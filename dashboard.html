@@ -36,16 +36,11 @@
     position: sticky;
     top: 0;
     z-index: 10;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
   }
   .topbar .brand {
     font-weight: 700;
     margin-right: 20px;
     color: var(--text);
-    white-space: nowrap;
-    flex-shrink: 0;
   }
   .topbar a, .topbar .nav-btn {
     display: inline-flex;
@@ -61,8 +56,6 @@
     background: none;
     font-family: inherit;
     cursor: pointer;
-    white-space: nowrap;
-    flex-shrink: 0;
   }
   .topbar a.active, .topbar .nav-btn.active {
     background: #edf3fc;
@@ -73,16 +66,12 @@
     margin-left: auto;
     display: flex;
     gap: 8px;
-    flex-shrink: 0;
   }
   .topbar-actions button {
     background: #333; color: #fff; border: none; padding: 8px 14px;
     border-radius: 8px; font-size: 12px; cursor: pointer; font-family: inherit;
-    white-space: nowrap;
-    flex-shrink: 0;
   }
   .topbar-actions button.logout { background: #eee; color: #555; }
-  .btn-label { }
 
   /* 전체 레이아웃 */
   .layout {
@@ -382,8 +371,6 @@
 .calendar-day:hover { background:#f2f6fc; }
 .md-right { flex:1; padding:24px 28px; overflow-y:auto; }
 .md-right-empty { color:var(--muted); font-size:14px; text-align:center; margin-top:80px; }
-.mobile-back-btn { display:none; background:#f0f0ee; color:var(--text); border:none; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; margin-bottom:12px; }
-.mobile-back-btn:hover { background:#e6e6e3; }
 .md-right-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:16px; }
 .md-right-title { font-size:18px; font-weight:700; }
 .md-right-sub { font-size:13px; color:var(--muted); margin-top:2px; }
@@ -434,10 +421,21 @@
 .mini-cal .mc-day.selected { background:var(--accent); color:#fff; font-weight:700; }
 .mini-cal .mc-day.selected:hover { background:var(--accent); }
 
-/* ===== 반응형 (모바일/태블릿) ===== */
+.mobile-back-btn { display:none; background:#f0f0ee; color:var(--text); border:none; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; margin-bottom:12px; }
+.mobile-back-btn:hover { background:#e6e6e3; }
+
+.right-summary { border:1px solid var(--border); border-radius:8px; margin-bottom:16px; background:#fbfbfa; overflow:hidden; }
+.right-summary-toggle { width:100%; display:flex; align-items:center; justify-content:space-between; background:none; border:none; padding:10px 12px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; color:var(--text); }
+.right-summary-toggle:hover { background:#f2f2f0; }
+.right-summary-chevron { transition: transform 0.15s ease; color:var(--muted); }
+.right-summary-toggle.open .right-summary-chevron { transform: rotate(180deg); }
+.right-summary-body { display:none; padding:0 12px; font-size:12.5px; color:var(--text); border-top:1px dashed var(--border); }
+.right-summary-body.show { display:block; padding-top:10px; padding-bottom:10px; }
+.right-summary-body .row { margin: 8px 0; white-space: pre-wrap; }
+.right-summary-body .row b { color: var(--muted); font-weight:600; font-size:11px; display:block; margin-bottom:2px; }
+
 @media (max-width: 900px) {
   .md-3col { flex-direction: column; }
-  /* 캘린더 패널: 날짜를 탭했을 때만 보이고, 닫히면 공간을 차지하지 않음 */
   .calendar-panel { display: none; border-right: none; border-bottom: 1px solid var(--border); }
   .calendar-panel.open { display: block; width: 100%; }
   .calendar-panel-inner { width: 100%; }
@@ -449,7 +447,6 @@
     overflow-y: auto;
   }
   .md-left.mobile-list-hidden { display: none; }
-  /* 상세 패널: 수업/일정을 선택했을 때만 보임 */
   .md-right { display: none; padding: 18px 16px; }
   .md-right.mobile-detail-open { display: block; flex: 1; overflow-y: auto; }
   .md-right-header { flex-wrap: wrap; gap: 8px; }
@@ -457,29 +454,14 @@
   .right-tab { white-space: nowrap; flex-shrink: 0; }
   .mobile-back-btn { display: inline-flex; align-items: center; gap: 6px; }
 }
-
 @media (max-width: 640px) {
-  .topbar { padding: 0 10px; gap: 2px; }
-  .topbar .brand { font-size: 13px; margin-right: 10px; }
-  .topbar a, .topbar .nav-btn { padding: 8px 10px; font-size: 13px; }
-  .topbar-actions { gap: 6px; }
-  .topbar-actions button { padding: 8px 10px; font-size: 11px; }
-  .domain-tab-row { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
-  .domain-tab { white-space: nowrap; flex-shrink: 0; }
+  .topbar { flex-wrap: wrap; height: auto; min-height: 52px; padding: 8px 12px; gap: 6px; }
+  .topbar .brand { margin-right: 8px; }
+  .topbar-actions { margin-left: 0; width: 100%; justify-content: flex-end; }
 }
-
 @media (max-width: 480px) {
-  .topbar .brand { display: none; }
   .btn-label { display: none; }
-  .topbar a, .topbar .nav-btn, .topbar-actions button {
-    padding: 10px;
-    font-size: 16px;
-  }
-  .topbar-actions button { font-size: 15px; }
-  .md-date-nav-clickable { padding: 10px; }
-  .date-nav-btn { width: 36px; height: 36px; font-size: 15px; }
-  .calendar-day { min-height: 42px; padding: 3px 5px; font-size: 10px; }
-  .modal-box { padding: 16px; }
+  .topbar a, .topbar .nav-btn, .topbar-actions button { padding: 8px 10px; }
 }
 </style>
 </head>
@@ -498,13 +480,13 @@
 <div id="app-screen" style="display:none">
 <div class="topbar">
   <div class="brand">하다 학원관리</div>
-  <button class="nav-btn active" data-tab="dashboard" onclick="showTab('dashboard')">📊<span class="btn-label"> 대시보드</span></button>
-  <button class="nav-btn" data-tab="admin" onclick="showTab('admin')">🗂️<span class="btn-label"> 리포트 관리</span></button>
-  <button class="nav-btn" data-tab="kiosk" onclick="showTab('kiosk')">🖊️<span class="btn-label"> 키오스크</span></button>
+  <button class="nav-btn active" data-tab="dashboard" onclick="showTab('dashboard')">📊 <span class="btn-label">대시보드</span></button>
+  <button class="nav-btn" data-tab="admin" onclick="showTab('admin')">🗂️ <span class="btn-label">리포트 관리</span></button>
+  <button class="nav-btn" data-tab="kiosk" onclick="showTab('kiosk')">🖊️ <span class="btn-label">키오스크</span></button>
   <div class="topbar-actions">
-    <button onclick="topbarRefresh()">🔄<span class="btn-label"> 새로고침</span></button>
-    <button onclick="topbarChangePassword()">🔑<span class="btn-label"> 비밀번호 변경</span></button>
-    <button class="logout" onclick="topbarLogout()">🚪<span class="btn-label"> 로그아웃</span></button>
+    <button onclick="topbarRefresh()">🔄 <span class="btn-label">새로고침</span></button>
+    <button onclick="topbarChangePassword()">🔑 <span class="btn-label">비밀번호 변경</span></button>
+    <button class="logout" onclick="topbarLogout()"><span class="btn-label">로그아웃</span></button>
   </div>
 </div>
 
@@ -557,6 +539,12 @@
             <div class="md-right-sub" id="right-sub"></div>
           </div>
           <a class="md-right-link" id="right-page-link" target="_blank" href="#">노션에서 보기 ↗</a>
+        </div>
+        <div class="right-summary" id="right-summary">
+          <button class="right-summary-toggle" id="right-summary-toggle" onclick="toggleRightSummary()">
+            <span>📋 수업 정보 요약</span><span class="right-summary-chevron" id="right-summary-chevron">▾</span>
+          </button>
+          <div class="right-summary-body" id="right-summary-body"></div>
         </div>
         <div class="right-tabs" id="right-tabs">
           <button class="right-tab active" data-tab="students" onclick="setRightTab('students')">👥 학생</button>
@@ -774,6 +762,7 @@ function setDomain(domain) {
   el("class-list-area").style.display = domain === "class" ? "flex" : "none"
   el("schedule-list-area").style.display = domain === "schedule" ? "flex" : "none"
   el("right-tabs").style.display = domain === "class" ? "flex" : "none"
+  el("right-summary").style.display = domain === "class" ? "block" : "none"
   el("md-right-empty").style.display = "block"
   el("md-right-content").style.display = "none"
   el("md-right-empty").textContent = domain === "class" ? "👈 왼쪽에서 수업을 선택하면 상세정보가 표시돼요" : "👈 왼쪽에서 일정을 선택하면 상세정보가 표시돼요"
@@ -794,7 +783,6 @@ function toggleCalendarPanel() {
   }
 }
 
-// 모바일(≤900px)에서만 상세 패널을 열고/닫습니다. 데스크톱은 항상 모든 열이 같이 보입니다.
 function isMobileLayout() { return window.matchMedia("(max-width: 900px)").matches }
 function openMobileDetail() {
   if (!isMobileLayout()) return
@@ -983,8 +971,25 @@ function selectClass(id) {
   el("right-title").textContent = c.className
   el("right-sub").textContent = [c.teacherName, c.method, c.timeRange].filter(Boolean).join(" · ")
   el("right-page-link").href = c.url
+  el("right-summary").style.display = "block"
+  el("right-summary-body").innerHTML =
+    '<div class="row"><b>출석현황</b>' + esc(c.attendanceStatus || "-") + '</div>' +
+    '<div class="row"><b>학습 내용</b>' + esc(c.studySummary || "-") + '</div>' +
+    '<div class="row"><b>과제 안내</b>' + esc(c.assignmentSummary || "-") + '</div>' +
+    '<div class="row"><b>평가 결과</b>' + esc(c.evaluationSummary || "-") + '</div>' +
+    '<button class="bulk-send-btn" onclick="sendBulkForClass(' + attrSafe(c.id) + ')">📩 보고서 일괄 전송</button>'
+  el("right-summary-body").classList.remove("show")
+  el("right-summary-toggle").classList.remove("open")
   setRightTab(RIGHT_TAB, true)
   openMobileDetail()
+}
+
+function toggleRightSummary() {
+  const body = el("right-summary-body")
+  const btn = el("right-summary-toggle")
+  const open = !body.classList.contains("show")
+  body.classList.toggle("show", open)
+  btn.classList.toggle("open", open)
 }
 
 function setRightTab(tab, force) {
@@ -1001,7 +1006,7 @@ function renderRightTabBody() {
   if (RIGHT_TAB === "students") {
     renderStudentsTab(c, body)
   } else if (RIGHT_TAB === "record") {
-    body.innerHTML = '<div class="record-card"><div class="title">📖 학습 내용</div><div class="meta">' + esc(c.studySummary || "등록된 ���용이 없어요") + '</div></div>'
+    body.innerHTML = '<div class="record-card"><div class="title">📖 학습 내용</div><div class="meta">' + esc(c.studySummary || "등록된 내용이 없어요") + '</div></div>'
   } else if (RIGHT_TAB === "assignment" || RIGHT_TAB === "evaluation") {
     renderTaskTab(c, body, RIGHT_TAB)
   }
@@ -1150,7 +1155,7 @@ function renderScheduleDetail(s) {
   if (s.relatedText) html += field("관련 대상", esc(s.relatedText))
   if (s.memo) html += field("메모", esc(s.memo).replace(/\n/g, "<br>"))
   if ((s.tags || []).length) html += field("태그", s.tags.map(function (t) { return '<span class="badge gray">' + esc(t) + '</span>' }).join(" "))
-  html += '<div class="schedule-detail-hint" style="margin-top:16px;color:var(--muted);font-size:12px">✏️ 수정은 노션에서 해주세요 (대시보드는 보기 전용이에��)</div>'
+  html += '<div class="schedule-detail-hint" style="margin-top:16px;color:var(--muted);font-size:12px">✏️ 수정은 노션에서 해주세요 (대시보드는 보기 전용이에요)</div>'
   body.innerHTML = html
 }
 
@@ -1175,7 +1180,7 @@ async function sendStudentReport(i) {
   if (btn) { btn.disabled = true; btn.textContent = "발송중..." }
   try {
     await callSendDailyReport({ registrationId: s.registrationId, attendanceId: s.attendanceId })
-    showToast(esc(s.name) + "에게 알림톡을 발��했어요")
+    showToast(esc(s.name) + "에게 알림톡을 발송했어요")
   } catch (err) {
     showToast("발송 실패: " + err.message)
   } finally {
