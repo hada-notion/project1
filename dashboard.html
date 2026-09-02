@@ -452,6 +452,15 @@
 .right-summary-body .info-card .info-content { font-size:12.5px; color:#6b6b68; line-height:1.6; white-space:pre-wrap; }
 .right-summary-body .info-card .info-content.empty { color:#bbb; }
 .right-summary-body .bulk-send-btn { margin-top:4px; }
+.summary-two-col { display:flex; gap:10px; margin-bottom:10px; }
+.summary-two-col .info-card.half { flex:1; margin-bottom:0; }
+.stat-row { display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--text); padding:3px 0; }
+.stat-row b { font-weight:700; }
+.stat-dot { display:inline-block; width:8px; height:8px; border-radius:50%; }
+.stat-dot.green { background:var(--green); }
+.stat-dot.blue { background:var(--blue); }
+.stat-dot.red { background:var(--red); }
+.stat-dot.orange { background:#d9822b; }
 
 @media (max-width: 900px) {
   .md-3col { flex-direction: column; }
@@ -774,7 +783,7 @@ let SCHEDULES = []
 let SELECTED_SCHEDULE_ID = null
 let CALENDAR_OPEN = false
 let CAL_PANEL_MONTH = kstToday().slice(0, 7)
-let CAL_PANEL_ITEMS = []
+let CAL_PANEL_ITEMS = {}
 
 function formatDateLabel(dateStr) {
   const d = new Date(dateStr + "T00:00:00+09:00")
@@ -843,6 +852,31 @@ function goCalendarPanelToday() {
 async function loadCalendarPanel() {
   const parts = CAL_PANEL_MONTH.split("-").map(Number)
   el("cal-panel-month-label").textContent = parts[0] + "년 " + parts[1] + "월"
+  renderCalPanel()
+  loadCalPanelDots()
+}
+
+// 캘린더에 표시된 달의 날짜별로 수업/일정이 있는지 조회해서 점을 표시해요.
+async function loadCalPanelDots() {
+  const month = CAL_PANEL_MONTH
+  const parts = month.split("-").map(Number)
+  const y = parts[0], m = parts[1]
+  const daysInMonth = new Date(y, m, 0).getDate()
+  const url = DOMAIN === "class" ? GET_CLASSES_URL : GET_SCHEDULES_URL
+  const items = {}
+  await Promise.all(Array.from({ length: daysInMonth }, function (_, i) { return i + 1 }).map(async function (d) {
+    const dateStr = month + "-" + String(d).padStart(2, "0")
+    try {
+      const res = await fetch(url + "?date=" + dateStr, {
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
+      })
+      const data = await res.json()
+      const list = DOMAIN === "class" ? data.classes : data.schedules
+      if (res.ok && list && list.length) items[dateStr] = true
+    } catch (err) {}
+  }))
+  if (month !== CAL_PANEL_MONTH) return
+  CAL_PANEL_ITEMS = items
   renderCalPanel()
 }
 
@@ -1015,8 +1049,20 @@ function selectClass(id) {
     (function () { const r = parseAttendanceRate(c.attendanceRate); return r ? '<span class="rate-badge ' + attendanceRateTone(r.pct) + '">' + esc(r.text) + '</span>' : "" })()
   el("right-page-link").href = c.url
   el("right-summary-toggle").style.display = "inline-flex"
+  const stat = summarizeStudents(c.students)
   el("right-summary-body").innerHTML =
-    '<div class="info-card"><h3>📋 출석현황</h3><div class="info-content' + (c.attendanceStatus ? '' : ' empty') + '">' + esc(c.attendanceStatus || "기록 없음") + '</div></div>' +
+    '<div class="summary-two-col">' +
+      '<div class="info-card half"><h3>✅ 출석 현황</h3>' +
+        '<div class="stat-row"><span class="stat-dot green"></span>등원 <b>' + stat.attend + '</b>명</div>' +
+        '<div class="stat-row"><span class="stat-dot blue"></span>보강 <b>' + stat.makeup + '</b>명</div>' +
+        '<div class="stat-row"><span class="stat-dot red"></span>결석 <b>' + stat.absent + '</b>명</div>' +
+      '</div>' +
+      '<div class="info-card half"><h3>📝 과제 현황</h3>' +
+        '<div class="stat-row"><span class="stat-dot green"></span>완료 <b>' + stat.done + '</b>명</div>' +
+        '<div class="stat-row"><span class="stat-dot orange"></span>일부완료 <b>' + stat.partial + '</b>명</div>' +
+        '<div class="stat-row"><span class="stat-dot red"></span>미완료 <b>' + stat.none + '</b>명</div>' +
+      '</div>' +
+    '</div>' +
     '<div class="info-card"><h3>📖 학습 내용</h3><div class="info-content' + (c.studySummary ? '' : ' empty') + '">' + esc(c.studySummary || "기록 없음") + '</div></div>' +
     '<div class="info-card"><h3>📝 과제 안내</h3><div class="info-content' + (c.assignmentSummary ? '' : ' empty') + '">' + esc(c.assignmentSummary || "기록 없음") + '</div></div>' +
     '<div class="info-card"><h3>📄 평가 결과</h3><div class="info-content' + (c.evaluationSummary ? '' : ' empty') + '">' + esc(c.evaluationSummary || "기록 없음") + '</div></div>'
