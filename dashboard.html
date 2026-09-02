@@ -562,7 +562,7 @@
           <div class="md-right-sub-row">
             <span class="md-right-sub" id="right-sub"></span>
             <button class="right-summary-toggle" id="right-summary-toggle" onclick="toggleRightSummary()">
-              <span id="right-summary-toggle-label">출석 현황 더보기</span><span class="right-summary-chevron" id="right-summary-chevron">▾</span>
+              <span id="right-summary-toggle-label">더보기</span><span class="right-summary-chevron" id="right-summary-chevron">▾</span>
             </button>
           </div>
         </div>
@@ -1011,7 +1011,7 @@ function selectClass(id) {
     '<button class="bulk-send-btn" onclick="sendBulkForClass(' + attrSafe(c.id) + ')">📩 보고서 일괄 전송</button>'
   el("right-summary-body").classList.remove("show")
   el("right-summary-toggle").classList.remove("open")
-  el("right-summary-toggle-label").textContent = "출석 현황 더보기"
+  el("right-summary-toggle-label").textContent = "더보기"
   setRightTab(RIGHT_TAB, true)
   openMobileDetail()
 }
@@ -1023,7 +1023,7 @@ function toggleRightSummary() {
   const open = !body.classList.contains("show")
   body.classList.toggle("show", open)
   btn.classList.toggle("open", open)
-  label.textContent = open ? "접기" : "출석 현황 더보기"
+  label.textContent = open ? "접기" : "더보기"
 }
 
 function setRightTab(tab, force) {
