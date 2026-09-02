@@ -382,6 +382,8 @@
 .calendar-day:hover { background:#f2f6fc; }
 .md-right { flex:1; padding:24px 28px; overflow-y:auto; }
 .md-right-empty { color:var(--muted); font-size:14px; text-align:center; margin-top:80px; }
+.mobile-back-btn { display:none; background:#f0f0ee; color:var(--text); border:none; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; margin-bottom:12px; }
+.mobile-back-btn:hover { background:#e6e6e3; }
 .md-right-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:16px; }
 .md-right-title { font-size:18px; font-weight:700; }
 .md-right-sub { font-size:13px; color:var(--muted); margin-top:2px; }
@@ -432,48 +434,52 @@
 .mini-cal .mc-day.selected { background:var(--accent); color:#fff; font-weight:700; }
 .mini-cal .mc-day.selected:hover { background:var(--accent); }
 
-  /* ===== 반응형 (모바일/태블릿) ===== */
-  @media (max-width: 900px) {
-    .md-3col { flex-direction: column; }
-    .calendar-panel { border-right: none; border-bottom: 1px solid var(--border); }
-    .calendar-panel.open { width: 100%; }
-    .calendar-panel-inner { width: 100%; }
-    .md-left {
-      width: 100%;
-      border-right: none;
-      border-bottom: 1px solid var(--border);
-      max-height: 50vh;
-      overflow-y: auto;
-    }
-    .md-right { padding: 18px 16px; }
-    .md-right-header { flex-wrap: wrap; gap: 8px; }
-    .right-tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
-    .right-tab { white-space: nowrap; flex-shrink: 0; }
+/* ===== 반응형 (모바일/태블릿) ===== */
+@media (max-width: 900px) {
+  .md-3col { flex-direction: column; }
+  /* 캘린더 패널: 날짜를 탭했을 때만 보이고, 닫히면 공간을 차지하지 않음 */
+  .calendar-panel { display: none; border-right: none; border-bottom: 1px solid var(--border); }
+  .calendar-panel.open { display: block; width: 100%; }
+  .calendar-panel-inner { width: 100%; }
+  .md-left {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    max-height: 50vh;
+    overflow-y: auto;
   }
+  /* 상세 패널: 수업/일정을 선택했을 때만 보임 */
+  .md-right { display: none; padding: 18px 16px; }
+  .md-right.mobile-detail-open { display: block; }
+  .md-right-header { flex-wrap: wrap; gap: 8px; }
+  .right-tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+  .right-tab { white-space: nowrap; flex-shrink: 0; }
+  .mobile-back-btn { display: inline-flex; align-items: center; gap: 6px; }
+}
 
-  @media (max-width: 640px) {
-    .topbar { padding: 0 10px; gap: 2px; }
-    .topbar .brand { font-size: 13px; margin-right: 10px; }
-    .topbar a, .topbar .nav-btn { padding: 8px 10px; font-size: 13px; }
-    .topbar-actions { gap: 6px; }
-    .topbar-actions button { padding: 8px 10px; font-size: 11px; }
-    .domain-tab-row { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
-    .domain-tab { white-space: nowrap; flex-shrink: 0; }
-  }
+@media (max-width: 640px) {
+  .topbar { padding: 0 10px; gap: 2px; }
+  .topbar .brand { font-size: 13px; margin-right: 10px; }
+  .topbar a, .topbar .nav-btn { padding: 8px 10px; font-size: 13px; }
+  .topbar-actions { gap: 6px; }
+  .topbar-actions button { padding: 8px 10px; font-size: 11px; }
+  .domain-tab-row { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+  .domain-tab { white-space: nowrap; flex-shrink: 0; }
+}
 
-  @media (max-width: 480px) {
-    .topbar .brand { display: none; }
-    .btn-label { display: none; }
-    .topbar a, .topbar .nav-btn, .topbar-actions button {
-      padding: 10px;
-      font-size: 16px;
-    }
-    .topbar-actions button { font-size: 15px; }
-    .md-date-nav-clickable { padding: 10px; }
-    .date-nav-btn { width: 36px; height: 36px; font-size: 15px; }
-    .calendar-day { min-height: 42px; padding: 3px 5px; font-size: 10px; }
-    .modal-box { padding: 16px; }
+@media (max-width: 480px) {
+  .topbar .brand { display: none; }
+  .btn-label { display: none; }
+  .topbar a, .topbar .nav-btn, .topbar-actions button {
+    padding: 10px;
+    font-size: 16px;
   }
+  .topbar-actions button { font-size: 15px; }
+  .md-date-nav-clickable { padding: 10px; }
+  .date-nav-btn { width: 36px; height: 36px; font-size: 15px; }
+  .calendar-day { min-height: 42px; padding: 3px 5px; font-size: 10px; }
+  .modal-box { padding: 16px; }
+}
 </style>
 </head>
 <body>
@@ -540,9 +546,10 @@
       <div id="class-list-area" class="class-list-area"></div>
       <div id="schedule-list-area" class="schedule-list-area" style="display:none"></div>
     </div>
-    <div class="md-right">
+    <div class="md-right" id="md-right">
       <div class="md-right-empty" id="md-right-empty">👈 왼쪽에서 수업을 선택하면 상세정보가 표시돼요</div>
       <div class="md-right-content" id="md-right-content" style="display:none">
+        <button class="mobile-back-btn" onclick="closeMobileDetail()">← 목록으로</button>
         <div class="md-right-header">
           <div>
             <div class="md-right-title" id="right-title"></div>
@@ -771,6 +778,7 @@ function setDomain(domain) {
   el("md-right-empty").textContent = domain === "class" ? "👈 왼쪽에서 수업을 선택하면 상세정보가 표시돼요" : "👈 왼쪽에서 일정을 선택하면 상세정보가 표시돼요"
   SELECTED_CLASS_ID = null
   SELECTED_SCHEDULE_ID = null
+  closeMobileDetail()
   loadCenterList()
   if (CALENDAR_OPEN) loadCalendarPanel()
 }
@@ -784,6 +792,11 @@ function toggleCalendarPanel() {
     loadCalendarPanel()
   }
 }
+
+// 모바일(≤900px)에서만 상세 패널을 열고/닫습니다. 데스크톱은 항상 모든 열이 같이 보입니다.
+function isMobileLayout() { return window.matchMedia("(max-width: 900px)").matches }
+function openMobileDetail() { if (isMobileLayout()) el("md-right").classList.add("mobile-detail-open") }
+function closeMobileDetail() { el("md-right").classList.remove("mobile-detail-open") }
 
 function shiftCalendarMonth(delta) {
   const parts = CAL_PANEL_MONTH.split("-").map(Number)
@@ -820,7 +833,12 @@ function renderCalPanel() {
 
 function goToDateFromCalendarPanel(dateStr) {
   CURRENT_DATE = dateStr
-  if (CALENDAR_OPEN) renderCalPanel()
+  if (isMobileLayout()) {
+    CALENDAR_OPEN = false
+    el("calendar-panel").classList.remove("open")
+  } else if (CALENDAR_OPEN) {
+    renderCalPanel()
+  }
   loadCenterList()
 }
 
@@ -958,6 +976,7 @@ function selectClass(id) {
   el("right-sub").textContent = [c.teacherName, c.method, c.timeRange].filter(Boolean).join(" · ")
   el("right-page-link").href = c.url
   setRightTab(RIGHT_TAB, true)
+  openMobileDetail()
 }
 
 function setRightTab(tab, force) {
@@ -974,7 +993,7 @@ function renderRightTabBody() {
   if (RIGHT_TAB === "students") {
     renderStudentsTab(c, body)
   } else if (RIGHT_TAB === "record") {
-    body.innerHTML = '<div class="record-card"><div class="title">📖 학습 내용</div><div class="meta">' + esc(c.studySummary || "등록된 내용이 없어요") + '</div></div>'
+    body.innerHTML = '<div class="record-card"><div class="title">📖 학습 내용</div><div class="meta">' + esc(c.studySummary || "등록된 ���용이 없어요") + '</div></div>'
   } else if (RIGHT_TAB === "assignment" || RIGHT_TAB === "evaluation") {
     renderTaskTab(c, body, RIGHT_TAB)
   }
@@ -1108,6 +1127,7 @@ function selectSchedule(id) {
   el("right-sub").textContent = [s.category, s.status].filter(Boolean).join(" · ")
   el("right-page-link").href = s.url
   renderScheduleDetail(s)
+  openMobileDetail()
 }
 
 function renderScheduleDetail(s) {
@@ -1122,7 +1142,7 @@ function renderScheduleDetail(s) {
   if (s.relatedText) html += field("관련 대상", esc(s.relatedText))
   if (s.memo) html += field("메모", esc(s.memo).replace(/\n/g, "<br>"))
   if ((s.tags || []).length) html += field("태그", s.tags.map(function (t) { return '<span class="badge gray">' + esc(t) + '</span>' }).join(" "))
-  html += '<div class="schedule-detail-hint" style="margin-top:16px;color:var(--muted);font-size:12px">✏️ 수정은 노션에서 해주세요 (대시보드는 보기 전용이에요)</div>'
+  html += '<div class="schedule-detail-hint" style="margin-top:16px;color:var(--muted);font-size:12px">✏️ 수정은 노션에서 해주세요 (대시보드는 보기 전용이에��)</div>'
   body.innerHTML = html
 }
 
