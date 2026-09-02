@@ -379,8 +379,10 @@
 .calendar-day:hover { background:#f2f6fc; }
 .md-right { flex:1; padding:24px 28px; overflow-y:auto; }
 .md-right-empty { color:var(--muted); font-size:14px; text-align:center; margin-top:80px; }
-.md-right-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:16px; }
+.md-right-header { margin-bottom:16px; }
+.md-right-title-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .md-right-title { font-size:18px; font-weight:700; }
+.md-right-time { font-size:13px; color:var(--muted); margin-top:4px; }
 .md-right-sub { font-size:13px; color:var(--muted); margin-top:2px; }
 .md-right-link { font-size:12px; color:var(--accent); text-decoration:none; }
 .right-tabs { display:flex; gap:6px; border-bottom:1px solid var(--border); margin-bottom:16px; }
@@ -439,9 +441,13 @@
 .right-summary-chevron { display:inline-block; font-size:10px; transition: transform 0.15s ease; }
 .right-summary-toggle.open .right-summary-chevron { transform: rotate(180deg); }
 .right-summary-body { display:none; padding:0; font-size:12.5px; color:var(--text); }
-.right-summary-body.show { display:block; margin-top:10px; margin-bottom:6px; }
-.right-summary-body .row { margin: 8px 0; white-space: pre-wrap; }
-.right-summary-body .row b { color: var(--muted); font-weight:600; font-size:11px; display:block; margin-bottom:2px; }
+.right-summary-body.show { display:block; margin-top:10px; margin-bottom:14px; }
+.right-summary-body .info-card { background:#fff; border-radius:14px; padding:14px 16px; margin-bottom:10px; box-shadow:0 1px 4px rgba(0,0,0,0.06); border:1px solid var(--border); }
+.right-summary-body .info-card:last-of-type { margin-bottom:0; }
+.right-summary-body .info-card h3 { font-size:13px; margin:0 0 8px; display:flex; align-items:center; gap:6px; color:var(--text); font-weight:700; }
+.right-summary-body .info-card .info-content { font-size:12.5px; color:#6b6b68; line-height:1.6; white-space:pre-wrap; }
+.right-summary-body .info-card .info-content.empty { color:#bbb; }
+.right-summary-body .bulk-send-btn { margin-top:4px; }
 
 @media (max-width: 900px) {
   .md-3col { flex-direction: column; }
@@ -548,16 +554,17 @@
       <div class="md-right-content" id="md-right-content" style="display:none">
         <button class="mobile-back-btn" onclick="closeMobileDetail()">← 목록으로</button>
         <div class="md-right-header">
-          <div>
+          <div class="md-right-title-row">
             <div class="md-right-title" id="right-title"></div>
-            <div class="md-right-sub-row">
-              <span class="md-right-sub" id="right-sub"></span>
-              <button class="right-summary-toggle" id="right-summary-toggle" onclick="toggleRightSummary()">
-                <span id="right-summary-toggle-label">출석 현황 더보기</span><span class="right-summary-chevron" id="right-summary-chevron">▾</span>
-              </button>
-            </div>
+            <a class="md-right-link" id="right-page-link" target="_blank" href="#">노션에서 보기 ↗</a>
           </div>
-          <a class="md-right-link" id="right-page-link" target="_blank" href="#">로션에서 보기 ↗</a>
+          <div class="md-right-time" id="right-time"></div>
+          <div class="md-right-sub-row">
+            <span class="md-right-sub" id="right-sub"></span>
+            <button class="right-summary-toggle" id="right-summary-toggle" onclick="toggleRightSummary()">
+              <span id="right-summary-toggle-label">출석 현황 더보기</span><span class="right-summary-chevron" id="right-summary-chevron">▾</span>
+            </button>
+          </div>
         </div>
         <div class="right-summary-body" id="right-summary-body"></div>
         <div class="right-tabs" id="right-tabs">
@@ -897,7 +904,7 @@ async function loadClassList(dateStr) {
     renderClassList()
     setStatus(null)
   } catch (err) {
-    setStatus("error", "불러오기 실패: " + err.message)
+    setStatus("error", "불��오기 실패: " + err.message)
   }
 }
 
@@ -976,7 +983,6 @@ function renderClassList() {
 }
 
 function onClassClick(id) {
-  EXPANDED_CLASS_ID = (EXPANDED_CLASS_ID === id) ? null : id
   selectClass(id)
   renderClassList()
 }
@@ -989,15 +995,19 @@ function selectClass(id) {
   if (!c) return
   el("md-right-empty").style.display = "none"
   el("md-right-content").style.display = "block"
-  el("right-title").textContent = c.className
-  el("right-sub").textContent = [c.teacherName, c.method, c.timeRange].filter(Boolean).join(" · ")
+  el("right-title").textContent = classEmoji(c) + " " + c.className
+  el("right-time").textContent = c.timeRange || ""
+  el("right-sub").innerHTML =
+    (c.teacherName ? '<span class="teacher-badge ' + teacherColorClass(c.teacherName) + '">' + esc(c.teacherName) + '</span>' : "") +
+    (c.method ? '<span class="badge blue">' + esc(c.method) + '</span>' : "") +
+    (function () { const r = parseAttendanceRate(c.attendanceRate); return r ? '<span class="rate-badge ' + attendanceRateTone(r.pct) + '">' + esc(r.text) + '</span>' : "" })()
   el("right-page-link").href = c.url
   el("right-summary-toggle").style.display = "inline-flex"
   el("right-summary-body").innerHTML =
-    '<div class="row"><b>출석현황</b>' + esc(c.attendanceStatus || "-") + '</div>' +
-    '<div class="row"><b>학습 내용</b>' + esc(c.studySummary || "-") + '</div>' +
-    '<div class="row"><b>과제 안내</b>' + esc(c.assignmentSummary || "-") + '</div>' +
-    '<div class="row"><b>평가 결과</b>' + esc(c.evaluationSummary || "-") + '</div>' +
+    '<div class="info-card"><h3>📋 출석현황</h3><div class="info-content' + (c.attendanceStatus ? '' : ' empty') + '">' + esc(c.attendanceStatus || "기록 없음") + '</div></div>' +
+    '<div class="info-card"><h3>📖 학습 내용</h3><div class="info-content' + (c.studySummary ? '' : ' empty') + '">' + esc(c.studySummary || "기록 없음") + '</div></div>' +
+    '<div class="info-card"><h3>📝 과제 안내</h3><div class="info-content' + (c.assignmentSummary ? '' : ' empty') + '">' + esc(c.assignmentSummary || "기록 없음") + '</div></div>' +
+    '<div class="info-card"><h3>📄 평가 결과</h3><div class="info-content' + (c.evaluationSummary ? '' : ' empty') + '">' + esc(c.evaluationSummary || "기록 없음") + '</div></div>' +
     '<button class="bulk-send-btn" onclick="sendBulkForClass(' + attrSafe(c.id) + ')">📩 보고서 일괄 전송</button>'
   el("right-summary-body").classList.remove("show")
   el("right-summary-toggle").classList.remove("open")
