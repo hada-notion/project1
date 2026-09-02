@@ -1,0 +1,1947 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>하다 학습 리포트</title>
+<style>
+* { box-sizing: border-box; }
+:root {
+  --content-w: clamp(300px, 96vw, 620px);
+  --content-w-wide: clamp(320px, 96vw, 820px);
+  --hint-gap: clamp(10px, 3.5vh, 28px);
+  --hint-font: clamp(0px, 2vh, 12px);
+  --hint-chevron: clamp(0px, 3.2vh, 20px);
+  --hint-chevron-gap: clamp(0px, 0.6vh, 4px);
+}
+@media (min-width: 700px) {
+  :root { --content-w: clamp(480px, 82vw, 760px); --content-w-wide: clamp(540px, 86vw, 960px); }
+}
+@media (min-width: 1100px) {
+  :root { --content-w: clamp(560px, 55vw, 820px); --content-w-wide: clamp(640px, 60vw, 1080px); }
+}
+html, body { margin: 0; height: 100%; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body { overscroll-behavior-y: none; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  background: #f5f6f8;
+  color: #222;
+  overflow-x: hidden;
+}
+.mock-banner {
+  background: #fff3cd;
+  color: #92720b;
+  font-size: 12px;
+  text-align: center;
+  padding: 6px;
+  font-weight: 600;
+  position: relative;
+  z-index: 50;
+}
+
+/* ===== 햄버거 ===== */
+.hamburger-btn {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 60;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.25);
+  backdrop-filter: blur(4px);
+  border: none;
+  color: #fff;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.hamburger-btn.dark { background: rgba(0,0,0,0.06); color: #333; }
+
+.menu-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 90;
+}
+.menu-overlay.active { display: block; }
+.menu-panel {
+  position: fixed;
+  top: 0; right: 0;
+  width: 78%;
+  max-width: 320px;
+  height: 100%;
+  background: #fff;
+  z-index: 91;
+  padding: 24px 18px;
+  box-shadow: -4px 0 16px rgba(0,0,0,0.12);
+  transform: translateX(100%);
+  transition: transform 0.25s ease;
+}
+.menu-overlay.active .menu-panel { transform: translateX(0); }
+.menu-panel h3 { font-size: 15px; color: #999; margin: 0 0 14px; }
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 6px;
+  border-bottom: 1px solid #f2f2f2;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.menu-item .icon { font-size: 18px; }
+.menu-close {
+  position: absolute;
+  top: 18px; left: 16px;
+  background: #f0f0f0;
+  border: none;
+  border-radius: 50%;
+  width: 30px; height: 30px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* ===== 인트로 / 통합시간표 스와이프 섹션 ===== */
+.scroll-container {
+  height: 100vh;
+  overflow-y: scroll;
+  scroll-snap-type: y mandatory;
+}
+.snap-section {
+  height: 100vh;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(20px, 5vw, 40px) clamp(16px, 6vw, 36px);
+  position: relative;
+  overflow: hidden;
+}
+.intro-section {
+  background: linear-gradient(160deg, #6c5ce7, #a29bfe 65%, #cbb9ff);
+  color: #fff;
+  text-align: center;
+}
+.intro-greeting { font-size: 14px; opacity: 0.85; margin-bottom: 6px; }
+.intro-name { font-size: clamp(28px, 8vw, 40px); font-weight: 800; margin-bottom: 10px; }
+.intro-sub { font-size: 14px; opacity: 0.9; margin-bottom: 40px; }
+.intro-sub span:not(:last-child)::after { content: " · "; opacity: 0.6; }
+
+.class-btn-group { width: 100%; max-width: clamp(240px, 68vw, 360px); display: flex; flex-direction: column; gap: 10px; margin-bottom: 34px; }
+.class-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(255,255,255,0.16);
+  border: 1px solid rgba(255,255,255,0.35);
+  color: #fff;
+  padding: 15px 20px;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  backdrop-filter: blur(2px);
+}
+.class-btn.primary { background: #fff; color: #6c5ce7; border-color: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+.class-btn .cb-left { display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; }
+.class-btn .cb-emoji { font-size: 18px; flex-shrink: 0; }
+.class-btn .cb-name-wrap { display: flex; flex-direction: row; align-items: center; gap: 8px; min-width: 0; overflow: hidden; }
+.class-btn .cb-class-name { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.class-btn .cb-arrow { font-size: 16px; flex-shrink: 0; }
+
+.swipe-hint { position: absolute; bottom: var(--hint-gap); left: 0; right: 0; text-align: center; font-size: var(--hint-font); opacity: 0.8; cursor: pointer; }
+.swipe-hint .chevron { display: block; font-size: var(--hint-chevron); animation: bounce 1.6s infinite; margin-top: var(--hint-chevron-gap); }
+@keyframes bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(6px); } }
+
+.timetable-section { background: #f5f6f8; }
+.timetable-section h2 { font-size: 17px; margin: 0 0 4px; }
+.timetable-section .tt-hint { font-size: 12px; color: #999; margin-bottom: 18px; }
+.schedule-section { background: linear-gradient(160deg, #eef4ff, #dbe9ff); justify-content: flex-start; padding-top: clamp(36px, 12vh, 130px); padding-bottom: clamp(8px, 3vh, 40px); padding-left: clamp(4px, 1.5vw, 12px); padding-right: clamp(4px, 1.5vw, 12px); }
+.grades-section { background: linear-gradient(160deg, #fff2e6, #ffe6d6); justify-content: flex-start; padding-top: clamp(90px, 18vh, 150px); padding-left: clamp(8px, 3vw, 20px); padding-right: clamp(8px, 3vw, 20px); }
+.schedule-section h2, .grades-section h2 { font-size: 17px; margin: 0 0 4px; color: #333; }
+.schedule-section .section-hint, .grades-section .section-hint { font-size: 12px; color: #888; margin-bottom: 16px; }
+.section-scroll { width: 100%; max-width: var(--content-w); overflow-y: visible; padding: 2px 2px 10px; }
+.week-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; width: 100%; max-width: var(--content-w); }
+.week-col { text-align: center; }
+.week-col .day-label { font-size: 12px; color: #888; margin-bottom: 6px; font-weight: 600; }
+.week-slot { background: #f5f3ff; color: #6c5ce7; border-radius: 8px; padding: 6px 4px; font-size: 11px; margin-bottom: 4px; line-height: 1.3; }
+.week-slot .slot-time { font-weight: 700; }
+.up-hint { position: absolute; top: var(--hint-gap); left: 0; right: 0; margin-top: 0; font-size: var(--hint-font); color: #bbb; text-align: center; cursor: pointer; opacity: 0.8; }
+.up-hint .chevron { display: block; font-size: var(--hint-chevron); margin-bottom: var(--hint-chevron-gap); }
+
+/* ===== 등록 상세(메인) 페이지 ===== */
+.detail-page { max-width: var(--content-w-wide); margin: 0 auto; padding: 16px; padding-bottom: 60px; }
+.header {
+  background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+  color: #fff;
+  padding: 24px 20px;
+  border-radius: 16px;
+  margin-bottom: 16px;
+}
+.header h1 { margin: 0 0 6px; font-size: clamp(18px, 4vw, 24px); }
+.header .sub-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.header .sub-badge { background: rgba(255,255,255,0.22); padding: 3px 10px; border-radius: 999px; font-size: 12px; }
+.back-btn { display: inline-flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.22); color: #fff; border: none; padding: 6px 12px; border-radius: 999px; font-size: 13px; cursor: pointer; margin-bottom: 10px; }
+
+/* ===== 등록 상세 - 뎁스2 스와이프 섹션 ===== */
+.reg-header-section { background: linear-gradient(160deg, #6c5ce7, #a29bfe 65%, #cbb9ff); color: #fff; text-align: center; }
+.reg-header-top { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.reg-back-btn { flex-shrink: 0; background: rgba(255,255,255,0.22); color: #fff; border: none; width: 36px; height: 36px; border-radius: 50%; font-size: 16px; font-weight: 600; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s ease; }
+.reg-breadcrumb { display: none; flex: 1; min-width: 0; align-items: center; gap: 4px; font-size: 14px; font-weight: 600; line-height: 1; flex-wrap: nowrap; overflow: hidden; text-align: left; }
+.reg-breadcrumb .crumb { display: inline-flex; align-items: center; line-height: 1; cursor: pointer; opacity: 0.9; white-space: nowrap; }
+.reg-breadcrumb .crumb:hover { text-decoration: underline; }
+.reg-breadcrumb .crumb.current { font-weight: 800; opacity: 1; cursor: default; overflow: hidden; text-overflow: ellipsis; }
+.reg-breadcrumb .crumb.current:hover { text-decoration: none; }
+.reg-breadcrumb .crumb-sep { display: inline-flex; align-items: center; line-height: 1; opacity: 0.6; flex-shrink: 0; }
+.reg-head-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 10px; }
+.reg-head-row.stacked { flex-direction: column; gap: 2px; }
+.reg-emoji { font-size: 22px; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; border-radius: 8px; overflow: hidden; flex-shrink: 0; }
+.reg-head-row.stacked .reg-emoji { font-size: 40px; width: 56px; height: 56px; margin-bottom: 6px; border-radius: 10px; }
+.reg-emoji img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; }
+.reg-title { font-size: clamp(18px, 5vw, 24px); font-weight: 800; }
+.reg-head-row.stacked .reg-title { font-size: clamp(22px, 6vw, 32px); margin-bottom: 4px; }
+.reg-cover-wrap { text-align: center; margin: 4px 0 12px; }
+.reg-cover-img { width: 110px; height: 150px; margin: 0 auto; border-radius: 10px; overflow: hidden; background: rgba(255,255,255,0.18); display: flex; align-items: center; justify-content: center; font-size: 42px; box-shadow: 0 2px 8px rgba(0,0,0,0.18); }
+.reg-cover-img img { width: 100%; height: 100%; object-fit: cover; }
+.book-cover-card { display: flex; flex-direction: column; gap: 16px; background: #fff; border-radius: 14px; padding: 18px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.book-cover-top { display: flex; align-items: stretch; gap: 16px; }
+.book-cover-card-img { width: clamp(90px, 26%, 150px); aspect-ratio: 110 / 150; align-self: stretch; flex-shrink: 0; border-radius: 10px; overflow: hidden; background: linear-gradient(135deg, #ece9fb, #f5f3ff); display: flex; align-items: center; justify-content: center; font-size: 42px; margin: auto 0; }
+.book-cover-progress .progress-track { height: 8px; background: #e6e1fa; border-radius: 4px; overflow: hidden; }
+.book-cover-progress .progress-fill { height: 100%; background: #6c5ce7; border-radius: 4px; }
+.book-cover-progress .progress-label { font-size: 12px; color: #6c5ce7; font-weight: 700; text-align: right; margin-top: 6px; }
+.book-cover-card-img img { width: 100%; height: 100%; object-fit: cover; }
+.book-cover-card-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px; justify-content: center; }
+.book-cover-info-row { display: flex; flex-direction: column; gap: 4px; }
+.book-cover-info-row .info-label { font-size: 12px; color: #999; font-weight: 600; }
+.book-cover-info-row .info-value { font-size: 15px; color: #333; font-weight: 700; }
+.unit-list { margin: 0; padding-left: 18px; font-size: 13px; color: #444; line-height: 1.7; }
+.unit-list li.empty { color: #bbb; list-style: none; padding-left: 0; margin-left: -18px; }
+.reg-sub-badges { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin-bottom: 8px; }
+.reg-sub-badges .sub-badge { background: rgba(255,255,255,0.22); padding: 3px 10px; border-radius: 999px; font-size: 12px; }
+.reg-period { font-size: 13px; opacity: 0.85; margin-bottom: 8px; }
+.reg-divider { width: 32px; height: 1px; background: rgba(255,255,255,0.35); margin: 6px auto 8px; }
+.day-status-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+
+/* ===== 등록 상세 - 뎁스2 하단 탭 방식 ===== */
+.reg-detail-page { min-height: 100vh; background: #f5f6f8; padding-bottom: 78px; -webkit-overflow-scrolling: touch; }
+.reg-header-bar { position: sticky; top: 0; z-index: 55; background: linear-gradient(160deg, #6c5ce7, #a29bfe 65%, #cbb9ff); color: #fff; text-align: center; padding: 14px 14px 14px; will-change: padding; }
+.reg-tab-content { max-width: var(--content-w-wide); margin: 0 auto; padding: 18px clamp(4px, 3vw, 16px) 24px; }
+.reg-tab-content h2 { font-size: 17px; margin: 0 0 4px; color: #333; }
+.reg-tab-content .section-hint { font-size: 12px; color: #888; margin-bottom: 16px; }
+.status-box-row { display: flex; gap: 10px; margin-bottom: 14px; }
+.status-box { flex: 1; background: #fff; border-radius: 14px; padding: 16px 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); text-align: center; }
+.status-box .label { font-size: 15px; font-weight: 700; color: #333; margin-bottom: 10px; }
+.reg-tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; display: flex; background: #fff; box-shadow: 0 -2px 10px rgba(0,0,0,0.08); padding: 6px clamp(4px, 2vw, 16px) calc(6px + env(safe-area-inset-bottom, 0px)); }
+.reg-tab-btn { flex: 1; background: none; border: none; padding: 8px 2px; font-size: 11px; font-weight: 600; color: #999; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; border-radius: 10px; }
+.reg-tab-btn .tab-icon { font-size: 19px; }
+.reg-tab-btn.active { color: #6c5ce7; background: #f5f3ff; }
+.reg-header-bar { transition: padding 0.22s ease; }
+/* 기본 상태(최상단) = 작은 헤더. 뒤로가기 + 경로만 노출해서
+   캘린더가 한 화면에 다 들어오게 한다. 스크롤하면 .expanded 가 붙어 커진다. */
+.reg-header-bar { padding: 12px 12px 12px; }
+.reg-header-bar .reg-head-row, .reg-header-bar .reg-cover-wrap, .reg-header-bar .reg-sub-badges, .reg-header-bar .reg-period, .reg-header-bar .reg-divider { display: none; }
+.reg-header-bar .reg-breadcrumb { display: flex; }
+.reg-header-bar .reg-back-btn { width: 36px; height: 36px; font-size: 16px; }
+.reg-header-bar:not(.expanded) .reg-header-top { margin-bottom: 0; }
+/* 스크롤 내리면 헤더가 커지면서 상세 정보가 드러난다 */
+.reg-header-bar.expanded { padding: 14px 14px 14px; }
+.reg-header-bar.expanded .reg-head-row { display: flex; }
+.reg-header-bar.expanded .reg-head-row.stacked { display: flex; flex-direction: column; }
+.reg-header-bar.expanded .reg-cover-wrap { display: block; }
+.reg-header-bar.expanded .reg-sub-badges { display: flex; }
+.reg-header-bar.expanded .reg-period { display: block; }
+.reg-header-bar.expanded .reg-divider { display: block; }
+.reg-header-bar.expanded .reg-breadcrumb { display: none; }
+.reg-header-bar.expanded .reg-back-btn { width: 36px; height: 36px; font-size: 16px; }
+.cal-nav-right { display: flex; align-items: center; gap: 6px; }
+.cal-today-btn { background: #f0eefc; border: none; color: #6c5ce7; font-size: clamp(10px, 1.8vw, 12px); font-weight: 700; padding: 5px 10px; border-radius: 999px; cursor: pointer; }
+.cal-today-btn:active { background: #ece9ff; }
+.attendance-calendar .cal-day.완료 { background: #e6f7ee; color: #1e9e5c; font-weight: 700; }
+.attendance-calendar .cal-day.미완료 { background: #fdeaea; color: #e04b4b; font-weight: 700; }
+.attendance-calendar .cal-day.부분완료 { background: #fff6e0; color: #d68f00; font-weight: 700; }
+.attendance-calendar .cal-day.today:not(.selected) { box-shadow: inset 0 0 0 2px #a29bfe; }
+.cal-cell.today { box-shadow: inset 0 0 0 2px #a29bfe; }
+.seg-toggle { display: flex; background: #f0eefc; border-radius: 999px; padding: 3px; width: fit-content; margin: 0 auto 14px; }
+.seg-toggle button { border: none; background: none; padding: 7px 16px; border-radius: 999px; font-size: 12px; font-weight: 700; color: #8a7fc9; cursor: pointer; }
+.seg-toggle button.active { background: #fff; color: #6c5ce7; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.feed-type-icon { display: inline-flex; align-items: center; justify-content: center; font-size: 13px; margin-right: 6px; }
+.report-donut-row { display: flex; gap: 10px; margin-bottom: 14px; }
+.donut-card { flex: 1; background: #fff; border-radius: 14px; padding: 16px 8px; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.donut-title { font-size: 15px; font-weight: 700; color: #333; margin: 0 0 10px; }
+.donut { width: 76px; height: 76px; border-radius: 50%; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center; }
+.donut-hole { width: 54px; height: 54px; border-radius: 50%; background: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; color: #333; line-height: 1.1; }
+.donut-count-below { font-size: 12px; color: #999; font-weight: 600; }
+.test-bar-row { margin-bottom: 12px; }
+.test-bar-row .title { font-size: 13px; font-weight: 600; color: #333; margin-bottom: 2px; }
+.test-bar-row .meta { font-size: 11px; color: #999; margin-bottom: 4px; }
+.test-bar-track { background: #f0f0f0; border-radius: 6px; height: 8px; overflow: hidden; }
+.test-bar-fill { height: 100%; background: #6c5ce7; border-radius: 6px; }
+
+.books-section, .attendance-section, .study-section, .tasks-section { justify-content: flex-start; padding-top: clamp(36px, 12vh, 130px); padding-bottom: clamp(8px, 3vh, 40px); padding-left: clamp(4px, 1.5vw, 12px); padding-right: clamp(4px, 1.5vw, 12px); }
+.books-section h2, .attendance-section h2, .study-section h2, .tasks-section h2 { font-size: 17px; margin: 0 0 4px; color: #333; }
+.books-section .section-hint, .attendance-section .section-hint, .study-section .section-hint, .tasks-section .section-hint { font-size: 12px; color: #888; margin-bottom: 16px; }
+.books-section { background: #f5f6f8; }
+.attendance-section { background: linear-gradient(160deg, #eef4ff, #dbe9ff); }
+.study-section { background: linear-gradient(160deg, #eefaf1, #dcf3e3); }
+.tasks-section { background: linear-gradient(160deg, #fff2e6, #ffe6d6); }
+.book-cards-wrap { width: 100%; max-width: var(--content-w-wide); }
+.tasks-section .card { max-width: var(--content-w); margin-left: auto; margin-right: auto; }
+
+.card { background: #fff; border-radius: 14px; padding: 18px; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.card h2 { font-size: 15px; margin: 0 0 12px; display: flex; align-items: center; gap: 6px; }
+.row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
+.row:last-child { border-bottom: none; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: #eee; color: #555; }
+.badge.수강중, .badge.출석 { background: #e6f7ee; color: #1e9e5c; }
+.badge.종료 { background: #f0f0f0; color: #999; }
+.badge.결석 { background: #fdeaea; color: #e04b4b; }
+.badge.보강 { background: #eaf1fd; color: #2f6fd9; }
+.badge.완료 { background: #e6f7ee; color: #1e9e5c; }
+.badge.미완료 { background: #fdeaea; color: #e04b4b; }
+.badge.부분완료 { background: #fff6e0; color: #d68f00; }
+.badge.제출 { background: #e6f7ee; color: #1e9e5c; }
+.badge.미제출 { background: #fdeaea; color: #e04b4b; }
+
+.book-cards { display: flex; gap: 10px; overflow-x: auto; padding: 2px 2px 6px; margin: 0 -2px; -webkit-overflow-scrolling: touch; }
+.book-card { position: relative; flex: 0 0 clamp(150px, 44vw, 220px); aspect-ratio: 3 / 4; border-radius: 12px; overflow: hidden; background: linear-gradient(135deg, #ece9fb, #f5f3ff); box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+.book-card .cover { position: absolute; inset: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 30px; }
+.book-card .cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.book-card .info-overlay { position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 8px 8px; background: linear-gradient(to bottom, rgba(248,247,253,0) 0%, rgba(248,247,253,0.55) 32%, rgba(248,247,253,0.94) 56%, #f8f7fd 78%); }
+.book-card .title { font-size: 12px; font-weight: 700; line-height: 1.35; margin-bottom: 8px; min-height: 32px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: #222; }
+.book-card .progress-track { height: 5px; background: #e6e1fa; border-radius: 3px; overflow: hidden; margin-bottom: 4px; }
+.book-card .progress-fill { height: 100%; background: #6c5ce7; border-radius: 3px; }
+.book-card .progress-label { font-size: 11px; color: #6c5ce7; font-weight: 700; text-align: right; }
+
+.attendance-calendar { margin-top: 4px; }
+.attendance-calendar .cal-month-label { font-size: 13px; font-weight: 700; color: #6c5ce7; margin: 4px 0 8px; }
+.attendance-calendar .cal-month + .cal-month-label { margin-top: 18px; }
+.attendance-calendar .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: clamp(1px, min(1vw, 1vh), 10px); margin-bottom: 6px; }
+.attendance-calendar .cal-dow { font-size: clamp(8px, min(2.2vw, 2.2vh), 17px); color: #999; text-align: center; font-weight: 600; padding-bottom: 2px; }
+.attendance-calendar .cal-day { aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 8px; font-size: clamp(8px, min(2.9vw, 2.9vh), 22px); background: #f7f7f9; color: #bbb; cursor: pointer; transition: transform 0.1s; }
+.attendance-calendar .cal-day:active { transform: scale(0.92); }
+.attendance-calendar .cal-day.selected { outline: 2px solid #6c5ce7; outline-offset: 1px; }
+.attendance-calendar .cal-day.empty { background: transparent; cursor: default; }
+.attendance-calendar .cal-day.출석 { background: #e6f7ee; color: #1e9e5c; font-weight: 700; }
+.attendance-calendar .cal-day.결석 { background: #fdeaea; color: #e04b4b; font-weight: 700; }
+.attendance-calendar .cal-day.보강 { background: #eaf1fd; color: #2f6fd9; font-weight: 700; }
+.attendance-calendar .cal-legend { display: flex; gap: 14px; font-size: 11px; color: #888; margin-top: 4px; justify-content: center; }
+.attendance-calendar .cal-legend .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+.cal-hint { font-size: 11px; color: #bbb; text-align: center; margin-top: 10px; }
+
+/* 학습기록 카드 공통 스타일 (학습/과제/평가 공통 사용) */
+.log-card { background: #fff; border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.log-row { display: flex; flex-direction: column; margin-bottom: 12px; }
+.log-row:last-child { margin-bottom: 0; }
+.log-top { display: flex; gap: 12px; align-items: stretch; min-height: 44px; }
+.log-icon { flex-shrink: 0; width: 44px; align-self: stretch; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.log-divider { border-top: 1px solid #f1f0f6; margin: 10px -16px 0; }
+.log-extra { padding: 10px 16px 0; margin: 0 -16px; }
+.log-extra .feed-body { margin-top: 0; padding-top: 0; border-top: none; }
+.log-icon-emoji { font-size: 15px; line-height: 1; height: 17px; width: 100%; display: flex; align-items: center; justify-content: center; }
+.log-icon-label { font-size: 9px; font-weight: 700; line-height: 1; height: 10px; width: 100%; display: flex; align-items: center; justify-content: center; letter-spacing: -0.2px; }
+.log-card.학습 .log-icon { background: #eaf2fc; color: #3f74b3; }
+.log-card.과제 .log-icon { background: #fdf1e3; color: #c17d2e; }
+.log-card.평가 .log-icon { background: #e9f7ef; color: #2f9e64; }
+.log-body { flex: 1; min-width: 0; }
+.log-title-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.log-title-row .log-title { margin-bottom: 0; }
+.log-title { font-weight: 700; font-size: 14px; color: #222; margin-bottom: 4px; }
+.log-context { font-size: 12px; color: #888; margin-bottom: 6px; }
+.log-pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 999px; }
+.log-card.학습 .log-pill, .log-row.학습 .log-pill { background: #eaf2fc; color: #3f74b3; }
+.log-card.과제 .log-pill, .log-row.과제 .log-pill { background: #fdf1e3; color: #c17d2e; }
+.log-card.평가 .log-pill, .log-row.평가 .log-pill { background: #e9f7ef; color: #2f9e64; }
+.log-pill.tone-submit { background: #eaf1fd !important; color: #2f6fd9 !important; }
+.log-pill.tone-late { background: #fdeaea !important; color: #e04b4b !important; }
+.log-pill.tone-red { background: #fdeaea !important; color: #e04b4b !important; }
+.log-pill.tone-orange { background: #fff1e0 !important; color: #d9822b !important; }
+.log-pill.tone-yellow { background: #fff9db !important; color: #b9971d !important; }
+.log-pill.tone-green { background: #e6f7ee !important; color: #1e9e5c !important; }
+.log-pill.tone-blue { background: #eaf1fd !important; color: #2f6fd9 !important; }
+.log-pill.tone-perfect { background: #eaf1fd !important; color: #2f6fd9 !important; }
+.log-note { font-size: 12px; color: #888; line-height: 1.5; margin-bottom: 6px; white-space: pre-wrap; }
+.log-photo { width: 100%; border-radius: 10px; aspect-ratio: 4 / 3; object-fit: cover; display: block; margin-top: 8px; }
+.log-date-group { margin-bottom: 6px; }
+.log-date-label { font-size: 13px; font-weight: 600; color: #9a9a9a; margin: 0 0 10px; display: flex; align-items: center; gap: 6px; }
+
+.day-detail-item { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; border-bottom: 1px solid #f5f5f7; }
+.day-detail-item:last-child { border-bottom: none; }
+.day-detail-item .tag { font-size: 10px; font-weight: 700; padding: 3px 7px; border-radius: 6px; white-space: nowrap; margin-top: 1px; }
+.day-detail-item .tag.학습 { background: #eef2ff; color: #4c51bf; }
+.day-detail-item .tag.과제 { background: #fff7e6; color: #c97c00; }
+.day-detail-item .tag.평가 { background: #ffeef0; color: #d1355e; }
+.day-detail-item .title { font-size: 13px; font-weight: 600; }
+.day-detail-item .meta { font-size: 11px; color: #888; margin-top: 2px; }
+.list-item { padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
+.list-item:last-child { border-bottom: none; }
+.list-item.empty-hint { color: #aaa; text-align: center; padding: 16px 0; }
+.list-item .title { font-weight: 600; margin-bottom: 3px; }
+.list-item .meta { color: #888; font-size: 12px; }
+.empty { color: #aaa; font-size: 13px; text-align: center; padding: 12px 0; }
+
+.feed-card { background: #fff; border-radius: 14px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp { from { transform: translateY(24px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.book-card { cursor: pointer; }
+.feed-card .feed-date { font-size: 13px; font-weight: 700; color: #333; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+.feed-entry { padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid #f0f0f0; }
+.feed-entry:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+.feed-entry .feed-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; color: #222; }
+.feed-entry .feed-meta { color: #888; font-size: 12px; margin-bottom: 8px; }
+.feed-entry .feed-note { font-size: 13px; color: #444; line-height: 1.55; margin-bottom: 10px; white-space: pre-wrap; }
+.feed-entry .feed-photo { width: 100%; border-radius: 10px; aspect-ratio: 4 / 3; object-fit: cover; display: block; }
+
+/* ===== 모달 (햄버거 세션용) ===== */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; align-items: flex-end; justify-content: center; }
+.modal-overlay.active { display: flex; }
+.modal-sheet { background: #fff; width: 100%; max-width: 480px; max-height: 85vh; overflow-y: auto; border-radius: 20px 20px 0 0; padding: 20px; }
+.modal-sheet h3 { margin: 0 0 14px; font-size: 17px; display: flex; justify-content: space-between; align-items: center; }
+.modal-close { background: #f0f0f0; border: none; border-radius: 50%; width: 28px; height: 28px; font-size: 14px; cursor: pointer; }
+.view-toggle { display: flex; gap: 6px; margin-bottom: 16px; }
+.view-toggle button { flex: 1; padding: 8px 0; border-radius: 10px; border: 1px solid #eee; background: #f7f7f9; color: #888; font-size: 13px; font-weight: 600; cursor: pointer; }
+.view-toggle button.active { background: #6c5ce7; color: #fff; border-color: #6c5ce7; }
+.grade-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.grade-table th, .grade-table td { padding: 8px 6px; border-bottom: 1px solid #f0f0f0; text-align: left; }
+.grade-table th { color: #999; font-weight: 600; font-size: 12px; }
+.chart-legend { display: flex; gap: 14px; margin-bottom: 10px; font-size: 12px; }
+.chart-legend .legend-item { display: flex; align-items: center; gap: 5px; }
+.chart-legend .dot { width: 8px; height: 8px; border-radius: 50%; }
+.chart-wrap { width: 100%; max-width: 480px; margin: 0 auto; aspect-ratio: 400 / 220; max-height: min(34vh, 300px); }
+.chart-wrap svg { width: 100%; height: 100%; display: block; }
+.info-detail-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
+.info-detail-row:last-child { border-bottom: none; }
+.info-detail-row .label { color: #888; }
+.reg-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 4px; border-bottom: 1px solid #f0f0f0; cursor: pointer; gap: 8px; }
+.reg-item:last-child { border-bottom: none; }
+.reg-item .left { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; overflow: hidden; }
+.reg-item .name-wrap { display: flex; flex-direction: row; align-items: center; gap: 8px; min-width: 0; flex-wrap: nowrap; overflow: hidden; }
+.reg-item .class-name { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
+.reg-item .period { font-size: 12px; color: #999; white-space: nowrap; flex-shrink: 0; }
+.reg-item .badge { flex-shrink: 0; white-space: nowrap; }
+@media (max-width: 360px) {
+  .reg-item .period { display: none; }
+}
+
+.menu-item-header { display: flex; align-items: center; gap: 10px; padding: 14px 6px; border-bottom: 1px solid #f2f2f2; font-size: 15px; font-weight: 600; cursor: pointer; background: #fff; }
+.menu-item-header .icon { font-size: 18px; }
+.menu-item-header.active { background: linear-gradient(135deg, rgba(108,92,231,0.10), rgba(155,120,255,0.05)); color: #6c5ce7; border-bottom: 1px solid rgba(108,92,231,0.16); }
+.menu-item-chevron { font-size: 11px; color: #bbb; }
+.menu-item-header.active .menu-item-chevron { color: #a99bee; }
+.menu-item-body { padding: 4px 6px 16px; border-bottom: 1px solid #f2f2f2; background: linear-gradient(135deg, rgba(108,92,231,0.06), rgba(155,120,255,0.02)); color: #333; }
+.menu-item-body .info-detail-row, .menu-item-body .reg-item { border-bottom: 1px solid rgba(108,92,231,0.10); }
+.menu-item-body .info-detail-row .label { color: #888; }
+.menu-item-body .reg-item .class-name { color: #333; }
+.menu-item-body .reg-item .period { color: #999; }
+.menu-nav-item { display: flex; align-items: center; gap: 10px; padding: 14px 6px; border-bottom: 1px solid #f2f2f2; font-size: 15px; font-weight: 600; cursor: pointer; }
+.menu-nav-item .icon { font-size: 18px; }
+
+.sub-page { max-width: var(--content-w-wide); margin: 0 auto; padding: 16px; padding-bottom: 60px; }
+.sub-page h2 { font-size: 17px; margin: 0 0 4px; color: #333; }
+.sub-page .section-hint { font-size: 12px; color: #888; margin-bottom: 16px; }
+.header-plain { padding: 4px 0 12px; }
+.back-btn-plain { display: inline-flex; align-items: center; gap: 4px; background: #f0eefc; color: #6c5ce7; border: none; padding: 7px 14px; border-radius: 999px; font-size: 13px; font-weight: 600; cursor: pointer; }
+
+.cal-month { background: #fff; border-radius: 14px; padding: clamp(8px, min(4vw, 3.6vh), 38px); margin-bottom: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.cal-month-title { font-size: clamp(16px, 3.2vw, 22px); font-weight: 700; }
+.cal-month-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.cal-nav-btn { background: #f0eefc; border: none; width: clamp(28px, 4vw, 40px); height: clamp(28px, 4vw, 40px); border-radius: 50%; color: #6c5ce7; font-size: clamp(15px, 2.4vw, 20px); font-weight: 700; cursor: pointer; }
+.cal-nav-btn:disabled { opacity: 0.3; cursor: default; }
+.schedule-cal-wrap { width: 100%; margin: 0 auto; max-width: min(var(--content-w), 68vh); overflow: hidden; }
+.attendance-cal-wrap { width: 100%; margin: 0 auto; max-width: min(var(--content-w), 62vh); overflow: hidden; transition: max-width 0.24s ease; }
+
+/* [v5] 헤더가 큰(확장) 상태: 캘린더를 더 축소해서 한 화면에 통째로 들어오게 하고,
+   출석/결석/보강 숫자·범례·힌트는 숨긴다. 스크롤해서 헤더가 작아지면 캘린더가 커지고 함께 나타난다. */
+body.reg-expanded .attendance-cal-wrap { max-width: min(var(--content-w), 43vh); }
+body.reg-expanded .attendance-calendar { padding: clamp(6px, min(3vw, 2.2vh), 18px); }
+body.reg-expanded .attendance-calendar .cal-month-label { font-size: 11px; margin: 2px 0 4px; }
+body.reg-expanded .cal-month-nav { margin-bottom: 6px; }
+body.reg-expanded .cal-summary,
+body.reg-expanded .attendance-calendar .cal-legend,
+body.reg-expanded .cal-hint { display: none; }
+/* 캘린더만 있는 화면에서도 살짝 스크롤해서 헤더를 줄일 수 있도록 여지를 둔다 */
+body.reg-expanded .reg-detail-page { min-height: calc(100vh + 96px); }
+body:not(.reg-expanded) .cal-summary,
+body:not(.reg-expanded) .attendance-calendar .cal-legend,
+body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
+@keyframes calExtraFadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+.cal-summary { display: flex; gap: 8px; margin-top: 10px; }
+.cal-summary-item { flex: 1; background: #fff; border-radius: 12px; padding: 10px 6px; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.cal-summary-item .num { display: block; font-size: clamp(16px, 3.4vw, 22px); font-weight: 800; line-height: 1.1; }
+.cal-summary-item .lbl { display: block; font-size: clamp(10px, 1.9vw, 12px); color: #888; margin-top: 3px; font-weight: 600; }
+.cal-summary-item.present .num { color: #1e9e5c; }
+.cal-summary-item.absent .num { color: #e04b4b; }
+.cal-summary-item.makeup .num { color: #2f6fd9; }
+.cal-summary-item.partial .num { color: #d68f00; }
+.attendance-calendar { background: #fff; border-radius: 14px; padding: clamp(8px, min(4vw, 3.6vh), 38px); box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); font-size: clamp(12px, 2vw, 15px); color: #999; text-align: center; margin-bottom: 6px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: clamp(1px, min(1vw, 1vh), 10px); }
+.cal-cell { aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: clamp(8px, min(2.9vw, 2.9vh), 22px); border-radius: 8px; position: relative; }
+.cal-cell.has-event { background: #f5f3ff; color: #333; font-weight: 700; cursor: pointer; }
+.cal-cell.has-event:active { background: #ece9ff; }
+.cal-dots { display: flex; gap: 3px; margin-top: 3px; }
+.cal-dot { width: 5px; height: 5px; border-radius: 50%; background: #6c5ce7; flex-shrink: 0; }
+.list-item .title { display: flex; align-items: center; gap: 6px; }
+.list-item .title .cal-dot { width: 8px; height: 8px; }
+.cal-event-list { margin-top: 12px; }
+
+/* ===== 학습기록 피드 (노션 페이지 본문 글 + 사진) ===== */
+.feed-body { margin-top: 10px; padding-top: 10px; border-top: 1px solid #f1f0f6; display: flex; flex-direction: column; gap: 8px; }
+.feed-para { font-size: 14px; line-height: 1.62; color: #3a3a3a; white-space: pre-wrap; word-break: break-word; }
+.feed-heading { font-size: 15px; font-weight: 800; color: #2b2b2b; margin-top: 2px; }
+.feed-bullet { font-size: 14px; line-height: 1.6; color: #3a3a3a; padding-left: 14px; position: relative; }
+.feed-bullet::before { content: ""; position: absolute; left: 3px; top: 9px; width: 4px; height: 4px; border-radius: 50%; background: #a29bfe; }
+.feed-quote { font-size: 14px; line-height: 1.6; color: #6c5ce7; background: #f7f5ff; border-left: 3px solid #a29bfe; border-radius: 0 10px 10px 0; padding: 9px 12px; }
+.feed-images { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 2px; }
+.feed-images.single { grid-template-columns: 1fr; }
+.feed-figure { margin: 0; }
+.feed-img { width: 100%; aspect-ratio: 1 / 1; max-height: 320px; object-fit: cover; border-radius: 12px; display: block; background: #f0f0f4; cursor: zoom-in; }
+.feed-images.single .feed-img { aspect-ratio: auto; height: auto; max-height: 420px; object-fit: contain; background: #fafafa; }
+.feed-figure figcaption { font-size: 11px; color: #999; margin-top: 4px; text-align: center; }
+.feed-video { margin: 8px 0; }
+.feed-video iframe { width: 100%; aspect-ratio: 16 / 9; border-radius: 12px; display: block; border: 0; }
+.feed-video video { width: 100%; max-height: 420px; border-radius: 12px; display: block; background: #000; }
+.feed-video-caption { font-size: 11px; color: #999; margin-top: 4px; text-align: center; }
+.feed-divider { border-top: 1px solid #f1f0f6; margin: 12px 0; }
+.feed-lightbox { position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; padding: 16px; cursor: zoom-out; }
+.feed-lightbox img { max-width: 100%; max-height: 100%; border-radius: 8px; }
+
+@media (max-height: 520px) {
+  .schedule-section, .books-section, .attendance-section, .study-section, .tasks-section {
+    padding-top: 6px !important;
+    padding-bottom: 2px !important;
+  }
+  .schedule-section h2, .grades-section h2, .books-section h2, .attendance-section h2, .study-section h2, .tasks-section h2 {
+    font-size: 12px; margin: 0 0 2px;
+  }
+  .schedule-section .section-hint, .grades-section .section-hint, .books-section .section-hint, .attendance-section .section-hint, .study-section .section-hint, .tasks-section .section-hint {
+    font-size: 0px; margin-bottom: 0px; height: 0; overflow: hidden;
+  }
+  .up-hint, .swipe-hint { font-size: 0px; }
+  .up-hint .chevron, .swipe-hint .chevron { display: none; }
+  .cal-month-nav { margin-bottom: 2px; }
+  .cal-nav-btn { width: 20px; height: 20px; font-size: 11px; }
+  .cal-month-title { font-size: 12px; }
+  .cal-hint { display: none; }
+  .attendance-calendar .cal-legend { font-size: 0px; height: 0; margin-top: 0; overflow: hidden; }
+  .attendance-calendar .cal-month-label { font-size: 9px; margin: 0 0 2px; }
+  .cal-month { margin-bottom: 2px !important; }
+}
+  #debug-clock {
+    position: fixed; top: 4px; left: 50%; transform: translateX(-50%);
+    z-index: 9999; color: #bbb;
+    font-size: 10px; padding: 2px 6px;
+    pointer-events: none; white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+<div id="debug-clock">-</div>
+<div id="app"></div>
+
+<div class="menu-overlay" id="menu">
+  <div class="menu-panel">
+    <button class="menu-close" onclick="closeMenu()">✕</button>
+    <h3 style="margin-top:28px;">메뉴</h3>
+    <div id="menu-body"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="schedule-day-modal" onclick="if(event.target===this) closeScheduleDayModal()">
+  <div class="modal-sheet">
+    <h3><span id="schedule-day-modal-title"></span><button class="modal-close" onclick="closeScheduleDayModal()">✕</button></h3>
+    <div id="schedule-day-modal-body"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="test-detail-modal" onclick="if(event.target===this) closeTestDetailModal()">
+  <div class="modal-sheet">
+    <h3><span id="test-detail-modal-title"></span><button class="modal-close" onclick="closeTestDetailModal()">✕</button></h3>
+    <div id="test-detail-modal-body"></div>
+  </div>
+</div>
+
+<script>
+// ===================== 목업 데이터 =====================
+// TODO(아이콘 소스 규칙): 일부 아이콘은 HTML에 직접 박힌 이모지이고, 일부는 노션 페이지 아이콘을 가져와야 함. 추후 아이콘 소스를 하나의 변수/규칙으로 통일하는 규칙을 정해야 함 (아직 미정).
+let STUDENT = null
+let DATA_ERROR = null
+
+const SUPABASE_URL = "https://twczhsxybkcvjkdfdxvs.supabase.co"
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR3Y3poc3h5YmtjdmprZGZkeHZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyOTcwMDQsImV4cCI6MjEwMzg3MzAwNH0.t7Ltb_iSYqE4gHSoGSm-OlpiLjGqIcgrhzGJ-t56EDc"
+
+// 반마다 서로 다른 색상 이모지를 안정적으로 배정한다 (같은 반 이름이면 항상 같은 색).
+// 실제 반 색상 데이터가 서버에서 내려오면 이 함수를 그 값으로 교체하면 된다.
+const CLASS_COLOR_EMOJIS = ["🟣", "🔵", "🟢", "🟠", "🔴", "🟡", "🟤", "⚪"]
+function pickClassColorEmoji(seed) {
+  const str = String(seed || "")
+  let hash = 0
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * 31 + str.charCodeAt(i)) >>> 0
+  }
+  return CLASS_COLOR_EMOJIS[hash % CLASS_COLOR_EMOJIS.length]
+}
+// 노션 "진행상태" 원본값은 "진행 중" / "완료" / "다음 교재"처럼 공백·이모지가 들어갈 수 있어서,
+// 공백과 이모지를 지우고 UI 필터 값(진행중 / 완료 / 예정)으로 매핑한다.
+function normalizeBookStatus(rawStatus) {
+  const s = String(rawStatus || "")
+    .replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, "")
+    .replace(/\s+/g, "")
+  if (!s) return "진행중"
+  if (s.includes("진행")) return "진행중"
+  if (s.includes("완료") || s.includes("종료")) return "완료"
+  if (s.includes("다음") || s.includes("예정") || s.includes("대기")) return "예정"
+  return s
+}
+// 과제 상태에 따른 배지 색상 톤 (제출: 파란색 / 미제출: 빨간색)
+function homeworkPillTone(status) {
+  const s = String(status || "").trim()
+  if (s === "제출") return "tone-submit"
+  if (s === "미제출") return "tone-late"
+  return ""
+}
+// 평가 정답률에 따른 배지 색상 톤 (60미만 빨강 / 70미만 주황 / 80미만 노랑 / 90미만 초록 / 100미만 파랑 / 100 파랑+이모지)
+function scorePillTone(correct, total) {
+  if (!total) return ""
+  const pct = Math.round((correct / total) * 100)
+  if (pct >= 100) return "tone-perfect"
+  if (pct >= 90) return "tone-blue"
+  if (pct >= 80) return "tone-green"
+  if (pct >= 70) return "tone-yellow"
+  if (pct >= 60) return "tone-orange"
+  return "tone-red"
+}
+// 실제 점수(정답률)를 "N점 (correct/total)" 형식으로 표기한다. (100점이라고 별도 아이콘을 붙이지 않는다.)
+function scorePillText(correct, total) {
+  if (!total) return `정답 ${correct ?? 0} / 0`
+  const pct = Math.round(((correct ?? 0) / total) * 100)
+  return `${pct}점 (${correct ?? 0}/${total})`
+}
+// 노션 학습기록 "페이지 본문"을 피드용 부록으로 정리한다.
+// Edge Function 이 body: [{ type: "text" | "image", text?, url?, caption? }] 로 내려준다.
+function normalizeFeedBody(rawBody) {
+  if (!Array.isArray(rawBody)) return []
+  return rawBody
+    .map((b) => {
+      if (!b) return null
+      if (b.type === "image" && b.url) {
+        return { type: "image", url: String(b.url), caption: String(b.caption || "") }
+      }
+      if (b.type === "video" && b.url) {
+        return { type: "video", url: String(b.url), caption: String(b.caption || "") }
+      }
+      const t = String(b.text || "").trim()
+      if (!t) return null
+      return { type: "text", text: t, style: String(b.style || "") }
+    })
+    .filter(Boolean)
+}
+
+// 유튜브/비메오 링크는 iframe 임베드로, 그 외(직접 업로드된 mp4 등)는 <video> 태그로 재생한다.
+function buildFeedVideoHtml(vid) {
+  const url = String(vid.url || "")
+  const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]{6,})/)
+  const vimeo = url.match(/vimeo\.com\/(\d+)/)
+  let inner = ""
+  if (yt) {
+    inner = `<iframe src="https://www.youtube.com/embed/${esc(yt[1])}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`
+  } else if (vimeo) {
+    inner = `<iframe src="https://player.vimeo.com/video/${esc(vimeo[1])}" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>`
+  } else {
+    inner = `<video src="${esc(url)}" controls preload="metadata"></video>`
+  }
+  return `<div class="feed-video">${inner}${vid.caption ? `<div class="feed-video-caption">${esc(vid.caption)}</div>` : ""}</div>`
+}
+
+// 피드 본문 렌더링: 글 + 사진을 인스타그램 피드처럼 보여준다.
+// 이미지 1장은 크게, 2장 이상은 그리드로 배치한다.
+function buildFeedBodyHtml(body) {
+  const items = normalizeFeedBody(body)
+  if (!items.length) return ""
+  const parts = []
+  let imageBuffer = []
+  const flushImages = () => {
+    if (!imageBuffer.length) return
+    const cls = imageBuffer.length === 1 ? "feed-images single" : "feed-images"
+    parts.push(`<div class="${cls}">${imageBuffer
+      .map((img) => `<figure class="feed-figure"><img class="feed-img" src="${esc(img.url)}" loading="lazy" onclick="openFeedImage('${esc(img.url).replace(/'/g, "&#39;")}')" />${img.caption ? `<figcaption>${esc(img.caption)}</figcaption>` : ""}</figure>`)
+      .join("")}</div>`)
+    imageBuffer = []
+  }
+  items.forEach((it) => {
+    if (it.type === "image") {
+      imageBuffer.push(it)
+      return
+    }
+    if (it.type === "video") {
+      flushImages()
+      parts.push(buildFeedVideoHtml(it))
+      return
+    }
+    flushImages()
+    if (it.style === "heading") parts.push(`<div class="feed-heading">${esc(it.text)}</div>`)
+    else if (it.style === "bullet") parts.push(`<div class="feed-bullet">${esc(it.text)}</div>`)
+    else if (it.style === "quote") parts.push(`<div class="feed-quote">${esc(it.text)}</div>`)
+    else parts.push(`<div class="feed-para">${esc(it.text)}</div>`)
+  })
+  flushImages()
+  return `<div class="feed-body">${parts.join("")}</div>`
+}
+
+// 피드 이미지 탭 → 전체화면 뷰어
+function openFeedImage(url) {
+  if (!url) return
+  const layer = document.createElement("div")
+  layer.className = "feed-lightbox"
+  layer.innerHTML = `<img src="${esc(url)}" />`
+  layer.onclick = () => layer.remove()
+  document.body.appendChild(layer)
+}
+
+const LEADING_EMOJI_RE = /^(\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic})*)\s*/u
+function splitClassNameEmoji(rawClassName) {
+  const str = String(rawClassName || "").trim()
+  const match = str.match(LEADING_EMOJI_RE)
+  if (match) {
+    return { emoji: match[1], name: str.slice(match[0].length).trim() }
+  }
+  return { emoji: "", name: str }
+}
+
+// Supabase RPC 응답(같은 학생의 모든 등록을 registrations[] 배열로 집계)을 앞단의 UI가 사용하는
+// STUDENT/registrations[] 형태로 변환합니다.
+function mapRegistration(reg) {
+  return {
+    token: reg.access_token || "",
+    emoji: splitClassNameEmoji(reg.class_name).emoji || pickClassColorEmoji(splitClassNameEmoji(reg.class_name).name),
+    class_name: splitClassNameEmoji(reg.class_name).name || reg.class_name || "",
+    // 변경 후 (실제 값 반영)
+    status: reg.status === "수강 종료" ? "수강종료"
+      : reg.status === "수강 대기" ? "수강대기"
+      : "수강중",
+    start: reg.start_date || null,
+    end: reg.end_date || null,
+    teacher: reg.teacher_name || "",
+    class_mode: reg.class_mode || "",
+    schedule: (reg.schedule || []).map((s) => ({ day: s.day, start: s.start, end: s.end })),
+    books: (reg.books || []).map((b) => ({ title: b.title || "", progress: b.progress ?? 0, status: normalizeBookStatus(b.status), cover: b.cover || "", pages: b.pages ?? null, units: b.units || [] })),
+    attendance_summary: reg.attendance_summary || { present: 0, absent: 0, makeup: 0 },
+    attendance_rows: (reg.attendance_rows || []).map((a) => {
+      const rawDate = a.iso || a.date_iso || (typeof a.date === "string" && /^\d{4}-\d{2}-\d{2}/.test(a.date) ? a.date : null)
+      // [FIX] 백엔드가 시간/타임존까지 포함된 ISO 문자열을 보낼 수 있어, 항상 앞 10자(YYYY-MM-DD)로 정규화한다.
+      // 정규화하지 않으면 캘린더(slice 비교)는 매칭되지만 일일 보고서(=== 비교)는 매칭되지 않는 문제가 생긴다.
+      return { date: rawDate ? String(rawDate).slice(0, 10) : null, weekday: a.weekday || "", status: a.status || "" }
+    }),
+    study_logs: (reg.study_logs || []).map((s) => ({ book: s.book || "", range: s.range || "", unit: s.unit || "", date: s.iso || null, note: s.note || "", body: normalizeFeedBody(s.body) })),
+    homework: (reg.homework || []).map((h) => ({ title: h.title || "", book: h.book || "", range: h.range || "", unit: h.unit || "", note: h.note || "", due: h.due_iso || null, status: h.status || "미제출" })),
+    homework_days: (reg.homework_days || []).map((h) => ({ date: h.date || null, status: h.status || "미완료", submitted: h.submitted ?? 0, total: h.total ?? 0 })),
+    tests: (reg.tests || []).map((t) => ({ title: t.title || "", book: t.book || "", range: t.range || "", unit: t.unit || "", note: t.note || "", date: t.iso || null, correct: t.correct ?? 0, total: t.total ?? 0 })),
+    teacher_comments: (reg.teacher_comments || []).map((c) => ({ text: c.text || "", date: c.iso || null, by: c.by || "" })),
+    // 주간/월간 보고서: 보고서(학원) DB 자체의 "선생님 한마디"를 보고서 구분·학습 기간과 함께 보관한다.
+    report_comments: (reg.report_comments || []).map((c) => ({ kind: c.kind || "", start: c.start || null, end: c.end || c.start || null, comment: c.comment || "" })),
+  }
+}
+
+function mapReportToStudent(r) {
+  const regs = Array.isArray(r.registrations) && r.registrations.length ? r.registrations : [r]
+  return {
+    academy_name: "",
+    student_name: r.student_name || "",
+    school: (r.school_grade || "").split(" ")[0] || "",
+    grade: (r.school_grade || "").split(" ").slice(1).join(" ") || "",
+    gender: "",
+    birthdate: "",
+    siblings: (r.siblings || []).map((sib) => ({ name: sib.name || "", token: sib.access_token || null })),
+    student_phone: r.student_phone || "",
+    mother_phone: r.mother_phone || "",
+    father_phone: r.father_phone || "",
+    primary_contact: r.primary_contact || "",
+    grades: (r.grades || []).map((g) => ({
+      subject: g.subject || "수학",
+      exam_name: g.title || "",
+      score: g.score,
+      grade_level: g.level || "",
+      date: g.iso || null,
+    })),
+    notices: (r.notices || []).map((n) => ({ date: n.date || null, title: n.title || "", category: n.category || "" })),
+    registrations: regs.map(mapRegistration),
+  }
+}
+
+async function loadReportFromServer() {
+  const token = new URLSearchParams(window.location.search).get("token")
+  if (!token) {
+    DATA_ERROR = "링크가 올바르지 않아요. 받으신 링크를 다시 확인해주세요"
+    return
+  }
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_report_by_token`, {
+      method: "POST",
+      headers: {
+        "apikey": SUPABASE_ANON_KEY,
+        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ p_token: token }),
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    const row = Array.isArray(data) ? data[0] : data
+    if (!row) throw new Error("no data")
+    STUDENT = mapReportToStudent(row)
+    if (STUDENT.student_name) {
+      document.title = `${STUDENT.student_name} 학습 리포트`
+    }
+  } catch (e) {
+    DATA_ERROR = "데이터를 불러오는 중 문제가 생겼어요. 잠시 후 다시 시도해주세요"
+  }
+}
+
+// ===================== 상태 =====================
+const app = document.getElementById("app")
+let view = "intro" // "intro" | "detail" | "grades" | "schedule" | "book"
+let selectedToken = null
+let selectedBookTitle = null
+let gradeView = "table"
+let scheduleMonthIndex = 0
+let expandedSection = null // "basic" | "registrations" | null
+let selectedCalDate = null
+let regTab = "books" // "books" | "calendar" | "study" | "report"
+let calMode = "attendance" // "attendance" | "homework"
+let regCalMonthIndex = 0
+let reportPeriod = "week" // "week" | "month" | "day"
+let reportOffset = 0 // 0 = current period, 1 = previous period, etc.
+let reportDayDate = null // used when reportPeriod === "day"
+let bookStatusTab = "진행중" // "진행중" | "완료" | "예정"
+// Computes today date in Asia/Seoul time (not UTC) so it is correct before 9am KST.
+function todayIsoInSeoul() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date())
+  return parts
+}
+const MOCK_TODAY = todayIsoInSeoul()
+// [FIX] Bound how far back the attendance calendar / schedule calendar / report
+// view can navigate. Keep this in sync with the 6-month sinceIso window computed
+// server-side in _shared/syncStudentReport.ts so users cannot page into months that
+// have no data (which is what made the calendar look like it scrolls forever).
+const MAX_LOOKBACK_MONTHS = 6
+
+function esc(s) {
+  if (s === null || s === undefined) return ""
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]))
+}
+
+function openMenu() { renderMenuBody(); document.getElementById("menu").classList.add("active") }
+function closeMenu() { document.getElementById("menu").classList.remove("active") }
+
+function renderMenuBody() {
+  document.getElementById("menu-body").innerHTML = `
+    <div class="menu-item-header ${expandedSection === "basic" ? "active" : ""}" onclick="toggleSection('basic')">
+      <span class="icon">👤</span><span style="flex:1">기본정보</span><span class="menu-item-chevron">${expandedSection === "basic" ? "▲" : "▼"}</span>
+    </div>
+    ${expandedSection === "basic" ? `<div class="menu-item-body">${basicInfoBodyHtml()}</div>` : ""}
+    <div class="menu-item-header ${expandedSection === "registrations" ? "active" : ""}" onclick="toggleSection('registrations')">
+      <span class="icon">🏛️</span><span style="flex:1">등록 클래스</span><span class="menu-item-chevron">${expandedSection === "registrations" ? "▲" : "▼"}</span>
+    </div>
+    ${expandedSection === "registrations" ? `<div class="menu-item-body">${registrationsBodyHtml()}</div>` : ""}
+  `
+}
+function toggleSection(name) {
+  expandedSection = expandedSection === name ? null : name
+  renderMenuBody()
+}
+
+function openRegistration(token) {
+  selectedToken = token
+  regTab = "books"
+  bookStatusTab = "진행중"
+  selectedBookTitle = null
+  calMode = "attendance"
+  regCalMonthIndex = 0
+  reportPeriod = "week"
+  reportOffset = 0
+  reportDayDate = null
+  view = "detail"
+  renderApp()
+  window.scrollTo({ top: 0 })
+}
+
+function openBookStudy(title) {
+  selectedBookTitle = normBookTitle(title)
+  view = "book"
+  renderApp()
+  window.scrollTo({ top: 0 })
+}
+function closeBookDetail() {
+  view = "detail"
+  selectedBookTitle = null
+  renderApp()
+  window.scrollTo({ top: 0 })
+}
+function normBookTitle(v) {
+  return String(v || "").trim()
+}
+function renderBookDetail() {
+  const r = currentReg()
+  if (!r || !selectedBookTitle) return renderDetail()
+  const books = r.books || []
+  const targetTitle = normBookTitle(selectedBookTitle)
+  const book = books.find((b) => normBookTitle(b.title) === targetTitle) || {}
+  const items = []
+  ;((r.study_logs) || []).filter((l) => normBookTitle(l.book) === targetTitle).forEach((l) => items.push({
+    type: "학습", icon: "📖", date: l.date, book: l.book, range: l.range, unit: l.unit, note: l.note, pill: null, photo: l.photo, body: l.body,
+  }))
+  ;((r.homework) || []).filter((h) => normBookTitle(h.book) === targetTitle).forEach((h) => items.push({
+    type: "과제", icon: "📝", date: h.date || h.due, book: h.book, range: h.range, unit: h.unit, note: h.note || h.title, pill: h.status, pillTone: homeworkPillTone(h.status), photo: null, body: null,
+  }))
+  ;((r.tests) || []).filter((t) => normBookTitle(t.book) === targetTitle).forEach((t) => items.push({
+    type: "평가", icon: "📄", date: t.date, book: t.book, range: t.range, unit: t.unit, note: t.note || t.title, pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), photo: null, body: null,
+  }))
+  const sorted = items.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+  const studiedUnitKeys = new Set()
+  const studiedUnitList = []
+  items.slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)).forEach((l) => {
+    if (!l.unit) return
+    l.unit.split(/(?=\d+-\d+\.)/).map((s) => s.trim()).filter(Boolean).forEach((part) => {
+      const m = part.match(/^(\d+-\d+)/)
+      const key = m ? m[1] : part
+      studiedUnitKeys.add(key)
+      if (!studiedUnitList.some((u) => u.text === part)) studiedUnitList.push({ text: part, done: true })
+    })
+  })
+  const unitSortKey = (t) => {
+    const m = t.match(/^(\d+)-(\d+)/)
+    return m ? Number(m[1]) * 1000 + Number(m[2]) : 999999
+  }
+  const unitList = ((book.units && book.units.length)
+    ? book.units.map((u) => {
+        const m = u.match(/^(\d+-\d+)/)
+        const key = m ? m[1] : u
+        return { text: u, done: studiedUnitKeys.has(key) }
+      })
+    : studiedUnitList
+  ).slice().sort((a, b) => unitSortKey(a.text) - unitSortKey(b.text))
+  return `
+    <div class="reg-detail-page">
+      <div class="reg-header-bar">
+        <div class="reg-header-top">
+          <button class="reg-back-btn" onclick="closeBookDetail()">←</button>
+          <div class="reg-breadcrumb">
+            <span class="crumb" onclick="goIntro()">${esc(STUDENT.student_name)}</span>
+            <span class="crumb-sep">›</span>
+            <span class="crumb" onclick="closeBookDetail()">${r.emoji} ${esc(r.class_name)}</span>
+            <span class="crumb-sep">›</span>
+            <span class="crumb" onclick="closeBookDetail()">📚 교재</span>
+            <span class="crumb-sep">›</span>
+            <span class="crumb current">📘 ${esc(selectedBookTitle)}</span>
+          </div>
+        </div>
+        <div class="reg-cover-wrap">
+          <div class="reg-cover-img">${book.cover ? `<img src="${esc(book.cover)}" alt="${esc(selectedBookTitle)}">` : "📘"}</div>
+        </div>
+        <div class="reg-head-row">
+          <div class="reg-emoji">📘</div>
+          <div class="reg-title">${esc(selectedBookTitle)}</div>
+        </div>
+        <div class="reg-sub-badges">
+          <span class="sub-badge">${esc(book.status || "진행중")}</span>
+          ${book.progress != null ? `<span class="sub-badge">진도 ${book.progress}%</span>` : ""}
+        </div>
+      </div>
+      <div class="reg-tab-content">
+        <div class="book-cover-card">
+          <div class="book-cover-top">
+            <div class="book-cover-card-img">${book.cover ? `<img src="${esc(book.cover)}" alt="${esc(selectedBookTitle)}">` : "📘"}</div>
+            <div class="book-cover-card-info">
+              <div class="book-cover-info-row">
+                <span class="info-label">전체 분량</span>
+                <span class="info-value">${book.pages ? `전체 ${book.pages}쪽` : "-"}</span>
+              </div>
+              <div class="book-cover-info-row">
+                <span class="info-label">단원목록</span>
+                <ul class="unit-list">
+                  ${unitList.length ? unitList.map((u) => `<li>${esc(u.text)}${u.done ? " ✅" : ""}</li>`).join("") : `<li class="empty">-</li>`}
+                </ul>
+              </div>
+            </div>
+          </div>
+          ${book.progress != null ? `
+          <div class="book-cover-progress">
+            <div class="progress-track"><div class="progress-fill" style="width:${book.progress}%"></div></div>
+            <div class="progress-label">진도 ${book.progress}%</div>
+          </div>` : ""}
+        </div>
+        <h2>📖 학습기록</h2>
+        <div class="section-hint">이 교재와 관련된 학습 · 과제 · 평가 기록을 최근순으로 보여줍니다</div>
+        ${(() => {
+          const groups = []
+          sorted.forEach((l) => {
+            const last = groups[groups.length - 1]
+            if (last && last.date === l.date) { last.items.push(l) } else { groups.push({ date: l.date, items: [l] }) }
+          })
+          return groups.length ? groups.map((g) => `
+            <div class="log-date-group">
+              <div class="log-date-label">${esc(g.date)}</div>
+              ${g.items.map((l) => `
+                <div class="log-card ${l.type}">
+                  <div class="log-top">
+                  <div class="log-icon"><span class="log-icon-emoji">${l.icon}</span><span class="log-icon-label">${l.type}</span></div>
+                  <div class="log-body">
+                    <div class="log-title-row">
+                      <div class="log-title">${esc([l.book, l.range].filter(Boolean).join(" · ") || "기록")}</div>
+                      ${l.pill ? `<span class="log-pill ${l.pillTone || ""}">${esc(l.pill)}</span>` : ""}
+                    </div>
+                    ${l.unit ? `<div class="log-context">${esc(`  • 단원: ${l.unit}`)}</div>` : ""}
+                    ${l.note ? `<div class="log-note">${esc(l.note)}</div>` : ""}
+                  </div>
+                </div>
+                ${(l.photo || (l.body && buildFeedBodyHtml(l.body))) ? `<div class="log-divider"></div><div class="log-extra">${l.photo ? `<img class="log-photo" src="${esc(l.photo)}" />` : ""}${buildFeedBodyHtml(l.body)}</div>` : ""}
+                </div>
+              `).join("")}
+            </div>
+          `).join("") : `<div class="empty">이 교재와 관련된 기록이 없습니다.</div>`
+        })()}
+      </div>
+      </div>
+    </div>
+  `
+}
+function setBookStatusTab(status) {
+  bookStatusTab = status
+  renderApp()
+}
+function setRegTab(tab) {
+  regTab = tab
+  renderApp()
+  window.scrollTo({ top: 0 })
+}
+
+function goIntro() {
+  view = "intro"
+  selectedToken = null
+  selectedCalDate = null
+  renderApp()
+}
+
+function selectCalDay(date) {
+  selectedCalDate = date
+  regTab = "report"
+  reportPeriod = "day"
+  reportDayDate = date
+  view = "detail"
+  renderApp()
+  window.scrollTo({ top: 0 })
+}
+
+function scrollToTimetable() {
+  document.getElementById("timetable-section")?.scrollIntoView({ behavior: "smooth" })
+}
+function scrollToIntro() {
+  document.getElementById("intro-section")?.scrollIntoView({ behavior: "smooth" })
+}
+function scrollToSchedule() {
+  document.getElementById("schedule-section")?.scrollIntoView({ behavior: "smooth" })
+}
+function scrollToGrades() {
+  document.getElementById("grades-section")?.scrollIntoView({ behavior: "smooth" })
+}
+function scrollToRegSection(id) {
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth" })
+}
+
+function basicInfoBodyHtml() {
+  const s = STUDENT
+  return `
+    <div class="info-detail-row"><span class="label">학생이름</span><span>${esc(s.student_name)}</span></div>
+    <div class="info-detail-row"><span class="label">학교</span><span>${esc(s.school)}</span></div>
+    <div class="info-detail-row"><span class="label">학년</span><span>${esc(s.grade)}</span></div>
+    <div class="info-detail-row"><span class="label">성별</span><span>${esc(s.gender)}</span></div>
+    <div class="info-detail-row"><span class="label">생년월일</span><span>${esc(s.birthdate)}</span></div>
+    <div class="info-detail-row"><span class="label">형제자매</span><span>${s.siblings.length ? s.siblings.map((sib) => sib.token ? `<a href="?token=${encodeURIComponent(sib.token)}" class="sibling-link">${esc(sib.name)}</a>` : esc(sib.name)).join(", ") : "-"}</span></div>
+    <div class="info-detail-row"><span class="label">학생 연락처</span><span>${esc(s.student_phone)}</span></div>
+    <div class="info-detail-row"><span class="label">어머니 연락처</span><span>${esc(s.mother_phone)}</span></div>
+    <div class="info-detail-row"><span class="label">아버지 연락처</span><span>${esc(s.father_phone)}</span></div>
+  `
+}
+
+function registrationsBodyHtml() {
+  const statusOrder = { "수강중": 0, "수강종료": 1, "수강대기": 2 }
+  const regs = STUDENT.registrations.slice().sort((a, b) => {
+    const sa = statusOrder[a.status] ?? 3
+    const sb = statusOrder[b.status] ?? 3
+    if (sa !== sb) return sa - sb
+    return (a.start || "").localeCompare(b.start || "")
+  })
+  return regs.map((r) => `
+    <div class="reg-item" onclick="closeMenu(); openRegistration('${r.token}')">
+      <div class="left">
+        <span>${r.emoji}</span>
+        <div class="name-wrap">
+          <span class="class-name">${esc(r.class_name)}</span>
+          <span class="period">${esc(toShortDate(r.start))} ~ ${r.end ? esc(toShortDate(r.end)) : "현재"}</span>
+        </div>
+      </div>
+      <span class="badge ${esc(r.status)}">${esc(r.status)}</span>
+    </div>
+  `).join("")
+}
+
+function navigateScheduleMonth(delta) {
+  // [FIX] Don't allow paging further back than MAX_LOOKBACK_MONTHS; without this the
+  // calendar could be paged back indefinitely into months with no data at all.
+  if (delta < 0 && scheduleMonthIndex <= -MAX_LOOKBACK_MONTHS) return
+  scheduleMonthIndex += delta
+  const area = document.getElementById("schedule-cal-area")
+  if (area) {
+    area.innerHTML = buildScheduleCalendarHtml()
+  } else {
+    renderApp()
+  }
+}
+function goScheduleToday() {
+  scheduleMonthIndex = 0
+  const area = document.getElementById("schedule-cal-area")
+  if (area) {
+    area.innerHTML = buildScheduleCalendarHtml()
+  } else {
+    renderApp()
+  }
+}
+
+function addDaysStr(dateStr, days) {
+  const d = new Date(dateStr + "T00:00:00")
+  d.setDate(d.getDate() + days)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+}
+
+// 이모지는 카테고리 '이름'과 분리해서 관리한다. 노션 원본의 이모지 표기가 조금 달라져도
+// normalizeCategoryName()으로 이모지를 제거한 뒤 이름 텍스트만으로 매칭한다.
+function normalizeCategoryName(category) {
+  return String(category || "")
+    .replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, "")
+    .trim()
+}
+const NOTICE_CATEGORY_COLORS = { "휴원": "#9b9a97", "학원 일정": "#337ea9", "학사 일정": "#e03e3e", "할일": "#448361" }
+const NOTICE_CATEGORY_EMOJI = { "휴원": "💤", "학원 일정": "📆", "학사 일정": "🏫", "할일": "✅" }
+// 할일(✅)은 강사/직원용 내부 항목이므로 학생에게는 절대 노출하지 않는다.
+function getStudentVisibleNotices() {
+  return STUDENT.notices.filter((n) => normalizeCategoryName(n.category) !== "할일")
+}
+function scheduleBaseDate() {
+  const [y, m] = MOCK_TODAY.split("-").map(Number)
+  return new Date(y, m - 1 + scheduleMonthIndex, 1)
+}
+function buildScheduleCalendarHtml() {
+  const notices = getStudentVisibleNotices()
+  const base = scheduleBaseDate()
+  const y = base.getFullYear()
+  const mo = base.getMonth() + 1
+  const monthKey = `${y}-${String(mo).padStart(2, "0")}`
+  const startWeekday = new Date(y, mo - 1, 1).getDay()
+  const daysInMonth = new Date(y, mo, 0).getDate()
+  const byDay = {}
+  notices.filter((n) => n.date && n.date.startsWith(monthKey)).forEach((n) => {
+    const d = Number(n.date.slice(8, 10))
+    byDay[d] = byDay[d] || []
+    byDay[d].push(n)
+  })
+  let cells = ""
+  for (let i = 0; i < startWeekday; i++) cells += '<div class="cal-cell"></div>'
+  for (let d = 1; d <= daysInMonth; d++) {
+    const evts = byDay[d]
+    const dateStr = `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`
+    const today = dateStr === MOCK_TODAY ? "today" : ""
+    const dots = evts ? evts.slice(0, 3).map((n) => `<span class="cal-dot" style="background:${NOTICE_CATEGORY_COLORS[normalizeCategoryName(n.category)] || "#999"}"></span>`).join("") : ""
+    cells += `<div class="cal-cell ${evts ? "has-event" : ""} ${today}" ${evts ? `onclick="openScheduleDay('${dateStr}')"` : ""}><span>${d}</span>${evts ? `<span class="cal-dots">${dots}</span>` : ""}</div>`
+  }
+  return `
+    <div class="schedule-cal-wrap">
+      <div class="cal-month">
+        <div class="cal-month-nav">
+          <button class="cal-nav-btn" ${scheduleMonthIndex <= -MAX_LOOKBACK_MONTHS ? "disabled" : ""} onclick="navigateScheduleMonth(-1)">‹</button>
+          <div class="cal-month-title">${y}년 ${mo}월</div>
+          <div class="cal-nav-right">
+            <button class="cal-today-btn" onclick="goScheduleToday()">오늘</button>
+            <button class="cal-nav-btn" onclick="navigateScheduleMonth(1)">›</button>
+          </div>
+        </div>
+        <div class="cal-weekdays">${["일", "월", "화", "수", "목", "금", "토"].map((w) => `<div>${w}</div>`).join("")}</div>
+        <div class="cal-grid">${cells}</div>
+      </div>
+    </div>
+  `
+}
+function openScheduleDay(dateStr) {
+  const dayNotices = getStudentVisibleNotices().filter((n) => n.date === dateStr)
+  document.getElementById("schedule-day-modal-title").textContent = dateStr
+  document.getElementById("schedule-day-modal-body").innerHTML = dayNotices.length ? dayNotices.map((n) => `
+    <div class="list-item">
+      <div class="title"><span class="cal-dot" style="background:${NOTICE_CATEGORY_COLORS[normalizeCategoryName(n.category)] || "#999"}"></span>${esc(n.title)}</div>
+      <div class="meta">${esc(`${NOTICE_CATEGORY_EMOJI[normalizeCategoryName(n.category)] || ""} ${normalizeCategoryName(n.category) || "안내"}`.trim())}</div>
+    </div>
+  `).join("") : '<div class="empty">이 날짜에는 일정이 없습니다.</div>'
+  document.getElementById("schedule-day-modal").classList.add("active")
+}
+function closeScheduleDayModal() {
+  document.getElementById("schedule-day-modal").classList.remove("active")
+}
+
+let testChartPoints = []
+function showTestDetailModal(i) {
+  const p = testChartPoints[i]
+  if (!p) return
+  document.getElementById("test-detail-modal-title").textContent = p.label
+  const items = p.items || []
+  document.getElementById("test-detail-modal-body").innerHTML = items.length
+    ? items.map((t) => `
+      <div class="log-row 평가">
+        <div class="log-title-row"><div class="log-title">${esc([t.book, t.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${scorePillTone(t.correct ?? 0, t.total ?? 0)}">${scorePillText(t.correct ?? 0, t.total ?? 0)}</span></div>
+        ${t.unit ? `<div class="log-context">${esc(`  • 단원: ${t.unit}`)}</div>` : ""}
+        ${(t.note || t.title) ? `<div class="log-note">${esc(t.note || t.title)}</div>` : ""}
+        <div class="log-context">  • 날짜: ${esc(t.date || "-")}</div>
+      </div>
+    `).join("")
+    : `<div class="log-row 평가"><div class="log-note">해당 기간 평가 기록이 없습니다.</div></div>`
+  document.getElementById("test-detail-modal").classList.add("active")
+}
+function closeTestDetailModal() {
+  document.getElementById("test-detail-modal").classList.remove("active")
+}
+
+function buildGradeTableHtml(grades) {
+  return `
+    <table class="grade-table">
+      <thead><tr><th>과목</th><th>시험명</th><th>점수</th><th>등급</th><th>날짜</th></tr></thead>
+      <tbody>${grades.slice().reverse().map((g) => `<tr><td>${esc(g.subject)}</td><td>${esc(g.exam_name)}</td><td>${g.score}점</td><td>${esc(g.grade_level)}</td><td>${esc(g.date)}</td></tr>`).join("")}</tbody>
+    </table>
+  `
+}
+const SUBJECT_COLORS = { "수학": "#6c5ce7" }
+function niceAxisStep(maxValue, targetTicks) {
+  const safeMax = maxValue > 0 ? maxValue : 100
+  const roughStep = safeMax / targetTicks
+  const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)))
+  const residual = roughStep / magnitude
+  let niceResidual
+  if (residual > 5) niceResidual = 10
+  else if (residual > 2) niceResidual = 5
+  else if (residual > 1) niceResidual = 2
+  else niceResidual = 1
+  return niceResidual * magnitude
+}
+function buildGradeChartHtml(grades) {
+  const subjects = [...new Set(grades.map((g) => g.subject))]
+  const width = 400, height = 240
+  const paddingLeft = 34, paddingRight = 14, paddingTop = 18, paddingBottom = 36
+  const dates = [...new Set(grades.map((g) => g.date))].sort()
+  // X축에는 날짜 대신 해당 날짜의 시험명(예: "중1 1학기 중간고사")을 표시하고, 시험명이 없으면 날짜로 폴백합니다. dates가 이미 날짜순(ISO 문자열 sort)으로 정렬돼 있으므로 시간순이 유지됩니다.
+  const dateExamLabels = dates.map((d) => {
+    const match = grades.find((g) => g.date === d && g.exam_name)
+    return match ? match.exam_name : toShortDate(d)
+  })
+  const plotWidth = width - paddingLeft - paddingRight
+  const xStep = dates.length > 1 ? plotWidth / (dates.length - 1) : 0
+  const scores = grades.map((g) => g.score)
+  const axisMax = 100
+  const ticks = [0, 20, 40, 60, 80, 100]
+  const yFor = (score) => height - paddingBottom - (score / axisMax) * (height - paddingTop - paddingBottom)
+  const xFor = (date) => dates.length > 1 ? paddingLeft + dates.indexOf(date) * xStep : paddingLeft + plotWidth / 2
+  const lines = subjects.map((subj) => {
+    const pts = grades.filter((g) => g.subject === subj).sort((a, b) => (a.date || "").localeCompare(b.date || ""))
+    const path = pts.map((p) => `${xFor(p.date)},${yFor(p.score)}`).join(" ")
+    const color = SUBJECT_COLORS[subj] || "#999"
+    const dots = pts.map((p) => `<circle cx="${xFor(p.date)}" cy="${yFor(p.score)}" r="4" fill="${color}" />`).join("")
+    const valueLabels = pts.map((p) => `<text x="${xFor(p.date)}" y="${yFor(p.score) - 10}" font-size="11" font-weight="700" fill="${color}" text-anchor="middle">${p.score}점</text>`).join("")
+    return `<polyline points="${path}" fill="none" stroke="${color}" stroke-width="2" />${dots}${valueLabels}`
+  }).join("")
+  const gridLines = ticks.map((v) => `
+    <line x1="${paddingLeft}" y1="${yFor(v)}" x2="${width - paddingRight}" y2="${yFor(v)}" stroke="#eee" stroke-width="1" />
+    <text x="${paddingLeft - 6}" y="${yFor(v) + 3}" font-size="9" fill="#bbb" text-anchor="end">${v}</text>
+  `).join("")
+  const axisLines = `
+    <line x1="${paddingLeft}" y1="${paddingTop}" x2="${paddingLeft}" y2="${height - paddingBottom}" stroke="#ddd" stroke-width="1" />
+    <line x1="${paddingLeft}" y1="${height - paddingBottom}" x2="${width - paddingRight}" y2="${height - paddingBottom}" stroke="#ddd" stroke-width="1" />
+  `
+  const xAxisTicks = dates.map((d, i) => `
+    <text x="${xFor(d)}" y="${height - paddingBottom + 14}" font-size="9" fill="#bbb" text-anchor="middle">${esc(dateExamLabels[i])}</text>
+  `).join("")
+  return `
+    <div class="chart-legend">${subjects.map((s) => `<div class="legend-item"><span class="dot" style="background:${SUBJECT_COLORS[s] || "#999"}"></span>${esc(s)}</div>`).join("")}</div>
+    <div class="chart-wrap"><svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">${gridLines}${axisLines}${lines}${xAxisTicks}</svg></div>
+  `
+}
+function renderGradesPage() {
+  const grades = STUDENT.grades
+  return `
+    <div class="sub-page">
+      <div class="header-plain"><button class="back-btn-plain" onclick="goIntro()">←</button></div>
+      <div class="card">
+        <h2>📊 성적정보</h2>
+        <div class="view-toggle">
+          <button class="${gradeView === "table" ? "active" : ""}" onclick="setGradeView('table')">표로 보기</button>
+          <button class="${gradeView === "chart" ? "active" : ""}" onclick="setGradeView('chart')">차트로 보기</button>
+        </div>
+        ${gradeView === "table" ? buildGradeTableHtml(grades) : buildGradeChartHtml(grades)}
+      </div>
+    </div>
+  `
+}
+function renderSchedulePage() {
+  return `
+    <div class="sub-page">
+      <div class="header-plain"><button class="back-btn-plain" onclick="goIntro()">←</button></div>
+      <div class="card">
+        <h2>📅 일정정보</h2>
+        <div class="view-toggle">
+          <button class="${scheduleView === "list" ? "active" : ""}" onclick="setScheduleView('list')">리스트로 보기</button>
+          <button class="${scheduleView === "calendar" ? "active" : ""}" onclick="setScheduleView('calendar')">캘린더로 보기</button>
+        </div>
+        ${scheduleView === "list" ? scheduleListHtml() : ""}
+      </div>
+      ${scheduleView === "calendar" ? buildScheduleCalendarHtml() : ""}
+    </div>
+  `
+}
+function gradesContentHtml() {
+  return `
+    <div class="view-toggle">
+      <button class="${gradeView === "table" ? "active" : ""}" onclick="setGradeView('table')">표로 보기</button>
+      <button class="${gradeView === "chart" ? "active" : ""}" onclick="setGradeView('chart')">차트로 보기</button>
+    </div>
+    <div class="card">${gradeView === "table" ? buildGradeTableHtml(STUDENT.grades) : buildGradeChartHtml(STUDENT.grades)}</div>
+  `
+}
+function setGradeView(v) {
+  gradeView = v
+  const area = document.getElementById("grades-content-area")
+  if (area) {
+    area.innerHTML = gradesContentHtml()
+  } else {
+    renderApp()
+    scrollToGrades()
+  }
+}
+
+const DAYS = ["월", "화", "수", "목", "금", "토", "일"]
+function buildWeekGridHtml(regs) {
+  const active = regs.filter((r) => r.status === "수강중")
+  const byDay = {}
+  DAYS.forEach((d) => (byDay[d] = []))
+  active.forEach((r) => { (r.schedule || []).forEach((s) => { if (byDay[s.day]) byDay[s.day].push({ ...s, class_name: r.class_name }) }) })
+  DAYS.forEach((d) => { byDay[d].sort((a, b) => (a.start || "").localeCompare(b.start || "")) })
+  return `
+    <div class="week-grid">
+      ${DAYS.map((d) => `
+        <div class="week-col">
+          <div class="day-label">${d}</div>
+          ${byDay[d].length ? byDay[d].map((s) => `<div class="week-slot"><div class="slot-time">${esc(s.start)}</div>${esc(s.class_name)}</div>`).join("") : ""}
+        </div>
+      `).join("")}
+    </div>
+  `
+}
+
+function renderIntro() {
+  const s = STUDENT
+  const active = s.registrations.filter((r) => r.status === "수강중").slice().sort((a, b) => (a.start || "").localeCompare(b.start || ""))
+  return `
+    <div class="scroll-container">
+      <div class="snap-section intro-section" id="intro-section">
+        <button class="hamburger-btn" onclick="openMenu()">☰</button>
+        <div class="intro-greeting">${esc(s.academy_name)}</div>
+        <div class="intro-name">${esc(s.student_name)}</div>
+        <div class="intro-sub">${[s.school, s.grade, s.gender].filter(Boolean).map((x) => `<span>${esc(x)}</span>`).join("")}</div>
+        <div class="class-btn-group">
+          ${active.map((r) => `
+            <div class="class-btn primary" onclick="openRegistration('${r.token}')">
+              <span class="cb-left">
+                <span class="cb-emoji">${r.emoji}</span>
+                <span class="cb-name-wrap">
+                  <span class="cb-class-name">${esc(r.class_name)}</span>
+                </span>
+              </span>
+              <span class="badge ${esc(r.status)}">${esc(r.status)}</span>
+            </div>
+          `).join("")}
+        </div>
+        <div class="swipe-hint" onclick="scrollToTimetable()">통합 시간표 보기<span class="chevron">⌄</span></div>
+      </div>
+      <div class="snap-section timetable-section" id="timetable-section">
+        <button class="hamburger-btn dark" onclick="openMenu()">☰</button>
+        <h2>🗓️ 통합 시간표</h2>
+        <div class="tt-hint">현재 수강중인 반들만 요일별로 합쳐서 보여줍니다</div>
+        ${buildWeekGridHtml(s.registrations)}
+        <div class="up-hint" onclick="scrollToIntro()"><span class="chevron">⌃</span>이전으로</div>
+        <div class="swipe-hint" onclick="scrollToSchedule()">일정 보기<span class="chevron">⌄</span></div>
+      </div>
+      <div class="snap-section schedule-section" id="schedule-section">
+        <button class="hamburger-btn dark" onclick="openMenu()">☰</button>
+        <h2>📅 일정</h2>
+        <div class="section-hint">학원 공지와 상담 일정을 확인하세요</div>
+        <div id="schedule-cal-area" style="width:100%">${buildScheduleCalendarHtml()}</div>
+        <div class="up-hint" onclick="scrollToTimetable()"><span class="chevron">⌃</span>이전으로</div>
+        <div class="swipe-hint" onclick="scrollToGrades()">성적 보기<span class="chevron">⌄</span></div>
+      </div>
+      <div class="snap-section grades-section" id="grades-section">
+        <button class="hamburger-btn dark" onclick="openMenu()">☰</button>
+        <h2>📊 성적</h2>
+        <div class="section-hint">최근 시험 성적 추이를 확인하세요</div>
+        <div class="section-scroll" id="grades-content-area">${gradesContentHtml()}</div>
+        <div class="up-hint" onclick="scrollToSchedule()"><span class="chevron">⌃</span>이전으로</div>
+      </div>
+    </div>
+  `
+}
+
+function regCalBaseDate() {
+  const [y, m] = MOCK_TODAY.split("-").map(Number)
+  return new Date(y, m - 1 + regCalMonthIndex, 1)
+}
+function currentReg() {
+  return STUDENT.registrations.find((x) => x.token === selectedToken)
+}
+function navigateRegCalMonth(delta) {
+  // [FIX] Don't allow paging further back than MAX_LOOKBACK_MONTHS; without this the
+  // calendar could be paged back indefinitely into months with no data at all.
+  if (delta < 0 && regCalMonthIndex <= -MAX_LOOKBACK_MONTHS) return
+  regCalMonthIndex += delta
+  const area = document.getElementById("reg-cal-area")
+  if (area) {
+    area.innerHTML = buildRegCalendarHtml(currentReg(), calMode)
+  } else {
+    renderApp()
+  }
+}
+function goRegCalToday() {
+  regCalMonthIndex = 0
+  const area = document.getElementById("reg-cal-area")
+  if (area) {
+    area.innerHTML = buildRegCalendarHtml(currentReg(), calMode)
+  } else {
+    renderApp()
+  }
+}
+function setCalMode(mode) {
+  calMode = mode
+  regCalMonthIndex = 0
+  renderApp()
+}
+function buildRegCalendarHtml(r, mode) {
+  if (!r) return '<div class="empty">등록 정보가 없습니다.</div>'
+  const base = regCalBaseDate()
+  const y = base.getFullYear()
+  const m = base.getMonth() + 1
+  const monthKey = `${y}-${String(m).padStart(2, "0")}`
+  const byDay = {}
+  if (mode === "attendance") {
+    (r.attendance_rows || []).forEach((a) => {
+      if (a.date && a.date.slice(0, 7) === monthKey) byDay[Number(a.date.slice(8, 10))] = esc(a.status)
+    })
+  } else {
+    (r.homework_days || []).forEach((h) => {
+      if (h.date && h.date.slice(0, 7) === monthKey) byDay[Number(h.date.slice(8, 10))] = h.status
+    })
+  }
+  // 해당 월 출결 요약 (출석 / 결석 / 보강)
+  const monthRows = (r.attendance_rows || []).filter((a) => a.date && String(a.date).slice(0, 7) === monthKey)
+  const countBy = (kw) => monthRows.filter((a) => String(a.status || "").includes(kw)).length
+  const monthHw = (r.homework_days || []).filter((h) => h.date && String(h.date).slice(0, 7) === monthKey)
+  const hwDone = monthHw.filter((h) => h.status === "완료").length
+  const summaryHtml = mode === "attendance"
+    ? `<div class="cal-summary">
+        <div class="cal-summary-item present"><span class="num">${countBy("출석")}</span><span class="lbl">출석</span></div>
+        <div class="cal-summary-item absent"><span class="num">${countBy("결석")}</span><span class="lbl">결석</span></div>
+        <div class="cal-summary-item makeup"><span class="num">${countBy("보강")}</span><span class="lbl">보강</span></div>
+      </div>`
+    : `<div class="cal-summary">
+        <div class="cal-summary-item present"><span class="num">${hwDone}</span><span class="lbl">완료</span></div>
+        <div class="cal-summary-item partial"><span class="num">${monthHw.filter((h) => h.status === "부분완료").length}</span><span class="lbl">일부 완료</span></div>
+        <div class="cal-summary-item absent"><span class="num">${monthHw.filter((h) => h.status === "미완료").length}</span><span class="lbl">미완료</span></div>
+      </div>`
+  const dowLabels = ["일", "월", "화", "수", "목", "금", "토"]
+  const firstDow = new Date(y, m - 1, 1).getDay()
+  const daysInMonth = new Date(y, m, 0).getDate()
+  const cells = []
+  for (let i = 0; i < firstDow; i++) cells.push('<div class="cal-day empty"></div>')
+  for (let day = 1; day <= daysInMonth; day++) {
+    const status = byDay[day]
+    const dateStr = `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`
+    const selected = dateStr === selectedCalDate ? "selected" : ""
+    const today = dateStr === MOCK_TODAY ? "today" : ""
+    cells.push(`<div class="cal-day ${status || ""} ${selected} ${today}" onclick="selectCalDay('${dateStr}')"><span>${day}</span></div>`)
+  }
+  return `
+    <div class="attendance-calendar">
+      <div class="cal-month-nav">
+        <button class="cal-nav-btn" ${regCalMonthIndex <= -MAX_LOOKBACK_MONTHS ? "disabled" : ""} onclick="navigateRegCalMonth(-1)">‹</button>
+        <div class="cal-month-title">${y}년 ${m}월</div>
+        <div class="cal-nav-right">
+          <button class="cal-today-btn" onclick="goRegCalToday()">오늘</button>
+          <button class="cal-nav-btn" onclick="navigateRegCalMonth(1)">›</button>
+        </div>
+      </div>
+      <div class="cal-grid">
+        ${dowLabels.map((l) => `<div class="cal-dow">${l}</div>`).join("")}
+        ${cells.join("")}
+      </div>
+      ${summaryHtml}
+      <div class="cal-hint">날짜를 탭하면 데일리 리포트를 볼 수 있어요</div>
+    </div>
+  `
+}
+
+function setReportPeriod(period) {
+  reportPeriod = period
+  reportOffset = 0
+  if (period === "day") reportDayDate = reportDayDate || MOCK_TODAY
+  renderApp()
+}
+function navigateReportPeriod(delta) {
+  const maxOffset = reportPeriod === "week" ? 12 : 3
+  reportOffset = Math.max(0, Math.min(maxOffset, reportOffset + delta))
+  renderApp()
+}
+function navigateReportDay(delta) {
+  const candidate = addDaysStr(reportDayDate || MOCK_TODAY, -delta)
+  reportDayDate = candidate > MOCK_TODAY ? MOCK_TODAY : candidate
+  renderApp()
+}
+function goReportCurrent() {
+  if (reportPeriod === "day") {
+    reportDayDate = MOCK_TODAY
+  } else {
+    reportOffset = 0
+  }
+  renderApp()
+}
+function reportRange() {
+  if (reportPeriod === "week") {
+    const rangeEnd = addDaysStr(MOCK_TODAY, -7 * reportOffset)
+    const rangeStart = addDaysStr(rangeEnd, -6)
+    return { rangeStart, rangeEnd }
+  }
+  const [ty, tm] = MOCK_TODAY.split("-").map(Number)
+  const base = new Date(ty, tm - 1 - reportOffset, 1)
+  const y = base.getFullYear()
+  const m = base.getMonth() + 1
+  const rangeStart = `${y}-${String(m).padStart(2, "0")}-01`
+  const lastDay = new Date(y, m, 0).getDate()
+  const naturalEnd = `${y}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`
+  const rangeEnd = reportOffset === 0 ? MOCK_TODAY : naturalEnd
+  return { rangeStart, rangeEnd }
+}
+function computeTestTrendPoints(tests, periodType, baseOffset) {
+  const periodsCount = 3
+  const points = []
+  for (let i = periodsCount - 1; i >= 0; i--) {
+    const offset = baseOffset + i
+    let rangeStart, rangeEnd, label
+    if (periodType === "week") {
+      rangeEnd = addDaysStr(MOCK_TODAY, -7 * offset)
+      rangeStart = addDaysStr(rangeEnd, -6)
+      label = `${rangeStart.slice(5).replace("-", ".")}~${rangeEnd.slice(5).replace("-", ".")}`
+    } else {
+      const [ty, tm] = MOCK_TODAY.split("-").map(Number)
+      const base = new Date(ty, tm - 1 - offset, 1)
+      const y = base.getFullYear()
+      const m = base.getMonth() + 1
+      rangeStart = `${y}-${String(m).padStart(2, "0")}-01`
+      const lastDay = new Date(y, m, 0).getDate()
+      rangeEnd = `${y}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`
+      label = `${m}월`
+    }
+    const items = tests.filter((t) => t.date >= rangeStart && t.date <= rangeEnd)
+    const avg = items.length ? Math.round(items.reduce((s, t) => s + (t.total ? (t.correct / t.total) * 100 : 0), 0) / items.length) : null
+    points.push({ label, avg, count: items.length, items })
+  }
+  return points
+}
+function computeRecentTestPoints(tests, asOfDate, count) {
+  const past = tests.filter((t) => t.date <= asOfDate).slice().sort((a, b) => (a.date || "").localeCompare(b.date || ""))
+  const recent = past.slice(-count)
+  return recent.map((t) => ({
+    label: (t.date || "").slice(5).replace("-", "."),
+    avg: t.total ? Math.round((t.correct / t.total) * 1000) / 10 : null,
+    count: 1,
+    items: [t],
+  }))
+}
+function buildTestTrendChartHtml(points) {
+  testChartPoints = points
+  const width = 400, height = 200, paddingX = 30, paddingTop = 20, paddingBottom = 34
+  const xStep = points.length > 1 ? (width - paddingX * 2) / (points.length - 1) : 0
+  const validAvgs = points.filter((p) => p.avg !== null).map((p) => p.avg)
+  const axisMax = 100
+  const ticks = [0, 20, 40, 60, 80, 100]
+  const yFor = (v) => paddingTop + (height - paddingTop - paddingBottom) - (v / axisMax) * (height - paddingTop - paddingBottom)
+  const xFor = (i) => paddingX + i * xStep
+  const validPoints = points.map((p, i) => ({ ...p, i })).filter((p) => p.avg !== null)
+  const path = validPoints.map((p) => `${xFor(p.i)},${yFor(p.avg)}`).join(" ")
+  const dots = validPoints.map((p) => `<circle cx="${xFor(p.i)}" cy="${yFor(p.avg)}" r="4" fill="#6c5ce7" style="pointer-events:none" /><circle cx="${xFor(p.i)}" cy="${yFor(p.avg)}" r="12" fill="transparent" style="cursor:pointer" onclick="showTestDetailModal(${p.i})" />`).join("")
+  const valueLabels = validPoints.map((p) => `<text x="${xFor(p.i)}" y="${yFor(p.avg) - 10}" font-size="11" font-weight="700" fill="#6c5ce7" text-anchor="middle" style="cursor:pointer" onclick="showTestDetailModal(${p.i})">${p.avg.toFixed(1)}점</text>`).join("")
+  const gridLines = ticks.map((v) => `
+    <line x1="${paddingX}" y1="${yFor(v)}" x2="${width - paddingX}" y2="${yFor(v)}" stroke="#eee" stroke-width="1" />
+    <text x="2" y="${yFor(v) + 4}" font-size="9" fill="#bbb">${v}</text>
+  `).join("")
+  const xLabels = points.map((p, i) => `<text x="${xFor(i)}" y="${height - 10}" font-size="10" fill="#999" text-anchor="middle">${esc(p.label)}</text>`).join("")
+  const emptyOverlay = validPoints.length ? "" : '<div class="empty">해당 기간 평가 기록이 없습니다.</div>'
+  return `
+    <div class="chart-wrap"><svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">${gridLines}<polyline points="${path}" fill="none" stroke="#6c5ce7" stroke-width="2" />${dots}${valueLabels}${xLabels}</svg></div>
+    ${emptyOverlay}
+  `
+}
+function buildReportTabHtml(r) {
+  const homework = r.homework || []
+  const tests = r.tests || []
+  const reportComments = r.report_comments || []
+  const { rangeStart, rangeEnd } = reportRange()
+  const attendanceRows = (r.attendance_rows || []).filter((a) => a.date >= rangeStart && a.date <= rangeEnd)
+  const homeworkItems = (r.homework_days || []).filter((h) => h.date && h.date >= rangeStart && h.date <= rangeEnd)
+  const testItems = tests.filter((t) => t.date >= rangeStart && t.date <= rangeEnd)
+  const presentCount = attendanceRows.filter((a) => a.status !== "결석").length
+  const attRate = attendanceRows.length ? Math.round((presentCount / attendanceRows.length) * 100) : 0
+  const doneHomework = homeworkItems.filter((h) => h.status === "완료").length
+  const hwRate = homeworkItems.length ? Math.round((doneHomework / homeworkItems.length) * 100) : 0
+  const periodLabel = reportPeriod === "week" ? `${rangeStart} ~ ${rangeEnd}` : `${rangeStart.slice(0, 7)}`
+  const segToggleHtml = `
+    <div class="seg-toggle">
+      <button class="${reportPeriod === "day" ? "active" : ""}" onclick="setReportPeriod('day')">일간 보고서</button>
+      <button class="${reportPeriod === "week" ? "active" : ""}" onclick="setReportPeriod('week')">주간 보고서</button>
+      <button class="${reportPeriod === "month" ? "active" : ""}" onclick="setReportPeriod('month')">월간 보고서</button>
+    </div>
+  `
+  if (reportPeriod === "day") {
+    const dayDate = reportDayDate || MOCK_TODAY
+    return `
+      <h2>📊 보고서</h2>
+      <div class="section-hint">주간·월간·일간 학습 리포트를 확인하세요</div>
+      ${segToggleHtml}
+      <div class="cal-month-nav">
+        <button class="cal-nav-btn" onclick="navigateReportDay(1)">‹</button>
+        <div class="cal-month-title">${esc(formatDateLabel(dayDate))}</div>
+        <div class="cal-nav-right">
+          <button class="cal-today-btn" onclick="goReportCurrent()">오늘</button>
+          <button class="cal-nav-btn" ${dayDate >= MOCK_TODAY ? "disabled" : ""} onclick="navigateReportDay(-1)">›</button>
+        </div>
+      </div>
+      ${buildDailyBodyHtml(r, dayDate)}
+    `
+  }
+  return `
+    <h2>📊 보고서</h2>
+    <div class="section-hint">주간·월간·일간 학습 리포트를 확인하세요</div>
+    ${segToggleHtml}
+    <div class="cal-month-nav">
+      <button class="cal-nav-btn" ${reportOffset >= (reportPeriod === "week" ? MAX_LOOKBACK_MONTHS * 4 : MAX_LOOKBACK_MONTHS) ? "disabled" : ""} onclick="navigateReportPeriod(1)">‹</button>
+      <div class="cal-month-title">${esc(periodLabel)}</div>
+      <div class="cal-nav-right">
+        <button class="cal-today-btn" onclick="goReportCurrent()">현재</button>
+        <button class="cal-nav-btn" ${reportOffset === 0 ? "disabled" : ""} onclick="navigateReportPeriod(-1)">›</button>
+      </div>
+    </div>
+    <div class="report-donut-row">
+      <div class="donut-card">
+        <div class="donut-title">✅ 출석률</div>
+        <div class="donut" style="background: conic-gradient(#1e9e5c 0% ${attRate}%, #eee ${attRate}% 100%)"><div class="donut-hole">${attRate}%</div></div>
+        <div class="donut-count-below">(${presentCount}/${attendanceRows.length})</div>
+      </div>
+      <div class="donut-card">
+        <div class="donut-title">📝 과제이행률</div>
+        <div class="donut" style="background: conic-gradient(#6c5ce7 0% ${hwRate}%, #eee ${hwRate}% 100%)"><div class="donut-hole">${hwRate}%</div></div>
+        <div class="donut-count-below">(${doneHomework}/${homeworkItems.length})</div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>📄 평가 기록</h2>
+      ${buildTestTrendChartHtml(computeTestTrendPoints(tests, reportPeriod, reportOffset))}
+    </div>
+    <div class="card">
+      <h2>💬 선생님 한마디</h2>
+      ${(() => {
+        // 주간/월간 보고서: 보고서(학원) DB에서 보고서 구분이 일치하고 학습 기간이 현재 선택된
+        // 기간(rangeStart~rangeEnd)과 겹치는 보고서 페이지 자체의 "선생님 한마디"를 보여준다.
+        // (출석 DB의 일자별 코멘트를 모아서 보여주던 이전 방식은 오동작이었다.)
+        const kind = reportPeriod === "week" ? "주간 보고서" : "월간 보고서"
+        const matched = reportComments.filter((c) => c.kind === kind && c.start && (c.end || c.start) >= rangeStart && c.start <= rangeEnd)
+        return matched.length ? matched.map((c) => `<div class="list-item"><div>${esc(c.comment)}</div></div>`).join("") : `<div class="list-item empty-hint">아직 등록된 한마디가 없어요</div>`
+      })()}
+    </div>
+  `
+}
+
+function toShortDate(date) {
+  if (!date) return date
+  const parts = String(date).split("-")
+  if (parts.length !== 3) return date
+  const [y, m, d] = parts
+  return `${y.slice(-2)}.${m}.${d}`
+}
+
+function formatDateLabel(date) {
+  const [y, m, d] = date.split("-").map(Number)
+  const weekday = ["일", "월", "화", "수", "목", "금", "토"][new Date(y, m - 1, d).getDay()]
+  return `${y}년 ${m}월 ${d}일 (${weekday})`
+}
+
+function findNextHomework(r, date) {
+  const upcoming = (r.homework || []).filter((h) => h.due && h.due >= date).sort((a, b) => (a.due || "").localeCompare(b.due || ""))
+  return upcoming[0] || null
+}
+
+function findLatestComment(r, date) {
+  // 일간 보고서: 그날짜 출석 레코드에 실제로 적힌 코멘트만 보여준다 (다른 날 코멘트로 대체하지 않음).
+  // c.date는 백엔드가 보내는 원본 ISO 문자열(시간·타임존 포함일 수 있음)이라 date("YYYY-MM-DD")와
+  // 정확히 문자열이 같지 않을 수 있으므로, 날짜 부분(앞 10자)만 비교한다.
+  return (r.teacher_comments || []).find((c) => c.date && String(c.date).slice(0, 10) === date) || null
+}
+
+function buildDailyBodyHtml(r, date) {
+  const attendanceRow = (r.attendance_rows || []).find((a) => a.date === date)
+  const homeworkDayEntry = (r.homework_days || []).find((h) => h.date === date)
+  const homeworkStatusInfo = (status) => (status === "완료" ? { text: "제출", cls: "제출" } : status === "부분완료" ? { text: "부분완료", cls: "부분완료" } : { text: "미제출", cls: "미제출" })
+  const todaysLogs = (r.study_logs || []).filter((l) => l.date === date)
+  const nextHomework = findNextHomework(r, date)
+  const todaysTests = (r.tests || []).filter((t) => t.date === date)
+  const comment = findLatestComment(r, date)
+
+  return `
+    <div class="status-box-row">
+      <div class="status-box">
+        <div class="label">✅ 출석상태</div>
+        <span class="badge ${esc(attendanceRow ? attendanceRow.status : "해당 없음")}">${esc(attendanceRow ? attendanceRow.status : "해당 없음")}</span>
+      </div>
+      <div class="status-box">
+        <div class="label">📝 과제상태</div>
+        ${homeworkDayEntry ? (() => { const info = homeworkStatusInfo(homeworkDayEntry.status); return `<span class="badge ${info.cls}">${info.text}</span>` })() : `<span class="badge">해당 없음</span>`}
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>📖 오늘 학습 내용</h2>
+      ${todaysLogs.length ? todaysLogs.map((l) => `
+        <div class="log-row 학습">
+          <div class="log-title-row"><div class="log-title">${esc([l.book, l.range].filter(Boolean).join(" · ") || "학습 기록")}</div></div>
+          ${l.unit ? `<div class="log-context">${esc(`  • 단원: ${l.unit}`)}</div>` : ""}
+          ${l.note ? `<div class="log-note">${esc(l.note)}</div>` : ""}
+          ${buildFeedBodyHtml(l.body)}
+        </div>
+      `).join("") : '<div class="empty">이 날짜에 기록된 학습 내용이 없습니다.</div>'}
+    </div>
+
+    <div class="card">
+      <h2>📝 다음과제</h2>
+      ${nextHomework ? `
+        <div class="log-row 과제">
+          <div class="log-title-row"><div class="log-title">${esc([nextHomework.book, nextHomework.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${homeworkPillTone(nextHomework.status)}">${esc(nextHomework.status)}</span></div>
+          ${nextHomework.unit ? `<div class="log-context">${esc(`  • 단원: ${nextHomework.unit}`)}</div>` : ""}
+          ${(nextHomework.note || nextHomework.title) ? `<div class="log-note">${esc(nextHomework.note || nextHomework.title)}</div>` : ""}
+          <div class="log-context">  • 마감: ${esc(nextHomework.due)}</div>
+        </div>
+      ` : '<div class="empty">예정된 과제가 없습니다.</div>'}
+    </div>
+
+    <div class="card">
+      <h2>📄 평가</h2>
+      ${todaysTests.length ? todaysTests.map((t) => `
+        <div class="log-row 평가">
+          <div class="log-title-row"><div class="log-title">${esc([t.book, t.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${scorePillTone(t.correct ?? 0, t.total ?? 0)}">${scorePillText(t.correct ?? 0, t.total ?? 0)}</span></div>
+          ${t.unit ? `<div class="log-context">${esc(`  • 단원: ${t.unit}`)}</div>` : ""}
+          ${(t.note || t.title) ? `<div class="log-note">${esc(t.note || t.title)}</div>` : ""}
+        </div>
+      `).join("") : '<div class="empty">이 날짜에 기록된 평가가 없습니다.</div>'}
+      <div class="feed-divider"></div>
+      ${buildTestTrendChartHtml(computeRecentTestPoints(r.tests || [], date, 3))}
+    </div>
+
+    <div class="card">
+      <h2>💬 선생님 코멘트</h2>
+      ${comment ? `<div class="list-item"><div>${esc(comment.text)}</div></div>` : '<div class="empty">등록된 코멘트가 없습니다.</div>'}
+    </div>
+  `
+}
+
+function renderDetail() {
+  const r = STUDENT.registrations.find((x) => x.token === selectedToken)
+  if (!r) return renderIntro()
+  const books = r.books || []
+  const homework = r.homework || []
+  const tests = r.tests || []
+  const comments = r.teacher_comments || []
+  const studyLogs = r.study_logs || []
+  const tabs = [
+    { id: "books", icon: "📚", label: "교재" },
+    { id: "calendar", icon: "🗓️", label: "캘린더" },
+    { id: "study", icon: "📖", label: "학습기록" },
+    { id: "report", icon: "📊", label: "보고서" },
+  ]
+  if (!tabs.some((t) => t.id === regTab)) regTab = "books"
+  const tabBodies = {
+    books: `
+      <h2>📚 진도 교재</h2>
+      <div class="section-hint">진행상황별로 교재를 볼 수 있어요</div>
+      <div class="seg-toggle">
+        <button class="${bookStatusTab === "진행중" ? "active" : ""}" onclick="setBookStatusTab('진행중')">진행중인 교재</button>
+        <button class="${bookStatusTab === "완료" ? "active" : ""}" onclick="setBookStatusTab('완료')">완료된 교재</button>
+        <button class="${bookStatusTab === "예정" ? "active" : ""}" onclick="setBookStatusTab('예정')">다음교재</button>
+      </div>
+      ${(() => {
+        const filtered = books.filter((b) => normalizeBookStatus(b.status) === bookStatusTab)
+        return `<div class="book-cards-wrap"><div class="book-cards">${filtered.length ? filtered.map((b) => `
+        <div class="book-card" onclick="openBookStudy('${esc(b.title).replace(/'/g, "&#39;")}')">
+          <div class="cover">${b.cover ? `<img src="${esc(b.cover)}" alt="${esc(b.title)}">` : "📘"}</div>
+          <div class="info-overlay">
+            <div class="title">${esc(b.title)}</div>
+            ${b.progress != null ? `<div class="progress-track"><div class="progress-fill" style="width:${b.progress}%"></div></div><div class="progress-label">${b.progress}%</div>` : ""}
+          </div>
+        </div>
+      `).join("") : `<div class="empty">${bookStatusTab} 교재가 없습니다.</div>`}</div></div>`
+      })()}
+    `,
+    calendar: `
+      <h2>🗓️ 캘린더</h2>
+      <div class="section-hint">날짜를 탭하면 데일리 리포트를 볼 수 있어요</div>
+      <div class="seg-toggle">
+        <button class="${calMode === "attendance" ? "active" : ""}" onclick="setCalMode('attendance')">출결 현황</button>
+        <button class="${calMode === "homework" ? "active" : ""}" onclick="setCalMode('homework')">과제 현황</button>
+      </div>
+      <div class="attendance-cal-wrap" id="reg-cal-area">${buildRegCalendarHtml(r, calMode)}</div>
+    `,
+    study: `
+      <h2>📖 진도 학습기록 타임라인</h2>
+      <div class="section-hint">학습 · 과제 · 평가 기록을 최신순으로 보여줍니다</div>
+      ${(() => {
+        const items = []
+        studyLogs.forEach((l) => items.push({ type: "학습", icon: "📖", date: l.date, title: [l.book, l.range].filter(Boolean).join(" · ") || "학습 기록", context: l.unit ? `  • 단원: ${l.unit}` : "", note: l.note, photo: l.photo, body: l.body, book: l.book }))
+        homework.forEach((h) => items.push({ type: "과제", icon: "📝", date: h.date || h.due, title: [h.book, h.range].filter(Boolean).join(" · "), context: h.unit ? `  • 단원: ${h.unit}` : "", note: h.note || h.title || "", pill: h.status, pillTone: homeworkPillTone(h.status), book: h.book }))
+        tests.forEach((t) => items.push({ type: "평가", icon: "📄", date: t.date, title: [t.book, t.range].filter(Boolean).join(" · "), context: t.unit ? `  • 단원: ${t.unit}` : "", note: t.note || t.title || "", pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), book: t.book }))
+        const sorted = items.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+        const groups = []
+        sorted.forEach((l) => {
+          const last = groups[groups.length - 1]
+          if (last && last.date === l.date) { last.items.push(l) } else { groups.push({ date: l.date, items: [l] }) }
+        })
+        return groups.length ? groups.map((g) => `
+          <div class="log-date-group">
+            <div class="log-date-label">${esc(g.date)}</div>
+            ${g.items.map((l) => `
+              <div class="log-card ${l.type}">
+                <div class="log-top">
+                  <div class="log-icon"><span class="log-icon-emoji">${l.icon}</span><span class="log-icon-label">${l.type}</span></div>
+                  <div class="log-body">
+                    <div class="log-title-row">
+                      <div class="log-title">${esc(l.title)}</div>
+                      ${l.pill ? `<span class="log-pill ${l.pillTone || ""}">${esc(l.pill)}</span>` : ""}
+                    </div>
+                    ${l.context ? `<div class="log-context">${esc(l.context)}</div>` : ""}
+                    ${l.note ? `<div class="log-note">${esc(l.note)}</div>` : ""}
+                  </div>
+                </div>
+                ${(l.photo || (l.body && buildFeedBodyHtml(l.body))) ? `<div class="log-divider"></div><div class="log-extra">${l.photo ? `<img class="log-photo" src="${esc(l.photo)}" />` : ""}${buildFeedBodyHtml(l.body)}</div>` : ""}
+              </div>
+            `).join("")}
+          </div>
+        `).join("") : `<div class="empty">기록이 없습니다.</div>`
+      })()}
+    `,
+    report: buildReportTabHtml(r),
+  }
+  return `
+    <div class="reg-detail-page">
+      <div class="reg-header-bar">
+        <div class="reg-header-top">
+          <button class="reg-back-btn" onclick="goIntro()">←</button>
+          <div class="reg-breadcrumb">
+            <span class="crumb" onclick="goIntro()">${esc(STUDENT.student_name)}</span>
+            <span class="crumb-sep">›</span>
+            <span class="crumb" onclick="goIntro()">${r.emoji} ${esc(r.class_name)}</span>
+            <span class="crumb-sep">›</span>
+            <span class="crumb current">${esc(tabs.find((t) => t.id === regTab)?.icon || "")} ${esc(tabs.find((t) => t.id === regTab)?.label || "")}</span>
+          </div>
+        </div>
+        <div class="reg-head-row stacked">
+          <div class="reg-emoji">${r.emoji}</div>
+          <div class="reg-title">${esc(r.class_name)}</div>
+        </div>
+        <div class="reg-sub-badges">
+          <span class="sub-badge">${esc(r.status)}</span>
+          <span class="sub-badge">${esc(r.class_mode)}</span>
+          <span class="sub-badge">담임 ${esc(r.teacher)}</span>
+        </div>
+        <div class="reg-period">${esc(r.start || "")}${r.end ? " ~ " + esc(r.end) : " ~ 현재"}</div>
+      </div>
+      <div class="reg-tab-content">${tabBodies[regTab]}</div>
+    </div>
+    <div class="reg-tabbar">
+      ${tabs.map((t) => `<button class="reg-tab-btn ${regTab === t.id ? "active" : ""}" onclick="setRegTab('${t.id}')"><span class="tab-icon">${t.icon}</span>${esc(t.label)}</button>`).join("")}
+    </div>
+  `
+}
+
+let regScrollHandler = null
+function detachRegScrollShrink() {
+  if (regScrollHandler) {
+    window.removeEventListener("scroll", regScrollHandler)
+    regScrollHandler = null
+  }
+  window.onscroll = null
+  document.body.classList.remove("reg-expanded")
+  const bar = document.querySelector(".reg-header-bar")
+  if (bar) bar.classList.remove("expanded")
+}
+function attachRegScrollShrink() {
+  // 스크롤에 따라 헤더 크기를 동적으로 바꾸는 방식은 반응속도/스크롤 감도도 문제가 있어 제거하고,
+  // 헤더를 항상 작은(축소) 사이즈로 고정한다.
+  // 이에 맞춰 제목/보조정보도 "헤더 축소" 상태의 스타일로 고정된다.
+  detachRegScrollShrink()
+}
+function renderApp() {
+  if (view === "detail") {
+    app.innerHTML = renderDetail()
+    attachRegScrollShrink()
+  } else if (view === "book") {
+    app.innerHTML = renderBookDetail()
+    attachRegScrollShrink()
+  } else {
+    detachRegScrollShrink()
+    app.innerHTML = renderIntro()
+  }
+}
+
+function updateDebugClock() {
+  const el = document.getElementById("debug-clock")
+  if (!el) return
+  const now = new Date()
+  const parts = new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    weekday: "short", hour12: false,
+  }).format(now)
+  el.textContent = `현재 인식 시각(Asia/Seoul): ${parts}`
+}
+updateDebugClock()
+setInterval(updateDebugClock, 1000)
+
+async function initApp() {
+  app.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:80vh;color:#8a8a8a;font-size:15px;">불러오는 중...</div>'
+  await loadReportFromServer()
+  if (DATA_ERROR || !STUDENT) {
+    app.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:80vh;gap:12px;color:#666;font-size:15px;text-align:center;padding:0 24px;"><div style="font-size:32px;">⚠️</div><div>' + esc(DATA_ERROR || "데이터를 불러올 수 없어요.") + '</div></div>'
+    return
+  }
+  renderApp()
+}
+initApp()
+</script>
+</body>
+</html>

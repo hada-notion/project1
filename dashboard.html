@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>하다 어드민 대시보드</title>
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --panel: #ffffff;
+    --border: #e5e5e3;
+    --text: #37352f;
+    --muted: #9b9a97;
+    --accent: #2383e2;
+    --green: #2e7d32;
+    --blue: #1565c0;
+    --red: #c62828;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  /* 상단 메뉴 */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 52px;
+    padding: 0 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .topbar .brand {
+    font-weight: 700;
+    margin-right: 20px;
+    color: var(--text);
+  }
+  .topbar a, .topbar .nav-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    text-decoration: none;
+    color: var(--muted);
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    background: none;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .topbar a.active, .topbar .nav-btn.active {
+    background: #edf3fc;
+    color: var(--accent);
+  }
+  .topbar a:hover:not(.active), .topbar .nav-btn:hover:not(.active) { background: #f0f0ee; }
+
+  /* 전체 레이아웃 */
+  .layout {
+    display: flex;
+    min-height: calc(100vh - 52px);
+  }
+  /* 사이드 메뉴 */
+  .sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    padding: 16px 10px;
+  }
+  .sidebar .item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    margin-bottom: 2px;
+  }
+  .sidebar .item.active {
+    background: #edf3fc;
+    color: var(--accent);
+  }
+  .sidebar .item.disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .sidebar .item:hover:not(.active):not(.disabled) { background: #f0f0ee; }
+  .sidebar .soon {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--muted);
+    background: #f0f0ee;
+    padding: 2px 6px;
+    border-radius: 999px;
+  }
+
+  /* 메인 콘텐츠 */
+  .main {
+    flex: 1;
+    padding: 28px 32px;
+    max-width: 1100px;
+  }
+  .page-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .page-header h1 {
+    font-size: 22px;
+    margin: 0;
+  }
+  .page-header .date {
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .refresh-btn {
+    border: 1px solid var(--border);
+    background: var(--panel);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    color: var(--text);
+  }
+  .refresh-btn:hover { background: #f0f0ee; }
+
+  .status-banner {
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 16px;
+  }
+  .status-banner.loading { background: #eef4fd; color: var(--accent); }
+  .status-banner.error { background: #fdecec; color: var(--red); }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px;
+    min-height: 320px;
+  }
+  .card h2 {
+    font-size: 15px;
+    margin: 0 0 4px 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .card .count {
+    font-size: 28px;
+    font-weight: 700;
+    margin: 6px 0 14px 0;
+  }
+  .card .count small {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+  }
+  .list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+  .list li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: #fbfbfa;
+    font-size: 13px;
+  }
+  .list li a {
+    color: var(--text);
+    text-decoration: none;
+    flex: 1;
+  }
+  .list li a:hover { text-decoration: underline; }
+  .badge {
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .badge.green { background: #e6f4ea; color: var(--green); }
+  .badge.blue { background: #e8f0fe; color: var(--blue); }
+  .badge.red { background: #fdecec; color: var(--red); }
+  .badge.gray { background: #f0f0ee; color: var(--muted); }
+  .empty {
+    color: var(--muted);
+    font-size: 13px;
+    padding: 20px 0;
+    text-align: center;
+  }
+  .summary-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">하다 학원관리</div>
+  <button class="nav-btn active" data-tab="dashboard" onclick="showTab('dashboard')">📊 대시보드</button>
+  <button class="nav-btn" data-tab="admin" onclick="showTab('admin')">🗂️ 리포트 관리</button>
+  <button class="nav-btn" data-tab="kiosk" onclick="showTab('kiosk')">🖊️ 키오스크</button>
+</div>
+
+<div class="layout" id="page-dashboard">
+  <div class="sidebar">
+    <div class="item active" data-view="main">🏠 MAIN</div>
+    <div class="item disabled" data-view="calendar">📅 캘린더 <span class="soon">준비중</span></div>
+    <div class="item disabled" data-view="class">🏫 클래스 <span class="soon">준비중</span></div>
+    <div class="item disabled" data-view="teacher">򄐍닻 강사 <span class="soon">준비중</span></div>
+  </div>
+
+  <div class="main">
+    <div class="page-header">
+      <div>
+        <h1>MAIN</h1>
+        <div class="date" id="date-label">날짜 불러오는 중...</div>
+      </div>
+      <button class="refresh-btn" id="refresh-btn">🔄 새로고침</button>
+    </div>
+
+    <div id="status-area"></div>
+
+    <div class="cards">
+      <div class="card">
+        <h2>🗓️ 오늘 일정</h2>
+        <div class="count" id="schedule-count">-</div>
+        <ul class="list" id="schedule-list"></ul>
+      </div>
+
+      <div class="card">
+        <h2>📚 오늘 수업</h2>
+        <div class="count" id="class-count">-</div>
+        <ul class="list" id="class-list"></ul>
+      </div>
+
+      <div class="card">
+        <h2>👥 오늘 등원학생</h2>
+        <div class="count" id="attendance-count">-</div>
+        <div class="summary-row" id="attendance-summary"></div>
+        <ul class="list" id="attendance-list"></ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="page-iframe" style="display:none; height: calc(100vh - 52px);">
+  <iframe id="embed-frame" style="width:100%; height:100%; border:none;"></iframe>
+</div>
+
+<script>
+// ============ 설정 (배포 전 채워넣으세요) ============
+const SUPABASE_URL = "https://twczhsxybkcvjkdfdxvs.supabase.co"
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR3Y3poc3h5YmtjdmprZGZkeHZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyOTcwMDQsImV4cCI6MjEwMzg3MzAwNH0.t7Ltb_iSYqE4gHSoGSm-OlpiLjGqIcgrhzGJ-t56EDc" // admin.html에서 쓰는 anon key와 동일한 값으로 교체
+const FUNCTION_URL = SUPABASE_URL + "/functions/v1/get-admin-dashboard"
+const TAB_PAGES = { admin: "admin.html", kiosk: "attendance_kiosk.html" }
+// =============================================================
+
+function showTab(tab) {
+  document.querySelectorAll(".nav-btn").forEach(function (btn) {
+    btn.classList.toggle("active", btn.dataset.tab === tab)
+  })
+  const dashboardPage = document.getElementById("page-dashboard")
+  const iframePage = document.getElementById("page-iframe")
+  const frame = document.getElementById("embed-frame")
+  if (tab === "dashboard") {
+    dashboardPage.style.display = "flex"
+    iframePage.style.display = "none"
+    frame.src = "about:blank"
+  } else {
+    dashboardPage.style.display = "none"
+    iframePage.style.display = "block"
+    if (frame.getAttribute("src") !== TAB_PAGES[tab]) {
+      frame.src = TAB_PAGES[tab]
+    }
+  }
+}
+
+const statusBadgeClass = {
+  "🟢출석": "green",
+  "🔵보강": "blue",
+  "🔴결석": "red",
+}
+
+function el(id) { return document.getElementById(id) }
+
+function setStatus(type, message) {
+  const area = el("status-area")
+  if (!type) { area.innerHTML = ""; return }
+  area.innerHTML = '<div class="status-banner ' + type + '">' + message + '</div>'
+}
+
+function formatDateLabel(dateStr) {
+  const d = new Date(dateStr + "T00:00:00+09:00")
+  const days = ["일","월","화","수","목","금","토"]
+  return dateStr.replace(/-/g, ".") + " (" + days[d.getDay()] + ")"
+}
+
+function renderSchedules(schedules) {
+  el("schedule-count").textContent = schedules.length + "건"
+  const listEl = el("schedule-list")
+  if (schedules.length === 0) {
+    listEl.innerHTML = '<div class="empty">오늘 등록된 일정이 없어요</div>'
+    return
+  }
+  listEl.innerHTML = schedules.map(function (s) {
+    return '<li><a href="' + s.url + '" target="_blank">' + s.name + '</a>' +
+      (s.category ? '<span class="badge gray">' + s.category + '</span>' : '') + '</li>'
+  }).join("")
+}
+
+function renderClasses(classes) {
+  el("class-count").textContent = classes.length + "개 반"
+  const listEl = el("class-list")
+  if (classes.length === 0) {
+    listEl.innerHTML = '<div class="empty">오늘 진행된 수업이 없어요</div>'
+    return
+  }
+  listEl.innerHTML = classes.map(function (c) {
+    return '<li><a href="' + c.url + '" target="_blank">' + c.name + '</a></li>'
+  }).join("")
+}
+
+function renderAttendance(attendance) {
+  el("attendance-count").innerHTML = attendance.total + '명 <small>기록기준</small>'
+  const summaryEl = el("attendance-summary")
+  const entries = Object.entries(attendance.summary || {})
+  summaryEl.innerHTML = entries.map(function (entry) {
+    const key = entry[0], val = entry[1]
+    const cls = statusBadgeClass[key] || "gray"
+    return '<span class="badge ' + cls + '">' + key + ' ' + val + '</span>'
+  }).join("")
+
+  const listEl = el("attendance-list")
+  if (attendance.list.length === 0) {
+    listEl.innerHTML = '<div class="empty">오늘 출석 기록이 없어요</div>'
+    return
+  }
+  listEl.innerHTML = attendance.list.map(function (a) {
+    const cls = statusBadgeClass[a.status] || "gray"
+    return '<li><a href="' + a.url + '" target="_blank">' + a.name + '</a>' +
+      (a.status ? '<span class="badge ' + cls + '">' + a.status + '</span>' : '') + '</li>'
+  }).join("")
+}
+
+async function loadDashboard() {
+  setStatus("loading", "데이터를 불러오는 중이에요...")
+  try {
+    const res = await fetch(FUNCTION_URL, {
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: "Bearer " + SUPABASE_ANON_KEY,
+      },
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
+
+    el("date-label").textContent = formatDateLabel(data.date)
+    renderSchedules(data.schedules || [])
+    renderClasses(data.classes || [])
+    renderAttendance(data.attendance || { total: 0, summary: {}, list: [] })
+    setStatus(null)
+  } catch (err) {
+    setStatus("error", "불러오기 실패: " + err.message)
+  }
+}
+
+el("refresh-btn").addEventListener("click", loadDashboard)
+loadDashboard()
+</script>
+</body>
+</html>

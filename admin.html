@@ -1,0 +1,1539 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>학생 리포트 관리</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    background: #f5f6f8;
+    color: #222;
+  }
+  .container { max-width: 960px; margin: 0 auto; padding: 16px; }
+
+  /* ---------- Login screen ---------- */
+  #login-screen {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .login-card {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    padding: 32px 28px;
+    width: 100%;
+    max-width: 340px;
+    text-align: center;
+  }
+  .login-card h1 { font-size: 18px; margin: 0 0 4px; }
+  .login-card p { font-size: 12px; color: #888; margin: 0 0 20px; }
+  .login-card input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 14px;
+    margin-bottom: 10px;
+  }
+  .login-card button {
+    width: 100%;
+    padding: 10px 12px;
+    background: #6c5ce7;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .login-card button:disabled { background: #ccc; cursor: default; }
+  .login-error { color: #e04b4b; font-size: 12px; margin-top: 10px; min-height: 14px; }
+
+  /* ---------- App bar ---------- */
+  .app-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 14px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .app-bar h1 { font-size: 20px; margin: 0 0 2px; }
+  .app-bar .last-fetch { font-size: 12px; color: #999; }
+  .app-bar .debug-clock { font-size: 12px; color: #999; }
+  .app-bar-actions { display: flex; gap: 8px; }
+  .app-bar-actions button {
+    background: #333; color: #fff; border: none; padding: 8px 14px;
+    border-radius: 8px; font-size: 12px; cursor: pointer;
+  }
+  .app-bar-actions button.logout { background: #eee; color: #555; }
+
+  /* ---------- Stat cards ---------- */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .stat-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 12px 10px;
+    text-align: center;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .stat-card .num { font-size: 20px; font-weight: 700; }
+  .stat-card .label { font-size: 11px; color: #888; margin-top: 2px; }
+  .stat-card.tot .num { color: #333; }
+  .stat-card.ok .num { color: #2f9e64; }
+  .stat-card.stale .num { color: #d98c17; }
+  .stat-card.none .num { color: #999; }
+  .stat-card.fail .num { color: #e04b4b; }
+
+  /* ---------- View toggle ---------- */
+  .view-toggle {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .view-tabs { display: flex; gap: 6px; }
+  .view-tab {
+    padding: 8px 14px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: #fff;
+    font-size: 13px;
+    color: #666;
+    cursor: pointer;
+  }
+  .view-tab.active {
+    background: #6c5ce7;
+    border-color: #6c5ce7;
+    color: #fff;
+    font-weight: 600;
+  }
+  .bulk-actions { display: flex; align-items: center; gap: 6px; }
+  .icon-btn {
+    background: #eee; color: #555; border: none; width: 34px; height: 34px;
+    border-radius: 8px; font-size: 15px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .icon-btn.danger { color: #e04b4b; }
+  .icon-btn:disabled { opacity: 0.4; cursor: default; }
+  .selected-count { font-size: 12px; color: #6c5ce7; font-weight: 600; white-space: nowrap; }
+
+  /* ---------- Filter bar ---------- */
+  .filter-bar {
+    background: #fff;
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    position: sticky;
+    top: 8px;
+    z-index: 5;
+  }
+  .search-input-wrap {
+    flex: 1 1 200px;
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  .filter-bar input[type="text"] {
+    flex: 1 1 200px;
+    width: 100%;
+    padding: 8px 60px 8px 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 13px;
+    box-sizing: border-box;
+  }
+  .search-count {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 12px;
+    color: #6c5ce7;
+    font-weight: 600;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .filter-bar select {
+    padding: 8px 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 13px;
+    background: #fff;
+  }
+  .today-only-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #333;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+  }
+  .today-only-toggle input[type="checkbox"] {
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+  }
+
+  /* ---------- Status badges ---------- */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .badge::before { content: "●"; font-size: 9px; }
+  .badge.ok { background: #e9f7ef; color: #2f9e64; }
+  .badge.stale { background: #fdf1e3; color: #c17d2e; }
+  .badge.none { background: #f0f0f0; color: #888; }
+  .badge.fail { background: #fde8e8; color: #e04b4b; }
+  .badge.progress { background: #ece8fb; color: #6c5ce7; }
+  .badge.progress::before { content: ""; }
+  .course-tag { font-size: 11px; padding: 2px 7px; border-radius: 999px; background: #f0f0f0; color: #777; }
+  .course-tag.active { background: #eef7ff; color: #2e79c9; }
+  .course-tag.ended { background: #f2f2f2; color: #aaa; }
+
+  /* ---------- Desktop table ---------- */
+  /* table-layout: fixed + column widths keep the table size stable when rows expand/collapse or filters change. */
+  table { width: 100%; table-layout: fixed; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  th, td { padding: 10px 12px; text-align: left; font-size: 13px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; }
+  th { background: #fafafa; color: #888; font-weight: 600; font-size: 11px; white-space: nowrap; }
+  th:nth-child(1), td:nth-child(1) { width: 4%; text-align: center; }
+  th:nth-child(2), td:nth-child(2) { width: 25%; }
+  th:nth-child(3), td:nth-child(3) { width: 9%; }
+  th:nth-child(4), td:nth-child(4) { width: 13%; }
+  th:nth-child(5), td:nth-child(5) { width: 13%; }
+  th:nth-child(6), td:nth-child(6) { width: 36%; }
+  td:nth-child(6) { overflow: visible; white-space: nowrap; }
+  td:nth-child(6) .action, td:nth-child(6) .secondary { margin: 2px 4px 2px 0; }
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover { color: #6c5ce7; }
+  th.sortable.active { color: #6c5ce7; }
+  input.row-check { width: 15px; height: 15px; cursor: pointer; }
+  tr:last-child td { border-bottom: none; }
+  .student-header td { background: #f7f5ff; cursor: pointer; }
+  .student-header .chev { display: inline-block; width: 14px; }
+  .reg-row.collapsed { display: none; }
+  .sub-meta { font-size: 11px; color: #999; margin-top: 2px; }
+
+  button.action {
+    background: #6c5ce7;
+    color: #fff;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  button.action:disabled { background: #ccc; cursor: default; }
+  button.action.retry { background: #fff; color: #e04b4b; border: 1px solid #e04b4b; }
+  button.secondary {
+    background: #eee; color: #555; border: none; margin-left: 6px;
+    padding: 6px 12px; border-radius: 8px; font-size: 12px; cursor: pointer;
+  }
+  button.secondary:disabled { color: #bbb; cursor: default; }
+  button.secondary.danger { border-color: #f3c9c9; color: #e04b4b; }
+  button.secondary.danger:disabled { border-color: #ddd; color: #bbb; }
+  a.link { color: #6c5ce7; font-size: 12px; text-decoration: none; }
+
+  .error-toggle { font-size: 11px; color: #e04b4b; text-decoration: underline; cursor: pointer; background: none; border: none; padding: 0; margin-top: 4px; display: inline-block; }
+  .error-detail { font-size: 11px; color: #a33; background: #fdf3f3; border-radius: 6px; padding: 6px 8px; margin-top: 4px; display: none; white-space: pre-wrap; }
+  .error-detail.open { display: block; }
+
+  .status { font-size: 12px; color: #888; }
+  .loading, .empty { text-align: center; padding: 40px; color: #888; }
+
+  /* ---------- Mobile cards ---------- */
+  .mobile-view { display: none; }
+  .m-student-card { background: #fff; border-radius: 12px; margin-bottom: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); overflow: hidden; }
+  .m-student-head { padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; background: #f7f5ff; cursor: pointer; }
+  .m-student-head .name { font-weight: 700; font-size: 14px; }
+  .m-student-head .meta { font-size: 11px; color: #888; margin-top: 2px; }
+  .m-reg { padding: 12px 14px; border-top: 1px solid #f0f0f0; }
+  .m-reg-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .m-reg-title { font-weight: 600; font-size: 13px; }
+  .m-reg-sub { font-size: 11px; color: #999; margin-bottom: 8px; }
+  .m-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .m-actions button { flex: 1 1 auto; min-height: 38px; }
+  .m-actions .action { flex: 1 1 100%; }
+  .m-actions .secondary { flex: 1 1 auto; margin-left: 0; }
+  .m-reg.collapsed { display: none; }
+
+  /* ---------- Confirm modal ---------- */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    display: none; align-items: center; justify-content: center; padding: 16px; z-index: 50;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal-box { background: #fff; border-radius: 14px; padding: 22px 20px; max-width: 340px; width: 100%; }
+  .modal-box h3 { margin: 0 0 8px; font-size: 15px; }
+  .modal-box p { font-size: 13px; color: #666; line-height: 1.5; margin: 0 0 18px; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .modal-actions button { padding: 8px 14px; border-radius: 8px; font-size: 13px; border: none; cursor: pointer; }
+  .modal-actions .confirm { background: #6c5ce7; color: #fff; }
+  .modal-actions .cancel { background: #eee; color: #555; }
+
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: #222; color: #fff; padding: 10px 18px; border-radius: 999px;
+    font-size: 13px; z-index: 60; opacity: 0; transition: opacity 0.2s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+
+  /* ---------- Settings dropdown menu ---------- */
+  .menu-wrap { position: relative; display: inline-block; }
+  .dropdown-menu {
+    display: none; position: absolute; top: 100%; left: 0; margin-top: 4px;
+    background: #fff; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+    min-width: 130px; z-index: 40; overflow: hidden;
+  }
+  .dropdown-menu.open { display: block; }
+  .dropdown-menu button {
+    display: block; width: 100%; text-align: left; background: none; border: none;
+    padding: 9px 12px; font-size: 12px; color: #333; cursor: pointer; white-space: nowrap;
+  }
+  .dropdown-menu button:hover { background: #f5f3ff; }
+  .dropdown-menu button:disabled { color: #bbb; cursor: default; background: none; }
+  .dropdown-menu button.danger { color: #e04b4b; }
+
+  @media (max-width: 900px) {
+    .stats { grid-template-columns: repeat(4, 1fr); }
+  }
+  @media (max-width: 720px) {
+    .stats { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (max-width: 640px) {
+    .desktop-view { display: none; }
+    .mobile-view { display: block; }
+    .filter-bar { flex-direction: column; }
+    .filter-bar select { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-card">
+    <h1>🔒 관리자 로그인</h1>
+    <p>학생 리포트 관리 화면에 접근하려면<br>관리자 비밀번호를 입력하세요</p>
+    <input type="password" id="login-input" placeholder="관리자 비밀번호" autocomplete="current-password">
+    <button id="login-btn" onclick="submitLogin()">로그인</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<div id="app-screen" style="display:none">
+  <div class="container">
+    <div class="app-bar">
+      <div>
+        <h1>📋 학생 리포트 관리</h1>
+        <div class="last-fetch" id="last-fetch">-</div>
+        <div class="debug-clock" id="debug-clock">-</div>
+      </div>
+      <div class="app-bar-actions">
+        <button onclick="loadStudents()">🔄 새로고침</button>
+        <button onclick="openPasswordModal()">🔑 비밀번호 변경</button>
+        <button class="logout" onclick="logout()">로그아웃</button>
+      </div>
+    </div>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="view-toggle" id="view-toggle">
+      <div class="view-tabs">
+        <button id="view-tab-student" class="view-tab" onclick="setViewMode('student')" title="학생 보기 · 학생별로 묶어서 등록을 펼쳐보는 모드입니다">🧑‍🎓 학생 보기</button>
+        <button id="view-tab-registration" class="view-tab" onclick="setViewMode('registration')" title="등록 보기 · 학생 구분 없이 등록 단위로 나열합니다">📋 등록 보기</button>
+      </div>
+      <div class="bulk-actions" id="bulk-actions">
+        <span class="selected-count" id="selected-count"></span>
+        <button class="icon-btn" id="bulk-sync-btn" onclick="bulkSyncSelected()" title="선택 동기화 · 체크한 등록을 한 번에 최신화합니다">🔄️</button>
+        <button class="icon-btn" id="bulk-alimtalk-btn" onclick="bulkAlimtalkSelected()" title="선택 알림톡 일괄 전송 · 체크한 학생 중 오늘 수업이 있는 학생에게 알림톡을 전송합니다">📩</button>
+        <button class="icon-btn" id="bulk-disable-btn" onclick="bulkDisableSelected()" title="선택 비활성화 · 체크한 링크를 비활성화합니다">🔒</button>
+        <button class="icon-btn danger" id="bulk-regen-btn" onclick="bulkRegenerateSelected()" title="선택 링크 변경 · 체크한 링크를 새로 발급합니다">♻️</button>
+      </div>
+    </div>
+
+    <div class="filter-bar">
+      <div class="search-input-wrap">
+        <input type="text" id="search-input" placeholder="🔍 학생·학교·클래스 검색" oninput="onFilterChange()">
+        <span id="search-count" class="search-count"></span>
+      </div>
+      <select id="filter-course" onchange="onFilterChange()">
+        <option value="all">수강상태 전체</option>
+        <option value="수강 중">수강 중</option>
+        <option value="수강 예정">수강 예정</option>
+        <option value="수강 종료">수강 종료</option>
+      </select>
+      <select id="filter-report" onchange="onFilterChange()">
+        <option value="all">보고서 상태 전체</option>
+        <option value="ok">최신</option>
+        <option value="stale">갱신 필요</option>
+        <option value="none">미생성</option>
+        <option value="fail">실패</option>
+      </select>
+      <label class="today-only-toggle">
+        <input type="checkbox" id="filter-today" onchange="onFilterChange()">
+        오늘 수업만
+      </label>
+    </div>
+
+    <div id="app"><div class="loading">불러오는 중...</div></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="password-modal">
+  <div class="modal-box">
+    <h3>🔑 비밀번호 변경</h3>
+    <p>현재 비밀번호와 새 비밀번호(4자 이상)를 입력하세요.</p>
+    <input type="password" id="pw-current" placeholder="현재 비밀번호" style="width:100%;padding:9px 10px;margin-bottom:8px;border:1px solid #ddd;border-radius:8px;font-size:13px;">
+    <input type="password" id="pw-new" placeholder="새 비밀번호 (4자 이상)" style="width:100%;padding:9px 10px;margin-bottom:8px;border:1px solid #ddd;border-radius:8px;font-size:13px;">
+    <input type="password" id="pw-new-confirm" placeholder="새 비밀번호 확인" style="width:100%;padding:9px 10px;margin-bottom:8px;border:1px solid #ddd;border-radius:8px;font-size:13px;">
+    <div class="login-error" id="pw-error" style="min-height:16px;color:#e04b4b;font-size:12px;margin-bottom:8px;"></div>
+    <div class="modal-actions">
+      <button class="cancel" onclick="closePasswordModal()">취소</button>
+      <button class="confirm" id="pw-submit-btn" onclick="submitPasswordChange()">바꾸기</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="alimtalk-modal">
+  <div class="modal-box">
+    <h3>📩 알림톡을 발송할까요?</h3>
+    <p id="alimtalk-modal-body"></p>
+    <div class="modal-actions">
+      <button class="cancel" onclick="closeAlimtalkModal()">취소</button>
+      <button class="confirm" onclick="confirmAlimtalkSend()">발송</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL = "https://twczhsxybkcvjkdfdxvs.supabase.co"
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR3Y3poc3h5YmtjdmprZGZkeHZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyOTcwMDQsImV4cCI6MjEwMzg3MzAwNH0.t7Ltb_iSYqE4gHSoGSm-OlpiLjGqIcgrhzGJ-t56EDc"
+const ADMIN_KEY_STORAGE = "admin_key"
+const FILTER_STORAGE = "admin_filters"
+const COLLAPSE_STORAGE = "admin_collapsed_groups"
+const STALE_DAYS = 7
+
+function esc(s) {
+  if (s === null || s === undefined) return ""
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]))
+}
+
+function showToast(msg) {
+  const t = document.getElementById("toast")
+  t.textContent = msg
+  t.classList.add("show")
+  setTimeout(() => t.classList.remove("show"), 1800)
+}
+
+// ---------------- Auth / login screen ----------------
+function getAdminKey() {
+  return sessionStorage.getItem(ADMIN_KEY_STORAGE) || ""
+}
+
+function showLoginScreen(errorMsg) {
+  document.getElementById("login-screen").style.display = "flex"
+  document.getElementById("app-screen").style.display = "none"
+  document.getElementById("login-error").textContent = errorMsg || ""
+  document.getElementById("login-input").value = ""
+  setTimeout(() => document.getElementById("login-input").focus(), 50)
+}
+
+function showAppScreen() {
+  document.getElementById("login-screen").style.display = "none"
+  document.getElementById("app-screen").style.display = "block"
+  loadStudents()
+}
+
+async function submitLogin() {
+  const input = document.getElementById("login-input")
+  const key = input.value.trim()
+  const btn = document.getElementById("login-btn")
+  const errEl = document.getElementById("login-error")
+  if (!key) {
+    errEl.textContent = "비밀번호를 입력하세요."
+    return
+  }
+  btn.disabled = true
+  btn.textContent = "확인 중..."
+  errEl.textContent = ""
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/list-students`, {
+      headers: {
+        "x-admin-key": key,
+        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+        "apikey": SUPABASE_ANON_KEY,
+      },
+    })
+    if (res.status === 401) {
+      errEl.textContent = "비밀번호가 올바르지 않습니다."
+      btn.disabled = false
+      btn.textContent = "로그인"
+      return
+    }
+    if (!res.ok) throw new Error(`서버 오류: ${res.status}`)
+    sessionStorage.setItem(ADMIN_KEY_STORAGE, key)
+    showAppScreen()
+  } catch (err) {
+    errEl.textContent = "로그인에 실패했습니다: " + err.message
+  } finally {
+    btn.disabled = false
+    btn.textContent = "로그인"
+  }
+}
+
+function logout() {
+  sessionStorage.removeItem(ADMIN_KEY_STORAGE)
+  showLoginScreen("")
+}
+
+// ---------------- 비밀번호 변경 ----------------
+function openPasswordModal() {
+  document.getElementById("pw-current").value = ""
+  document.getElementById("pw-new").value = ""
+  document.getElementById("pw-new-confirm").value = ""
+  document.getElementById("pw-error").textContent = ""
+  document.getElementById("password-modal").classList.add("active")
+}
+
+function closePasswordModal() {
+  document.getElementById("password-modal").classList.remove("active")
+}
+
+async function submitPasswordChange() {
+  const current = document.getElementById("pw-current").value
+  const next = document.getElementById("pw-new").value
+  const confirmNext = document.getElementById("pw-new-confirm").value
+  const errEl = document.getElementById("pw-error")
+  const btn = document.getElementById("pw-submit-btn")
+
+  if (!current) { errEl.textContent = "현재 비밀번호를 입력하세요."; return }
+  if (!next || next.length < 4) { errEl.textContent = "새 비밀번호는 4자 이상이어야 합니다."; return }
+  if (next !== confirmNext) { errEl.textContent = "새 비밀번호가 서로 다릅니다."; return }
+
+  errEl.textContent = ""
+  btn.disabled = true
+  btn.textContent = "바꾸는 중..."
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/update-admin-key`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-key": current,
+        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+        "apikey": SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ newPassword: next }),
+    })
+    if (res.status === 401) {
+      errEl.textContent = "현재 비밀번호가 올바르지 않습니다."
+      return
+    }
+    if (!res.ok) throw new Error(`서버 오류: ${res.status} ${await res.text()}`)
+
+    // 새 비밀번호로 로그인 상태를 갱신해서 다음 동작도 끄지지 않게 이어지게 합니다.
+    sessionStorage.setItem(ADMIN_KEY_STORAGE, next)
+    closePasswordModal()
+    showToast("비밀번호가 바뀌었습니다.")
+  } catch (err) {
+    errEl.textContent = "실패: " + err.message
+  } finally {
+    btn.disabled = false
+    btn.textContent = "바꾸기"
+  }
+}
+
+document.getElementById("login-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") submitLogin()
+})
+
+// ---------------- Data / formatting helpers ----------------
+function formatDate(iso) {
+  if (!iso) return "생성 안 됨"
+  const d = new Date(iso)
+  return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`
+}
+
+function relativeFromNow(iso) {
+  if (!iso) return ""
+  const diffMs = Date.now() - new Date(iso).getTime()
+  const days = Math.floor(diffMs / (24 * 60 * 60 * 1000))
+  if (days <= 0) return "오늘"
+  if (days === 1) return "1일 전"
+  return `${days}일 전`
+}
+
+function reportUrl(token) {
+  return `${window.location.origin}${window.location.pathname.replace("admin.html","")}student_report.html?token=${token}`
+}
+
+// 날짜(시간 없는 값)와 타임스탬프를 같은 기준(한국시간 기준 '날짜')으로 비교하기 위한 헬퍼.
+// lastClassDate는 Notion 날짜 속성 값(YYYY-MM-DD, 시간 없음)이고, updatedAt은 실제 UTC 타임스탬프입니다.
+// 이 둘을 그냥 new Date(...).getTime()으로 비교하면, 날짜만 있는 값은 UTC 00:00(=한국시간 09:00)으로
+// 해석되어, 09시 이전에 갱신된 보고서가 실제로는 최신인데도 '갱신 필요'로 잘못 표시되는 문제가 있었습니다.
+function toKstDateOnly(iso) {
+  if (!iso) return null
+  const d = new Date(iso)
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(d)
+}
+
+// 보고서 상태를 계산합니다: fail(오류) > none(미생성) > stale(갱신 필요) > ok(최신)
+// 갱신 필요(stale) 판단 기준:
+//   1) 마지막 출석(수업)일이, 마지막으로 보고서를 갱신한 날짜보다 이후인 경우 (그날 수업 후 아직 안 갱신함)
+//   2) 위 조건에 해당하지 않아도, 마지막 갱신일로부터 STALE_DAYS일이 지난 경우
+// 날짜 비교는 한국시간 기준 '연-월-일'만 비교합니다(시:분은 무시).
+function reportStatus(s) {
+  if (s.error || s.lastError) return "fail"
+  if (!s.accessToken) return "none"
+  if (s.lastClassDate && s.updatedAt) {
+    const lastClassDateOnly = String(s.lastClassDate).slice(0, 10)
+    const updatedDateOnly = toKstDateOnly(s.updatedAt)
+    if (lastClassDateOnly > updatedDateOnly) return "stale"
+  }
+  if (s.updatedAt) {
+    const days = (Date.now() - new Date(s.updatedAt).getTime()) / (24 * 60 * 60 * 1000)
+    if (days > STALE_DAYS) return "stale"
+  }
+  return "ok"
+}
+
+const STATUS_LABEL = { ok: "최신", stale: "갱신 필요", none: "미생성", fail: "실패" }
+
+function statusBadgeHtml(status) {
+  return `<span class="badge ${status}">${STATUS_LABEL[status]}</span>`
+}
+
+function courseTagHtml(status) {
+  const cls = status === "수강 중" ? "active" : status === "수강 종료" ? "ended" : ""
+  return `<span class="course-tag ${cls}">${esc(status || "-")}</span>`
+}
+
+function actionLabel(status) {
+  if (status === "none") return "➕"
+  if (status === "fail") return "다시 시도"
+  return "🔄️" // ok, stale
+}
+
+function actionTitle(status) {
+  if (status === "none") return "보고서 생성 · 최초로 리포트를 생성합니다"
+  if (status === "fail") return "다시 시도 · 리포트 생성을 다시 시도합니다"
+  return "동기화 · 최신 수업 정보로 리포트를 갱신합니다"
+}
+
+function courseRank(status) {
+  if (status === "수강 중") return 0
+  if (status === "수강 예정") return 1
+  if (status === "수강 종료") return 2
+  return 3
+}
+
+function reportRank(status) {
+  const order = { ok: 0, stale: 1, none: 2, fail: 3 }
+  return order[status] !== undefined ? order[status] : 4
+}
+
+// ---------------- Load & render ----------------
+let STUDENTS = [] // flat list from the server, kept for lookups by index
+
+const ACTIVE_STATUS = "수강 중"
+
+// ---------------- View mode (학생 보기 / 등록 보기) ----------------
+const VIEW_MODE_STORAGE = "admin_view_mode"
+let VIEW_MODE = sessionStorage.getItem(VIEW_MODE_STORAGE) === "registration" ? "registration" : "student"
+
+function setViewMode(mode) {
+  VIEW_MODE = mode === "registration" ? "registration" : "student"
+  sessionStorage.setItem(VIEW_MODE_STORAGE, VIEW_MODE)
+  updateViewToggleUI()
+  renderAll()
+}
+
+function updateViewToggleUI() {
+  const studentTab = document.getElementById("view-tab-student")
+  const regTab = document.getElementById("view-tab-registration")
+  if (!studentTab || !regTab) return
+  studentTab.classList.toggle("active", VIEW_MODE === "student")
+  regTab.classList.toggle("active", VIEW_MODE === "registration")
+}
+
+// 자물쇠 토글 버튼을 클릭하여 활성화/비활성화를 전환합니다.
+async function toggleLinkStatus(index) {
+  const s = STUDENTS[index]
+  if (!s || !s.accessToken) return
+  await setLinkStatus(index, !s.linkDisabled)
+}
+
+function loadFilters() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(FILTER_STORAGE) || "{}")
+    document.getElementById("search-input").value = saved.query || ""
+    document.getElementById("filter-course").value = saved.course || "all"
+    document.getElementById("filter-report").value = saved.report || "all"
+    document.getElementById("filter-today").checked = !!saved.todayOnly
+  } catch (e) { /* ignore */ }
+}
+
+function currentFilters() {
+  return {
+    query: document.getElementById("search-input").value.trim().toLowerCase(),
+    course: document.getElementById("filter-course").value,
+    report: document.getElementById("filter-report").value,
+    todayOnly: document.getElementById("filter-today").checked,
+  }
+}
+
+function saveFilters() {
+  sessionStorage.setItem(FILTER_STORAGE, JSON.stringify(currentFilters()))
+}
+
+function onFilterChange() {
+  saveFilters()
+  renderAll()
+}
+
+// 기본값은 "모두 접힘"입니다. 사용자가 펼친 그룹만 이 목록에 기록됩니다.
+function loadExpandedSet() {
+  try { return new Set(JSON.parse(sessionStorage.getItem(COLLAPSE_STORAGE) || "[]")) }
+  catch (e) { return new Set() }
+}
+function saveExpandedSet(set) {
+  sessionStorage.setItem(COLLAPSE_STORAGE, JSON.stringify([...set]))
+}
+function toggleGroupCollapse(key) {
+  const set = loadExpandedSet()
+  if (set.has(key)) set.delete(key); else set.add(key)
+  saveExpandedSet(set)
+  renderAll()
+}
+
+async function loadStudents() {
+  const app = document.getElementById("app")
+  app.innerHTML = '<div class="loading">불러오는 중...</div>'
+  const adminKey = getAdminKey()
+  if (!adminKey) {
+    showLoginScreen()
+    return
+  }
+  SELECTED = new Set()
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/list-students`, {
+      headers: {
+        "x-admin-key": adminKey,
+        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+        "apikey": SUPABASE_ANON_KEY,
+      },
+    })
+    if (res.status === 401) {
+      logout()
+      return
+    }
+    if (!res.ok) throw new Error(`서버 오류: ${res.status} ${await res.text()}`)
+
+    const data = await res.json()
+    STUDENTS = data.students || []
+    document.getElementById("last-fetch").textContent = `마지막 조회: ${formatDate(new Date().toISOString())}`
+    renderAll()
+  } catch (err) {
+    app.innerHTML = `<div class="empty">오류: ${esc(err.message)}</div>`
+  }
+}
+
+function groupByStudent(students) {
+  const order = []
+  const map = new Map()
+  students.forEach((s, i) => {
+    const key = s.studentName || s.title || s.registrationId
+    if (!map.has(key)) {
+      map.set(key, [])
+      order.push(key)
+    }
+    map.get(key).push(i)
+  })
+  return order.map((key) => ({ studentName: key, indices: map.get(key) }))
+}
+
+function studentMetaLine(s) {
+  return [s.school, s.grade].filter(Boolean).join(" · ")
+}
+
+function matchesFilters(s, filters) {
+  if (filters.course !== "all" && s.status !== filters.course) return false
+  if (filters.report !== "all" && reportStatus(s) !== filters.report) return false
+  if (filters.todayOnly && !s.hasClassToday) return false
+  if (filters.query) {
+    const haystack = [s.studentName, s.title, s.school, s.grade, s.teacherName].filter(Boolean).join(" ").toLowerCase()
+    if (!haystack.includes(filters.query)) return false
+  }
+  return true
+}
+
+function renderAll() {
+  const filters = currentFilters()
+  renderStats(STUDENTS)
+  const filteredIndices = STUDENTS.map((s, i) => i).filter((i) => matchesFilters(STUDENTS[i], filters))
+  renderList(filteredIndices, filters)
+  updateSearchCount(filteredIndices, filters)
+  updateSelectionUI()
+}
+
+function updateSearchCount(filteredIndices, filters) {
+  const el = document.getElementById("search-count")
+  if (!el) return
+  if (!filters.query) {
+    el.textContent = ""
+    return
+  }
+  const filteredStudents = filteredIndices.map((i) => STUDENTS[i])
+  const studentCount = groupByStudent(filteredStudents).length
+  el.textContent = `학생 ${studentCount}명 · 등록 ${filteredIndices.length}건`
+}
+
+function renderStats(students) {
+  const groups = groupByStudent(students)
+  const counts = { ok: 0, stale: 0, none: 0, fail: 0 }
+  students.forEach((s) => { counts[reportStatus(s)]++ })
+  const todayStudentCount = groups.filter((g) => g.indices.some((i) => students[i].hasClassToday)).length
+  document.getElementById("stats").innerHTML = `
+    <div class="stat-card tot"><div class="num">${groups.length}</div><div class="label">전체 학생</div></div>
+    <div class="stat-card tot"><div class="num">${students.length}</div><div class="label">전체 등록</div></div>
+    <div class="stat-card tot"><div class="num">${todayStudentCount}</div><div class="label">오늘 수업 학생</div></div>
+    <div class="stat-card ok"><div class="num">${counts.ok}</div><div class="label">최신</div></div>
+    <div class="stat-card stale"><div class="num">${counts.stale}</div><div class="label">갱신 필요</div></div>
+    <div class="stat-card none"><div class="num">${counts.none}</div><div class="label">미생성</div></div>
+    <div class="stat-card fail"><div class="num">${counts.fail}</div><div class="label">생성 실패</div></div>
+  `
+}
+
+function compareByColumn(a, b, students, col) {
+  const sa = students[a], sb = students[b]
+  if (col === "name") return (sa.studentName || "").localeCompare(sb.studentName || "", "ko")
+  if (col === "course") return courseRank(sa.status) - courseRank(sb.status)
+  if (col === "report") return reportRank(reportStatus(sa)) - reportRank(reportStatus(sb))
+  const ta = sa.updatedAt ? new Date(sa.updatedAt).getTime() : 0
+  const tb = sb.updatedAt ? new Date(sb.updatedAt).getTime() : 0
+  return ta - tb
+}
+
+function sortIndices(indices, students, sort) {
+  const arr = [...indices]
+  arr.sort((a, b) => {
+    const cmp = compareByColumn(a, b, students, sort.col)
+    return sort.dir === "desc" ? -cmp : cmp
+  })
+  return arr
+}
+
+function groupSortValue(g, col) {
+  if (col === "name") return g.studentName
+  if (col === "course") return Math.min(...g.indices.map((i) => courseRank(STUDENTS[i].status)))
+  if (col === "report") return Math.min(...g.indices.map((i) => reportRank(reportStatus(STUDENTS[i]))))
+  return Math.max(...g.indices.map((i) => (STUDENTS[i].updatedAt ? new Date(STUDENTS[i].updatedAt).getTime() : 0)))
+}
+
+// ---------------- Header sort state (표 헤드 클릭 정렬) ----------------
+const SORT_STORAGE = "admin_sort_state"
+
+function getSortState() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(SORT_STORAGE) || "null")
+    if (saved && saved.col) return saved
+  } catch (e) { /* ignore */ }
+  return { col: "updated", dir: "desc" }
+}
+
+function saveSortState(sort) {
+  sessionStorage.setItem(SORT_STORAGE, JSON.stringify(sort))
+}
+
+function onHeaderSortClick(col) {
+  const sort = getSortState()
+  const dir = sort.col === col ? (sort.dir === "asc" ? "desc" : "asc") : (col === "updated" ? "desc" : "asc")
+  saveSortState({ col, dir })
+  renderAll()
+}
+
+function sortableTh(label, col, sort) {
+  const active = sort.col === col
+  const arrow = active ? (sort.dir === "asc" ? " ▲" : " ▼") : ""
+  return `<th class="sortable${active ? " active" : ""}" onclick="onHeaderSortClick(${JSON.stringify(col)})">${label}${arrow}</th>`
+}
+
+function renderTableHead(sort, allIndices) {
+  const allChecked = allIndices.length > 0 && allIndices.every((i) => isSelected(i))
+  return `
+    <tr>
+      <th><input type="checkbox" class="row-check" ${allChecked ? "checked" : ""} onchange='onSelectAllChange(this.checked, ${JSON.stringify(allIndices)})'></th>
+      ${sortableTh("학생 / 등록", "name", sort)}
+      ${sortableTh("수강상태", "course", sort)}
+      ${sortableTh("보고서 상태", "report", sort)}
+      ${sortableTh("마지막 갱신", "updated", sort)}
+      <th>작업</th>
+    </tr>
+  `
+}
+
+// ---------------- Selection (체크박스) ----------------
+let SELECTED = new Set()
+
+function isSelected(i) { return SELECTED.has(i) }
+
+function selectedIndices() {
+  return [...SELECTED].filter((i) => STUDENTS[i])
+}
+
+function onRowCheckboxChange(i, checked) {
+  if (checked) SELECTED.add(i); else SELECTED.delete(i)
+  updateSelectionUI()
+}
+
+function onSelectAllChange(checked, indices) {
+  indices.forEach((i) => { if (checked) SELECTED.add(i); else SELECTED.delete(i) })
+  renderAll()
+}
+
+function onGroupCheckboxChange(indices, checked) {
+  indices.forEach((i) => { if (checked) SELECTED.add(i); else SELECTED.delete(i) })
+  renderAll()
+}
+
+function updateSelectionUI() {
+  const count = SELECTED.size
+  const label = document.getElementById("selected-count")
+  if (label) label.textContent = count ? `${count}건 선택됨` : ""
+  ;["bulk-sync-btn", "bulk-alimtalk-btn", "bulk-disable-btn", "bulk-regen-btn"].forEach((id) => {
+    const btn = document.getElementById(id)
+    if (btn) btn.disabled = count === 0
+  })
+}
+
+// 선택한 등록을 한 번에 동기화합니다.
+async function bulkSyncSelected() {
+  const targets = selectedIndices()
+  if (!targets.length) { showToast("선택된 항목이 없습니다."); return }
+  const btn = document.getElementById("bulk-sync-btn")
+  if (btn) btn.disabled = true
+  for (const i of targets) {
+    await generateReport(i, true)
+  }
+  if (btn) btn.disabled = SELECTED.size === 0
+  showToast(`선택한 ${targets.length}건을 동기화했습니다.`)
+}
+
+// 선택한 학생 중 오늘 수업이 있는 학생에게만 알림톡을 일괄 전송합니다.
+function bulkAlimtalkSelected() {
+  const targets = selectedIndices().filter((i) => STUDENTS[i].hasClassToday && STUDENTS[i].attendanceId)
+  if (!targets.length) {
+    showToast("선택한 항목 중 오늘 수업이 있는 학생이 없습니다.")
+    return
+  }
+  ALIMTALK_PENDING = { type: "bulk", indices: targets }
+  openAlimtalkModal(`선택한 <strong>${targets.length}명</strong>에게<br>오늘 수업 알림톡을 발송할까요?`)
+}
+
+// 선택한 링크를 일괄 비활성화합니다.
+async function bulkDisableSelected() {
+  const targets = selectedIndices().filter((i) => STUDENTS[i].accessToken)
+  if (!targets.length) { showToast("선택된 항목 중 링크가 있는 학생이 없습니다."); return }
+  try {
+    const registrationIds = targets.map((i) => STUDENTS[i].registrationId)
+    await callLinkAction(registrationIds, "disable")
+    targets.forEach((i) => { STUDENTS[i].linkDisabled = true })
+    showToast(`선택한 ${targets.length}개 링크를 비활성화했습니다.`)
+    renderAll()
+  } catch (err) {
+    alert("선택 비활성화 오류: " + err.message)
+  }
+}
+
+// 선택한 링크(access_token)를 일괄으로 새로 발급합니다.
+async function bulkRegenerateSelected() {
+  const targets = selectedIndices().filter((i) => STUDENTS[i].accessToken)
+  if (!targets.length) { showToast("선택된 항목 중 링크가 있는 학생이 없습니다."); return }
+  try {
+    const registrationIds = targets.map((i) => STUDENTS[i].registrationId)
+    const result = await callLinkAction(registrationIds, "regenerate")
+    targets.forEach((i) => {
+      const newToken = result.tokens && result.tokens[STUDENTS[i].registrationId]
+      if (newToken) STUDENTS[i].accessToken = newToken
+      STUDENTS[i].linkDisabled = false
+    })
+    showToast(`선택한 ${targets.length}개 링크를 새로 발급했습니다.`)
+    renderAll()
+  } catch (err) {
+    alert("선택 링크 변경 오류: " + err.message)
+  }
+}
+
+function renderList(filteredIndices, filters) {
+  const app = document.getElementById("app")
+  if (!STUDENTS.length) {
+    app.innerHTML = '<div class="empty">학생 목록이 비어 있습니다. 등록(학원) DB 데이터베이스 ID 설정을 확인해주세요.</div>'
+    return
+  }
+  if (!filteredIndices.length) {
+    app.innerHTML = '<div class="empty">검색·필터 조건에 맞는 등록이 없습니다.</div>'
+    return
+  }
+
+  const sort = getSortState()
+
+  // Build groups restricted to filtered indices, preserving student grouping.
+  const allGroups = groupByStudent(STUDENTS)
+  const filteredSet = new Set(filteredIndices)
+  const groups = allGroups
+    .map((g) => ({ ...g, indices: g.indices.filter((i) => filteredSet.has(i)) }))
+    .filter((g) => g.indices.length)
+    .map((g) => ({ ...g, indices: sortIndices(g.indices, STUDENTS, sort) }))
+
+  groups.sort((a, b) => {
+    const va = groupSortValue(a, sort.col)
+    const vb = groupSortValue(b, sort.col)
+    const cmp = typeof va === "string" ? va.localeCompare(vb, "ko") : va - vb
+    return sort.dir === "desc" ? -cmp : cmp
+  })
+
+  const expanded = loadExpandedSet()
+
+  if (VIEW_MODE === "registration") {
+    const flatIndices = sortIndices(filteredIndices, STUDENTS, sort)
+    app.innerHTML = `
+      <div class="desktop-view">
+        <table>
+          <thead>
+            ${renderTableHead(sort, filteredIndices)}
+          </thead>
+          <tbody>
+            ${flatIndices.map((i) => renderDesktopRow(i, false, true)).join("")}
+          </tbody>
+        </table>
+      </div>
+      <div class="mobile-view">
+        ${flatIndices.map((i) => renderMobileReg(i, false, true)).join("")}
+      </div>
+    `
+    return
+  }
+
+  app.innerHTML = `
+    <div class="desktop-view">
+      <table>
+        <thead>
+          ${renderTableHead(sort, filteredIndices)}
+        </thead>
+        <tbody>
+          ${groups.map((g, gi) => renderDesktopGroup(g, gi, expanded)).join("")}
+        </tbody>
+      </table>
+    </div>
+    <div class="mobile-view">
+      ${groups.map((g, gi) => renderMobileGroup(g, gi, expanded)).join("")}
+    </div>
+  `
+}
+
+// 자물쇠 아이콘 하나로 활성화/비활성화를 토글합니다.
+function lockToggleButtonHtml(i, idPrefix) {
+  const s = STUDENTS[i]
+  const disabled = !s.accessToken
+  const isLocked = !!s.linkDisabled
+  const icon = isLocked ? "🔒" : "🔓"
+  const title = isLocked
+    ? "비활성화됨 · 클릭하면 링크를 다시 활성화합니다"
+    : "활성화됨 · 클릭하면 링크를 비활성화합니다"
+  return `<button class="secondary" id="${idPrefix}-${i}" onclick='toggleLinkStatus(${i})' ${disabled ? "disabled" : ""} title="${esc(title)}">${icon}</button>`
+}
+
+// 링크 변경(재발급) 아이콘 버튼입니다.
+function regenerateButtonHtml(i, idPrefix) {
+  const s = STUDENTS[i]
+  return `<button class="secondary danger" id="${idPrefix}-${i}" onclick='regenerateLink(${i})' ${s.accessToken ? "" : "disabled"} title="링크 변경 · 기존 링크를 무효화하고 새 링크를 발급합니다">♻️</button>`
+}
+
+function renderDesktopGroup(g, gi, expanded) {
+  const groupKey = `g-${g.studentName}`
+  const isCollapsed = !expanded.has(groupKey)
+  const activeCount = g.indices.filter((i) => STUDENTS[i].status === ACTIVE_STATUS).length
+  const first = STUDENTS[g.indices[0]]
+  const metaLine = studentMetaLine(first)
+  const firstWithToken = g.indices.find((i) => STUDENTS[i].accessToken)
+  const nameToken = firstWithToken !== undefined ? STUDENTS[firstWithToken].accessToken : null
+  const allChecked = g.indices.length > 0 && g.indices.every((i) => isSelected(i))
+  return `
+    <tr class="student-header" onclick='toggleGroupCollapse(${JSON.stringify(groupKey)})'>
+      <td onclick="event.stopPropagation()"><input type="checkbox" class="row-check" ${allChecked ? "checked" : ""} onchange='onGroupCheckboxChange(${JSON.stringify(g.indices)}, this.checked)'></td>
+      <td colspan="4">
+        <span class="chev">${isCollapsed ? "▶" : "▼"}</span>
+        <strong>${esc(g.studentName)}</strong>
+        <span class="status">${metaLine ? esc(metaLine) + " · " : ""}등록 ${g.indices.length}건${activeCount ? `, 수강중 ${activeCount}` : ""}</span>
+      </td>
+      <td onclick="event.stopPropagation()">
+        <button class="action" id="syncall-${gi}" onclick='syncAllForStudent(${gi})' ${activeCount ? "" : "disabled"} title="전체 동기화 · 이 학생의 모든 수강중 등록을 한 번에 갱신합니다">전체 동기화</button>
+      </td>
+    </tr>
+    ${g.indices.map((i) => renderDesktopRow(i, isCollapsed)).join("")}
+  `
+}
+
+function renderDesktopRow(i, isCollapsed, flat) {
+  const s = STUDENTS[i]
+  const status = reportStatus(s)
+  const errMsg = s.error || s.lastError
+  const titleCell = flat
+    ? `<div>${esc(s.studentName)}</div><div class="sub-meta">${esc(s.title || s.registrationId)}${s.teacherName ? ` · 담당: ${esc(s.teacherName)}` : ""}</div>`
+    : `${esc(s.title || s.registrationId)}${s.teacherName ? `<div class="sub-meta">담당: ${esc(s.teacherName)}</div>` : ""}`
+  return `
+    <tr id="row-${i}" class="reg-row${isCollapsed ? " collapsed" : ""}">
+      <td onclick="event.stopPropagation()"><input type="checkbox" class="row-check" ${isSelected(i) ? "checked" : ""} onchange='onRowCheckboxChange(${i}, this.checked)'></td>
+      <td style="padding-left:${flat ? "12" : "28"}px">
+        ${titleCell}
+      </td>
+      <td>${courseTagHtml(s.status)}</td>
+      <td id="statuscell-${i}">
+        ${statusBadgeHtml(status)}
+        ${errMsg ? `<button class="error-toggle" onclick='toggleError(${i})'>오류 상세</button><div class="error-detail" id="errdetail-${i}">${esc(errMsg)}</div>` : ""}
+      </td>
+      <td class="status" id="updated-${i}">${formatDate(s.updatedAt)}${s.updatedAt ? `<div class="sub-meta">${relativeFromNow(s.updatedAt)}</div>` : ""}</td>
+      <td>
+        <button class="action ${status === "fail" ? "retry" : ""}" id="btn-${i}" onclick='onActionClick(${i})' title="${esc(actionTitle(status))}">${actionLabel(status)}</button>
+        <button class="secondary" id="copy-${i}" onclick='openLink(${JSON.stringify(s.accessToken || "")})' ${s.accessToken ? "" : "disabled"} title="링크 열기 · 학부모용 리포트 페이지를 새 탭에서 열고 링크도 함께 복사합니다">🔗</button>
+        <button class="secondary" id="alimtalk-${i}" onclick='sendAlimtalk(${i})' ${s.hasClassToday ? "" : "disabled"} title="알림톡 전송 · 오늘 수업한 학생에게 카카오 알림톡을 전송합니다">📩</button>
+        ${lockToggleButtonHtml(i, "lock")}
+        ${regenerateButtonHtml(i, "regen")}
+      </td>
+    </tr>
+  `
+}
+
+function renderMobileGroup(g, gi, expanded) {
+  const groupKey = `g-${g.studentName}`
+  const isCollapsed = !expanded.has(groupKey)
+  const first = STUDENTS[g.indices[0]]
+  const metaLine = studentMetaLine(first)
+  const firstWithToken = g.indices.find((i) => STUDENTS[i].accessToken)
+  const nameToken = firstWithToken !== undefined ? STUDENTS[firstWithToken].accessToken : null
+  const allChecked = g.indices.length > 0 && g.indices.every((i) => isSelected(i))
+  return `
+    <div class="m-student-card">
+      <div class="m-student-head" onclick='toggleGroupCollapse(${JSON.stringify(groupKey)})'>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" class="row-check" onclick="event.stopPropagation()" ${allChecked ? "checked" : ""} onchange='onGroupCheckboxChange(${JSON.stringify(g.indices)}, this.checked)'>
+          <div>
+            <div class="name">${esc(g.studentName)}</div>
+            <div class="meta">${metaLine ? esc(metaLine) + " · " : ""}등록 ${g.indices.length}건</div>
+          </div>
+        </div>
+        <span class="chev">${isCollapsed ? "▶" : "▼"}</span>
+      </div>
+      ${g.indices.map((i) => renderMobileReg(i, isCollapsed)).join("")}
+    </div>
+  `
+}
+
+function renderMobileReg(i, isCollapsed, flat) {
+  const s = STUDENTS[i]
+  const status = reportStatus(s)
+  const errMsg = s.error || s.lastError
+  return `
+    <div class="m-reg${isCollapsed ? " collapsed" : ""}" id="mrow-${i}">
+      <div class="m-reg-top">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" class="row-check" ${isSelected(i) ? "checked" : ""} onchange='onRowCheckboxChange(${i}, this.checked)'>
+          <div class="m-reg-title">${flat ? esc(s.studentName) : esc(s.title || s.registrationId)}</div>
+        </div>
+        ${statusBadgeHtml(status)}
+      </div>
+      ${flat ? `<div class="m-reg-sub">${esc(s.title || s.registrationId)}</div>` : ""}
+      <div class="m-reg-sub">
+        ${courseTagHtml(s.status)}
+        ${s.teacherName ? ` · 담당 ${esc(s.teacherName)}` : ""}
+        ${s.updatedAt ? ` · ${formatDate(s.updatedAt)} (${relativeFromNow(s.updatedAt)})` : ""}
+      </div>
+      ${errMsg ? `<button class="error-toggle" onclick='toggleError(${i}, true)'>오류 상세</button><div class="error-detail" id="errdetail-m-${i}">${esc(errMsg)}</div>` : ""}
+      <div class="m-actions">
+        <button class="action ${status === "fail" ? "retry" : ""}" id="mbtn-${i}" onclick='onActionClick(${i})' title="${esc(actionTitle(status))}">${actionLabel(status)}</button>
+        <button class="secondary" onclick='openLink(${JSON.stringify(s.accessToken || "")})' ${s.accessToken ? "" : "disabled"} title="링크 열기 · 학부모용 리포트 페이지를 새 탭에서 열고 링크도 함께 복사합니다">🔗</button>
+        <button class="secondary" id="malimtalk-${i}" onclick='sendAlimtalk(${i})' ${s.hasClassToday ? "" : "disabled"} title="알림톡 전송 · 오늘 수업한 학생에게 카카오 알림톡을 전송합니다">📩</button>
+        ${lockToggleButtonHtml(i, "mlock")}
+        ${regenerateButtonHtml(i, "mregen")}
+      </div>
+    </div>
+  `
+}
+
+function toggleError(i, mobile) {
+  const el = document.getElementById(mobile ? `errdetail-m-${i}` : `errdetail-${i}`)
+  if (el) el.classList.toggle("open")
+}
+
+// ---------------- Actions: generate / refresh / retry ----------------
+function onActionClick(index) {
+  // 최신화해도 기존 링크(주소)는 유지되므로 별도 확인창 없이 바로 진행합니다.
+  generateReport(index)
+}
+
+function setRowBusy(index, label) {
+  const btn = document.getElementById(`btn-${index}`)
+  const mbtn = document.getElementById(`mbtn-${index}`)
+  ;[btn, mbtn].forEach((b) => { if (b) { b.disabled = true; b.textContent = label } })
+}
+
+function setRowIdle(index, label) {
+  const btn = document.getElementById(`btn-${index}`)
+  const mbtn = document.getElementById(`mbtn-${index}`)
+  ;[btn, mbtn].forEach((b) => { if (b) { b.disabled = false; b.textContent = label } })
+}
+
+// 같은 학생의 "수강 중"인 등록만 순서대로 동기화합니다. 수강 종료/대기 등록은 건너뜁니다.
+async function syncAllForStudent(groupIndex) {
+  const filters = currentFilters()
+  const filteredIndices = STUDENTS.map((s, i) => i).filter((i) => matchesFilters(STUDENTS[i], filters))
+  const allGroups = groupByStudent(STUDENTS)
+  const filteredSet = new Set(filteredIndices)
+  const groups = allGroups
+    .map((g) => ({ ...g, indices: g.indices.filter((i) => filteredSet.has(i)) }))
+    .filter((g) => g.indices.length)
+  const group = groups[groupIndex]
+  if (!group) return
+  const targets = group.indices.filter((i) => STUDENTS[i].status === ACTIVE_STATUS)
+  const syncAllBtn = document.getElementById(`syncall-${groupIndex}`)
+  if (syncAllBtn) { syncAllBtn.disabled = true; syncAllBtn.textContent = `동기화 중... (0/${targets.length})` }
+  let done = 0
+  for (const i of targets) {
+    await generateReport(i, true)
+    done++
+    if (syncAllBtn) syncAllBtn.textContent = `동기화 중... (${done}/${targets.length})`
+  }
+  if (syncAllBtn) {
+    syncAllBtn.textContent = `✅ 완료 (${targets.length}건)`
+    setTimeout(() => { syncAllBtn.disabled = false; syncAllBtn.textContent = "전체 동기화" }, 1500)
+  }
+}
+
+async function generateReport(index, silent) {
+  const s = STUDENTS[index]
+  setRowBusy(index, "생성 중...")
+  const adminKey = getAdminKey()
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/sync-student-report`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-key": adminKey,
+        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+        "apikey": SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ registrationId: s.registrationId }),
+    })
+    if (!res.ok) throw new Error(`실패: ${res.status} ${await res.text()}`)
+    const result = await res.json()
+
+    s.accessToken = result.access_token
+    s.updatedAt = new Date().toISOString()
+    delete s.error
+    delete s.lastError
+
+    setRowIdle(index, "✅ 완료")
+    if (!silent) showToast("보고서가 최신화되었습니다.")
+    setTimeout(() => renderAll(), 900)
+  } catch (err) {
+    s.error = err.message
+    setRowIdle(index, actionLabel("fail"))
+    if (!silent) alert("오류: " + err.message)
+    renderAll()
+  }
+}
+
+function copyLink(token) {
+  if (!token) return
+  navigator.clipboard.writeText(reportUrl(token))
+  showToast("링크가 복사되었습니다.")
+}
+
+// 리포트 링크를 새 탭에서 열고, 편의를 위해 해당 링크도 함께 복사합니다.
+function openLink(token) {
+  if (!token) return
+  window.open(reportUrl(token), "_blank")
+  navigator.clipboard.writeText(reportUrl(token)).catch(() => {})
+}
+
+// ---------------- Actions: AlimTalk send ----------------
+let ALIMTALK_PENDING = null // { type: "single", index } | { type: "bulk", indices: number[] }
+
+function openAlimtalkModal(bodyHtml) {
+  document.getElementById("alimtalk-modal-body").innerHTML = bodyHtml
+  document.getElementById("alimtalk-modal").classList.add("active")
+}
+
+function closeAlimtalkModal() {
+  ALIMTALK_PENDING = null
+  document.getElementById("alimtalk-modal").classList.remove("active")
+}
+
+// 개별 학생 알림톡 전송: 오늘 수업(attendanceId)이 있는 학생만 보낼 수 있습니다.
+function sendAlimtalk(i) {
+  const s = STUDENTS[i]
+  if (!s.hasClassToday || !s.attendanceId) {
+    showToast("오늘 등록된 수업이 없어 알림톡을 보낼 수 없습니다.")
+    return
+  }
+  ALIMTALK_PENDING = { type: "single", index: i }
+  openAlimtalkModal(`<strong>${esc(s.studentName)}</strong> (${esc(s.title || "")}) 학생에게<br>오늘 수업 알림톡을 발송할까요?`)
+}
+
+// 오늘 수업이 있는(현재 필터에 맞는) 학생 전원에게 일괄 전송합니다.
+function sendAlimtalkBulk() {
+  const filters = currentFilters()
+  const targets = STUDENTS
+    .map((s, i) => i)
+    .filter((i) => matchesFilters(STUDENTS[i], filters))
+    .filter((i) => STUDENTS[i].hasClassToday && STUDENTS[i].attendanceId)
+  if (!targets.length) {
+    showToast("오늘 수업이 있는(필터에 맞는) 학생이 없습니다.")
+    return
+  }
+  ALIMTALK_PENDING = { type: "bulk", indices: targets }
+  openAlimtalkModal(`오늘 수업이 있는 <strong>${targets.length}명</strong>에게<br>알림톡을 일괄 발송할까요?`)
+}
+
+async function confirmAlimtalkSend() {
+  const pending = ALIMTALK_PENDING
+  document.getElementById("alimtalk-modal").classList.remove("active")
+  ALIMTALK_PENDING = null
+  if (!pending) return
+  if (pending.type === "single") {
+    await sendAlimtalkOne(pending.index)
+  } else {
+    await sendAlimtalkBulkRun(pending.indices)
+  }
+}
+
+async function callSendDailyReport(s) {
+  const adminKey = getAdminKey()
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/send-daily-report`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-key": adminKey,
+      "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+      "apikey": SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({ registrationId: s.registrationId, attendanceId: s.attendanceId }),
+  })
+  if (!res.ok) throw new Error(`실패: ${res.status} ${await res.text()}`)
+  const result = await res.json()
+  s.accessToken = result.access_token
+  s.updatedAt = new Date().toISOString()
+  delete s.error
+  delete s.lastError
+  return result
+}
+
+async function sendAlimtalkOne(index) {
+  const s = STUDENTS[index]
+  const btn = document.getElementById(`alimtalk-${index}`)
+  const mbtn = document.getElementById(`malimtalk-${index}`)
+  ;[btn, mbtn].forEach((b) => { if (b) { b.disabled = true; b.textContent = "전송 중..." } })
+  try {
+    await callSendDailyReport(s)
+    showToast(`${s.studentName}에게 알림톡을 발송했습니다.`)
+    renderAll()
+  } catch (err) {
+    alert("알림톡 전송 오류: " + err.message)
+    ;[btn, mbtn].forEach((b) => { if (b) { b.disabled = false; b.textContent = "📩" } })
+  }
+}
+
+// ---------------- Actions: report link enable/disable ----------------
+// 링크 상태를 변경하거나(access_token 유지) 새 링크를 발급합니다(access_token 재발급).
+// action: "enable" | "disable" | "regenerate"
+async function callLinkAction(registrationIds, action) {
+  const adminKey = getAdminKey()
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/toggle-report-link`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-key": adminKey,
+      "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+      "apikey": SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({ registrationIds, action }),
+  })
+  if (!res.ok) throw new Error(`실패: ${res.status} ${await res.text()}`)
+  return res.json()
+}
+
+async function setLinkStatus(index, disabled) {
+  const s = STUDENTS[index]
+  if (!s.accessToken) return
+  try {
+    await callLinkAction([s.registrationId], disabled ? "disable" : "enable")
+    s.linkDisabled = disabled
+    showToast(disabled ? `${s.studentName} 링크를 비활성화했습니다.` : `${s.studentName} 링크를 활성화했습니다.`)
+    renderAll()
+  } catch (err) {
+    alert("링크 상태 변경 오류: " + err.message)
+  }
+}
+
+// 현재 필토에 해당하는(링크가 있는) 학생 전원을 일괄 활성화/비활성화합니다.
+async function toggleReportLinkBulk(disabled) {
+  const filters = currentFilters()
+  const targets = STUDENTS
+    .map((s, i) => i)
+    .filter((i) => matchesFilters(STUDENTS[i], filters))
+    .filter((i) => STUDENTS[i].accessToken && STUDENTS[i].linkDisabled !== disabled)
+  if (!targets.length) {
+    showToast(disabled ? "비활성화할 링크가 없습니다." : "활성화할 링크가 없습니다.")
+    return
+  }
+  const verb = disabled ? "비활성화" : "활성화"
+  try {
+    const registrationIds = targets.map((i) => STUDENTS[i].registrationId)
+    await callLinkAction(registrationIds, disabled ? "disable" : "enable")
+    targets.forEach((i) => { STUDENTS[i].linkDisabled = disabled })
+    showToast(`${targets.length}개 링크를 ${verb}했습니다.`)
+    renderAll()
+  } catch (err) {
+    alert("일괄 링크 상태 변경 오류: " + err.message)
+  }
+}
+
+// 링크(access_token)를 새로 발급합니다. 기존 링크는 더 이상 동작하지 않습니다.
+async function regenerateLink(index) {
+  const s = STUDENTS[index]
+  if (!s.accessToken) return
+  try {
+    const result = await callLinkAction([s.registrationId], "regenerate")
+    const newToken = result.tokens && result.tokens[s.registrationId]
+    if (newToken) s.accessToken = newToken
+    s.linkDisabled = false
+    showToast(`${s.studentName} 링크를 새로 발급했습니다. 기존 링크는 더 이상 동작하지 않습니다.`)
+    renderAll()
+  } catch (err) {
+    alert("링크 변경 오류: " + err.message)
+  }
+}
+
+// 현재 필토에 해당하는 학생 전원의 링크(access_token)를 일괄으로 새로 발급합니다.
+async function regenerateLinkBulk() {
+  const filters = currentFilters()
+  const targets = STUDENTS
+    .map((s, i) => i)
+    .filter((i) => matchesFilters(STUDENTS[i], filters))
+    .filter((i) => STUDENTS[i].accessToken)
+  if (!targets.length) {
+    showToast("링크를 바꿀 대상이 없습니다.")
+    return
+  }
+  try {
+    const registrationIds = targets.map((i) => STUDENTS[i].registrationId)
+    const result = await callLinkAction(registrationIds, "regenerate")
+    targets.forEach((i) => {
+      const newToken = result.tokens && result.tokens[STUDENTS[i].registrationId]
+      if (newToken) STUDENTS[i].accessToken = newToken
+      STUDENTS[i].linkDisabled = false
+    })
+    showToast(`${targets.length}개 링크를 새로 발급했습니다.`)
+    renderAll()
+  } catch (err) {
+    alert("일괄 링크 변경 오류: " + err.message)
+  }
+}
+
+// ---------------- Settings dropdown menu ----------------
+function toggleMenu(evt, id) {
+  evt.stopPropagation()
+  const target = document.getElementById(id)
+  if (!target) return
+  const isOpen = target.classList.contains("open")
+  closeAllMenus()
+  if (!isOpen) target.classList.add("open")
+}
+
+function closeAllMenus() {
+  document.querySelectorAll(".dropdown-menu.open").forEach((el) => el.classList.remove("open"))
+}
+
+document.addEventListener("click", closeAllMenus)
+
+async function sendAlimtalkBulkRun(indices) {
+  let done = 0
+  let failed = 0
+  showToast(`알림톡 일괄 전송을 시작합니다. (0/${indices.length})`)
+  for (const i of indices) {
+    try {
+      await callSendDailyReport(STUDENTS[i])
+      done++
+    } catch (err) {
+      failed++
+      STUDENTS[i].error = err.message
+    }
+    showToast(`알림톡 전송 중... (${done + failed}/${indices.length})`)
+  }
+  renderAll()
+  showToast(`알림톡 일괄 전송 완료: 성공 ${done}건${failed ? `, 실패 ${failed}건` : ""}`)
+}
+
+// ---------------- Debug clock ----------------
+// 진단용: 이 프론트엔드(밌단)가 현재 묵 시각을 어뚒게 인식하는지 화인하기 위해 추가합니다.
+function updateDebugClock() {
+  const el = document.getElementById("debug-clock")
+  if (!el) return
+  const now = new Date()
+  const parts = new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    weekday: "short", hour12: false,
+  }).format(now)
+  el.textContent = `현재 인식 시각(Asia/Seoul): ${parts}`
+}
+
+// ---------------- Boot ----------------
+;(function boot() {
+  loadFilters()
+  updateViewToggleUI()
+  updateDebugClock()
+  setInterval(updateDebugClock, 1000)
+  if (getAdminKey()) {
+    showAppScreen()
+  } else {
+    showLoginScreen()
+  }
+})()
+</script>
+</body>
+</html>
