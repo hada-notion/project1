@@ -385,7 +385,9 @@
 .md-right-time { font-size:13px; color:var(--muted); margin-top:4px; }
 .md-right-sub { font-size:13px; color:var(--muted); margin-top:2px; }
 .md-right-link { font-size:12px; color:var(--accent); text-decoration:none; }
-.right-tabs { display:flex; gap:6px; border-bottom:1px solid var(--border); margin-bottom:16px; }
+.right-tabs-row { display:flex; align-items:center; justify-content:space-between; gap:10px; border-bottom:1px solid var(--border); margin-bottom:16px; }
+.right-tabs { display:flex; gap:6px; }
+.right-tabs-row .bulk-send-btn { margin:0; flex-shrink:0; }
 .right-tab { border:none; background:none; padding:8px 12px; font-size:13px; cursor:pointer; color:var(--muted); font-family:inherit; border-bottom:2px solid transparent; }
 .right-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight:600; }
 .record-card { border:none; border-bottom:1px solid var(--border); border-radius:0; padding:12px 14px; margin-bottom:0; background:transparent; }
@@ -466,6 +468,8 @@
   .md-right { display: none; padding: 18px 16px; }
   .md-right.mobile-detail-open { display: block; flex: 1; overflow-y: auto; }
   .md-right-header { flex-wrap: wrap; gap: 8px; }
+  .right-tabs-row { flex-direction: column-reverse; align-items: stretch; gap: 8px; }
+  .right-tabs-row .bulk-send-btn { width: 100%; }
   .right-tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
   .right-tab { white-space: nowrap; flex-shrink: 0; }
   .mobile-back-btn { display: inline-flex; align-items: center; gap: 6px; }
@@ -567,11 +571,14 @@
           </div>
         </div>
         <div class="right-summary-body" id="right-summary-body"></div>
-        <div class="right-tabs" id="right-tabs">
-          <button class="right-tab active" data-tab="students" onclick="setRightTab('students')">👥 학생</button>
-          <button class="right-tab" data-tab="record" onclick="setRightTab('record')">📖 학습기록</button>
-          <button class="right-tab" data-tab="assignment" onclick="setRightTab('assignment')">📝 과제</button>
-          <button class="right-tab" data-tab="evaluation" onclick="setRightTab('evaluation')">✅ 평가</button>
+        <div class="right-tabs-row" id="right-tabs-row">
+          <div class="right-tabs" id="right-tabs">
+            <button class="right-tab active" data-tab="students" onclick="setRightTab('students')">👥 학생</button>
+            <button class="right-tab" data-tab="record" onclick="setRightTab('record')">📖 학습기록</button>
+            <button class="right-tab" data-tab="assignment" onclick="setRightTab('assignment')">📝 과제</button>
+            <button class="right-tab" data-tab="evaluation" onclick="setRightTab('evaluation')">✅ 평가</button>
+          </div>
+          <button class="bulk-send-btn" id="bulk-send-tab-btn" disabled onclick="sendBulkForClass(SELECTED_CLASS_ID)">📩 보고서 일괄 전송</button>
         </div>
         <div class="right-tab-body" id="right-tab-body"></div>
       </div>
@@ -782,8 +789,9 @@ function setDomain(domain) {
   document.querySelectorAll(".domain-tab").forEach(function (b) { b.classList.toggle("active", b.dataset.domain === domain) })
   el("class-list-area").style.display = domain === "class" ? "flex" : "none"
   el("schedule-list-area").style.display = domain === "schedule" ? "flex" : "none"
-  el("right-tabs").style.display = domain === "class" ? "flex" : "none"
+  el("right-tabs-row").style.display = domain === "class" ? "flex" : "none"
   el("right-summary-toggle").style.display = domain === "class" ? "inline-flex" : "none"
+  el("bulk-send-tab-btn").disabled = true
   el("right-summary-body").classList.remove("show")
   el("md-right-empty").style.display = "block"
   el("md-right-content").style.display = "none"
@@ -1007,8 +1015,8 @@ function selectClass(id) {
     '<div class="info-card"><h3>📋 출석현황</h3><div class="info-content' + (c.attendanceStatus ? '' : ' empty') + '">' + esc(c.attendanceStatus || "기록 없음") + '</div></div>' +
     '<div class="info-card"><h3>📖 학습 내용</h3><div class="info-content' + (c.studySummary ? '' : ' empty') + '">' + esc(c.studySummary || "기록 없음") + '</div></div>' +
     '<div class="info-card"><h3>📝 과제 안내</h3><div class="info-content' + (c.assignmentSummary ? '' : ' empty') + '">' + esc(c.assignmentSummary || "기록 없음") + '</div></div>' +
-    '<div class="info-card"><h3>📄 평가 결과</h3><div class="info-content' + (c.evaluationSummary ? '' : ' empty') + '">' + esc(c.evaluationSummary || "기록 없음") + '</div></div>' +
-    '<button class="bulk-send-btn" onclick="sendBulkForClass(' + attrSafe(c.id) + ')">📩 보고서 일괄 전송</button>'
+    '<div class="info-card"><h3>📄 평가 결과</h3><div class="info-content' + (c.evaluationSummary ? '' : ' empty') + '">' + esc(c.evaluationSummary || "기록 없음") + '</div></div>'
+  el("bulk-send-tab-btn").disabled = false
   el("right-summary-body").classList.remove("show")
   el("right-summary-toggle").classList.remove("open")
   el("right-summary-toggle-label").textContent = "더보기"
