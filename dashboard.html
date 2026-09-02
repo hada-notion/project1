@@ -336,6 +336,9 @@
 .filter-option { border:1px solid var(--border); background:#fbfbfa; padding:4px 10px; border-radius:999px; font-size:12px; cursor:pointer; color:var(--text); font-family:inherit; }
 .filter-option.active { background:var(--accent); color:#fff; border-color:var(--accent); }
 .md-date-nav { display:flex; align-items:center; justify-content:center; gap:12px; font-size:14px; font-weight:600; }
+.md-date-nav-clickable { cursor:pointer; gap:6px; padding:8px 10px; border-radius:8px; background:#fff; border:1px solid var(--border); }
+.md-date-nav-clickable:hover { background:#f7f7f5; }
+.cal-icon { font-size:14px; }
 .date-nav-btn { border:none; background:#f0f0ee; width:28px; height:28px; border-radius:6px; cursor:pointer; font-size:14px; }
 .class-list-area { display:flex; flex-direction:column; gap:8px; }
 .class-item { border:1px solid var(--border); border-radius:10px; background:#fbfbfa; overflow:hidden; }
@@ -414,7 +417,7 @@
 <div class="layout" id="page-dashboard" style="flex-direction:column">
   <div class="domain-tab-row">
     <button class="domain-tab active" data-domain="class" onclick="setDomain('class')">🏫 수업</button>
-    <button class="domain-tab" data-domain="schedule" onclick="setDomain('schedule')">🗓 일정</button>
+    <button class="domain-tab" data-domain="schedule" onclick="setDomain('schedule')">📅 일정</button>
   </div>
   <div class="md-3col">
     <div class="calendar-panel" id="calendar-panel">
@@ -428,18 +431,15 @@
       </div>
     </div>
     <div class="md-left">
+      <div class="md-date-nav md-date-nav-clickable" id="date-nav-clickable" onclick="toggleCalendarPanel()" title="날짜를 탭하면 캘린더가 열려요">
+        <span class="cal-icon">📅</span><span class="date-nav-label" id="date-nav-label">-</span>
+      </div>
       <div class="md-filter-row">
-        <button class="calendar-toggle-btn" onclick="toggleCalendarPanel()" title="캘린더 열기/닫기">🗓</button>
         <button class="filter-tab active" data-filter="all" onclick="setFilterMode('all')">전체</button>
         <button class="filter-tab" data-filter="teacher" onclick="setFilterMode('teacher')">강사</button>
         <button class="filter-tab" data-filter="class" onclick="setFilterMode('class')">클래스</button>
       </div>
       <div class="md-filter-options" id="filter-options"></div>
-      <div class="md-date-nav">
-        <button class="date-nav-btn" onclick="shiftDate(-1)">‹</button>
-        <span class="date-nav-label" id="date-nav-label">-</span>
-        <button class="date-nav-btn" onclick="shiftDate(1)">›</button>
-      </div>
       <div id="status-area"></div>
       <div id="class-list-area" class="class-list-area"></div>
       <div id="schedule-list-area" class="schedule-list-area" style="display:none"></div>
