@@ -445,12 +445,13 @@
     width: 100%;
     border-right: none;
     border-bottom: 1px solid var(--border);
-    max-height: 50vh;
+    flex: 1;
     overflow-y: auto;
   }
+  .md-left.mobile-list-hidden { display: none; }
   /* 상세 패널: 수업/일정을 선택했을 때만 보임 */
   .md-right { display: none; padding: 18px 16px; }
-  .md-right.mobile-detail-open { display: block; }
+  .md-right.mobile-detail-open { display: block; flex: 1; overflow-y: auto; }
   .md-right-header { flex-wrap: wrap; gap: 8px; }
   .right-tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
   .right-tab { white-space: nowrap; flex-shrink: 0; }
@@ -535,7 +536,7 @@
         <div id="cal-panel-area"></div>
       </div>
     </div>
-    <div class="md-left">
+    <div class="md-left" id="md-left">
       <div class="md-date-nav md-date-nav-clickable" id="date-nav-clickable" onclick="toggleCalendarPanel()" title="날짜를 탭하면 캘린더가 열려요">
         <span class="cal-icon">📅</span><span class="date-nav-label" id="date-nav-label">-</span>
       </div>
@@ -795,8 +796,15 @@ function toggleCalendarPanel() {
 
 // 모바일(≤900px)에서만 상세 패널을 열고/닫습니다. 데스크톱은 항상 모든 열이 같이 보입니다.
 function isMobileLayout() { return window.matchMedia("(max-width: 900px)").matches }
-function openMobileDetail() { if (isMobileLayout()) el("md-right").classList.add("mobile-detail-open") }
-function closeMobileDetail() { el("md-right").classList.remove("mobile-detail-open") }
+function openMobileDetail() {
+  if (!isMobileLayout()) return
+  el("md-right").classList.add("mobile-detail-open")
+  el("md-left").classList.add("mobile-list-hidden")
+}
+function closeMobileDetail() {
+  el("md-right").classList.remove("mobile-detail-open")
+  el("md-left").classList.remove("mobile-list-hidden")
+}
 
 function shiftCalendarMonth(delta) {
   const parts = CAL_PANEL_MONTH.split("-").map(Number)
