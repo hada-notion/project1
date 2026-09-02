@@ -364,8 +364,7 @@
 
     <div class="view-toggle" id="view-toggle">
       <div class="view-tabs">
-        <button id="view-tab-student" class="view-tab" onclick="setViewMode('student')" title="학생 보기 · 학생별로 묶어서 등록을 펼쳐보는 모드입니다">🧑‍🎓 학생 보기</button>
-        <button id="view-tab-registration" class="view-tab" onclick="setViewMode('registration')" title="등록 보기 · 학생 구분 없이 등록 단위로 나열합니다">📋 등록 보기</button>
+        <button id="view-tab-registration" class="view-tab active" title="등록 보기 · 학생 구분 없이 등록 단위로 나열합니다">📋 등록 보기</button>
       </div>
       <div class="bulk-actions" id="bulk-actions">
         <span class="selected-count" id="selected-count"></span>
@@ -667,22 +666,11 @@ let STUDENTS = [] // flat list from the server, kept for lookups by index
 const ACTIVE_STATUS = "수강 중"
 
 // ---------------- View mode (학생 보기 / 등록 보기) ----------------
-const VIEW_MODE_STORAGE = "admin_view_mode"
-let VIEW_MODE = sessionStorage.getItem(VIEW_MODE_STORAGE) === "registration" ? "registration" : "student"
-
-function setViewMode(mode) {
-  VIEW_MODE = mode === "registration" ? "registration" : "student"
-  sessionStorage.setItem(VIEW_MODE_STORAGE, VIEW_MODE)
-  updateViewToggleUI()
-  renderAll()
-}
+// 학생 보기 모드는 제거되었으며, 항상 등록 보기로만 동작합니다.
+const VIEW_MODE = "registration"
 
 function updateViewToggleUI() {
-  const studentTab = document.getElementById("view-tab-student")
-  const regTab = document.getElementById("view-tab-registration")
-  if (!studentTab || !regTab) return
-  studentTab.classList.toggle("active", VIEW_MODE === "student")
-  regTab.classList.toggle("active", VIEW_MODE === "registration")
+  // 단일 모드만 남아 토글할 것이 없지만, 기존 호출 위치와의 호환을 위해 빈 함수로 남겨둡니다.
 }
 
 // 자물쇠 토글 버튼을 클릭하여 활성화/비활성화를 전환합니다.
