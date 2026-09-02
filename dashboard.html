@@ -61,6 +61,16 @@
     color: var(--accent);
   }
   .topbar a:hover:not(.active), .topbar .nav-btn:hover:not(.active) { background: #f0f0ee; }
+  .topbar-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+  }
+  .topbar-actions button {
+    background: #333; color: #fff; border: none; padding: 8px 14px;
+    border-radius: 8px; font-size: 12px; cursor: pointer; font-family: inherit;
+  }
+  .topbar-actions button.logout { background: #eee; color: #555; }
 
   /* 전체 레이아웃 */
   .layout {
@@ -280,6 +290,11 @@
   <button class="nav-btn active" data-tab="dashboard" onclick="showTab('dashboard')">📊 대시보드</button>
   <button class="nav-btn" data-tab="admin" onclick="showTab('admin')">🗂️ 리포트 관리</button>
   <button class="nav-btn" data-tab="kiosk" onclick="showTab('kiosk')">🖊️ 키오스크</button>
+  <div class="topbar-actions">
+    <button onclick="topbarRefresh()">🔄 새로고침</button>
+    <button onclick="topbarChangePassword()">🔑 비밀번호 변경</button>
+    <button class="logout" onclick="topbarLogout()">로그아웃</button>
+  </div>
 </div>
 
 <div class="layout" id="page-dashboard">
@@ -390,7 +405,10 @@ const FUNCTION_URL = SUPABASE_URL + "/functions/v1/get-admin-dashboard"
 const TAB_PAGES = { admin: "admin.html", kiosk: "attendance_kiosk.html" }
 // =============================================================
 
+let CURRENT_TAB = "dashboard"
+
 function showTab(tab) {
+  CURRENT_TAB = tab
   document.querySelectorAll(".nav-btn").forEach(function (btn) {
     btn.classList.toggle("active", btn.dataset.tab === tab)
   })
@@ -408,6 +426,44 @@ function showTab(tab) {
       frame.src = TAB_PAGES[tab]
     }
   }
+}
+
+// ---------------- 상단 공용 새로고침 / 비밀번호 변경 / 로그아웃 ----------------
+// 리포트 관리 화면에만 있던 이 3가지 동작을 상단 메뉴로 옮겨, 어느 탭에 있든 바로 쓸 수 있게 합니다.
+function topbarRefresh() {
+  if (CURRENT_TAB === "dashboard") {
+    loadDashboard()
+    return
+  }
+  const frame = document.getElementById("embed-frame")
+  const win = frame.contentWindow
+  if (win && typeof win.loadStudents === "function") {
+    win.loadStudents()
+  } else if (win) {
+    frame.src = frame.src
+  }
+}
+
+function topbarChangePassword() {
+  const openModal = () => {
+    const frame = document.getElementById("embed-frame")
+    const win = frame.contentWindow
+    if (win && typeof win.openPasswordModal === "function") {
+      win.openPasswordModal()
+    }
+  }
+  if (CURRENT_TAB !== "admin") {
+    showTab("admin")
+    const frame = document.getElementById("embed-frame")
+    frame.addEventListener("load", openModal, { once: true })
+  } else {
+    openModal()
+  }
+}
+
+function topbarLogout() {
+  localStorage.removeItem(ADMIN_KEY_STORAGE)
+  location.reload()
 }
 
 const statusBadgeClass = {
