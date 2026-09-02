@@ -440,6 +440,7 @@
 const SUPABASE_URL = "https://twczhsxybkcvjkdfdxvs.supabase.co"
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR3Y3poc3h5YmtjdmprZGZkeHZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyOTcwMDQsImV4cCI6MjEwMzg3MzAwNH0.t7Ltb_iSYqE4gHSoGSm-OlpiLjGqIcgrhzGJ-t56EDc"
 const ADMIN_KEY_STORAGE = "admin_key"
+const STUDENTS_CACHE_STORAGE = "admin_students_cache"
 const FILTER_STORAGE = "admin_filters"
 const COLLAPSE_STORAGE = "admin_collapsed_groups"
 const STALE_DAYS = 7
@@ -458,7 +459,7 @@ function showToast(msg) {
 
 // ---------------- Auth / login screen ----------------
 function getAdminKey() {
-  return sessionStorage.getItem(ADMIN_KEY_STORAGE) || ""
+  return localStorage.getItem(ADMIN_KEY_STORAGE) || ""
 }
 
 function showLoginScreen(errorMsg) {
@@ -502,7 +503,7 @@ async function submitLogin() {
       return
     }
     if (!res.ok) throw new Error(`서버 오류: ${res.status}`)
-    sessionStorage.setItem(ADMIN_KEY_STORAGE, key)
+    localStorage.setItem(ADMIN_KEY_STORAGE, key)
     showAppScreen()
   } catch (err) {
     errEl.textContent = "로그인에 실패했습니다: " + err.message
@@ -513,7 +514,8 @@ async function submitLogin() {
 }
 
 function logout() {
-  sessionStorage.removeItem(ADMIN_KEY_STORAGE)
+  localStorage.removeItem(ADMIN_KEY_STORAGE)
+  sessionStorage.removeItem(STUDENTS_CACHE_STORAGE)
   showLoginScreen("")
 }
 
@@ -563,7 +565,7 @@ async function submitPasswordChange() {
     if (!res.ok) throw new Error(`서버 오류: ${res.status} ${await res.text()}`)
 
     // 새 비밀번호로 로그인 상태를 갱신해서 다음 동작도 끄지지 않게 이어지게 합니다.
-    sessionStorage.setItem(ADMIN_KEY_STORAGE, next)
+    localStorage.setItem(ADMIN_KEY_STORAGE, next)
     closePasswordModal()
     showToast("비밀번호가 바뀌었습니다.")
   } catch (err) {
@@ -601,7 +603,7 @@ function reportUrl(token) {
 // 날짜(시간 없는 값)와 타임스탬프를 같은 기준(한국시간 기준 '날짜')으로 비교하기 위한 헬퍼.
 // lastClassDate는 Notion 날짜 속성 값(YYYY-MM-DD, 시간 없음)이고, updatedAt은 실제 UTC 타임스탬프입니다.
 // 이 둘을 그냥 new Date(...).getTime()으로 비교하면, 날짜만 있는 값은 UTC 00:00(=한국시간 09:00)으로
-// 해석되어, 09시 이전에 갱신된 보고서가 실제로는 최신인데도 '갱신 필요'로 잘못 표시되는 문제가 있었습니다.
+// 해석되어, 09시 이전에 갱신된 보고서가 실제로는 최신인데도 '갱신 필요'로 잘못 표시되는 문제가 ��었습니다.
 function toKstDateOnly(iso) {
   if (!iso) return null
   const d = new Date(iso)
@@ -739,13 +741,27 @@ function toggleGroupCollapse(key) {
 
 async function loadStudents() {
   const app = document.getElementById("app")
-  app.innerHTML = '<div class="loading">불러오는 중...</div>'
   const adminKey = getAdminKey()
   if (!adminKey) {
     showLoginScreen()
     return
   }
   SELECTED = new Set()
+
+  // 탭을 이동했다가 돌아오면서 페이지가 다시 로드되어도, 캐시된 이전 목록을 먼저 그대로 보여주고
+  // 백그라운드에서만 최신 데이터를 받아와 화면이 순간적으로 "불러오는 중"으로 비워지지 않게 합니다.
+  let hadCache = false
+  const cached = sessionStorage.getItem(STUDENTS_CACHE_STORAGE)
+  if (cached) {
+    try {
+      STUDENTS = JSON.parse(cached)
+      hadCache = true
+      renderAll()
+    } catch { hadCache = false }
+  }
+  if (!hadCache) {
+    app.innerHTML = '<div class="loading">불러오는 중...</div>'
+  }
 
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/list-students`, {
@@ -763,10 +779,11 @@ async function loadStudents() {
 
     const data = await res.json()
     STUDENTS = data.students || []
+    sessionStorage.setItem(STUDENTS_CACHE_STORAGE, JSON.stringify(STUDENTS))
     document.getElementById("last-fetch").textContent = `마지막 조회: ${formatDate(new Date().toISOString())}`
     renderAll()
   } catch (err) {
-    app.innerHTML = `<div class="empty">오류: ${esc(err.message)}</div>`
+    if (!hadCache) app.innerHTML = `<div class="empty">오류: ${esc(err.message)}</div>`
   }
 }
 

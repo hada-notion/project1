@@ -1151,6 +1151,14 @@ function addDaysStr(dateStr, days) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 }
 
+// 주간 보고서는 항상 월요일~일요일로 고정한다. (요일에 관계없이 오늘이 속한 캘린더 주의 월요일을 기준으로 삼는다)
+function mondayOfWeek(dateStr) {
+  const d = new Date(dateStr + "T00:00:00")
+  const day = d.getDay() // 0=일 ... 6=토
+  const diffFromMonday = (day + 6) % 7
+  return addDaysStr(dateStr, -diffFromMonday)
+}
+
 // 이모지는 카테고리 '이름'과 분리해서 관리한다. 노션 원본의 이모지 표기가 조금 달라져도
 // normalizeCategoryName()으로 이모지를 제거한 뒤 이름 텍스트만으로 매칭한다.
 function normalizeCategoryName(category) {
@@ -1553,8 +1561,9 @@ function goReportCurrent() {
 }
 function reportRange() {
   if (reportPeriod === "week") {
-    const rangeEnd = addDaysStr(MOCK_TODAY, -7 * reportOffset)
-    const rangeStart = addDaysStr(rangeEnd, -6)
+    const currentMonday = mondayOfWeek(MOCK_TODAY)
+    const rangeStart = addDaysStr(currentMonday, -7 * reportOffset)
+    const rangeEnd = addDaysStr(rangeStart, 6)
     return { rangeStart, rangeEnd }
   }
   const [ty, tm] = MOCK_TODAY.split("-").map(Number)
@@ -1574,8 +1583,9 @@ function computeTestTrendPoints(tests, periodType, baseOffset) {
     const offset = baseOffset + i
     let rangeStart, rangeEnd, label
     if (periodType === "week") {
-      rangeEnd = addDaysStr(MOCK_TODAY, -7 * offset)
-      rangeStart = addDaysStr(rangeEnd, -6)
+      const currentMonday = mondayOfWeek(MOCK_TODAY)
+      rangeStart = addDaysStr(currentMonday, -7 * offset)
+      rangeEnd = addDaysStr(rangeStart, 6)
       label = `${rangeStart.slice(5).replace("-", ".")}~${rangeEnd.slice(5).replace("-", ".")}`
     } else {
       const [ty, tm] = MOCK_TODAY.split("-").map(Number)
