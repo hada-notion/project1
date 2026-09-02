@@ -641,10 +641,17 @@ const GET_CLASSES_URL = SUPABASE_URL + "/functions/v1/get-classes"
 const GET_CLASS_DETAIL_URL = SUPABASE_URL + "/functions/v1/get-class-detail"
 const GET_SCHEDULES_URL = SUPABASE_URL + "/functions/v1/get-schedules"
 
+// get-classes가 내려주는 status 값은 이모지를 뺀 순수 텍스트(출석/보강/결석)이므로 키도 그에 맞춥니다.
 const statusBadgeClass = {
-  "🟢출석": "green",
-  "🔵보강": "blue",
-  "🔴결석": "red",
+  "출석": "green",
+  "보강": "blue",
+  "결석": "red",
+}
+// 과제 이행 여부(완료/부분완료/미완료) 배지 색상
+const homeworkBadgeClass = {
+  "완료": "tone-green",
+  "부분완료": "tone-orange",
+  "미완료": "tone-red",
 }
 
 function el(id) { return document.getElementById(id) }
@@ -925,22 +932,64 @@ function renderStudentsTab(c, body) {
   body.innerHTML = students.map(function (s, i) {
     const cls = statusBadgeClass[s.status] || "gray"
     const canSend = !!s.attendanceId
+    const homeworkCls = s.homework ? (homeworkBadgeClass[s.homework.status] || "tone-gray") : ""
+    const homeworkBadge = s.homework ? ' <span class="badge ' + homeworkCls + '">' + s.homework.status + '</span>' : ""
+    const evalCls = s.evaluation ? attendanceRateTone(s.evaluation.score) : ""
+    const evalBadge = s.evaluation ? ' <span class="badge ' + evalCls + '">' + s.evaluation.score + '점</span>' : ""
     return '<div class="student-row"><span class="stu-name">🧑‍🎓 ' + esc(s.name) +
       (s.url ? ' <a class="stu-view" href="' + s.url + '" target="_blank">노션에서 보기 ↗</a>' : "") + ' ' +
-      (s.status ? '<span class="badge ' + cls + '">' + s.status + '</span>' : "") + '</span>' +
+      (s.status ? '<span class="badge ' + cls + '">' + s.status + '</span>' : "") + homeworkBadge + evalBadge + '</span>' +
       '<button class="send-btn" id="stu-send-' + i + '" onclick="sendStudentReport(' + i + ')" ' + (canSend ? "" : "disabled") + '>📩 전송</button></div>'
   }).join("")
 }
 
-// 과제/평가 탭은 수업(학원) DB의 "과제 안내"/"평가 결과" 수식 값을 그대로 보여줍니다.
+// 과제/평가 탭�� 수업(학원) DB의 "과제 안내"/"평가 결과" 수식 값을 그대로 보여줍니다.
 // 이 값은 클래스 목록을 불러올 때 이미 함께 계산되어 있으므로, 탭을 열 때마다
 // 별도로 과제 상세 페이지를 다시 불러올 필요가 없습니다(더 빠르게 표시됨).
-function renderTaskTab(c, body, kind) {
-  const summary = kind === "assignment" ? c.assignmentSummary : c.evaluationSummary
-  const emptyLabel = kind === "assignment" ? "과제" : "평가"
-  body.innerHTML = summary
-    ? '<div class="record-card"><div class="meta">' + esc(summary) + '</div></div>'
-    : '<div class="empty">등록된 ' + emptyLabel + ' 설명이 없어요</div>'
+async function fetchClassDetail(classId) {
+  if (CLASS_DETAIL_CACHE[classId]) return CLASS_DETAIL_CACHE[classId]
+  const res = await fetch(GET_CLASS_DETAIL_URL, {
+    method: "POST",
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "Content-Type": "application/json", "x-admin-key": getAdminKey() || "" },
+    body: JSON.stringify({ classSessionId: classId }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
+  CLASS_DETAIL_CACHE[classId] = data
+  return data
+}
+
+// 평가 탭은 수업(학원) DB의 "평가 결과" 수식 값을 그대로 보여줍니다(클래스 목록 조회 시 이미 계산되어 있음).
+// 과제 탭은 마감일을 반영하기 위해 get-class-detail을 통해 학습기록(과제) 목록을 따로 조회합니다.
+// (조금 느리지만 마감일을 다시 보여줄 수 있습니다.) 결과는 CLASS_DETAIL_CACHE에 캐싱되어 재조회를 최소화합니다.
+async function renderTaskTab(c, body, kind) {
+  if (kind === "evaluation") {
+    const summary = c.evaluationSummary
+    body.innerHTML = summary
+      ? '<div class="record-card"><div class="meta">' + esc(summary) + '</div></div>'
+      : '<div class="empty">등록된 평가 설명이 없어요</div>'
+    return
+  }
+  body.innerHTML = '<div class="empty">불러오는 중...</div>'
+  try {
+    const data = await fetchClassDetail(c.id)
+    const records = (data.assignments && data.assignments.records) || []
+    let html = ""
+    if (records.length === 0) {
+      html = '<div class="empty">등록된 과제 설명이 없어요</div>'
+    } else {
+      html = records.map(function (r) {
+        return '<div class="record-card"><div class="title"><a href="' + r.url + '" target="_blank">' + esc(r.title) + '</a></div>' +
+          '<div class="meta">교재: ' + esc(r.book) + (r.range ? " · 범위: " + esc(r.range) : "") + '</div>' +
+          (r.content ? '<div class="meta" style="margin-top:4px">' + esc(r.content) + '</div>' : "") +
+          '<div class="meta" style="margin-top:4px">• 마감일: ' + esc(r.dueDate ? formatDateLabel(r.dueDate) : "미정") + '</div>' +
+          '</div>'
+      }).join("")
+    }
+    body.innerHTML = html
+  } catch (err) {
+    body.innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '</div>'
+  }
 }
 
 // ---------------- 일정 목록(중앙) ----------------
