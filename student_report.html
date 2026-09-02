@@ -803,6 +803,23 @@ async function loadReportFromServer() {
     const fast = await fastRes.json()
     const detail = await detailRes.json()
     const row = { ...fast, ...detail, access_token: fast.token }
+    if (Array.isArray(row.registrations) && row.registrations.length) {
+      row.registrations = row.registrations.map((r) => (
+        r.access_token === fast.token
+          ? {
+              ...r,
+              attendance_summary: detail.attendance_summary,
+              attendance_rows: detail.attendance_rows,
+              study_logs: detail.study_logs,
+              homework: detail.homework,
+              homework_days: detail.homework_days,
+              tests: detail.tests,
+              teacher_comments: detail.teacher_comments,
+              report_comments: detail.report_comments,
+            }
+          : r
+      ))
+    }
     if (!row) throw new Error("no data")
     STUDENT = mapReportToStudent(row)
     if (STUDENT.student_name) {
