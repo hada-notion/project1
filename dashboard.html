@@ -803,8 +803,10 @@ function filteredClasses() {
   })
 }
 
-function classEmoji(name) {
-  const n = String(name || "")
+function classEmoji(c) {
+  // 노션 클래스(학원) DB의 "이모지" 속성 값을 그대로 사용해요. 백엔드가 emoji 필드를 안 내려주는 동안만 학년별 기본값으로 대체해요.
+  if (c && c.emoji) return c.emoji
+  const n = String((c && c.className) || "")
   if (n.indexOf("고") >= 0) return "🎓"
   if (n.indexOf("중") >= 0) return "📘"
   if (n.indexOf("초") >= 0) return "🐣"
@@ -847,7 +849,7 @@ function renderClassList() {
     const rate = parseAttendanceRate(c.attendanceRate)
     return '<div class="class-item' + (selected ? " selected" : "") + '" data-id="' + c.id + '">' +
       '<div class="class-item-head" onclick="onClassClick(' + attrSafe(c.id) + ')">' +
-        '<div class="class-item-title-row"><span class="class-item-title">' + classEmoji(c.className) + ' ' + esc(c.className) + '</span><span class="class-item-time">' + esc(c.timeRange || "") + '</span></div>' +
+        '<div class="class-item-title-row"><span class="class-item-title">' + classEmoji(c) + ' ' + esc(c.className) + '</span><span class="class-item-time">' + esc(c.timeRange || "") + '</span></div>' +
         '<div class="class-item-badges">' +
           (c.teacherName ? '<span class="teacher-badge ' + teacherColorClass(c.teacherName) + '">' + esc(c.teacherName) + '</span>' : "") +
           (c.method ? '<span class="badge blue">' + esc(c.method) + '</span>' : "") +
