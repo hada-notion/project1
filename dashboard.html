@@ -317,7 +317,7 @@
 .md-3col { flex:1; display:flex; min-height:0; }
 .calendar-toggle-btn { border:1px solid var(--border); background:#fff; width:28px; height:28px; border-radius:6px; cursor:pointer; font-size:13px; flex-shrink:0; }
 .calendar-panel { width:0; flex-shrink:0; overflow:hidden; background:var(--bg); border-right:1px solid var(--border); transition: width 0.18s ease; }
-.calendar-panel.open { width: 20%; }
+.calendar-panel.open { width: 15%; min-width: 240px; }
 .calendar-panel-inner { width:100%; height:100%; padding:6%; display:flex; flex-direction:column; gap:10px; }
 .calendar-panel-inner.mini-cal { background:#fff; border-radius:14px; box-shadow:0 1px 4px rgba(0,0,0,0.06); width:100%; }
 .cal-panel-month-nav { display:flex; align-items:center; justify-content:space-between; margin-bottom:2px; }
@@ -344,7 +344,7 @@
 .schedule-detail-field { margin: 12px 0; }
 .schedule-detail-field b { color: var(--muted); font-weight:600; font-size:11px; display:block; margin-bottom:4px; text-transform:uppercase; letter-spacing:.02em; }
 .schedule-detail-field .val { font-size:14px; color:var(--text); }
-.md-left { width: 26%; flex-shrink:0; background:var(--panel); border-right:1px solid var(--border); padding:16px; overflow-y:auto; display:flex; flex-direction:column; gap:10px; }
+.md-left { width: 20%; min-width: 280px; flex-shrink:0; background:var(--panel); border-right:1px solid var(--border); padding:16px; overflow-y:auto; display:flex; flex-direction:column; gap:10px; }
 .filter-tab, .view-tab { border:1px solid var(--border); background:#fff; padding:6px 12px; border-radius:8px; font-size:13px; cursor:pointer; color:var(--muted); font-family:inherit; }
 .filter-tab.active, .view-tab.active { background:#edf3fc; color:var(--accent); border-color:#c9e0fb; }
 .md-filter-row, .md-view-row { display:flex; gap:6px; }
@@ -385,7 +385,9 @@
 .md-right-time { font-size:13px; color:var(--muted); margin-top:4px; }
 .md-right-sub { font-size:13px; color:var(--muted); margin-top:2px; }
 .md-right-link { font-size:12px; color:var(--accent); text-decoration:none; }
-.right-tabs { display:flex; gap:6px; border-bottom:1px solid var(--border); margin-bottom:16px; }
+.right-tabs-row { display:flex; align-items:center; justify-content:space-between; gap:10px; border-bottom:1px solid var(--border); margin-bottom:16px; }
+.right-tabs-row .bulk-send-btn { margin-bottom:0; flex-shrink:0; }
+.right-tabs { display:flex; gap:6px; flex:1; min-width:0; overflow-x:auto; }
 .right-tab { border:none; background:none; padding:8px 12px; font-size:13px; cursor:pointer; color:var(--muted); font-family:inherit; border-bottom:2px solid transparent; }
 .right-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight:600; }
 .record-card { border:none; border-bottom:1px solid var(--border); border-radius:0; padding:12px 14px; margin-bottom:0; background:transparent; }
@@ -468,6 +470,9 @@
   .md-right-header { flex-wrap: wrap; gap: 8px; }
   .right-tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
   .right-tab { white-space: nowrap; flex-shrink: 0; }
+  .right-tabs-row { flex-direction: column-reverse; align-items: stretch; gap: 8px; border-bottom: none; }
+  .right-tabs-row .right-tabs { border-bottom: 1px solid var(--border); }
+  .right-tabs-row .bulk-send-btn { width: 100%; padding: 10px 12px; }
   .mobile-back-btn { display: inline-flex; align-items: center; gap: 6px; }
 }
 @media (max-width: 640px) {
@@ -508,7 +513,7 @@
 
 <div class="modal-overlay" id="alimtalk-modal">
   <div class="modal-box">
-    <h3>알림톡 발송 확���</h3>
+    <h3>알림톡 발송 확인</h3>
     <p id="alimtalk-modal-text">선택된 학생에게 오늘의 학습 리포트 알림톡을 발송하시겠습니까?</p>
     <div class="modal-actions">
       <button class="cancel" onclick="closeAlimtalkModal()">취소</button>
@@ -567,11 +572,14 @@
           </div>
         </div>
         <div class="right-summary-body" id="right-summary-body"></div>
-        <div class="right-tabs" id="right-tabs">
-          <button class="right-tab active" data-tab="students" onclick="setRightTab('students')">👥 학생</button>
-          <button class="right-tab" data-tab="record" onclick="setRightTab('record')">📖 학습기록</button>
-          <button class="right-tab" data-tab="assignment" onclick="setRightTab('assignment')">📝 과제</button>
-          <button class="right-tab" data-tab="evaluation" onclick="setRightTab('evaluation')">✅ 평가</button>
+        <div class="right-tabs-row" id="right-tabs-row">
+          <div class="right-tabs" id="right-tabs">
+            <button class="right-tab active" data-tab="students" onclick="setRightTab('students')">👥 학생</button>
+            <button class="right-tab" data-tab="record" onclick="setRightTab('record')">📖 학습기록</button>
+            <button class="right-tab" data-tab="assignment" onclick="setRightTab('assignment')">📝 과제</button>
+            <button class="right-tab" data-tab="evaluation" onclick="setRightTab('evaluation')">✅ 평가</button>
+          </div>
+          <button class="bulk-send-btn" id="right-bulk-send-btn" disabled>📩 보고서 일괄 전송</button>
         </div>
         <div class="right-tab-body" id="right-tab-body"></div>
       </div>
@@ -669,7 +677,7 @@ function showTab(tab) {
   }
 }
 
-// ---------------- 상단 공용 새로고�� / 비밀번호 변경 / 로그아웃 ----------------
+// ---------------- 상단 공용 새로고침 / 비밀번호 변경 / 로그아웃 ----------------
 // 리포트 관리 화면에만 있던 이 3가지 동작을 상단 메뉴로 옮겨, 어느 탭에 있든 바로 쓸 수 있게 합니다.
 function topbarRefresh() {
   if (CURRENT_TAB === "dashboard") {
@@ -782,8 +790,9 @@ function setDomain(domain) {
   document.querySelectorAll(".domain-tab").forEach(function (b) { b.classList.toggle("active", b.dataset.domain === domain) })
   el("class-list-area").style.display = domain === "class" ? "flex" : "none"
   el("schedule-list-area").style.display = domain === "schedule" ? "flex" : "none"
-  el("right-tabs").style.display = domain === "class" ? "flex" : "none"
+  el("right-tabs-row").style.display = domain === "class" ? "flex" : "none"
   el("right-summary-toggle").style.display = domain === "class" ? "inline-flex" : "none"
+  el("right-bulk-send-btn").disabled = true
   el("right-summary-body").classList.remove("show")
   el("md-right-empty").style.display = "block"
   el("md-right-content").style.display = "none"
@@ -1007,8 +1016,10 @@ function selectClass(id) {
     '<div class="info-card"><h3>📋 출석현황</h3><div class="info-content' + (c.attendanceStatus ? '' : ' empty') + '">' + esc(c.attendanceStatus || "기록 없음") + '</div></div>' +
     '<div class="info-card"><h3>📖 학습 내용</h3><div class="info-content' + (c.studySummary ? '' : ' empty') + '">' + esc(c.studySummary || "기록 없음") + '</div></div>' +
     '<div class="info-card"><h3>📝 과제 안내</h3><div class="info-content' + (c.assignmentSummary ? '' : ' empty') + '">' + esc(c.assignmentSummary || "기록 없음") + '</div></div>' +
-    '<div class="info-card"><h3>📄 평가 결과</h3><div class="info-content' + (c.evaluationSummary ? '' : ' empty') + '">' + esc(c.evaluationSummary || "기록 없음") + '</div></div>' +
-    '<button class="bulk-send-btn" onclick="sendBulkForClass(' + attrSafe(c.id) + ')">📩 보고서 일괄 전송</button>'
+    '<div class="info-card"><h3>📄 평가 결과</h3><div class="info-content' + (c.evaluationSummary ? '' : ' empty') + '">' + esc(c.evaluationSummary || "기록 없음") + '</div></div>'
+  const bulkBtn = el("right-bulk-send-btn")
+  bulkBtn.disabled = false
+  bulkBtn.onclick = function () { sendBulkForClass(c.id) }
   el("right-summary-body").classList.remove("show")
   el("right-summary-toggle").classList.remove("open")
   el("right-summary-toggle-label").textContent = "더보기"
@@ -1057,7 +1068,7 @@ function renderStudentsTab(c, body) {
     const evalCls = s.evaluation ? attendanceRateTone(s.evaluation.score) : ""
     const evalBadge = s.evaluation ? ' <span class="badge ' + evalCls + '">' + s.evaluation.score + '점</span>' : ""
     return '<div class="student-row"><span class="stu-name">🧑‍🎓 ' + esc(s.name) +
-      (s.url ? ' <a class="stu-view" href="' + s.url + '" target="_blank">노션에서 보기 ↗</a>' : "") + ' ' +
+      (s.url ? ' <a class="stu-view" href="' + s.url + '" target="_blank">노션에서 보��� ↗</a>' : "") + ' ' +
       (s.status ? '<span class="badge ' + cls + '">' + s.status + '</span>' : "") + homeworkBadge + evalBadge + '</span>' +
       '<button class="send-btn" id="stu-send-' + i + '" onclick="sendStudentReport(' + i + ')" ' + (canSend ? "" : "disabled") + '>📩 전송</button></div>'
   }).join("")
@@ -1214,7 +1225,7 @@ async function sendStudentReport(i) {
   if (btn) { btn.disabled = true; btn.textContent = "발송중..." }
   try {
     await callSendDailyReport({ registrationId: s.registrationId, attendanceId: s.attendanceId })
-    showToast(esc(s.name) + "에게 알림톡을 발송했어요")
+    showToast(esc(s.name) + "에게 ���림톡을 발송했어요")
   } catch (err) {
     showToast("발송 실패: " + err.message)
   } finally {
