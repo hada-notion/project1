@@ -303,6 +303,31 @@
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+.domain-tab-row { display:flex; gap:6px; padding:10px 16px; border-bottom:1px solid var(--border); background:var(--panel); }
+.domain-tab { border:1px solid var(--border); background:#fff; padding:6px 14px; border-radius:8px; font-size:13px; cursor:pointer; color:var(--muted); font-family:inherit; }
+.domain-tab.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+.md-3col { flex:1; display:flex; min-height:0; }
+.calendar-toggle-btn { border:1px solid var(--border); background:#fff; width:28px; height:28px; border-radius:6px; cursor:pointer; font-size:13px; flex-shrink:0; }
+.calendar-panel { width:0; flex-shrink:0; overflow:hidden; background:var(--panel); border-right:1px solid var(--border); transition: width 0.18s ease; }
+.calendar-panel.open { width:300px; }
+.calendar-panel-inner { width:300px; padding:16px; display:flex; flex-direction:column; gap:10px; }
+.cal-panel-month-nav { display:flex; align-items:center; justify-content:center; gap:12px; font-size:14px; font-weight:600; }
+.cat-dot-row { display:flex; gap:2px; flex-wrap:wrap; justify-content:center; margin-top:2px; }
+.cat-dot { width:6px; height:6px; border-radius:50%; display:inline-block; }
+.cat-dot.green { background:var(--green); }
+.cat-dot.blue { background:var(--blue); }
+.cat-dot.red { background:var(--red); }
+.cat-dot.gray { background:var(--muted); }
+.schedule-item { border:1px solid var(--border); border-radius:10px; background:#fbfbfa; padding:10px 12px; cursor:pointer; display:flex; flex-direction:column; gap:4px; }
+.schedule-item:hover { background:#f2f6fc; }
+.schedule-item.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.schedule-item-title-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.schedule-item-title { font-size:13.5px; font-weight:600; }
+.schedule-item-badges { display:flex; gap:6px; flex-wrap:wrap; }
+.schedule-list-area { display:flex; flex-direction:column; gap:8px; }
+.schedule-detail-field { margin: 12px 0; }
+.schedule-detail-field b { color: var(--muted); font-weight:600; font-size:11px; display:block; margin-bottom:4px; text-transform:uppercase; letter-spacing:.02em; }
+.schedule-detail-field .val { font-size:14px; color:var(--text); }
 .md-left { width: 340px; flex-shrink:0; background:var(--panel); border-right:1px solid var(--border); padding:16px; overflow-y:auto; display:flex; flex-direction:column; gap:10px; }
 .filter-tab, .view-tab { border:1px solid var(--border); background:#fff; padding:6px 12px; border-radius:8px; font-size:13px; cursor:pointer; color:var(--muted); font-family:inherit; }
 .filter-tab.active, .view-tab.active { background:#edf3fc; color:var(--accent); border-color:#c9e0fb; }
@@ -386,44 +411,57 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<div class="layout" id="page-dashboard">
-  <div class="md-left">
-    <div class="md-filter-row">
-      <button class="filter-tab active" data-filter="all" onclick="setFilterMode('all')">전체</button>
-      <button class="filter-tab" data-filter="teacher" onclick="setFilterMode('teacher')">강사</button>
-      <button class="filter-tab" data-filter="class" onclick="setFilterMode('class')">클래스</button>
-    </div>
-    <div class="md-filter-options" id="filter-options"></div>
-    <div class="md-view-row">
-      <button class="view-tab active" data-view="list" onclick="setViewMode('list')">📋 리스트 보기</button>
-      <button class="view-tab" data-view="calendar" onclick="setViewMode('calendar')">📅 캘린더 보기</button>
-    </div>
-    <div class="md-date-nav">
-      <button class="date-nav-btn" onclick="shiftDate(-1)">‹</button>
-      <span class="date-nav-label" id="date-nav-label">-</span>
-      <button class="date-nav-btn" onclick="shiftDate(1)">›</button>
-    </div>
-    <div id="status-area"></div>
-    <div id="class-list-area" class="class-list-area"></div>
-    <div id="calendar-area" class="calendar-area" style="display:none"></div>
+<div class="layout" id="page-dashboard" style="flex-direction:column">
+  <div class="domain-tab-row">
+    <button class="domain-tab active" data-domain="class" onclick="setDomain('class')">🏫 수업</button>
+    <button class="domain-tab" data-domain="schedule" onclick="setDomain('schedule')">🗓 일정</button>
   </div>
-  <div class="md-right">
-    <div class="md-right-empty" id="md-right-empty">👈 왼쪽에서 수업을 선택하면 상세정보가 표시돼요</div>
-    <div class="md-right-content" id="md-right-content" style="display:none">
-      <div class="md-right-header">
-        <div>
-          <div class="md-right-title" id="right-title"></div>
-          <div class="md-right-sub" id="right-sub"></div>
+  <div class="md-3col">
+    <div class="calendar-panel" id="calendar-panel">
+      <div class="calendar-panel-inner">
+        <div class="cal-panel-month-nav">
+          <button class="date-nav-btn" onclick="shiftCalendarMonth(-1)">‹</button>
+          <span id="cal-panel-month-label">-</span>
+          <button class="date-nav-btn" onclick="shiftCalendarMonth(1)">›</button>
         </div>
-        <a class="md-right-link" id="right-page-link" target="_blank" href="#">노션에서 보기 ↗</a>
+        <div id="cal-panel-area"></div>
       </div>
-      <div class="right-tabs">
-        <button class="right-tab active" data-tab="students" onclick="setRightTab('students')">👥 학생</button>
-        <button class="right-tab" data-tab="record" onclick="setRightTab('record')">📖 학습기록</button>
-        <button class="right-tab" data-tab="assignment" onclick="setRightTab('assignment')">📝 과제</button>
-        <button class="right-tab" data-tab="evaluation" onclick="setRightTab('evaluation')">✅ 평가</button>
+    </div>
+    <div class="md-left">
+      <div class="md-filter-row">
+        <button class="calendar-toggle-btn" onclick="toggleCalendarPanel()" title="캘린더 열기/닫기">🗓</button>
+        <button class="filter-tab active" data-filter="all" onclick="setFilterMode('all')">전체</button>
+        <button class="filter-tab" data-filter="teacher" onclick="setFilterMode('teacher')">강사</button>
+        <button class="filter-tab" data-filter="class" onclick="setFilterMode('class')">클래스</button>
       </div>
-      <div class="right-tab-body" id="right-tab-body"></div>
+      <div class="md-filter-options" id="filter-options"></div>
+      <div class="md-date-nav">
+        <button class="date-nav-btn" onclick="shiftDate(-1)">‹</button>
+        <span class="date-nav-label" id="date-nav-label">-</span>
+        <button class="date-nav-btn" onclick="shiftDate(1)">›</button>
+      </div>
+      <div id="status-area"></div>
+      <div id="class-list-area" class="class-list-area"></div>
+      <div id="schedule-list-area" class="schedule-list-area" style="display:none"></div>
+    </div>
+    <div class="md-right">
+      <div class="md-right-empty" id="md-right-empty">👈 왼쪽에서 수업을 선택하면 상세정보가 표시돼요</div>
+      <div class="md-right-content" id="md-right-content" style="display:none">
+        <div class="md-right-header">
+          <div>
+            <div class="md-right-title" id="right-title"></div>
+            <div class="md-right-sub" id="right-sub"></div>
+          </div>
+          <a class="md-right-link" id="right-page-link" target="_blank" href="#">노션에서 보기 ↗</a>
+        </div>
+        <div class="right-tabs" id="right-tabs">
+          <button class="right-tab active" data-tab="students" onclick="setRightTab('students')">👥 학생</button>
+          <button class="right-tab" data-tab="record" onclick="setRightTab('record')">📖 학습기록</button>
+          <button class="right-tab" data-tab="assignment" onclick="setRightTab('assignment')">📝 과제</button>
+          <button class="right-tab" data-tab="evaluation" onclick="setRightTab('evaluation')">✅ 평가</button>
+        </div>
+        <div class="right-tab-body" id="right-tab-body"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -559,6 +597,7 @@ function topbarLogout() {
 // ============ 마스터-디테일 (좌: 수업 리스트/캘린더, 우: 수업 상세) ============
 const GET_CLASSES_URL = SUPABASE_URL + "/functions/v1/get-classes"
 const GET_CLASS_DETAIL_URL = SUPABASE_URL + "/functions/v1/get-class-detail"
+const GET_SCHEDULES_URL = SUPABASE_URL + "/functions/v1/get-schedules"
 
 const statusBadgeClass = {
   "🟢출석": "green",
@@ -592,16 +631,20 @@ function kstToday() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date())
 }
 
-let VIEW_MODE = "list"
+let DOMAIN = "class"
 let FILTER_MODE = "all"
 let FILTER_VALUE = null
 let CURRENT_DATE = kstToday()
-let CURRENT_MONTH = CURRENT_DATE.slice(0, 7)
 let CLASSES = []
 let SELECTED_CLASS_ID = null
 let EXPANDED_CLASS_ID = null
 let RIGHT_TAB = "students"
 let CLASS_DETAIL_CACHE = {}
+let SCHEDULES = []
+let SELECTED_SCHEDULE_ID = null
+let CALENDAR_OPEN = false
+let CAL_PANEL_MONTH = kstToday().slice(0, 7)
+let CAL_PANEL_ITEMS = []
 
 function formatDateLabel(dateStr) {
   const d = new Date(dateStr + "T00:00:00+09:00")
@@ -609,19 +652,119 @@ function formatDateLabel(dateStr) {
   return dateStr.replace(/-/g, ".") + " (" + days[d.getDay()] + ")"
 }
 
+// ---------------- 수업/일정 모드 전환 ----------------
+function setDomain(domain) {
+  if (DOMAIN === domain) return
+  DOMAIN = domain
+  FILTER_MODE = "all"
+  FILTER_VALUE = null
+  document.querySelectorAll(".domain-tab").forEach(function (b) { b.classList.toggle("active", b.dataset.domain === domain) })
+  document.querySelectorAll(".filter-tab").forEach(function (b) { b.classList.toggle("active", b.dataset.filter === "all") })
+  el("class-list-area").style.display = domain === "class" ? "flex" : "none"
+  el("schedule-list-area").style.display = domain === "schedule" ? "flex" : "none"
+  el("right-tabs").style.display = domain === "class" ? "flex" : "none"
+  el("md-right-empty").style.display = "block"
+  el("md-right-content").style.display = "none"
+  el("md-right-empty").textContent = domain === "class" ? "👈 왼쪽에서 수업을 선택하면 상세정보가 표시돼요" : "👈 왼쪽에서 일정을 선택하면 상세정보가 표시돼요"
+  SELECTED_CLASS_ID = null
+  SELECTED_SCHEDULE_ID = null
+  renderFilterOptions()
+  loadCenterList()
+  if (CALENDAR_OPEN) loadCalendarPanel()
+}
+
+// ---------------- 캘린더 사이드패널 (열고/닫기) ----------------
+function toggleCalendarPanel() {
+  CALENDAR_OPEN = !CALENDAR_OPEN
+  el("calendar-panel").classList.toggle("open", CALENDAR_OPEN)
+  if (CALENDAR_OPEN) {
+    CAL_PANEL_MONTH = CURRENT_DATE.slice(0, 7)
+    loadCalendarPanel()
+  }
+}
+
+function shiftCalendarMonth(delta) {
+  const parts = CAL_PANEL_MONTH.split("-").map(Number)
+  const y = parts[0], m = parts[1]
+  const d = new Date(y, m - 1 + delta, 1)
+  CAL_PANEL_MONTH = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")
+  loadCalendarPanel()
+}
+
+async function loadCalendarPanel() {
+  el("cal-panel-month-label").textContent = CAL_PANEL_MONTH.replace("-", ".")
+  const url = (DOMAIN === "class" ? GET_CLASSES_URL : GET_SCHEDULES_URL) + "?month=" + CAL_PANEL_MONTH
+  try {
+    const res = await fetch(url, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
+    CAL_PANEL_ITEMS = (DOMAIN === "class" ? data.classes : data.schedules) || []
+    renderCalPanel()
+  } catch (err) {
+    el("cal-panel-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '</div>'
+  }
+}
+
+function renderCalPanel() {
+  const byDay = {}
+  CAL_PANEL_ITEMS.forEach(function (item) {
+    if (!item.date) return
+    const day = item.date.slice(0, 10)
+    if (!byDay[day]) byDay[day] = []
+    byDay[day].push(item)
+  })
+  const parts = CAL_PANEL_MONTH.split("-").map(Number)
+  const y = parts[0], m = parts[1]
+  const first = new Date(y, m - 1, 1)
+  const startWeekday = first.getDay()
+  const daysInMonth = new Date(y, m, 0).getDate()
+  const today = kstToday()
+  let cells = ""
+  for (let i = 0; i < startWeekday; i++) cells += '<div class="calendar-day empty"></div>'
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = CAL_PANEL_MONTH + "-" + String(d).padStart(2, "0")
+    const items = byDay[dateStr] || []
+    let extra = ""
+    if (DOMAIN === "class") {
+      extra = items.length ? '<div class="cnt">' + items.length + '건</div>' : ""
+    } else {
+      const colors = Array.from(new Set(items.map(function (it) { return it.categoryColor }))).slice(0, 6)
+      extra = colors.length ? '<div class="cat-dot-row">' + colors.map(function (col) { return '<span class="cat-dot ' + col + '"></span>' }).join("") + '</div>' : ""
+    }
+    cells += '<div class="calendar-day' + (dateStr === today ? " today" : "") + '" onclick="goToDateFromCalendarPanel(' + JSON.stringify(dateStr) + ')">' +
+      '<div class="num">' + d + '</div>' + extra + '</div>'
+  }
+  el("cal-panel-area").innerHTML = '<div class="calendar-grid">' + cells + '</div>'
+}
+
+function goToDateFromCalendarPanel(dateStr) {
+  CURRENT_DATE = dateStr
+  loadCenterList()
+}
+
+// ---------------- 필터(전체/강사/클래스) ----------------
 function setFilterMode(mode) {
   FILTER_MODE = mode
   FILTER_VALUE = null
   document.querySelectorAll(".filter-tab").forEach(function (b) { b.classList.toggle("active", b.dataset.filter === mode) })
   renderFilterOptions()
-  renderClassList()
+  renderCenterList()
 }
 
 function renderFilterOptions() {
   const optArea = el("filter-options")
   if (FILTER_MODE === "all") { optArea.innerHTML = ""; return }
-  const key = FILTER_MODE === "teacher" ? "teacherName" : "className"
-  const names = Array.from(new Set(CLASSES.map(function (c) { return c[key] }).filter(Boolean)))
+  let names
+  if (DOMAIN === "class") {
+    const key = FILTER_MODE === "teacher" ? "teacherName" : "className"
+    names = Array.from(new Set(CLASSES.map(function (c) { return c[key] }).filter(Boolean)))
+  } else {
+    const key = FILTER_MODE === "teacher" ? "teacherNames" : "classNames"
+    const all = SCHEDULES.flatMap(function (s) { return s[key] || [] })
+    names = Array.from(new Set(all.filter(Boolean)))
+  }
   if (names.length === 0) { optArea.innerHTML = '<span class="empty">해당 항목이 없어요</span>'; return }
   optArea.innerHTML = names.map(function (name) {
     return '<button class="filter-option' + (FILTER_VALUE === name ? " active" : "") + '" onclick="selectFilterValue(' + JSON.stringify(name) + ')">' + esc(name) + '</button>'
@@ -631,36 +774,28 @@ function renderFilterOptions() {
 function selectFilterValue(name) {
   FILTER_VALUE = (FILTER_VALUE === name) ? null : name
   renderFilterOptions()
-  renderClassList()
+  renderCenterList()
 }
 
-function setViewMode(mode) {
-  VIEW_MODE = mode
-  document.querySelectorAll(".view-tab").forEach(function (b) { b.classList.toggle("active", b.dataset.view === mode) })
-  el("class-list-area").style.display = mode === "list" ? "flex" : "none"
-  el("calendar-area").style.display = mode === "calendar" ? "flex" : "none"
-  if (mode === "list") {
-    loadClassList(CURRENT_DATE)
-  } else {
-    loadClassCalendar(CURRENT_MONTH)
-  }
-}
-
+// ---------------- 날짜 이동(하루씨) ----------------
 function shiftDate(delta) {
-  if (VIEW_MODE === "list") {
-    const d = new Date(CURRENT_DATE + "T00:00:00+09:00")
-    d.setDate(d.getDate() + delta)
-    CURRENT_DATE = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(d)
-    loadClassList(CURRENT_DATE)
-  } else {
-    const parts = CURRENT_MONTH.split("-").map(Number)
-    const y = parts[0], m = parts[1]
-    const d = new Date(y, m - 1 + delta, 1)
-    CURRENT_MONTH = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")
-    loadClassCalendar(CURRENT_MONTH)
-  }
+  const d = new Date(CURRENT_DATE + "T00:00:00+09:00")
+  d.setDate(d.getDate() + delta)
+  CURRENT_DATE = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(d)
+  loadCenterList()
 }
 
+function loadCenterList() {
+  if (DOMAIN === "class") loadClassList(CURRENT_DATE)
+  else loadScheduleList(CURRENT_DATE)
+}
+
+function renderCenterList() {
+  if (DOMAIN === "class") renderClassList()
+  else renderScheduleList()
+}
+
+// ---------------- 수업 목록(중앙) ----------------
 async function loadClassList(dateStr) {
   setStatus("loading", "수업 목록을 불러오는 중이에요...")
   el("date-nav-label").textContent = formatDateLabel(dateStr)
@@ -815,55 +950,81 @@ async function renderTaskTab(c, body, kind) {
   }
 }
 
-// ---------------- 캘린더(월간) 보기 ----------------
-async function loadClassCalendar(monthStr) {
-  setStatus("loading", "캘린더를 불러오는 중이에요...")
-  el("date-nav-label").textContent = monthStr.replace("-", ".")
+// ---------------- 일정 목록(중앙) ----------------
+async function loadScheduleList(dateStr) {
+  setStatus("loading", "일정 목록을 불러오는 중이에요...")
+  el("date-nav-label").textContent = formatDateLabel(dateStr)
   try {
-    const res = await fetch(GET_CLASSES_URL + "?month=" + monthStr, {
+    const res = await fetch(GET_SCHEDULES_URL + "?date=" + dateStr, {
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
-    CLASSES = data.classes || []
+    SCHEDULES = data.schedules || []
     renderFilterOptions()
-    renderCalendar(monthStr)
+    renderScheduleList()
     setStatus(null)
   } catch (err) {
     setStatus("error", "불러오기 실패: " + err.message)
   }
 }
 
-function renderCalendar(monthStr) {
-  const list = filteredClasses()
-  const countByDay = {}
-  list.forEach(function (c) {
-    if (!c.date) return
-    const day = c.date.slice(0, 10)
-    countByDay[day] = (countByDay[day] || 0) + 1
-  })
-  const parts = monthStr.split("-").map(Number)
-  const y = parts[0], m = parts[1]
-  const first = new Date(y, m - 1, 1)
-  const startWeekday = first.getDay()
-  const daysInMonth = new Date(y, m, 0).getDate()
-  const today = kstToday()
-  let cells = ""
-  for (let i = 0; i < startWeekday; i++) cells += '<div class="calendar-day empty"></div>'
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dateStr = monthStr + "-" + String(d).padStart(2, "0")
-    const cnt = countByDay[dateStr] || 0
-    cells += '<div class="calendar-day' + (dateStr === today ? " today" : "") + '" onclick="goToDateFromCalendar(' + JSON.stringify(dateStr) + ')">' +
-      '<div class="num">' + d + '</div>' + (cnt ? '<div class="cnt">' + cnt + '건</div>' : "") + '</div>'
-  }
-  el("calendar-area").innerHTML = '<div class="calendar-grid">' + cells + '</div>'
+function filteredSchedules() {
+  if (FILTER_MODE === "all" || !FILTER_VALUE) return SCHEDULES
+  const key = FILTER_MODE === "teacher" ? "teacherNames" : "classNames"
+  return SCHEDULES.filter(function (s) { return (s[key] || []).includes(FILTER_VALUE) })
 }
 
-function goToDateFromCalendar(dateStr) {
-  CURRENT_DATE = dateStr
-  setViewMode("list")
-  document.querySelector('.view-tab[data-view="list"]').classList.add("active")
-  document.querySelector('.view-tab[data-view="calendar"]').classList.remove("active")
+function findSchedule(id) { return SCHEDULES.find(function (s) { return s.id === id }) }
+
+function renderScheduleList() {
+  const listEl = el("schedule-list-area")
+  const list = filteredSchedules()
+  if (list.length === 0) {
+    listEl.innerHTML = '<div class="empty">해당 날짜에 일정이 없어요</div>'
+    return
+  }
+  listEl.innerHTML = list.map(function (s) {
+    const selected = SELECTED_SCHEDULE_ID === s.id
+    return '<div class="schedule-item' + (selected ? " selected" : "") + '" onclick="selectSchedule(' + JSON.stringify(s.id) + ')">' +
+      '<div class="schedule-item-title-row"><span class="schedule-item-title">' + esc(s.name) + '</span></div>' +
+      '<div class="schedule-item-badges">' +
+        (s.category ? '<span class="badge ' + s.categoryColor + '">' + esc(s.category) + '</span>' : "") +
+        (s.status ? '<span class="badge gray">' + esc(s.status) + '</span>' : "") +
+        (s.teacherNames || []).map(function (n) { return '<span class="badge blue">' + esc(n) + '</span>' }).join("") +
+        (s.classNames || []).map(function (n) { return '<span class="badge gray">' + esc(n) + '</span>' }).join("") +
+      '</div>' +
+    '</div>'
+  }).join("")
+}
+
+function selectSchedule(id) {
+  SELECTED_SCHEDULE_ID = id
+  const s = findSchedule(id)
+  if (!s) return
+  renderScheduleList()
+  el("md-right-empty").style.display = "none"
+  el("md-right-content").style.display = "block"
+  el("right-title").textContent = s.name
+  el("right-sub").textContent = [s.category, s.status].filter(Boolean).join(" · ")
+  el("right-page-link").href = s.url
+  renderScheduleDetail(s)
+}
+
+function renderScheduleDetail(s) {
+  const body = el("right-tab-body")
+  function field(label, valueHtml) {
+    return '<div class="schedule-detail-field"><b>' + esc(label) + '</b><div class="val">' + valueHtml + '</div></div>'
+  }
+  let html = ""
+  html += field("날짜", esc(s.date ? formatDateLabel(s.date.slice(0, 10)) : "-"))
+  html += field("구분", s.category ? '<span class="badge ' + s.categoryColor + '">' + esc(s.category) + '</span>' : "-")
+  html += field("진행상태", s.status ? '<span class="badge gray">' + esc(s.status) + '</span>' : "-")
+  if (s.relatedText) html += field("관련 대상", esc(s.relatedText))
+  if (s.memo) html += field("메모", esc(s.memo).replace(/\n/g, "<br>"))
+  if ((s.tags || []).length) html += field("태그", s.tags.map(function (t) { return '<span class="badge gray">' + esc(t) + '</span>' }).join(" "))
+  html += '<div class="schedule-detail-hint" style="margin-top:16px;color:var(--muted);font-size:12px">✏️ 수정은 노션에서 해주세요 (대시보드는 보기 전용이에요)</div>'
+  body.innerHTML = html
 }
 
 // ---------------- 알림톡 발송 ----------------
@@ -914,8 +1075,8 @@ async function sendBulkForClass(classId) {
 
 // ---------------- 초기 로딩 ----------------
 function loadDashboard() {
-  if (VIEW_MODE === "list") loadClassList(CURRENT_DATE)
-  else loadClassCalendar(CURRENT_MONTH)
+  loadCenterList()
+  if (CALENDAR_OPEN) loadCalendarPanel()
 }
 
 if (getAdminKey()) {
