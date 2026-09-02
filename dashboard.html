@@ -270,6 +270,37 @@
   }
   .login-card button:disabled { background: #ccc; cursor: default; }
   .login-error { color: #e04b4b; font-size: 12px; margin-top: 10px; min-height: 14px; }
+
+.attendance-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.attendance-item .left { display: flex; align-items: center; gap: 8px; }
+.send-btn {
+  padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border);
+  background: #fff; cursor: pointer; font-size: 12px;
+}
+.send-btn:disabled { color: var(--muted); cursor: default; opacity: 0.5; }
+.bulk-send-btn {
+  margin-bottom: 8px; padding: 6px 12px; border-radius: 8px; border: none;
+  background: var(--accent); color: #fff; font-size: 13px; cursor: pointer;
+}
+.bulk-send-btn:disabled { background: var(--muted); cursor: default; }
+.modal-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+  align-items: center; justify-content: center; z-index: 100;
+}
+.modal-overlay.show { display: flex; }
+.modal-box { background: #fff; border-radius: 12px; padding: 20px; width: 320px; max-width: 90vw; }
+.modal-box h3 { margin: 0 0 8px; }
+.modal-box p { margin: 0 0 16px; color: var(--muted); font-size: 14px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.modal-actions button { padding: 8px 14px; border-radius: 8px; border: none; cursor: pointer; font-size: 13px; }
+.modal-actions .cancel { background: var(--bg); color: var(--text); }
+.modal-actions .confirm { background: var(--accent); color: #fff; }
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
+  background: #37352f; color: #fff; padding: 10px 18px; border-radius: 8px;
+  font-size: 13px; opacity: 0; transition: opacity 0.2s, transform 0.2s; z-index: 200; pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 </style>
 </head>
 <body>
@@ -296,6 +327,18 @@
     <button class="logout" onclick="topbarLogout()">로그아웃</button>
   </div>
 </div>
+
+<div class="modal-overlay" id="alimtalk-modal">
+  <div class="modal-box">
+    <h3>알림톡 발송 확인</h3>
+    <p id="alimtalk-modal-text">선택된 학생에게 오늘의 학습 리포트 알림톡을 발송하시겠습니까?</p>
+    <div class="modal-actions">
+      <button class="cancel" onclick="closeAlimtalkModal()">취소</button>
+      <button class="confirm" onclick="confirmAlimtalkSend()">발송</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
 
 <div class="layout" id="page-dashboard">
   <div class="sidebar">
@@ -333,6 +376,7 @@
         <h2>👥 오늘 등원학생</h2>
         <div class="count" id="attendance-count">-</div>
         <div class="summary-row" id="attendance-summary"></div>
+        <button class="bulk-send-btn" id="bulk-send-btn" onclick="sendAlimtalkBulk()" disabled>📩 전송</button>
         <ul class="list" id="attendance-list"></ul>
       </div>
     </div>
@@ -402,6 +446,7 @@ document.getElementById("login-input").addEventListener("keydown", (e) => {
 const SUPABASE_URL = "https://twczhsxybkcvjkdfdxvs.supabase.co"
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR3Y3poc3h5YmtjdmprZGZkeHZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyOTcwMDQsImV4cCI6MjEwMzg3MzAwNH0.t7Ltb_iSYqE4gHSoGSm-OlpiLjGqIcgrhzGJ-t56EDc" // admin.html에서 쓰는 anon key와 동일한 값으로 교체
 const FUNCTION_URL = SUPABASE_URL + "/functions/v1/get-admin-dashboard"
+const SEND_DAILY_REPORT_URL = SUPABASE_URL + "/functions/v1/send-daily-report"
 const TAB_PAGES = { admin: "admin.html", kiosk: "attendance_kiosk.html" }
 // =============================================================
 
@@ -466,6 +511,9 @@ function topbarLogout() {
   location.reload()
 }
 
+let ATTENDANCE_LIST = []
+let ALIMTALK_PENDING = null
+
 const statusBadgeClass = {
   "🟢출석": "green",
   "🔵보강": "blue",
@@ -473,6 +521,20 @@ const statusBadgeClass = {
 }
 
 function el(id) { return document.getElementById(id) }
+
+function esc(s) {
+  if (s === null || s === undefined) return ""
+  return String(s).replace(/[&<>"']/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  })
+}
+
+function showToast(msg) {
+  const t = document.getElementById("toast")
+  t.textContent = msg
+  t.classList.add("show")
+  setTimeout(function () { t.classList.remove("show") }, 1800)
+}
 
 function setStatus(type, message) {
   const area = el("status-area")
@@ -521,15 +583,24 @@ function renderAttendance(attendance) {
     return '<span class="badge ' + cls + '">' + key + ' ' + val + '</span>'
   }).join("")
 
+  ATTENDANCE_LIST = attendance.list || []
+  const bulkBtn = el("bulk-send-btn")
+  const hasSendable = ATTENDANCE_LIST.some(function (a) { return a.hasClassToday && a.attendanceId })
+  if (bulkBtn) bulkBtn.disabled = !hasSendable
+
   const listEl = el("attendance-list")
-  if (attendance.list.length === 0) {
+  if (ATTENDANCE_LIST.length === 0) {
     listEl.innerHTML = '<div class="empty">오늘 출석 기록이 없어요</div>'
     return
   }
-  listEl.innerHTML = attendance.list.map(function (a) {
+  listEl.innerHTML = ATTENDANCE_LIST.map(function (a, i) {
     const cls = statusBadgeClass[a.status] || "gray"
-    return '<li><a href="' + a.url + '" target="_blank">' + a.name + '</a>' +
-      (a.status ? '<span class="badge ' + cls + '">' + a.status + '</span>' : '') + '</li>'
+    const canSend = a.hasClassToday && a.attendanceId
+    return '<li class="attendance-item">' +
+      '<span class="left"><a href="' + a.url + '" target="_blank">' + esc(a.name) + '</a>' +
+      (a.status ? '<span class="badge ' + cls + '">' + a.status + '</span>' : '') + '</span>' +
+      '<span class="right"><button class="send-btn" id="send-' + i + '" onclick="sendAlimtalk(' + i + ')" ' + (canSend ? "" : "disabled") + '>📩 전송</button></span>' +
+      '</li>'
   }).join("")
 }
 
@@ -561,6 +632,100 @@ if (getAdminKey()) {
 } else {
   showLoginScreen()
 }
+
+function openAlimtalkModal(indices) {
+  ALIMTALK_PENDING = indices
+  const text = indices.length === 1
+    ? (ATTENDANCE_LIST[indices[0]] ? esc(ATTENDANCE_LIST[indices[0]].name) : "") + "에게 오늘의 학습 리포트 알림톡을 발송하시겠습니까?"
+    : indices.length + "원에게 오늘의 학습 리포트 알림톡을 일괄 발송하시겠습니까?"
+  el("alimtalk-modal-text").textContent = text
+  el("alimtalk-modal").classList.add("show")
+}
+
+function closeAlimtalkModal() {
+  ALIMTALK_PENDING = null
+  el("alimtalk-modal").classList.remove("show")
+}
+
+function sendAlimtalk(i) {
+  const a = ATTENDANCE_LIST[i]
+  if (!a || !a.hasClassToday || !a.attendanceId) return
+  openAlimtalkModal([i])
+}
+
+function sendAlimtalkBulk() {
+  const indices = ATTENDANCE_LIST
+    .map(function (a, i) { return i })
+    .filter(function (i) { const a = ATTENDANCE_LIST[i]; return a.hasClassToday && a.attendanceId })
+  if (indices.length === 0) return
+  openAlimtalkModal(indices)
+}
+
+function confirmAlimtalkSend() {
+  const indices = ALIMTALK_PENDING
+  el("alimtalk-modal").classList.remove("show")
+  if (!indices || indices.length === 0) return
+  if (indices.length === 1) {
+    sendAlimtalkOne(indices[0])
+  } else {
+    sendAlimtalkBulkRun(indices)
+  }
+  ALIMTALK_PENDING = null
+}
+
+async function callSendDailyReport(a) {
+  const res = await fetch(SEND_DAILY_REPORT_URL, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: "Bearer " + SUPABASE_ANON_KEY,
+      "Content-Type": "application/json",
+      "x-admin-key": getAdminKey() || "",
+    },
+    body: JSON.stringify({ registrationId: a.registrationId, attendanceId: a.attendanceId }),
+  })
+  const data = await res.json().catch(function () { return {} })
+  if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
+  return data
+}
+
+async function sendAlimtalkOne(index) {
+  const a = ATTENDANCE_LIST[index]
+  if (!a) return
+  const btn = el("send-" + index)
+  if (btn) { btn.disabled = true; btn.textContent = "발송중..." }
+  try {
+    await callSendDailyReport(a)
+    showToast(esc(a.name) + "에게 알림톡을 발송했어요")
+  } catch (err) {
+    showToast("발송 실패: " + err.message)
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "📩 전송" }
+  }
+}
+
+async function sendAlimtalkBulkRun(indices) {
+  const bulkBtn = el("bulk-send-btn")
+  if (bulkBtn) { bulkBtn.disabled = true; bulkBtn.textContent = "발송중..." }
+  let success = 0, fail = 0
+  for (const i of indices) {
+    const a = ATTENDANCE_LIST[i]
+    if (!a) continue
+    const btn = el("send-" + i)
+    if (btn) { btn.disabled = true; btn.textContent = "발송중..." }
+    try {
+      await callSendDailyReport(a)
+      success++
+    } catch (_e) {
+      fail++
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = "📩 전송" }
+    }
+  }
+  if (bulkBtn) { bulkBtn.disabled = false; bulkBtn.textContent = "📩 전송" }
+  showToast(success + "건 발송 완료" + (fail ? ", " + fail + "건 실패" : ""))
+}
+
 </script>
 </body>
 </html>
