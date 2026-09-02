@@ -301,6 +301,51 @@
   font-size: 13px; opacity: 0; transition: opacity 0.2s, transform 0.2s; z-index: 200; pointer-events: none;
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+.md-left { width: 340px; flex-shrink:0; background:var(--panel); border-right:1px solid var(--border); padding:16px; overflow-y:auto; display:flex; flex-direction:column; gap:10px; }
+.filter-tab, .view-tab { border:1px solid var(--border); background:#fff; padding:6px 12px; border-radius:8px; font-size:13px; cursor:pointer; color:var(--muted); font-family:inherit; }
+.filter-tab.active, .view-tab.active { background:#edf3fc; color:var(--accent); border-color:#c9e0fb; }
+.md-filter-row, .md-view-row { display:flex; gap:6px; }
+.md-filter-options { display:flex; flex-wrap:wrap; gap:6px; }
+.filter-option { border:1px solid var(--border); background:#fbfbfa; padding:4px 10px; border-radius:999px; font-size:12px; cursor:pointer; color:var(--text); font-family:inherit; }
+.filter-option.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+.md-date-nav { display:flex; align-items:center; justify-content:center; gap:12px; font-size:14px; font-weight:600; }
+.date-nav-btn { border:none; background:#f0f0ee; width:28px; height:28px; border-radius:6px; cursor:pointer; font-size:14px; }
+.class-list-area { display:flex; flex-direction:column; gap:8px; }
+.class-item { border:1px solid var(--border); border-radius:10px; background:#fbfbfa; overflow:hidden; }
+.class-item.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.class-item-head { padding:10px 12px; cursor:pointer; display:flex; flex-direction:column; gap:4px; }
+.class-item-head:hover { background:#f2f6fc; }
+.class-item-title-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.class-item-title { font-size:13.5px; font-weight:600; }
+.class-item-time { font-size:12px; color:var(--muted); }
+.class-item-badges { display:flex; gap:6px; flex-wrap:wrap; }
+.class-item-body { display:none; padding:0 12px 12px; border-top:1px dashed var(--border); font-size:12.5px; color:var(--text); }
+.class-item-body.show { display:block; }
+.class-item-body .row { margin: 8px 0; }
+.class-item-body .row b { color: var(--muted); font-weight:600; font-size:11px; display:block; margin-bottom:2px; }
+.calendar-area { display:flex; flex-direction:column; gap:6px; }
+.calendar-grid { display:grid; grid-template-columns: repeat(7, 1fr); gap:4px; }
+.calendar-day { border:1px solid var(--border); border-radius:8px; min-height:56px; padding:4px 6px; font-size:11px; cursor:pointer; background:#fff; }
+.calendar-day.empty { visibility:hidden; }
+.calendar-day.today { border-color: var(--accent); }
+.calendar-day .num { font-weight:600; margin-bottom:2px; }
+.calendar-day .cnt { color: var(--accent); font-size:11px; }
+.calendar-day:hover { background:#f2f6fc; }
+.md-right { flex:1; padding:24px 28px; overflow-y:auto; }
+.md-right-empty { color:var(--muted); font-size:14px; text-align:center; margin-top:80px; }
+.md-right-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:16px; }
+.md-right-title { font-size:18px; font-weight:700; }
+.md-right-sub { font-size:13px; color:var(--muted); margin-top:2px; }
+.md-right-link { font-size:12px; color:var(--accent); text-decoration:none; }
+.right-tabs { display:flex; gap:6px; border-bottom:1px solid var(--border); margin-bottom:16px; }
+.right-tab { border:none; background:none; padding:8px 12px; font-size:13px; cursor:pointer; color:var(--muted); font-family:inherit; border-bottom:2px solid transparent; }
+.right-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight:600; }
+.record-card { border:1px solid var(--border); border-radius:10px; padding:12px 14px; margin-bottom:10px; background:#fbfbfa; }
+.record-card .title { font-weight:600; font-size:13.5px; margin-bottom:4px; }
+.record-card .meta { font-size:12px; color:var(--muted); }
+.activity-row { display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-radius:8px; background:#fff; border:1px solid var(--border); margin-bottom:6px; font-size:13px; }
+.student-row { display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-radius:8px; background:#fff; border:1px solid var(--border); margin-bottom:6px; font-size:13px; }
 </style>
 </head>
 <body>
@@ -341,44 +386,43 @@
 <div class="toast" id="toast"></div>
 
 <div class="layout" id="page-dashboard">
-  <div class="sidebar">
-    <div class="item active" data-view="main">🏠 MAIN</div>
-    <div class="item disabled" data-view="calendar">📅 캘린더 <span class="soon">준비중</span></div>
-    <div class="item disabled" data-view="class">🏫 클래스 <span class="soon">준비중</span></div>
-    <div class="item disabled" data-view="teacher">򄐍닻 강사 <span class="soon">준비중</span></div>
-  </div>
-
-  <div class="main">
-    <div class="page-header">
-      <div>
-        <h1>MAIN</h1>
-        <div class="date" id="date-label">날짜 불러오는 중...</div>
-      </div>
-      <button class="refresh-btn" id="refresh-btn">🔄 새로고침</button>
+  <div class="md-left">
+    <div class="md-filter-row">
+      <button class="filter-tab active" data-filter="all" onclick="setFilterMode('all')">전체</button>
+      <button class="filter-tab" data-filter="teacher" onclick="setFilterMode('teacher')">강사</button>
+      <button class="filter-tab" data-filter="class" onclick="setFilterMode('class')">클래스</button>
     </div>
-
+    <div class="md-filter-options" id="filter-options"></div>
+    <div class="md-view-row">
+      <button class="view-tab active" data-view="list" onclick="setViewMode('list')">📋 리스트 보기</button>
+      <button class="view-tab" data-view="calendar" onclick="setViewMode('calendar')">📅 캘린더 보기</button>
+    </div>
+    <div class="md-date-nav">
+      <button class="date-nav-btn" onclick="shiftDate(-1)">‹</button>
+      <span class="date-nav-label" id="date-nav-label">-</span>
+      <button class="date-nav-btn" onclick="shiftDate(1)">›</button>
+    </div>
     <div id="status-area"></div>
-
-    <div class="cards">
-      <div class="card">
-        <h2>🗓️ 오늘 일정</h2>
-        <div class="count" id="schedule-count">-</div>
-        <ul class="list" id="schedule-list"></ul>
+    <div id="class-list-area" class="class-list-area"></div>
+    <div id="calendar-area" class="calendar-area" style="display:none"></div>
+  </div>
+  <div class="md-right">
+    <div class="md-right-empty" id="md-right-empty">👈 왼쪽에서 수업을 선택하면 상세정보가 표시돼요</div>
+    <div class="md-right-content" id="md-right-content" style="display:none">
+      <div class="md-right-header">
+        <div>
+          <div class="md-right-title" id="right-title"></div>
+          <div class="md-right-sub" id="right-sub"></div>
+        </div>
+        <a class="md-right-link" id="right-page-link" target="_blank" href="#">노션에서 보기 ↗</a>
       </div>
-
-      <div class="card">
-        <h2>📚 오늘 수업</h2>
-        <div class="count" id="class-count">-</div>
-        <ul class="list" id="class-list"></ul>
+      <div class="right-tabs">
+        <button class="right-tab active" data-tab="students" onclick="setRightTab('students')">👥 학생</button>
+        <button class="right-tab" data-tab="record" onclick="setRightTab('record')">📖 학습기록</button>
+        <button class="right-tab" data-tab="assignment" onclick="setRightTab('assignment')">📝 과제</button>
+        <button class="right-tab" data-tab="evaluation" onclick="setRightTab('evaluation')">✅ 평가</button>
       </div>
-
-      <div class="card">
-        <h2>👥 오늘 등원학생</h2>
-        <div class="count" id="attendance-count">-</div>
-        <div class="summary-row" id="attendance-summary"></div>
-        <button class="bulk-send-btn" id="bulk-send-btn" onclick="sendAlimtalkBulk()" disabled>📩 전송</button>
-        <ul class="list" id="attendance-list"></ul>
-      </div>
+      <div class="right-tab-body" id="right-tab-body"></div>
     </div>
   </div>
 </div>
@@ -511,8 +555,9 @@ function topbarLogout() {
   location.reload()
 }
 
-let ATTENDANCE_LIST = []
-let ALIMTALK_PENDING = null
+// ============ 마스터-디테일 (좌: 수업 리스트/캘린더, 우: 수업 상세) ============
+const GET_CLASSES_URL = SUPABASE_URL + "/functions/v1/get-classes"
+const GET_CLASS_DETAIL_URL = SUPABASE_URL + "/functions/v1/get-class-detail"
 
 const statusBadgeClass = {
   "🟢출석": "green",
@@ -542,161 +587,306 @@ function setStatus(type, message) {
   area.innerHTML = '<div class="status-banner ' + type + '">' + message + '</div>'
 }
 
+function kstToday() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date())
+}
+
+let VIEW_MODE = "list"
+let FILTER_MODE = "all"
+let FILTER_VALUE = null
+let CURRENT_DATE = kstToday()
+let CURRENT_MONTH = CURRENT_DATE.slice(0, 7)
+let CLASSES = []
+let SELECTED_CLASS_ID = null
+let EXPANDED_CLASS_ID = null
+let RIGHT_TAB = "students"
+let CLASS_DETAIL_CACHE = {}
+
 function formatDateLabel(dateStr) {
   const d = new Date(dateStr + "T00:00:00+09:00")
   const days = ["일","월","화","수","목","금","토"]
   return dateStr.replace(/-/g, ".") + " (" + days[d.getDay()] + ")"
 }
 
-function renderSchedules(schedules) {
-  el("schedule-count").textContent = schedules.length + "건"
-  const listEl = el("schedule-list")
-  if (schedules.length === 0) {
-    listEl.innerHTML = '<div class="empty">오늘 등록된 일정이 없어요</div>'
-    return
-  }
-  listEl.innerHTML = schedules.map(function (s) {
-    return '<li><a href="' + s.url + '" target="_blank">' + s.name + '</a>' +
-      (s.category ? '<span class="badge gray">' + s.category + '</span>' : '') + '</li>'
+function setFilterMode(mode) {
+  FILTER_MODE = mode
+  FILTER_VALUE = null
+  document.querySelectorAll(".filter-tab").forEach(function (b) { b.classList.toggle("active", b.dataset.filter === mode) })
+  renderFilterOptions()
+  renderClassList()
+}
+
+function renderFilterOptions() {
+  const optArea = el("filter-options")
+  if (FILTER_MODE === "all") { optArea.innerHTML = ""; return }
+  const key = FILTER_MODE === "teacher" ? "teacherName" : "className"
+  const names = Array.from(new Set(CLASSES.map(function (c) { return c[key] }).filter(Boolean)))
+  if (names.length === 0) { optArea.innerHTML = '<span class="empty">해당 항목이 없어요</span>'; return }
+  optArea.innerHTML = names.map(function (name) {
+    return '<button class="filter-option' + (FILTER_VALUE === name ? " active" : "") + '" onclick="selectFilterValue(' + JSON.stringify(name) + ')">' + esc(name) + '</button>'
   }).join("")
 }
 
-function renderClasses(classes) {
-  el("class-count").textContent = classes.length + "개 반"
-  const listEl = el("class-list")
-  if (classes.length === 0) {
-    listEl.innerHTML = '<div class="empty">오늘 진행된 수업이 없어요</div>'
-    return
-  }
-  listEl.innerHTML = classes.map(function (c) {
-    return '<li><a href="' + c.url + '" target="_blank">' + c.name + '</a></li>'
-  }).join("")
+function selectFilterValue(name) {
+  FILTER_VALUE = (FILTER_VALUE === name) ? null : name
+  renderFilterOptions()
+  renderClassList()
 }
 
-function renderAttendance(attendance) {
-  el("attendance-count").innerHTML = attendance.total + '명 <small>기록기준</small>'
-  const summaryEl = el("attendance-summary")
-  const entries = Object.entries(attendance.summary || {})
-  summaryEl.innerHTML = entries.map(function (entry) {
-    const key = entry[0], val = entry[1]
-    const cls = statusBadgeClass[key] || "gray"
-    return '<span class="badge ' + cls + '">' + key + ' ' + val + '</span>'
-  }).join("")
-
-  ATTENDANCE_LIST = attendance.list || []
-  const bulkBtn = el("bulk-send-btn")
-  const hasSendable = ATTENDANCE_LIST.some(function (a) { return a.hasClassToday && a.attendanceId })
-  if (bulkBtn) bulkBtn.disabled = !hasSendable
-
-  const listEl = el("attendance-list")
-  if (ATTENDANCE_LIST.length === 0) {
-    listEl.innerHTML = '<div class="empty">오늘 출석 기록이 없어요</div>'
-    return
+function setViewMode(mode) {
+  VIEW_MODE = mode
+  document.querySelectorAll(".view-tab").forEach(function (b) { b.classList.toggle("active", b.dataset.view === mode) })
+  el("class-list-area").style.display = mode === "list" ? "flex" : "none"
+  el("calendar-area").style.display = mode === "calendar" ? "flex" : "none"
+  if (mode === "list") {
+    loadClassList(CURRENT_DATE)
+  } else {
+    loadClassCalendar(CURRENT_MONTH)
   }
-  listEl.innerHTML = ATTENDANCE_LIST.map(function (a, i) {
-    const cls = statusBadgeClass[a.status] || "gray"
-    const canSend = a.hasClassToday && a.attendanceId
-    return '<li class="attendance-item">' +
-      '<span class="left"><a href="' + a.url + '" target="_blank">' + esc(a.name) + '</a>' +
-      (a.status ? '<span class="badge ' + cls + '">' + a.status + '</span>' : '') + '</span>' +
-      '<span class="right"><button class="send-btn" id="send-' + i + '" onclick="sendAlimtalk(' + i + ')" ' + (canSend ? "" : "disabled") + '>📩 전송</button></span>' +
-      '</li>'
-  }).join("")
 }
 
-async function loadDashboard() {
-  setStatus("loading", "데이터를 불러오는 중이에요...")
+function shiftDate(delta) {
+  if (VIEW_MODE === "list") {
+    const d = new Date(CURRENT_DATE + "T00:00:00+09:00")
+    d.setDate(d.getDate() + delta)
+    CURRENT_DATE = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(d)
+    loadClassList(CURRENT_DATE)
+  } else {
+    const parts = CURRENT_MONTH.split("-").map(Number)
+    const y = parts[0], m = parts[1]
+    const d = new Date(y, m - 1 + delta, 1)
+    CURRENT_MONTH = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")
+    loadClassCalendar(CURRENT_MONTH)
+  }
+}
+
+async function loadClassList(dateStr) {
+  setStatus("loading", "수업 목록을 불러오는 중이에요...")
+  el("date-nav-label").textContent = formatDateLabel(dateStr)
   try {
-    const res = await fetch(FUNCTION_URL, {
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: "Bearer " + SUPABASE_ANON_KEY,
-      },
+    const res = await fetch(GET_CLASSES_URL + "?date=" + dateStr, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
-
-    el("date-label").textContent = formatDateLabel(data.date)
-    renderSchedules(data.schedules || [])
-    renderClasses(data.classes || [])
-    renderAttendance(data.attendance || { total: 0, summary: {}, list: [] })
+    CLASSES = data.classes || []
+    renderFilterOptions()
+    renderClassList()
     setStatus(null)
   } catch (err) {
     setStatus("error", "불러오기 실패: " + err.message)
   }
 }
 
-el("refresh-btn").addEventListener("click", loadDashboard)
-if (getAdminKey()) {
-  showAppScreen()
-} else {
-  showLoginScreen()
+function filteredClasses() {
+  if (FILTER_MODE === "all" || !FILTER_VALUE) return CLASSES
+  const key = FILTER_MODE === "teacher" ? "teacherName" : "className"
+  return CLASSES.filter(function (c) { return c[key] === FILTER_VALUE })
 }
 
-function openAlimtalkModal(indices) {
-  ALIMTALK_PENDING = indices
-  const text = indices.length === 1
-    ? (ATTENDANCE_LIST[indices[0]] ? esc(ATTENDANCE_LIST[indices[0]].name) : "") + "에게 오늘의 학습 리포트 알림톡을 발송하시겠습니까?"
-    : indices.length + "원에게 오늘의 학습 리포트 알림톡을 일괄 발송하시겠습니까?"
-  el("alimtalk-modal-text").textContent = text
-  el("alimtalk-modal").classList.add("show")
-}
-
-function closeAlimtalkModal() {
-  ALIMTALK_PENDING = null
-  el("alimtalk-modal").classList.remove("show")
-}
-
-function sendAlimtalk(i) {
-  const a = ATTENDANCE_LIST[i]
-  if (!a || !a.hasClassToday || !a.attendanceId) return
-  openAlimtalkModal([i])
-}
-
-function sendAlimtalkBulk() {
-  const indices = ATTENDANCE_LIST
-    .map(function (a, i) { return i })
-    .filter(function (i) { const a = ATTENDANCE_LIST[i]; return a.hasClassToday && a.attendanceId })
-  if (indices.length === 0) return
-  openAlimtalkModal(indices)
-}
-
-function confirmAlimtalkSend() {
-  const indices = ALIMTALK_PENDING
-  el("alimtalk-modal").classList.remove("show")
-  if (!indices || indices.length === 0) return
-  if (indices.length === 1) {
-    sendAlimtalkOne(indices[0])
-  } else {
-    sendAlimtalkBulkRun(indices)
+function renderClassList() {
+  const listEl = el("class-list-area")
+  const list = filteredClasses()
+  if (list.length === 0) {
+    listEl.innerHTML = '<div class="empty">해당 날짜에 수업이 없어요</div>'
+    return
   }
-  ALIMTALK_PENDING = null
+  listEl.innerHTML = list.map(function (c) {
+    const expanded = EXPANDED_CLASS_ID === c.id
+    const selected = SELECTED_CLASS_ID === c.id
+    return '<div class="class-item' + (selected ? " selected" : "") + '" data-id="' + c.id + '">' +
+      '<div class="class-item-head" onclick="onClassClick(' + JSON.stringify(c.id) + ')">' +
+        '<div class="class-item-title-row"><span class="class-item-title">' + esc(c.className) + '</span><span class="class-item-time">' + esc(c.timeRange || "") + '</span></div>' +
+        '<div class="class-item-badges">' +
+          (c.teacherName ? '<span class="badge gray">' + esc(c.teacherName) + '</span>' : "") +
+          (c.method ? '<span class="badge blue">' + esc(c.method) + '</span>' : "") +
+          (c.attendanceRate ? '<span class="badge green">출석 ' + esc(c.attendanceRate) + '</span>' : "") +
+        '</div>' +
+      '</div>' +
+      '<div class="class-item-body' + (expanded ? " show" : "") + '">' +
+        '<div class="row"><b>출석현황</b>' + esc(c.attendanceStatus || "-") + '</div>' +
+        '<div class="row"><b>학습 내용</b>' + esc(c.studySummary || "-") + '</div>' +
+        '<div class="row"><b>과제 안내</b>' + esc(c.assignmentSummary || "-") + '</div>' +
+        '<div class="row"><b>평가 결과</b>' + esc(c.evaluationSummary || "-") + '</div>' +
+        '<button class="bulk-send-btn" onclick="sendBulkForClass(' + JSON.stringify(c.id) + ')">📩 보고서 일괄 전송</button>' +
+      '</div>' +
+    '</div>'
+  }).join("")
 }
 
-async function callSendDailyReport(a) {
+function onClassClick(id) {
+  EXPANDED_CLASS_ID = (EXPANDED_CLASS_ID === id) ? null : id
+  selectClass(id)
+  renderClassList()
+}
+
+function findClass(id) { return CLASSES.find(function (c) { return c.id === id }) }
+
+function selectClass(id) {
+  SELECTED_CLASS_ID = id
+  const c = findClass(id)
+  if (!c) return
+  el("md-right-empty").style.display = "none"
+  el("md-right-content").style.display = "block"
+  el("right-title").textContent = c.className
+  el("right-sub").textContent = [c.teacherName, c.method, c.timeRange].filter(Boolean).join(" · ")
+  el("right-page-link").href = c.url
+  setRightTab(RIGHT_TAB, true)
+}
+
+function setRightTab(tab, force) {
+  if (RIGHT_TAB === tab && !force) return
+  RIGHT_TAB = tab
+  document.querySelectorAll(".right-tab").forEach(function (b) { b.classList.toggle("active", b.dataset.tab === tab) })
+  renderRightTabBody()
+}
+
+function renderRightTabBody() {
+  const c = findClass(SELECTED_CLASS_ID)
+  const body = el("right-tab-body")
+  if (!c) { body.innerHTML = ""; return }
+  if (RIGHT_TAB === "students") {
+    renderStudentsTab(c, body)
+  } else if (RIGHT_TAB === "record") {
+    body.innerHTML = '<div class="record-card"><div class="title">📖 학습 내용</div><div class="meta">' + esc(c.studySummary || "등록된 내용이 없어요") + '</div></div>'
+  } else if (RIGHT_TAB === "assignment" || RIGHT_TAB === "evaluation") {
+    renderTaskTab(c, body, RIGHT_TAB)
+  }
+}
+
+function renderStudentsTab(c, body) {
+  const students = c.students || []
+  if (students.length === 0) { body.innerHTML = '<div class="empty">출석 기록이 없어요</div>'; return }
+  body.innerHTML = students.map(function (s, i) {
+    const cls = statusBadgeClass[s.status] || "gray"
+    const canSend = !!s.attendanceId
+    return '<div class="student-row"><span><a href="' + s.url + '" target="_blank">' + esc(s.name) + '</a> ' +
+      (s.status ? '<span class="badge ' + cls + '">' + s.status + '</span>' : "") + '</span>' +
+      '<button class="send-btn" id="stu-send-' + i + '" onclick="sendStudentReport(' + i + ')" ' + (canSend ? "" : "disabled") + '>📩 전송</button></div>'
+  }).join("")
+}
+
+async function fetchClassDetail(classId) {
+  if (CLASS_DETAIL_CACHE[classId]) return CLASS_DETAIL_CACHE[classId]
+  const res = await fetch(GET_CLASS_DETAIL_URL, {
+    method: "POST",
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "Content-Type": "application/json", "x-admin-key": getAdminKey() || "" },
+    body: JSON.stringify({ classSessionId: classId }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
+  CLASS_DETAIL_CACHE[classId] = data
+  return data
+}
+
+async function renderTaskTab(c, body, kind) {
+  body.innerHTML = '<div class="empty">불러오는 중...</div>'
+  try {
+    const data = await fetchClassDetail(c.id)
+    const group = kind === "assignment" ? data.assignments : data.evaluations
+    const records = (group && group.records) || []
+    const activities = (group && group.activities) || []
+    let html = ""
+    if (records.length === 0) {
+      html += '<div class="empty">등록된 ' + (kind === "assignment" ? "과제" : "평가") + ' 설명이 없어요</div>'
+    } else {
+      html += records.map(function (r) {
+        return '<div class="record-card"><div class="title"><a href="' + r.url + '" target="_blank">' + esc(r.title) + '</a></div>' +
+          '<div class="meta">교재: ' + esc(r.book) + (r.range ? " · 범위: " + esc(r.range) : "") + '</div>' +
+          (r.content ? '<div class="meta" style="margin-top:4px">' + esc(r.content) + '</div>' : "") +
+          '</div>'
+      }).join("")
+    }
+    if (activities.length === 0) {
+      html += '<div class="empty">학생별 학습 활동이 없어요</div>'
+    } else {
+      html += activities.map(function (a) {
+        const scoreText = kind === "evaluation" && a.score != null ? (a.score + "점 (" + a.correctCount + "/" + a.totalCount + ")") : ""
+        const statusText = kind === "assignment" ? (a.assignmentStatus || "") : ""
+        const cls = statusText.indexOf("제출") >= 0 ? "green" : statusText ? "red" : "gray"
+        return '<div class="activity-row"><span><a href="' + a.url + '" target="_blank">' + esc(a.studentName) + '</a></span>' +
+          '<span>' + (statusText ? '<span class="badge ' + cls + '">' + esc(statusText) + '</span>' : "") + (scoreText ? '<span class="badge blue">' + esc(scoreText) + '</span>' : "") + '</span></div>'
+      }).join("")
+    }
+    body.innerHTML = html
+  } catch (err) {
+    body.innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '</div>'
+  }
+}
+
+// ---------------- 캘린더(월간) 보기 ----------------
+async function loadClassCalendar(monthStr) {
+  setStatus("loading", "캘린더를 불러오는 중이에요...")
+  el("date-nav-label").textContent = monthStr.replace("-", ".")
+  try {
+    const res = await fetch(GET_CLASSES_URL + "?month=" + monthStr, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
+    CLASSES = data.classes || []
+    renderFilterOptions()
+    renderCalendar(monthStr)
+    setStatus(null)
+  } catch (err) {
+    setStatus("error", "불러오기 실패: " + err.message)
+  }
+}
+
+function renderCalendar(monthStr) {
+  const list = filteredClasses()
+  const countByDay = {}
+  list.forEach(function (c) {
+    if (!c.date) return
+    const day = c.date.slice(0, 10)
+    countByDay[day] = (countByDay[day] || 0) + 1
+  })
+  const parts = monthStr.split("-").map(Number)
+  const y = parts[0], m = parts[1]
+  const first = new Date(y, m - 1, 1)
+  const startWeekday = first.getDay()
+  const daysInMonth = new Date(y, m, 0).getDate()
+  const today = kstToday()
+  let cells = ""
+  for (let i = 0; i < startWeekday; i++) cells += '<div class="calendar-day empty"></div>'
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = monthStr + "-" + String(d).padStart(2, "0")
+    const cnt = countByDay[dateStr] || 0
+    cells += '<div class="calendar-day' + (dateStr === today ? " today" : "") + '" onclick="goToDateFromCalendar(' + JSON.stringify(dateStr) + ')">' +
+      '<div class="num">' + d + '</div>' + (cnt ? '<div class="cnt">' + cnt + '건</div>' : "") + '</div>'
+  }
+  el("calendar-area").innerHTML = '<div class="calendar-grid">' + cells + '</div>'
+}
+
+function goToDateFromCalendar(dateStr) {
+  CURRENT_DATE = dateStr
+  setViewMode("list")
+  document.querySelector('.view-tab[data-view="list"]').classList.add("active")
+  document.querySelector('.view-tab[data-view="calendar"]').classList.remove("active")
+}
+
+// ---------------- 알림톡 발송 ----------------
+async function callSendDailyReport(payload) {
   const res = await fetch(SEND_DAILY_REPORT_URL, {
     method: "POST",
-    headers: {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: "Bearer " + SUPABASE_ANON_KEY,
-      "Content-Type": "application/json",
-      "x-admin-key": getAdminKey() || "",
-    },
-    body: JSON.stringify({ registrationId: a.registrationId, attendanceId: a.attendanceId }),
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "Content-Type": "application/json", "x-admin-key": getAdminKey() || "" },
+    body: JSON.stringify(payload),
   })
   const data = await res.json().catch(function () { return {} })
   if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
   return data
 }
 
-async function sendAlimtalkOne(index) {
-  const a = ATTENDANCE_LIST[index]
-  if (!a) return
-  const btn = el("send-" + index)
+async function sendStudentReport(i) {
+  const c = findClass(SELECTED_CLASS_ID)
+  if (!c) return
+  const s = (c.students || [])[i]
+  if (!s || !s.attendanceId) return
+  const btn = el("stu-send-" + i)
   if (btn) { btn.disabled = true; btn.textContent = "발송중..." }
   try {
-    await callSendDailyReport(a)
-    showToast(esc(a.name) + "에게 알림톡을 발송했어요")
+    await callSendDailyReport({ registrationId: s.registrationId, attendanceId: s.attendanceId })
+    showToast(esc(s.name) + "에게 알림톡을 발송했어요")
   } catch (err) {
     showToast("발송 실패: " + err.message)
   } finally {
@@ -704,28 +894,34 @@ async function sendAlimtalkOne(index) {
   }
 }
 
-async function sendAlimtalkBulkRun(indices) {
-  const bulkBtn = el("bulk-send-btn")
-  if (bulkBtn) { bulkBtn.disabled = true; bulkBtn.textContent = "발송중..." }
+async function sendBulkForClass(classId) {
+  const c = findClass(classId)
+  if (!c) return
+  const targets = (c.students || []).filter(function (s) { return s.attendanceId })
+  if (targets.length === 0) { showToast("전송할 학생이 없어요"); return }
   let success = 0, fail = 0
-  for (const i of indices) {
-    const a = ATTENDANCE_LIST[i]
-    if (!a) continue
-    const btn = el("send-" + i)
-    if (btn) { btn.disabled = true; btn.textContent = "발송중..." }
+  for (const s of targets) {
     try {
-      await callSendDailyReport(a)
+      await callSendDailyReport({ registrationId: s.registrationId, attendanceId: s.attendanceId })
       success++
     } catch (_e) {
       fail++
-    } finally {
-      if (btn) { btn.disabled = false; btn.textContent = "📩 전송" }
     }
   }
-  if (bulkBtn) { bulkBtn.disabled = false; bulkBtn.textContent = "📩 전송" }
   showToast(success + "건 발송 완료" + (fail ? ", " + fail + "건 실패" : ""))
 }
 
+// ---------------- 초기 로딩 ----------------
+function loadDashboard() {
+  if (VIEW_MODE === "list") loadClassList(CURRENT_DATE)
+  else loadClassCalendar(CURRENT_MONTH)
+}
+
+if (getAdminKey()) {
+  showAppScreen()
+} else {
+  showLoginScreen()
+}
 </script>
 </body>
 </html>
