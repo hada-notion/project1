@@ -325,7 +325,18 @@
 .schedule-item-title-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .schedule-item-title { font-size:13.5px; font-weight:600; }
 .schedule-item-badges { display:flex; gap:6px; flex-wrap:wrap; }
-.schedule-list-area { display:flex; flex-direction:column; gap:8px; }
+.schedule-list-area { display:flex; flex-direction:column; gap:14px; }
+.schedule-date-group { display:flex; flex-direction:column; gap:0; }
+.schedule-date-label { font-size:12px; font-weight:700; color:var(--muted); padding:0 4px 6px; }
+.schedule-date-box { border:1px solid var(--border); border-radius:10px; overflow:hidden; background:#fff; }
+.schedule-item-mini { border:none; border-bottom:1px solid var(--border); background:transparent; padding:9px 12px; cursor:pointer; display:flex; align-items:center; gap:8px; }
+.schedule-item-mini:last-child { border-bottom:none; }
+.schedule-item-mini:hover { background:#f2f6fc; }
+.schedule-item-mini.selected { background:#eef4fd; }
+.schedule-item-mini .cat { font-size:12.5px; font-weight:600; flex-shrink:0; }
+.schedule-item-mini .who { font-size:12.5px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mc-day.has-schedule::after { content:""; position:absolute; bottom:2px; left:50%; transform:translateX(-50%); width:4px; height:4px; border-radius:50%; background:var(--accent); }
+.mc-day.selected.has-schedule::after { background:#fff; }
 .schedule-detail-field { margin: 12px 0; }
 .schedule-detail-field b { color: var(--muted); font-weight:600; font-size:11px; display:block; margin-bottom:4px; text-transform:uppercase; letter-spacing:.02em; }
 .schedule-detail-field .val { font-size:14px; color:var(--text); }
@@ -676,6 +687,7 @@ let SELECTED_SCHEDULE_ID = null
 let CALENDAR_OPEN = false
 let CAL_PANEL_MONTH = kstToday().slice(0, 7)
 let CAL_PANEL_ITEMS = []
+let CAL_PANEL_SCHEDULE_DATES = new Set()
 
 function formatDateLabel(dateStr) {
   const d = new Date(dateStr + "T00:00:00+09:00")
@@ -723,7 +735,28 @@ function shiftCalendarMonth(delta) {
 
 async function loadCalendarPanel() {
   el("cal-panel-month-label").textContent = CAL_PANEL_MONTH.replace("-", ".")
+  if (DOMAIN === "schedule") {
+    await loadCalPanelScheduleDots()
+  } else {
+    CAL_PANEL_SCHEDULE_DATES = new Set()
+  }
   renderCalPanel()
+}
+
+// mini-cal dot badge: month-scope schedule dates only (일정 탭에서만 사용)
+async function loadCalPanelScheduleDots() {
+  try {
+    const res = await fetch(GET_SCHEDULES_URL + "?month=" + CAL_PANEL_MONTH, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
+    const dates = new Set()
+    ;(data.schedules || []).forEach(function (s) { if (s.date) dates.add(s.date.slice(0, 10)) })
+    CAL_PANEL_SCHEDULE_DATES = dates
+  } catch (err) {
+    CAL_PANEL_SCHEDULE_DATES = new Set()
+  }
 }
 
 function renderCalPanel() {
@@ -741,6 +774,7 @@ function renderCalPanel() {
     let cls = "mc-day"
     if (dateStr === today) cls += " today"
     if (dateStr === CURRENT_DATE) cls += " selected"
+    if (DOMAIN === "schedule" && CAL_PANEL_SCHEDULE_DATES.has(dateStr)) cls += " has-schedule"
     cells += '<div class="' + cls + '" onclick="goToDateFromCalendarPanel(' + attrSafe(dateStr) + ')">' + d + '</div>'
   }
   el("cal-panel-area").innerHTML = '<div class="mc-grid">' + cells + '</div>'
@@ -1003,19 +1037,34 @@ function renderScheduleList() {
   const listEl = el("schedule-list-area")
   const list = filteredSchedules()
   if (list.length === 0) {
-    listEl.innerHTML = '<div class="empty">해당 날짜에 일정이 없어요</div>'
+    listEl.innerHTML = '<div class="empty">해당 기간에 일정이 없어요</div>'
     return
   }
-  listEl.innerHTML = list.map(function (s) {
-    const selected = SELECTED_SCHEDULE_ID === s.id
-    return '<div class="schedule-item' + (selected ? " selected" : "") + '" onclick="selectSchedule(' + attrSafe(s.id) + ')">' +
-      '<div class="schedule-item-title-row"><span class="schedule-item-title">' + esc(s.name) + '</span></div>' +
-      '<div class="schedule-item-badges">' +
-        (s.category ? '<span class="badge ' + s.categoryColor + '">' + esc(s.category) + '</span>' : "") +
-        (s.status ? '<span class="badge gray">' + esc(s.status) + '</span>' : "") +
-        (s.teacherNames || []).map(function (n) { return '<span class="badge blue">' + esc(n) + '</span>' }).join("") +
-        (s.classNames || []).map(function (n) { return '<span class="badge gray">' + esc(n) + '</span>' }).join("") +
-      '</div>' +
+  // 선택한 날짜 기준 향후 7일을 날짜별로 묶어서, 학습 타임라인처럼 날짜 라벨은 박스 바깥에 표시합니다.
+  const groups = []
+  const groupByDate = {}
+  list.forEach(function (s) {
+    const dateKey = s.date ? s.date.slice(0, 10) : "-"
+    if (!groupByDate[dateKey]) {
+      groupByDate[dateKey] = []
+      groups.push(dateKey)
+    }
+    groupByDate[dateKey].push(s)
+  })
+  groups.sort()
+  listEl.innerHTML = groups.map(function (dateKey) {
+    const items = groupByDate[dateKey]
+    const rows = items.map(function (s) {
+      const selected = SELECTED_SCHEDULE_ID === s.id
+      const who = (s.teacherNames || []).join(", ")
+      return '<div class="schedule-item-mini' + (selected ? " selected" : "") + '" onclick="selectSchedule(' + attrSafe(s.id) + ')">' +
+        (s.category ? '<span class="cat badge ' + s.categoryColor + '">' + esc(s.category) + '</span>' : "") +
+        (who ? '<span class="who">' + esc(who) + '</span>' : "") +
+      '</div>'
+    }).join("")
+    return '<div class="schedule-date-group">' +
+      '<div class="schedule-date-label">' + esc(dateKey === "-" ? "날짜 없음" : formatDateLabel(dateKey)) + '</div>' +
+      '<div class="schedule-date-box">' + rows + '</div>' +
     '</div>'
   }).join("")
 }
