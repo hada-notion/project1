@@ -209,6 +209,7 @@
     text-decoration: none;
     flex: 1;
   }
+  a { color: inherit; }
   .list li a:hover { text-decoration: underline; }
   .badge {
     font-size: 11px;
@@ -318,9 +319,9 @@
 .cat-dot.blue { background:var(--blue); }
 .cat-dot.red { background:var(--red); }
 .cat-dot.gray { background:var(--muted); }
-.schedule-item { border:1px solid var(--border); border-radius:10px; background:#fbfbfa; padding:10px 12px; cursor:pointer; display:flex; flex-direction:column; gap:4px; }
+.schedule-item { border:none; border-bottom:1px solid var(--border); border-radius:0; background:transparent; padding:10px 12px; cursor:pointer; display:flex; flex-direction:column; gap:4px; }
 .schedule-item:hover { background:#f2f6fc; }
-.schedule-item.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.schedule-item.selected { background:#eef4fd; }
 .schedule-item-title-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .schedule-item-title { font-size:13.5px; font-weight:600; }
 .schedule-item-badges { display:flex; gap:6px; flex-wrap:wrap; }
@@ -341,8 +342,8 @@
 .cal-icon { font-size:14px; }
 .date-nav-btn { border:none; background:#f0f0ee; width:28px; height:28px; border-radius:6px; cursor:pointer; font-size:14px; }
 .class-list-area { display:flex; flex-direction:column; gap:8px; }
-.class-item { border:1px solid var(--border); border-radius:10px; background:#fbfbfa; overflow:hidden; }
-.class-item.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.class-item { border:none; border-bottom:1px solid var(--border); border-radius:0; background:transparent; overflow:hidden; }
+.class-item.selected { background:#eef4fd; }
 .class-item-head { padding:10px 12px; cursor:pointer; display:flex; flex-direction:column; gap:4px; }
 .class-item-head:hover { background:#f2f6fc; }
 .class-item-title-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
@@ -370,11 +371,43 @@
 .right-tabs { display:flex; gap:6px; border-bottom:1px solid var(--border); margin-bottom:16px; }
 .right-tab { border:none; background:none; padding:8px 12px; font-size:13px; cursor:pointer; color:var(--muted); font-family:inherit; border-bottom:2px solid transparent; }
 .right-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight:600; }
-.record-card { border:1px solid var(--border); border-radius:10px; padding:12px 14px; margin-bottom:10px; background:#fbfbfa; }
+.record-card { border:none; border-bottom:1px solid var(--border); border-radius:0; padding:12px 14px; margin-bottom:0; background:transparent; }
+.record-card a, .activity-row a { color: var(--text); text-decoration:none; }
+.record-card a:hover, .activity-row a:hover { text-decoration:underline; }
 .record-card .title { font-weight:600; font-size:13.5px; margin-bottom:4px; }
 .record-card .meta { font-size:12px; color:var(--muted); }
-.activity-row { display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-radius:8px; background:#fff; border:1px solid var(--border); margin-bottom:6px; font-size:13px; }
-.student-row { display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-radius:8px; background:#fff; border:1px solid var(--border); margin-bottom:6px; font-size:13px; }
+.activity-row { display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-radius:0; background:transparent; border:none; border-bottom:1px solid var(--border); margin-bottom:0; font-size:13px; }
+.student-row { display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-radius:0; background:transparent; border:none; border-bottom:1px solid var(--border); margin-bottom:0; font-size:13px; }
+.student-row .stu-name { display:flex; align-items:center; gap:6px; }
+.student-row .stu-view { font-size:11px; color:var(--muted); text-decoration:none; margin-left:6px; }
+.student-row .stu-view:hover { text-decoration:underline; }
+.search-row { display:flex; }
+.search-box { flex:1; border:1px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family:inherit; background:#fff; }
+.search-box:focus { outline:none; border-color:var(--accent); }
+.teacher-badge { font-size:11px; padding:2px 7px; border-radius:999px; white-space:nowrap; }
+.teacher-badge.tb-gray { background:#f1f1ef; color:#5a5a57; }
+.teacher-badge.tb-brown { background:#efe4dd; color:#8c5b3f; }
+.teacher-badge.tb-orange { background:#faebdd; color:#a86227; }
+.teacher-badge.tb-yellow { background:#fbf3db; color:#9b7d1f; }
+.teacher-badge.tb-green { background:#ddedea; color:#3a7566; }
+.teacher-badge.tb-blue { background:#ddebf1; color:#3072a3; }
+.teacher-badge.tb-purple { background:#eae4f2; color:#6b4d99; }
+.teacher-badge.tb-pink { background:#f4dfeb; color:#a3467c; }
+.teacher-badge.tb-red { background:#fbe4e4; color:#af4141; }
+.rate-badge { font-size:11px; padding:2px 7px; border-radius:999px; white-space:nowrap; font-weight:600; }
+.rate-badge.tone-red { background:#fdeaea; color:#e04b4b; }
+.rate-badge.tone-orange { background:#fff1e0; color:#d9822b; }
+.rate-badge.tone-yellow { background:#fff9db; color:#b9971d; }
+.rate-badge.tone-green { background:#e6f7ee; color:#1e9e5c; }
+.rate-badge.tone-blue { background:#eaf1fd; color:#2f6fd9; }
+.mini-cal .mc-grid { display:grid; grid-template-columns: repeat(7, 1fr); gap:2px; }
+.mini-cal .mc-dow { text-align:center; font-size:11px; color:var(--muted); padding:4px 0; }
+.mini-cal .mc-day { position:relative; text-align:center; font-size:12.5px; padding:7px 0; border-radius:50%; cursor:pointer; color:var(--text); }
+.mini-cal .mc-day:hover { background:#f0f0ee; }
+.mini-cal .mc-day.empty { visibility:hidden; cursor:default; }
+.mini-cal .mc-day.today { color:var(--accent); font-weight:700; }
+.mini-cal .mc-day.selected { background:var(--accent); color:#fff; font-weight:700; }
+.mini-cal .mc-day.selected:hover { background:var(--accent); }
 </style>
 </head>
 <body>
@@ -421,7 +454,7 @@
   </div>
   <div class="md-3col">
     <div class="calendar-panel" id="calendar-panel">
-      <div class="calendar-panel-inner">
+      <div class="calendar-panel-inner mini-cal">
         <div class="cal-panel-month-nav">
           <button class="date-nav-btn" onclick="shiftCalendarMonth(-1)">‹</button>
           <span id="cal-panel-month-label">-</span>
@@ -434,12 +467,9 @@
       <div class="md-date-nav md-date-nav-clickable" id="date-nav-clickable" onclick="toggleCalendarPanel()" title="날짜를 탭하면 캘린더가 열려요">
         <span class="cal-icon">📅</span><span class="date-nav-label" id="date-nav-label">-</span>
       </div>
-      <div class="md-filter-row">
-        <button class="filter-tab active" data-filter="all" onclick="setFilterMode('all')">전체</button>
-        <button class="filter-tab" data-filter="teacher" onclick="setFilterMode('teacher')">강사</button>
-        <button class="filter-tab" data-filter="class" onclick="setFilterMode('class')">클래스</button>
+      <div class="search-row">
+        <input type="text" id="search-input" class="search-box" placeholder="🔍 검색 (수업명 · 강사 · 학생 등)" oninput="onSearchInput(this.value)">
       </div>
-      <div class="md-filter-options" id="filter-options"></div>
       <div id="status-area"></div>
       <div id="class-list-area" class="class-list-area"></div>
       <div id="schedule-list-area" class="schedule-list-area" style="display:none"></div>
@@ -633,8 +663,7 @@ function kstToday() {
 }
 
 let DOMAIN = "class"
-let FILTER_MODE = "all"
-let FILTER_VALUE = null
+let SEARCH_TERM = ""
 let CURRENT_DATE = kstToday()
 let CLASSES = []
 let SELECTED_CLASS_ID = null
@@ -657,10 +686,10 @@ function formatDateLabel(dateStr) {
 function setDomain(domain) {
   if (DOMAIN === domain) return
   DOMAIN = domain
-  FILTER_MODE = "all"
-  FILTER_VALUE = null
+  SEARCH_TERM = ""
+  const searchInput = el("search-input")
+  if (searchInput) searchInput.value = ""
   document.querySelectorAll(".domain-tab").forEach(function (b) { b.classList.toggle("active", b.dataset.domain === domain) })
-  document.querySelectorAll(".filter-tab").forEach(function (b) { b.classList.toggle("active", b.dataset.filter === "all") })
   el("class-list-area").style.display = domain === "class" ? "flex" : "none"
   el("schedule-list-area").style.display = domain === "schedule" ? "flex" : "none"
   el("right-tabs").style.display = domain === "class" ? "flex" : "none"
@@ -669,7 +698,6 @@ function setDomain(domain) {
   el("md-right-empty").textContent = domain === "class" ? "👈 왼쪽에서 수업을 선택하면 상세정보가 표시돼요" : "👈 왼쪽에서 일정을 선택하면 상세정보가 표시돼요"
   SELECTED_CLASS_ID = null
   SELECTED_SCHEDULE_ID = null
-  renderFilterOptions()
   loadCenterList()
   if (CALENDAR_OPEN) loadCalendarPanel()
 }
@@ -694,87 +722,38 @@ function shiftCalendarMonth(delta) {
 
 async function loadCalendarPanel() {
   el("cal-panel-month-label").textContent = CAL_PANEL_MONTH.replace("-", ".")
-  const url = (DOMAIN === "class" ? GET_CLASSES_URL : GET_SCHEDULES_URL) + "?month=" + CAL_PANEL_MONTH
-  try {
-    const res = await fetch(url, {
-      headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
-    })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
-    CAL_PANEL_ITEMS = (DOMAIN === "class" ? data.classes : data.schedules) || []
-    renderCalPanel()
-  } catch (err) {
-    el("cal-panel-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '</div>'
-  }
+  renderCalPanel()
 }
 
 function renderCalPanel() {
-  const byDay = {}
-  CAL_PANEL_ITEMS.forEach(function (item) {
-    if (!item.date) return
-    const day = item.date.slice(0, 10)
-    if (!byDay[day]) byDay[day] = []
-    byDay[day].push(item)
-  })
   const parts = CAL_PANEL_MONTH.split("-").map(Number)
   const y = parts[0], m = parts[1]
   const first = new Date(y, m - 1, 1)
   const startWeekday = first.getDay()
   const daysInMonth = new Date(y, m, 0).getDate()
   const today = kstToday()
-  let cells = ""
-  for (let i = 0; i < startWeekday; i++) cells += '<div class="calendar-day empty"></div>'
+  const dows = ["일", "월", "화", "수", "목", "금", "토"]
+  let cells = dows.map(function (d) { return '<div class="mc-dow">' + d + '</div>' }).join("")
+  for (let i = 0; i < startWeekday; i++) cells += '<div class="mc-day empty"></div>'
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = CAL_PANEL_MONTH + "-" + String(d).padStart(2, "0")
-    const items = byDay[dateStr] || []
-    let extra = ""
-    if (DOMAIN === "class") {
-      extra = items.length ? '<div class="cnt">' + items.length + '건</div>' : ""
-    } else {
-      const colors = Array.from(new Set(items.map(function (it) { return it.categoryColor }))).slice(0, 6)
-      extra = colors.length ? '<div class="cat-dot-row">' + colors.map(function (col) { return '<span class="cat-dot ' + col + '"></span>' }).join("") + '</div>' : ""
-    }
-    cells += '<div class="calendar-day' + (dateStr === today ? " today" : "") + '" onclick="goToDateFromCalendarPanel(' + attrSafe(dateStr) + ')">' +
-      '<div class="num">' + d + '</div>' + extra + '</div>'
+    let cls = "mc-day"
+    if (dateStr === today) cls += " today"
+    if (dateStr === CURRENT_DATE) cls += " selected"
+    cells += '<div class="' + cls + '" onclick="goToDateFromCalendarPanel(' + attrSafe(dateStr) + ')">' + d + '</div>'
   }
-  el("cal-panel-area").innerHTML = '<div class="calendar-grid">' + cells + '</div>'
+  el("cal-panel-area").innerHTML = '<div class="mc-grid">' + cells + '</div>'
 }
 
 function goToDateFromCalendarPanel(dateStr) {
   CURRENT_DATE = dateStr
+  if (CALENDAR_OPEN) renderCalPanel()
   loadCenterList()
 }
 
-// ---------------- 필터(전체/강사/클래스) ----------------
-function setFilterMode(mode) {
-  FILTER_MODE = mode
-  FILTER_VALUE = null
-  document.querySelectorAll(".filter-tab").forEach(function (b) { b.classList.toggle("active", b.dataset.filter === mode) })
-  renderFilterOptions()
-  renderCenterList()
-}
-
-function renderFilterOptions() {
-  const optArea = el("filter-options")
-  if (FILTER_MODE === "all") { optArea.innerHTML = ""; return }
-  let names
-  if (DOMAIN === "class") {
-    const key = FILTER_MODE === "teacher" ? "teacherName" : "className"
-    names = Array.from(new Set(CLASSES.map(function (c) { return c[key] }).filter(Boolean)))
-  } else {
-    const key = FILTER_MODE === "teacher" ? "teacherNames" : "classNames"
-    const all = SCHEDULES.flatMap(function (s) { return s[key] || [] })
-    names = Array.from(new Set(all.filter(Boolean)))
-  }
-  if (names.length === 0) { optArea.innerHTML = '<span class="empty">해당 항목이 없어요</span>'; return }
-  optArea.innerHTML = names.map(function (name) {
-    return '<button class="filter-option' + (FILTER_VALUE === name ? " active" : "") + '" onclick="selectFilterValue(' + attrSafe(name) + ')">' + esc(name) + '</button>'
-  }).join("")
-}
-
-function selectFilterValue(name) {
-  FILTER_VALUE = (FILTER_VALUE === name) ? null : name
-  renderFilterOptions()
+// ---------------- 검색(만능 검색창) ----------------
+function onSearchInput(term) {
+  SEARCH_TERM = (term || "").trim().toLowerCase()
   renderCenterList()
 }
 
@@ -807,7 +786,6 @@ async function loadClassList(dateStr) {
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
     CLASSES = data.classes || []
-    renderFilterOptions()
     renderClassList()
     setStatus(null)
   } catch (err) {
@@ -816,9 +794,44 @@ async function loadClassList(dateStr) {
 }
 
 function filteredClasses() {
-  if (FILTER_MODE === "all" || !FILTER_VALUE) return CLASSES
-  const key = FILTER_MODE === "teacher" ? "teacherName" : "className"
-  return CLASSES.filter(function (c) { return c[key] === FILTER_VALUE })
+  if (!SEARCH_TERM) return CLASSES
+  return CLASSES.filter(function (c) {
+    const hay = [c.className, c.teacherName, c.method, c.studySummary, c.assignmentSummary, c.evaluationSummary]
+      .concat((c.students || []).map(function (s) { return s.name }))
+      .filter(Boolean).join(" ").toLowerCase()
+    return hay.indexOf(SEARCH_TERM) >= 0
+  })
+}
+
+function classEmoji(name) {
+  const n = String(name || "")
+  if (n.indexOf("고") >= 0) return "🎓"
+  if (n.indexOf("중") >= 0) return "📘"
+  if (n.indexOf("초") >= 0) return "🐣"
+  return "📚"
+}
+
+function teacherColorClass(name) {
+  const palette = ["tb-gray", "tb-brown", "tb-orange", "tb-yellow", "tb-green", "tb-blue", "tb-purple", "tb-pink", "tb-red"]
+  const s = String(name || "")
+  let hash = 0
+  for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0
+  return palette[hash % palette.length]
+}
+
+function parseAttendanceRate(raw) {
+  if (!raw) return null
+  const m = String(raw).match(/(\d+)\s*%\s*(\([^)]*\))?/)
+  if (!m) return null
+  return { pct: Number(m[1]), text: "출석률 " + m[1] + "%" + (m[2] ? " " + m[2] : "") }
+}
+
+function attendanceRateTone(pct) {
+  if (pct >= 100) return "tone-blue"
+  if (pct >= 90) return "tone-green"
+  if (pct >= 70) return "tone-yellow"
+  if (pct >= 50) return "tone-orange"
+  return "tone-red"
 }
 
 function renderClassList() {
@@ -831,13 +844,14 @@ function renderClassList() {
   listEl.innerHTML = list.map(function (c) {
     const expanded = EXPANDED_CLASS_ID === c.id
     const selected = SELECTED_CLASS_ID === c.id
+    const rate = parseAttendanceRate(c.attendanceRate)
     return '<div class="class-item' + (selected ? " selected" : "") + '" data-id="' + c.id + '">' +
       '<div class="class-item-head" onclick="onClassClick(' + attrSafe(c.id) + ')">' +
-        '<div class="class-item-title-row"><span class="class-item-title">' + esc(c.className) + '</span><span class="class-item-time">' + esc(c.timeRange || "") + '</span></div>' +
+        '<div class="class-item-title-row"><span class="class-item-title">' + classEmoji(c.className) + ' ' + esc(c.className) + '</span><span class="class-item-time">' + esc(c.timeRange || "") + '</span></div>' +
         '<div class="class-item-badges">' +
-          (c.teacherName ? '<span class="badge gray">' + esc(c.teacherName) + '</span>' : "") +
+          (c.teacherName ? '<span class="teacher-badge ' + teacherColorClass(c.teacherName) + '">' + esc(c.teacherName) + '</span>' : "") +
           (c.method ? '<span class="badge blue">' + esc(c.method) + '</span>' : "") +
-          (c.attendanceRate ? '<span class="badge green">출석 ' + esc(c.attendanceRate) + '</span>' : "") +
+          (rate ? '<span class="rate-badge ' + attendanceRateTone(rate.pct) + '">' + esc(rate.text) + '</span>' : "") +
         '</div>' +
       '</div>' +
       '<div class="class-item-body' + (expanded ? " show" : "") + '">' +
@@ -897,7 +911,8 @@ function renderStudentsTab(c, body) {
   body.innerHTML = students.map(function (s, i) {
     const cls = statusBadgeClass[s.status] || "gray"
     const canSend = !!s.attendanceId
-    return '<div class="student-row"><span><a href="' + s.url + '" target="_blank">' + esc(s.name) + '</a> ' +
+    return '<div class="student-row"><span class="stu-name">🧑‍🎓 ' + esc(s.name) +
+      (s.url ? ' <a class="stu-view" href="' + s.url + '" target="_blank">노션에서 보기 ↗</a>' : "") + ' ' +
       (s.status ? '<span class="badge ' + cls + '">' + s.status + '</span>' : "") + '</span>' +
       '<button class="send-btn" id="stu-send-' + i + '" onclick="sendStudentReport(' + i + ')" ' + (canSend ? "" : "disabled") + '>📩 전송</button></div>'
   }).join("")
@@ -962,7 +977,6 @@ async function loadScheduleList(dateStr) {
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
     SCHEDULES = data.schedules || []
-    renderFilterOptions()
     renderScheduleList()
     setStatus(null)
   } catch (err) {
@@ -971,9 +985,13 @@ async function loadScheduleList(dateStr) {
 }
 
 function filteredSchedules() {
-  if (FILTER_MODE === "all" || !FILTER_VALUE) return SCHEDULES
-  const key = FILTER_MODE === "teacher" ? "teacherNames" : "classNames"
-  return SCHEDULES.filter(function (s) { return (s[key] || []).includes(FILTER_VALUE) })
+  if (!SEARCH_TERM) return SCHEDULES
+  return SCHEDULES.filter(function (s) {
+    const hay = [s.name, s.category, s.status, s.memo, s.relatedText]
+      .concat(s.teacherNames || [], s.classNames || [], s.tags || [])
+      .filter(Boolean).join(" ").toLowerCase()
+    return hay.indexOf(SEARCH_TERM) >= 0
+  })
 }
 
 function findSchedule(id) { return SCHEDULES.find(function (s) { return s.id === id }) }
