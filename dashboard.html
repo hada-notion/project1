@@ -606,6 +606,7 @@ const statusBadgeClass = {
 }
 
 function el(id) { return document.getElementById(id) }
+function attrSafe(value) { return JSON.stringify(value).replace(/"/g, "&quot;").replace(/'/g, "&#39;") }
 
 function esc(s) {
   if (s === null || s === undefined) return ""
@@ -733,7 +734,7 @@ function renderCalPanel() {
       const colors = Array.from(new Set(items.map(function (it) { return it.categoryColor }))).slice(0, 6)
       extra = colors.length ? '<div class="cat-dot-row">' + colors.map(function (col) { return '<span class="cat-dot ' + col + '"></span>' }).join("") + '</div>' : ""
     }
-    cells += '<div class="calendar-day' + (dateStr === today ? " today" : "") + '" onclick="goToDateFromCalendarPanel(' + JSON.stringify(dateStr) + ')">' +
+    cells += '<div class="calendar-day' + (dateStr === today ? " today" : "") + '" onclick="goToDateFromCalendarPanel(' + attrSafe(dateStr) + ')">' +
       '<div class="num">' + d + '</div>' + extra + '</div>'
   }
   el("cal-panel-area").innerHTML = '<div class="calendar-grid">' + cells + '</div>'
@@ -767,7 +768,7 @@ function renderFilterOptions() {
   }
   if (names.length === 0) { optArea.innerHTML = '<span class="empty">해당 항목이 없어요</span>'; return }
   optArea.innerHTML = names.map(function (name) {
-    return '<button class="filter-option' + (FILTER_VALUE === name ? " active" : "") + '" onclick="selectFilterValue(' + JSON.stringify(name) + ')">' + esc(name) + '</button>'
+    return '<button class="filter-option' + (FILTER_VALUE === name ? " active" : "") + '" onclick="selectFilterValue(' + attrSafe(name) + ')">' + esc(name) + '</button>'
   }).join("")
 }
 
@@ -831,7 +832,7 @@ function renderClassList() {
     const expanded = EXPANDED_CLASS_ID === c.id
     const selected = SELECTED_CLASS_ID === c.id
     return '<div class="class-item' + (selected ? " selected" : "") + '" data-id="' + c.id + '">' +
-      '<div class="class-item-head" onclick="onClassClick(' + JSON.stringify(c.id) + ')">' +
+      '<div class="class-item-head" onclick="onClassClick(' + attrSafe(c.id) + ')">' +
         '<div class="class-item-title-row"><span class="class-item-title">' + esc(c.className) + '</span><span class="class-item-time">' + esc(c.timeRange || "") + '</span></div>' +
         '<div class="class-item-badges">' +
           (c.teacherName ? '<span class="badge gray">' + esc(c.teacherName) + '</span>' : "") +
@@ -844,7 +845,7 @@ function renderClassList() {
         '<div class="row"><b>학습 내용</b>' + esc(c.studySummary || "-") + '</div>' +
         '<div class="row"><b>과제 안내</b>' + esc(c.assignmentSummary || "-") + '</div>' +
         '<div class="row"><b>평가 결과</b>' + esc(c.evaluationSummary || "-") + '</div>' +
-        '<button class="bulk-send-btn" onclick="sendBulkForClass(' + JSON.stringify(c.id) + ')">📩 보고서 일괄 전송</button>' +
+        '<button class="bulk-send-btn" onclick="sendBulkForClass(' + attrSafe(c.id) + ')">📩 보고서 일괄 전송</button>' +
       '</div>' +
     '</div>'
   }).join("")
@@ -986,7 +987,7 @@ function renderScheduleList() {
   }
   listEl.innerHTML = list.map(function (s) {
     const selected = SELECTED_SCHEDULE_ID === s.id
-    return '<div class="schedule-item' + (selected ? " selected" : "") + '" onclick="selectSchedule(' + JSON.stringify(s.id) + ')">' +
+    return '<div class="schedule-item' + (selected ? " selected" : "") + '" onclick="selectSchedule(' + attrSafe(s.id) + ')">' +
       '<div class="schedule-item-title-row"><span class="schedule-item-title">' + esc(s.name) + '</span></div>' +
       '<div class="schedule-item-badges">' +
         (s.category ? '<span class="badge ' + s.categoryColor + '">' + esc(s.category) + '</span>' : "") +
