@@ -359,7 +359,7 @@
 .class-item-badges { display:flex; gap:6px; flex-wrap:wrap; }
 .class-item-body { display:none; padding:0 12px 12px; border-top:1px dashed var(--border); font-size:12.5px; color:var(--text); }
 .class-item-body.show { display:block; }
-.class-item-body .row { margin: 8px 0; }
+.class-item-body .row { margin: 8px 0; white-space: pre-wrap; }
 .class-item-body .row b { color: var(--muted); font-weight:600; font-size:11px; display:block; margin-bottom:2px; }
 .calendar-area { display:flex; flex-direction:column; gap:6px; }
 .calendar-grid { display:grid; grid-template-columns: repeat(7, 1fr); gap:4px; }
@@ -382,7 +382,7 @@
 .record-card a, .activity-row a { color: var(--text); text-decoration:none; }
 .record-card a:hover, .activity-row a:hover { text-decoration:underline; }
 .record-card .title { font-weight:600; font-size:13.5px; margin-bottom:4px; }
-.record-card .meta { font-size:12px; color:var(--muted); }
+.record-card .meta { font-size:12px; color:var(--muted); white-space: pre-wrap; }
 .activity-row { display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-radius:0; background:transparent; border:none; border-bottom:1px solid var(--border); margin-bottom:0; font-size:13px; }
 .student-item { border-bottom:1px solid var(--border); }
 .student-row { display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-radius:0; background:transparent; border:none; border-bottom:none; margin-bottom:0; font-size:13px; cursor:pointer; }
@@ -932,44 +932,15 @@ function renderStudentsTab(c, body) {
   }).join("")
 }
 
-async function fetchClassDetail(classId) {
-  if (CLASS_DETAIL_CACHE[classId]) return CLASS_DETAIL_CACHE[classId]
-  const res = await fetch(GET_CLASS_DETAIL_URL, {
-    method: "POST",
-    headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "Content-Type": "application/json", "x-admin-key": getAdminKey() || "" },
-    body: JSON.stringify({ classSessionId: classId }),
-  })
-  const data = await res.json()
-  if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
-  CLASS_DETAIL_CACHE[classId] = data
-  return data
-}
-
-async function renderTaskTab(c, body, kind) {
-  body.innerHTML = '<div class="empty">불러오는 ���...</div>'
-  try {
-    const data = await fetchClassDetail(c.id)
-    const group = kind === "assignment" ? data.assignments : data.evaluations
-    const records = (group && group.records) || []
-    const activities = (group && group.activities) || []
-    let html = ""
-    if (records.length === 0) {
-      html += '<div class="empty">등록된 ' + (kind === "assignment" ? "과제" : "평가") + ' 설명이 없어요</div>'
-    } else {
-      html += records.map(function (r) {
-        return '<div class="record-card"><div class="title"><a href="' + r.url + '" target="_blank">' + esc(r.title) + '</a></div>' +
-          '<div class="meta">교재: ' + esc(r.book) + (r.range ? " · 범위: " + esc(r.range) : "") + '</div>' +
-          (r.content ? '<div class="meta" style="margin-top:4px">' + esc(r.content) + '</div>' : "") +
-          (kind === "assignment" ? '<div class="meta" style="margin-top:4px">• 마감일: ' + esc(r.dueDate ? formatDateLabel(r.dueDate) : "미정") + '</div>' : "") +
-          '</div>'
-      }).join("")
-    }
-    // 과제/평가 탭은 이제 학생별 제출 체크 목록을 따로 보여주지 않고, 오늘 출제되는 설명(범위·내용·단원 등)만 보여줍니다.
-    // 학생별 과제 이행/평가 점수는 "학생" 탭에서 확인합니다.
-    body.innerHTML = html
-  } catch (err) {
-    body.innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '</div>'
-  }
+// 과제/평가 탭은 수업(학원) DB의 "과제 안내"/"평가 결과" 수식 값을 그대로 보여줍니다.
+// 이 값은 클래스 목록을 불러올 때 이미 함께 계산되어 있으므로, 탭을 열 때마다
+// 별도로 과제 상세 페이지를 다시 불러올 필요가 없습니다(더 빠르게 표시됨).
+function renderTaskTab(c, body, kind) {
+  const summary = kind === "assignment" ? c.assignmentSummary : c.evaluationSummary
+  const emptyLabel = kind === "assignment" ? "과제" : "평가"
+  body.innerHTML = summary
+    ? '<div class="record-card"><div class="meta">' + esc(summary) + '</div></div>'
+    : '<div class="empty">등록된 ' + emptyLabel + ' 설명이 없어요</div>'
 }
 
 // ---------------- 일정 목록(중앙) ----------------
