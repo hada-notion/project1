@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>📋 하다 학습 리포트</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%F0%9F%93%8B%3C/text%3E%3C/svg%3E">
+<title>하다 학습 리포트</title>
 <style>
 * { box-sizing: border-box; }
 :root {
@@ -823,7 +824,7 @@ async function loadReportFromServer() {
     if (!row) throw new Error("no data")
     STUDENT = mapReportToStudent(row)
     if (STUDENT.student_name) {
-      document.title = `📋 ${STUDENT.student_name} 학습 리포트`
+      document.title = `${STUDENT.student_name} 학습 리포트`
     }
   } catch (e) {
     DATA_ERROR = "데이터를 불러오는 중 문제가 생겼어요. 잠시 후 다시 시도해주세요"
