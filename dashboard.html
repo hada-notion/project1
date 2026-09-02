@@ -334,7 +334,8 @@
 .schedule-item-mini:hover { background:#f2f6fc; }
 .schedule-item-mini.selected { background:#eef4fd; }
 .schedule-item-mini .cat { font-size:12.5px; font-weight:600; flex-shrink:0; }
-.schedule-item-mini .who { font-size:12.5px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.schedule-item-mini .title { font-size:13px; font-weight:600; color:var(--text); flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.schedule-item-mini .who { font-size:12.5px; color:var(--muted); flex-shrink:0; max-width:35%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .mc-day.has-schedule::after { content:""; position:absolute; bottom:2px; left:50%; transform:translateX(-50%); width:4px; height:4px; border-radius:50%; background:var(--accent); }
 .mc-day.selected.has-schedule::after { background:#fff; }
 .schedule-detail-field { margin: 12px 0; }
@@ -1059,6 +1060,7 @@ function renderScheduleList() {
       const who = (s.teacherNames || []).join(", ")
       return '<div class="schedule-item-mini' + (selected ? " selected" : "") + '" onclick="selectSchedule(' + attrSafe(s.id) + ')">' +
         (s.category ? '<span class="cat badge ' + s.categoryColor + '">' + esc(s.category) + '</span>' : "") +
+        '<span class="title">' + esc(s.name) + '</span>' +
         (who ? '<span class="who">' + esc(who) + '</span>' : "") +
       '</div>'
     }).join("")
