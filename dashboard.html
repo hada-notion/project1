@@ -456,11 +456,10 @@
 .summary-two-col .info-card.half { flex:1; margin-bottom:0; }
 .stat-row { display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--text); padding:3px 0; }
 .stat-row b { font-weight:700; }
-.stat-dot { display:inline-block; width:8px; height:8px; border-radius:50%; }
-.stat-dot.green { background:var(--green); }
-.stat-dot.blue { background:var(--blue); }
-.stat-dot.red { background:var(--red); }
-.stat-dot.orange { background:#d9822b; }
+.stat-text.green { color:var(--green); }
+.stat-text.blue { color:var(--blue); }
+.stat-text.red { color:var(--red); }
+.stat-text.orange { color:#d9822b; }
 
 @media (max-width: 900px) {
   .md-3col { flex-direction: column; }
@@ -1053,14 +1052,14 @@ function selectClass(id) {
   el("right-summary-body").innerHTML =
     '<div class="summary-two-col">' +
       '<div class="info-card half"><h3>✅ 출석 현황</h3>' +
-        '<div class="stat-row"><span class="stat-dot green"></span>등원 <b>' + stat.attend + '</b>명</div>' +
-        '<div class="stat-row"><span class="stat-dot blue"></span>보강 <b>' + stat.makeup + '</b>명</div>' +
-        '<div class="stat-row"><span class="stat-dot red"></span>결석 <b>' + stat.absent + '</b>명</div>' +
+        '<div class="stat-row stat-text green">등원 <b>' + stat.attend + '</b>명</div>' +
+        '<div class="stat-row stat-text blue">보강 <b>' + stat.makeup + '</b>명</div>' +
+        '<div class="stat-row stat-text red">결석 <b>' + stat.absent + '</b>명</div>' +
       '</div>' +
       '<div class="info-card half"><h3>📝 과제 현황</h3>' +
-        '<div class="stat-row"><span class="stat-dot green"></span>완료 <b>' + stat.done + '</b>명</div>' +
-        '<div class="stat-row"><span class="stat-dot orange"></span>일부완료 <b>' + stat.partial + '</b>명</div>' +
-        '<div class="stat-row"><span class="stat-dot red"></span>미완료 <b>' + stat.none + '</b>명</div>' +
+        '<div class="stat-row stat-text green">완료 <b>' + stat.done + '</b>명</div>' +
+        '<div class="stat-row stat-text orange">일부완료 <b>' + stat.partial + '</b>명</div>' +
+        '<div class="stat-row stat-text red">미완료 <b>' + stat.none + '</b>명</div>' +
       '</div>' +
     '</div>' +
     '<div class="info-card"><h3>📖 학습 내용</h3><div class="info-content' + (c.studySummary ? '' : ' empty') + '">' + esc(c.studySummary || "기록 없음") + '</div></div>' +
@@ -1161,7 +1160,7 @@ async function renderTaskTab(c, body, kind) {
     const summary = c.evaluationSummary
     body.innerHTML = summary
       ? '<div class="record-card"><div class="meta">' + esc(summary) + '</div></div>'
-      : '<div class="empty">등록된 평가 설명이 없어요</div>'
+      : '<div class="empty">등록된 평가 정보가 없어요</div>'
     return
   }
   body.innerHTML = '<div class="empty">불러오는 중...</div>'
