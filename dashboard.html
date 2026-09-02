@@ -316,10 +316,18 @@
 .domain-tab.active { background:var(--accent); color:#fff; border-color:var(--accent); }
 .md-3col { flex:1; display:flex; min-height:0; }
 .calendar-toggle-btn { border:1px solid var(--border); background:#fff; width:28px; height:28px; border-radius:6px; cursor:pointer; font-size:13px; flex-shrink:0; }
-.calendar-panel { width:0; flex-shrink:0; overflow:hidden; background:var(--panel); border-right:1px solid var(--border); transition: width 0.18s ease; }
+.calendar-panel { width:0; flex-shrink:0; overflow:hidden; background:var(--bg); border-right:1px solid var(--border); transition: width 0.18s ease; }
 .calendar-panel.open { width:300px; }
 .calendar-panel-inner { width:300px; padding:16px; display:flex; flex-direction:column; gap:10px; }
-.cal-panel-month-nav { display:flex; align-items:center; justify-content:center; gap:12px; font-size:14px; font-weight:600; }
+.calendar-panel-inner.mini-cal { background:#fff; border-radius:14px; padding:16px; box-shadow:0 1px 4px rgba(0,0,0,0.06); margin:14px; width:calc(300px - 28px); }
+.cal-panel-month-nav { display:flex; align-items:center; justify-content:space-between; margin-bottom:2px; }
+.cal-panel-nav-btn { background:#f0eefc; border:none; width:30px; height:30px; border-radius:50%; color:#6c5ce7; font-size:15px; font-weight:700; cursor:pointer; flex-shrink:0; }
+.cal-panel-nav-btn:hover { background:#ece9ff; }
+.cal-panel-month-title { font-size:15px; font-weight:700; color:#333; }
+.cal-panel-nav-right { display:flex; align-items:center; gap:6px; }
+.cal-panel-today-btn { background:#f0eefc; border:none; color:#6c5ce7; font-size:11px; font-weight:700; padding:5px 10px; border-radius:999px; cursor:pointer; }
+.cal-panel-today-btn:hover { background:#ece9ff; }
+.cal-panel-hint { font-size:11px; color:#bbb; text-align:center; margin-top:6px; }
 .cat-dot-row { display:flex; gap:2px; flex-wrap:wrap; justify-content:center; margin-top:2px; }
 .cat-dot { width:6px; height:6px; border-radius:50%; display:inline-block; }
 .cat-dot.green { background:var(--green); }
@@ -412,25 +420,26 @@
 .rate-badge.tone-yellow { background:#fff9db; color:#b9971d; }
 .rate-badge.tone-green { background:#e6f7ee; color:#1e9e5c; }
 .rate-badge.tone-blue { background:#eaf1fd; color:#2f6fd9; }
-.mini-cal .mc-grid { display:grid; grid-template-columns: repeat(7, 1fr); gap:2px; }
-.mini-cal .mc-dow { text-align:center; font-size:11px; color:var(--muted); padding:4px 0; }
-.mini-cal .mc-day { position:relative; text-align:center; font-size:12.5px; padding:7px 0; border-radius:50%; cursor:pointer; color:var(--text); }
-.mini-cal .mc-day:hover { background:#f0f0ee; }
-.mini-cal .mc-day.empty { visibility:hidden; cursor:default; }
-.mini-cal .mc-day.today { color:var(--accent); font-weight:700; }
-.mini-cal .mc-day.selected { background:var(--accent); color:#fff; font-weight:700; }
-.mini-cal .mc-day.selected:hover { background:var(--accent); }
+.mini-cal .mc-grid { display:grid; grid-template-columns: repeat(7, 1fr); gap:4px; margin-bottom:2px; }
+.mini-cal .mc-dow { text-align:center; font-size:12px; color:#999; font-weight:600; padding-bottom:2px; }
+.mini-cal .mc-day { aspect-ratio:1; display:flex; align-items:center; justify-content:center; position:relative; font-size:13px; border-radius:8px; cursor:pointer; background:#f7f7f9; color:#bbb; transition:transform 0.1s; }
+.mini-cal .mc-day:active { transform:scale(0.92); }
+.mini-cal .mc-day:hover { background:#efeefc; }
+.mini-cal .mc-day.empty { visibility:hidden; cursor:default; background:transparent; }
+.mini-cal .mc-day.today:not(.selected) { box-shadow: inset 0 0 0 2px #a29bfe; color:#6c5ce7; font-weight:700; }
+.mini-cal .mc-day.selected { outline:2px solid #6c5ce7; outline-offset:1px; background:#6c5ce7; color:#fff; font-weight:700; }
+.mini-cal .mc-day.selected:hover { background:#6c5ce7; }
 
 .mobile-back-btn { display:none; background:#f0f0ee; color:var(--text); border:none; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; margin-bottom:12px; }
 .mobile-back-btn:hover { background:#e6e6e3; }
 
-.right-summary { border:1px solid var(--border); border-radius:8px; margin-bottom:16px; background:#fbfbfa; overflow:hidden; }
-.right-summary-toggle { width:100%; display:flex; align-items:center; justify-content:space-between; background:none; border:none; padding:10px 12px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; color:var(--text); }
-.right-summary-toggle:hover { background:#f2f2f0; }
-.right-summary-chevron { transition: transform 0.15s ease; color:var(--muted); }
+.md-right-sub-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:2px; }
+.right-summary-toggle { background:none; border:none; padding:0; font-size:12px; color:var(--accent); cursor:pointer; font-family:inherit; display:inline-flex; align-items:center; gap:2px; }
+.right-summary-toggle:hover { text-decoration:underline; }
+.right-summary-chevron { display:inline-block; font-size:10px; transition: transform 0.15s ease; }
 .right-summary-toggle.open .right-summary-chevron { transform: rotate(180deg); }
-.right-summary-body { display:none; padding:0 12px; font-size:12.5px; color:var(--text); border-top:1px dashed var(--border); }
-.right-summary-body.show { display:block; padding-top:10px; padding-bottom:10px; }
+.right-summary-body { display:none; padding:0; font-size:12.5px; color:var(--text); }
+.right-summary-body.show { display:block; margin-top:10px; margin-bottom:6px; }
 .right-summary-body .row { margin: 8px 0; white-space: pre-wrap; }
 .right-summary-body .row b { color: var(--muted); font-weight:600; font-size:11px; display:block; margin-bottom:2px; }
 
@@ -511,11 +520,15 @@
     <div class="calendar-panel" id="calendar-panel">
       <div class="calendar-panel-inner mini-cal">
         <div class="cal-panel-month-nav">
-          <button class="date-nav-btn" onclick="shiftCalendarMonth(-1)">‹</button>
-          <span id="cal-panel-month-label">-</span>
-          <button class="date-nav-btn" onclick="shiftCalendarMonth(1)">›</button>
+          <button class="cal-panel-nav-btn" onclick="shiftCalendarMonth(-1)">‹</button>
+          <div class="cal-panel-month-title" id="cal-panel-month-label">-</div>
+          <div class="cal-panel-nav-right">
+            <button class="cal-panel-today-btn" onclick="goCalendarPanelToday()">오늘</button>
+            <button class="cal-panel-nav-btn" onclick="shiftCalendarMonth(1)">›</button>
+          </div>
         </div>
         <div id="cal-panel-area"></div>
+        <div class="cal-panel-hint">날짜를 탭하면 해당 날짜의 수업을 볼 수 있어요</div>
       </div>
     </div>
     <div class="md-left" id="md-left">
@@ -536,16 +549,16 @@
         <div class="md-right-header">
           <div>
             <div class="md-right-title" id="right-title"></div>
-            <div class="md-right-sub" id="right-sub"></div>
+            <div class="md-right-sub-row">
+              <span class="md-right-sub" id="right-sub"></span>
+              <button class="right-summary-toggle" id="right-summary-toggle" onclick="toggleRightSummary()">
+                <span id="right-summary-toggle-label">출석 현황 더보기</span><span class="right-summary-chevron" id="right-summary-chevron">▾</span>
+              </button>
+            </div>
           </div>
-          <a class="md-right-link" id="right-page-link" target="_blank" href="#">노션에서 보기 ↗</a>
+          <a class="md-right-link" id="right-page-link" target="_blank" href="#">로션에서 보기 ↗</a>
         </div>
-        <div class="right-summary" id="right-summary">
-          <button class="right-summary-toggle" id="right-summary-toggle" onclick="toggleRightSummary()">
-            <span>📋 수업 정보 요약</span><span class="right-summary-chevron" id="right-summary-chevron">▾</span>
-          </button>
-          <div class="right-summary-body" id="right-summary-body"></div>
-        </div>
+        <div class="right-summary-body" id="right-summary-body"></div>
         <div class="right-tabs" id="right-tabs">
           <button class="right-tab active" data-tab="students" onclick="setRightTab('students')">👥 학생</button>
           <button class="right-tab" data-tab="record" onclick="setRightTab('record')">📖 학습기록</button>
@@ -762,7 +775,8 @@ function setDomain(domain) {
   el("class-list-area").style.display = domain === "class" ? "flex" : "none"
   el("schedule-list-area").style.display = domain === "schedule" ? "flex" : "none"
   el("right-tabs").style.display = domain === "class" ? "flex" : "none"
-  el("right-summary").style.display = domain === "class" ? "block" : "none"
+  el("right-summary-toggle").style.display = domain === "class" ? "inline-flex" : "none"
+  el("right-summary-body").classList.remove("show")
   el("md-right-empty").style.display = "block"
   el("md-right-content").style.display = "none"
   el("md-right-empty").textContent = domain === "class" ? "👈 왼쪽에서 수업을 선택하면 상세정보가 표시돼요" : "👈 왼쪽에서 일정을 선택하면 상세정보가 표시돼요"
@@ -802,8 +816,14 @@ function shiftCalendarMonth(delta) {
   loadCalendarPanel()
 }
 
+function goCalendarPanelToday() {
+  CAL_PANEL_MONTH = kstToday().slice(0, 7)
+  loadCalendarPanel()
+}
+
 async function loadCalendarPanel() {
-  el("cal-panel-month-label").textContent = CAL_PANEL_MONTH.replace("-", ".")
+  const parts = CAL_PANEL_MONTH.split("-").map(Number)
+  el("cal-panel-month-label").textContent = parts[0] + "년 " + parts[1] + "월"
   renderCalPanel()
 }
 
@@ -971,7 +991,7 @@ function selectClass(id) {
   el("right-title").textContent = c.className
   el("right-sub").textContent = [c.teacherName, c.method, c.timeRange].filter(Boolean).join(" · ")
   el("right-page-link").href = c.url
-  el("right-summary").style.display = "block"
+  el("right-summary-toggle").style.display = "inline-flex"
   el("right-summary-body").innerHTML =
     '<div class="row"><b>출석현황</b>' + esc(c.attendanceStatus || "-") + '</div>' +
     '<div class="row"><b>학습 내용</b>' + esc(c.studySummary || "-") + '</div>' +
@@ -980,6 +1000,7 @@ function selectClass(id) {
     '<button class="bulk-send-btn" onclick="sendBulkForClass(' + attrSafe(c.id) + ')">📩 보고서 일괄 전송</button>'
   el("right-summary-body").classList.remove("show")
   el("right-summary-toggle").classList.remove("open")
+  el("right-summary-toggle-label").textContent = "출석 현황 더보기"
   setRightTab(RIGHT_TAB, true)
   openMobileDetail()
 }
@@ -987,9 +1008,11 @@ function selectClass(id) {
 function toggleRightSummary() {
   const body = el("right-summary-body")
   const btn = el("right-summary-toggle")
+  const label = el("right-summary-toggle-label")
   const open = !body.classList.contains("show")
   body.classList.toggle("show", open)
   btn.classList.toggle("open", open)
+  label.textContent = open ? "접기" : "출석 현황 더보기"
 }
 
 function setRightTab(tab, force) {
