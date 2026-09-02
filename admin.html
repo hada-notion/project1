@@ -597,7 +597,7 @@ function reportUrl(token) {
 
 // 날짜(시간 없는 값)와 타임스탬프를 같은 기준(한국시간 기준 '날짜')으로 비교하기 위한 헬퍼.
 // lastClassDate는 Notion 날짜 속성 값(YYYY-MM-DD, 시간 없음)이고, updatedAt은 실제 UTC 타임스탬프입니다.
-// 이 둘을 그냥 new Date(...).getTime()으로 비교하면, 날짜만 있는 값은 UTC 00:00(=한국시간 09:00)으로
+// 이 둘을 그��� new Date(...).getTime()으로 비교하면, 날짜만 있는 값은 UTC 00:00(=한국시간 09:00)으로
 // 해석되어, 09시 이전에 갱신된 보고서가 실제로는 최신인데도 '갱신 필요'로 잘못 표시되는 문제가 ��었습니다.
 function toKstDateOnly(iso) {
   if (!iso) return null
@@ -645,7 +645,7 @@ function actionLabel(status) {
 function actionTitle(status) {
   if (status === "none") return "보고서 생성 · 최초로 리포트를 생성합니다"
   if (status === "fail") return "다시 시도 · 리포트 생성을 다시 시도합니다"
-  return "동기화 · 최신 수업 정보로 리포트를 갱신합니다"
+  return "보고서 생성 · 최신 수업 정보로 리포트를 다시 생성합니다"
 }
 
 function courseRank(status) {
@@ -949,7 +949,7 @@ async function bulkSyncSelected() {
     await generateReport(i, true)
   }
   if (btn) btn.disabled = SELECTED.size === 0
-  showToast(`선택한 ${targets.length}건을 동기화했습니다.`)
+  showToast(`선택한 ${targets.length}건의 보고서를 생성했습니다.`)
 }
 
 // 선택한 학생 중 오늘 수업이 있는 학생에게만 알림톡을 일괄 전송합니다.
@@ -1234,7 +1234,7 @@ async function syncAllForStudent(groupIndex) {
   for (const i of targets) {
     await generateReport(i, true)
     done++
-    if (syncAllBtn) syncAllBtn.textContent = `동기화 중... (${done}/${targets.length})`
+    if (syncAllBtn) syncAllBtn.textContent = `생성 중... (${done}/${targets.length})`
   }
   if (syncAllBtn) {
     syncAllBtn.textContent = `✅ 완료 (${targets.length}건)`
