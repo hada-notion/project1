@@ -433,12 +433,14 @@
 .mini-cal .mc-day.today:not(.selected) { box-shadow: inset 0 0 0 2px #a29bfe; color:#6c5ce7; font-weight:700; }
 .mini-cal .mc-day.selected { outline:2px solid #6c5ce7; outline-offset:1px; background:#6c5ce7; color:#fff; font-weight:700; }
 .mini-cal .mc-day.selected:hover { background:#6c5ce7; }
+.mini-cal .mc-day-dot { position:absolute; bottom:3px; left:50%; transform:translateX(-50%); width:5px; height:5px; border-radius:50%; background:#6c5ce7; }
+.mini-cal .mc-day.selected .mc-day-dot { background:#fff; }
 
 .mobile-back-btn { display:none; background:#f0f0ee; color:var(--text); border:none; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; margin-bottom:12px; }
 .mobile-back-btn:hover { background:#e6e6e3; }
 
 .md-right-sub-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:2px; }
-.right-summary-toggle { background:none; border:none; padding:0; font-size:12px; color:var(--accent); cursor:pointer; font-family:inherit; display:inline-flex; align-items:center; gap:2px; }
+.right-summary-toggle { background:none; border:none; padding:0; font-size:12px; color:var(--muted); cursor:pointer; font-family:inherit; display:inline-flex; align-items:center; gap:2px; }
 .right-summary-toggle:hover { text-decoration:underline; }
 .right-summary-chevron { display:inline-block; font-size:10px; transition: transform 0.15s ease; }
 .right-summary-toggle.open .right-summary-chevron { transform: rotate(180deg); }
@@ -473,6 +475,7 @@
   .right-tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
   .right-tab { white-space: nowrap; flex-shrink: 0; }
   .mobile-back-btn { display: inline-flex; align-items: center; gap: 6px; }
+  .summary-two-col { flex-direction: column; gap: 8px; }
 }
 @media (max-width: 640px) {
   .topbar { flex-wrap: wrap; height: auto; min-height: 52px; padding: 8px 12px; gap: 6px; }
@@ -858,7 +861,8 @@ function renderCalPanel() {
     let cls = "mc-day"
     if (dateStr === today) cls += " today"
     if (dateStr === CURRENT_DATE) cls += " selected"
-    cells += '<div class="' + cls + '" onclick="goToDateFromCalendarPanel(' + attrSafe(dateStr) + ')">' + d + '</div>'
+    const dot = CAL_PANEL_ITEMS[dateStr] ? '<span class="mc-day-dot"></span>' : ""
+    cells += '<div class="' + cls + '" onclick="goToDateFromCalendarPanel(' + attrSafe(dateStr) + ')">' + d + dot + '</div>'
   }
   el("cal-panel-area").innerHTML = '<div class="mc-grid">' + cells + '</div>'
 }
@@ -1052,6 +1056,22 @@ function renderRightTabBody() {
   } else if (RIGHT_TAB === "assignment" || RIGHT_TAB === "evaluation") {
     renderTaskTab(c, body, RIGHT_TAB)
   }
+}
+
+// 학생 목록의 출결/과제 상태를 집계해서 출석 현황·과제 현황 두 박스에 표시할 인원수를 계산해요.
+function summarizeStudents(students) {
+  const stat = { attend: 0, makeup: 0, absent: 0, done: 0, partial: 0, none: 0 }
+  ;(students || []).forEach(function (s) {
+    if (s.status === "출석") stat.attend++
+    else if (s.status === "보강") stat.makeup++
+    else if (s.status === "결석") stat.absent++
+    if (s.homework) {
+      if (s.homework.status === "완료") stat.done++
+      else if (s.homework.status === "부분완료") stat.partial++
+      else if (s.homework.status === "미완료") stat.none++
+    }
+  })
+  return stat
 }
 
 function renderStudentsTab(c, body) {
