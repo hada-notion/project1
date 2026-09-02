@@ -190,7 +190,7 @@ body {
 .header .sub-badge { background: rgba(255,255,255,0.22); padding: 3px 10px; border-radius: 999px; font-size: 12px; }
 .back-btn { display: inline-flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.22); color: #fff; border: none; padding: 6px 12px; border-radius: 999px; font-size: 13px; cursor: pointer; margin-bottom: 10px; }
 
-/* ===== 등록 상세 - 뎁스2 스와이프 섹션 ===== */
+/* ===== 등록 상세 - 뎁스2 스와이�� 섹션 ===== */
 .reg-header-section { background: linear-gradient(160deg, #6c5ce7, #a29bfe 65%, #cbb9ff); color: #fff; text-align: center; }
 .reg-header-top { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .reg-back-btn { flex-shrink: 0; background: rgba(255,255,255,0.22); color: #fff; border: none; width: 36px; height: 36px; border-radius: 50%; font-size: 16px; font-weight: 600; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s ease; }
@@ -781,18 +781,28 @@ async function loadReportFromServer() {
     return
   }
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_report_by_token`, {
-      method: "POST",
-      headers: {
-        "apikey": SUPABASE_ANON_KEY,
-        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ p_token: token }),
-    })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const data = await res.json()
-    const row = Array.isArray(data) ? data[0] : data
+    const commonHeaders = {
+      "apikey": SUPABASE_ANON_KEY,
+      "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+      "Content-Type": "application/json",
+    }
+    const [fastRes, detailRes] = await Promise.all([
+      fetch(`${SUPABASE_URL}/functions/v1/get-report-fast`, {
+        method: "POST",
+        headers: commonHeaders,
+        body: JSON.stringify({ token }),
+      }),
+      fetch(`${SUPABASE_URL}/functions/v1/get-report-detail`, {
+        method: "POST",
+        headers: commonHeaders,
+        body: JSON.stringify({ token }),
+      }),
+    ])
+    if (!fastRes.ok) throw new Error(`HTTP ${fastRes.status}`)
+    if (!detailRes.ok) throw new Error(`HTTP ${detailRes.status}`)
+    const fast = await fastRes.json()
+    const detail = await detailRes.json()
+    const row = { ...fast, ...detail, access_token: fast.token }
     if (!row) throw new Error("no data")
     STUDENT = mapReportToStudent(row)
     if (STUDENT.student_name) {
