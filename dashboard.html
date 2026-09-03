@@ -445,6 +445,8 @@
 .mini-cal .mc-day.week-selected.today { box-shadow: inset 0 0 0 2px #6c5ce7; }
 .mini-cal .mc-day.no-select { cursor:default; }
 .mini-cal .mc-day.no-select:hover { background:#f7f7f9; }
+.mini-cal .mc-day.empty.week-selected { visibility:visible; background:#e4e1fb; cursor:default; }
+.mini-cal .mc-day.empty.week-selected:hover { background:#e4e1fb; }
 
 .mobile-back-btn { display:none; background:#f0f0ee; color:var(--text); border:none; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; margin-bottom:12px; }
 .mobile-back-btn:hover { background:#e6e6e3; }
@@ -643,7 +645,7 @@ async function submitLogin() {
   const key = input.value.trim()
   const btn = document.getElementById("login-btn")
   const errEl = document.getElementById("login-error")
-  if (!key) { errEl.textContent = "비밀번호를 입력하세요."; return }
+  if (!key) { errEl.textContent = "비밀번호를 입����하세요."; return }
   btn.disabled = true
   btn.textContent = "확인 중..."
   errEl.textContent = ""
@@ -916,6 +918,7 @@ async function loadCalendarPanel() {
   const parts = CAL_PANEL_MONTH.split("-").map(Number)
   el("cal-panel-month-label").textContent = parts[0] + "년 " + parts[1] + "월"
   renderCalPanel()
+  updateDateNavLabel()
   loadCalPanelDots()
 }
 
@@ -964,6 +967,7 @@ function selectCalWeek(weekStartStr) {
   SELECTED_WEEK_START = weekStartStr
   SELECTED_WEEK_END = weekEndOf(weekStartStr)
   renderCalPanel()
+  updateDateNavLabel()
   renderReportList()
 }
 
@@ -978,7 +982,18 @@ function renderCalPanel() {
   const isWeeklyReport = DOMAIN === "report" && REPORT_TYPE === "weekly"
   const isMonthOnly = DOMAIN === "tuition" || (DOMAIN === "report" && REPORT_TYPE === "monthly")
   let cells = dows.map(function (d) { return '<div class="mc-dow">' + d + '</div>' }).join("")
-  for (let i = 0; i < startWeekday; i++) cells += '<div class="mc-day empty"></div>'
+  function ymdOf(day) {
+    const dt = new Date(y, m - 1, day)
+    return dt.getFullYear() + "-" + String(dt.getMonth() + 1).padStart(2, "0") + "-" + String(dt.getDate()).padStart(2, "0")
+  }
+  for (let i = 0; i < startWeekday; i++) {
+    let leadCls = "mc-day empty"
+    if (isWeeklyReport) {
+      const leadDateStr = ymdOf(i - startWeekday + 1)
+      if (SELECTED_WEEK_START && leadDateStr >= SELECTED_WEEK_START && leadDateStr <= SELECTED_WEEK_END) leadCls += " week-selected"
+    }
+    cells += '<div class="' + leadCls + '"></div>'
+  }
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = CAL_PANEL_MONTH + "-" + String(d).padStart(2, "0")
     let cls = "mc-day"
@@ -994,7 +1009,36 @@ function renderCalPanel() {
       cells += '<div class="' + cls + '" onclick="goToDateFromCalendarPanel(' + attrSafe(dateStr) + ')">' + d + dot + '</div>'
     }
   }
+  if (isWeeklyReport) {
+    const trailing = (7 - ((startWeekday + daysInMonth) % 7)) % 7
+    for (let j = 1; j <= trailing; j++) {
+      let trailCls = "mc-day empty"
+      const trailDateStr = ymdOf(daysInMonth + j)
+      if (SELECTED_WEEK_START && trailDateStr >= SELECTED_WEEK_START && trailDateStr <= SELECTED_WEEK_END) trailCls += " week-selected"
+      cells += '<div class="' + trailCls + '"></div>'
+    }
+  }
   el("cal-panel-area").innerHTML = '<div class="mc-grid">' + cells + '</div>'
+}
+
+function formatWeekRangeLabel(startStr, endStr) {
+  const days = ["일", "월", "��", "수", "목", "금", "토"]
+  const sd = new Date(startStr + "T00:00:00+09:00")
+  const ed = new Date(endStr + "T00:00:00+09:00")
+  const startText = startStr.replace(/-/g, ".") + " (" + days[sd.getDay()] + ")"
+  const endText = endStr.slice(5).replace(/-/g, ".") + " (" + days[ed.getDay()] + ")"
+  return startText + " ~ " + endText
+}
+
+function updateDateNavLabel() {
+  const labelEl = el("date-nav-label")
+  if (!labelEl) return
+  if (DOMAIN === "report" && REPORT_TYPE === "weekly" && SELECTED_WEEK_START && SELECTED_WEEK_END) {
+    labelEl.textContent = formatWeekRangeLabel(SELECTED_WEEK_START, SELECTED_WEEK_END)
+  } else if ((DOMAIN === "report" && REPORT_TYPE === "monthly") || DOMAIN === "tuition") {
+    const parts2 = CAL_PANEL_MONTH.split("-").map(Number)
+    labelEl.textContent = parts2[0] + "년 " + parts2[1] + "월"
+  }
 }
 
 function goToDateFromCalendarPanel(dateStr) {
@@ -1043,6 +1087,7 @@ function setReportType(type) {
   document.querySelectorAll(".report-type-btn").forEach(function (b) { b.classList.toggle("active", b.dataset.reportType === type) })
   if (type === "weekly") initDefaultWeek()
   renderCalPanel()
+  updateDateNavLabel()
   loadReportList(CAL_PANEL_MONTH)
 }
 
@@ -1147,7 +1192,7 @@ function renderTuitionList() {
   const term = SEARCH_TERM
   const list = TUITIONS.filter(function (t) { return !term || (t.studentInfo || "").toLowerCase().includes(term) })
   if (!list.length) {
-    el("tuition-list-area").innerHTML = '<div class="empty">해당 월에 해당하는 청구 내역이 없어요</div>'
+    el("tuition-list-area").innerHTML = '<div class="empty">해당 월에 해당하는 청�� 내역이 없어요</div>'
     return
   }
   el("tuition-list-area").innerHTML = list.map(function (t) {
@@ -1210,7 +1255,7 @@ async function loadClassList(dateStr) {
     refreshClassList(dateStr, true)
     return
   }
-  setStatus("loading", "수업 목록을 불러오는 중이에요...")
+  setStatus("loading", "수업 목록을 ���러오는 중이에요...")
   CLASSES = []
   renderClassList()
   clearRightPanel()
