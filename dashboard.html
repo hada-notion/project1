@@ -1059,7 +1059,7 @@ function selectClass(id) {
   el("md-right-empty").style.display = "none"
   el("md-right-content").style.display = "block"
   el("right-title").textContent = classEmoji(c) + " " + c.className
-  el("right-time").textContent = c.timeRange || ""
+  el("right-time").textContent = (CURRENT_DATE ? CURRENT_DATE.replace(/-/g, ".") + " " : "") + (c.timeRange || "")
   el("right-sub").innerHTML =
     (c.teacherName ? '<span class="teacher-badge ' + teacherColorClass(c.teacherName) + '">' + esc(c.teacherName) + '</span>' : "") +
     (c.method ? '<span class="badge blue">' + esc(c.method) + '</span>' : "") +
