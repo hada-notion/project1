@@ -1108,7 +1108,8 @@ function groupByClass(list, idKey, nameKey) {
   list.forEach(function (item) {
     const id = item[idKey] || "__unassigned__"
     const name = item[nameKey] || "미배정"
-    if (!map.has(id)) map.set(id, { classId: id, className: name, items: [] })
+    if (!map.has(id)) map.set(id, { classId: id, className: name, emoji: item.emoji || "", items: [] })
+    else if (!map.get(id).emoji && item.emoji) map.get(id).emoji = item.emoji
     map.get(id).items.push(item)
   })
   const groups = Array.from(map.values())
@@ -1149,7 +1150,7 @@ function renderReportList() {
     const sentCount = g.items.filter(function (r) { return r.sentBy }).length
     return '<div class="class-item' + active + '">'
       + '<div class="class-item-head" onclick="selectReportClass(' + attrSafe(g.classId) + ')">'
-        + '<div class="class-item-title-row"><span class="class-item-title">' + resolveClassEmoji(g.classId, g.className) + ' ' + esc(g.className) + '</span><span class="class-item-time">' + g.items.length + '명</span></div>'
+        + '<div class="class-item-title-row"><span class="class-item-title">' + resolveClassEmoji(g.classId, g.className, g.emoji) + ' ' + esc(g.className) + '</span><span class="class-item-time">' + g.items.length + '명</span></div>'
         + '<div class="class-item-badges"><span class="badge tone-blue">발송 ' + sentCount + '</span><span class="badge tone-gray">미발송 ' + (g.items.length - sentCount) + '</span></div>'
       + '</div>'
       + '</div>'
@@ -1174,7 +1175,7 @@ function renderReportClassDetail() {
   el("md-right-content").style.display = "block"
   const detailClassId = list[0].classId || "__unassigned__"
   const detailClassName = list[0].className || "미배정"
-  el("right-title").textContent = (detailClassId !== "__unassigned__" ? resolveClassEmoji(detailClassId, detailClassName) + " " : "") + detailClassName
+  el("right-title").textContent = (detailClassId !== "__unassigned__" ? resolveClassEmoji(detailClassId, detailClassName, list[0].emoji) + " " : "") + detailClassName
   el("right-page-link").style.display = "none"
   const sentCount = list.filter(function (r) { return r.sentBy }).length
   el("right-time").textContent = list.length + "명 중 발송완료 " + sentCount + "명"
@@ -1260,7 +1261,7 @@ function renderTuitionList() {
     const totalAmount = g.items.reduce(function (sum, t) { return sum + (t.amount || 0) }, 0)
     return '<div class="class-item' + active + '">'
       + '<div class="class-item-head" onclick="selectTuitionClass(' + attrSafe(g.classId) + ')">'
-        + '<div class="class-item-title-row"><span class="class-item-title">' + resolveClassEmoji(g.classId, g.className) + ' ' + esc(g.className) + '</span><span class="class-item-time">' + Number(totalAmount).toLocaleString("ko-KR") + '원</span></div>'
+        + '<div class="class-item-title-row"><span class="class-item-title">' + resolveClassEmoji(g.classId, g.className, g.emoji) + ' ' + esc(g.className) + '</span><span class="class-item-time">' + Number(totalAmount).toLocaleString("ko-KR") + '원</span></div>'
         + '<div class="class-item-badges"><span class="badge tone-gray">' + g.items.length + '명</span>' + (unpaidCount ? '<span class="badge tone-red">미납 ' + unpaidCount + '</span>' : '<span class="badge tone-green">완납</span>') + '</div>'
       + '</div>'
       + '</div>'
@@ -1285,7 +1286,7 @@ function renderTuitionClassDetail() {
   el("md-right-content").style.display = "block"
   const detailClassId = list[0].classId || "__unassigned__"
   const detailClassName = list[0].className || "미배정"
-  el("right-title").textContent = (detailClassId !== "__unassigned__" ? resolveClassEmoji(detailClassId, detailClassName) + " " : "") + detailClassName
+  el("right-title").textContent = (detailClassId !== "__unassigned__" ? resolveClassEmoji(detailClassId, detailClassName, list[0].emoji) + " " : "") + detailClassName
   el("right-page-link").style.display = "none"
   const totalAmount = list.reduce(function (sum, t) { return sum + (t.amount || 0) }, 0)
   el("right-time").textContent = list.length + "명 · 총 " + Number(totalAmount).toLocaleString("ko-KR") + "원"
@@ -1388,7 +1389,11 @@ function rememberClassEmoji(classId, c) {
   const emoji = classEmoji(c)
   if (emoji) CLASS_EMOJI_MAP[classId] = emoji
 }
-function resolveClassEmoji(classId, className) {
+function resolveClassEmoji(classId, className, directEmoji) {
+  if (directEmoji) {
+    if (classId) CLASS_EMOJI_MAP[classId] = directEmoji
+    return directEmoji
+  }
   if (classId && CLASS_EMOJI_MAP[classId]) return CLASS_EMOJI_MAP[classId]
   return classEmoji({ className: className })
 }
