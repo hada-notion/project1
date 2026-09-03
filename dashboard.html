@@ -955,8 +955,10 @@ async function loadClassList(dateStr) {
   const cached = CLASS_LIST_CACHE[dateStr]
   if (cached) {
     // 이미 본 날짜는 캐시된 내용을 바로 보여주고, 뒤에서 최신 데이터로 조용히 갱신해요.
+    // 이전 날짜에 선택된 수업 상세가 그대로 남아있지 않도록 오른쪽 패널을 함께 비워요.
     CLASSES = cached
     renderClassList()
+    clearRightPanel()
     setStatus(null)
     refreshClassList(dateStr, true)
     return
@@ -1264,6 +1266,7 @@ async function loadScheduleList(dateStr) {
   if (cached) {
     SCHEDULES = cached
     renderScheduleList()
+    clearRightPanel()
     setStatus(null)
     refreshScheduleList(dateStr, true)
     return
