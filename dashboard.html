@@ -1185,11 +1185,49 @@ async function fetchClassDetail(classId) {
   return data
 }
 
-// 평가 탭은 수업(학원) DB의 "평가 결과" 수식 값을 그대로 보여줍니다(클래스 등록 조회 시 이미 계산되어 있음).
+// 여러 후보 필드명 중 값이 있는 첫 번째 필드를 그대로 반환해요.
+// 백엔드 응답 필드명이 바뀌거나 통일되지 않은 경우에도 값을 놓치지 않기 위한 방어적 처리예요.
+function pickField(obj, keys) {
+  if (!obj) return null
+  for (let i = 0; i < keys.length; i++) {
+    const v = obj[keys[i]]
+    if (v !== undefined && v !== null && v !== "") return v
+  }
+  return null
+}
+
+// 평가 탭은 우선 get-class-detail의 학습기록(평가) 레코드를 조회해서 리포트 페이지처럼 "N점 (정답/전체)" 형태로 보여주고,
+// 이 정보가 없으면 기존의 "평가 결과" 요약 텍스트로 대체해요(하위 호환).
 // 과제 탭은 마감일을 반영하기 위해 get-class-detail을 통해 학습기록(과제) 목록을 따로 조회합니다.
 // (조금 느리지만 마감일을 다시 보여줄 수 있습니다.) 결과는 CLASS_DETAIL_CACHE에 캐싱되어 재조회를 최소화합니다.
+// 보고서 페이지와 동일하게, 부가 정보는 제목 아래에 "  • 라벨: 값" 형태로 한 줄씩 통일해서 보여줘요.
+function bulletLine(label, value) {
+  if (value === null || value === undefined || value === "") return ""
+  return '<div class="meta" style="margin-top:4px">' + esc("  • " + label + ": " + value) + '</div>'
+}
+
 async function renderTaskTab(c, body, kind) {
   if (kind === "evaluation") {
+    body.innerHTML = '<div class="empty">불러오는 중...</div>'
+    try {
+      const data = await fetchClassDetail(c.id)
+      const records = (data.evaluations && data.evaluations.records) || (data.tests && data.tests.records) || []
+      if (records.length > 0) {
+        body.innerHTML = records.map(function (r) {
+          const total = pickField(r, ["totalQuestions", "total", "전체문항", "전체 문항"])
+          const correct = pickField(r, ["correctQuestions", "correct", "정답문항", "정답 문항"])
+          const score = pickField(r, ["score", "점수"])
+          const scoreText = (score !== null ? score + "점" : "") + (total ? " (" + (correct !== null ? correct : "?") + "/" + total + ")" : "")
+          return '<div class="record-card"><div class="title"><a href="' + r.url + '" target="_blank">' + esc(r.title || "평가") + '</a></div>' +
+            '<div class="meta">교재: ' + esc(r.book || "-") + (r.range ? " · 범위: " + esc(r.range) : "") + '</div>' +
+            (scoreText ? bulletLine("점수", scoreText) : "") +
+            '</div>'
+        }).join("")
+        return
+      }
+    } catch (err) {
+      // 상세 조회가 실패하면 아래 요약 텍스트로 폴백해요.
+    }
     const summary = c.evaluationSummary
     body.innerHTML = summary
       ? '<div class="record-card"><div class="meta">' + esc(summary) + '</div></div>'
@@ -1205,10 +1243,11 @@ async function renderTaskTab(c, body, kind) {
       html = '<div class="empty">등록된 과제 설명이 없어요</div>'
     } else {
       html = records.map(function (r) {
+        const due = pickField(r, ["dueDate", "due_iso", "due", "dueAt", "과제마감일", "과제 마감일"])
         return '<div class="record-card"><div class="title"><a href="' + r.url + '" target="_blank">' + esc(r.title) + '</a></div>' +
           '<div class="meta">교재: ' + esc(r.book) + (r.range ? " · 범위: " + esc(r.range) : "") + '</div>' +
-          (r.content ? '<div class="meta" style="margin-top:4px">' + esc(r.content) + '</div>' : "") +
-          '<div class="meta" style="margin-top:4px">• 마감일: ' + esc(r.dueDate ? formatDateLabel(r.dueDate) : "미정") + '</div>' +
+          bulletLine("내용", r.content) +
+          bulletLine("마감일", due ? formatDateLabel(due) : "미정") +
           '</div>'
       }).join("")
     }
