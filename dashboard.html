@@ -328,6 +328,11 @@
 .cal-panel-today-btn { background:#f0eefc; border:none; color:#6c5ce7; font-size:11px; font-weight:700; padding:5px 10px; border-radius:999px; cursor:pointer; }
 .cal-panel-today-btn:hover { background:#ece9ff; }
 .cal-panel-hint { font-size:11px; color:#bbb; text-align:center; margin-top:6px; }
+.cal-panel-report-toggle { display:flex; gap:6px; margin-top:8px; }
+.report-type-btn { flex:1; border:1px solid var(--border); background:#fff; padding:7px 6px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; color:var(--muted); font-family:inherit; }
+.report-type-btn.active { background:#6c5ce7; color:#fff; border-color:#6c5ce7; }
+#report-tuition-detail .right-tab-body p { margin:0 0 8px; font-size:13px; color:var(--text); line-height:1.5; }
+#report-tuition-detail .right-tab-body strong { font-size:12px; color:var(--muted); }
 .cat-dot-row { display:flex; gap:2px; flex-wrap:wrap; justify-content:center; margin-top:2px; }
 .cat-dot { width:6px; height:6px; border-radius:50%; display:inline-block; }
 .cat-dot.green { background:var(--green); }
@@ -537,6 +542,8 @@
   <div class="domain-tab-row">
     <button class="domain-tab active" data-domain="class" onclick="setDomain('class')">🏫 수업</button>
     <button class="domain-tab" data-domain="schedule" onclick="setDomain('schedule')">📅 일정</button>
+    <button class="domain-tab" data-domain="report" onclick="setDomain('report')">📄 보고서</button>
+    <button class="domain-tab" data-domain="tuition" onclick="setDomain('tuition')">💰 수강료</button>
   </div>
   <div class="md-3col">
     <div class="calendar-panel" id="calendar-panel">
@@ -550,7 +557,11 @@
           </div>
         </div>
         <div id="cal-panel-area"></div>
-        <div class="cal-panel-hint">날짜를 탭하면 해당 날짜의 수업을 볼 수 있어요</div>
+        <div class="cal-panel-report-toggle" id="cal-panel-report-toggle" style="display:none">
+          <button class="report-type-btn active" data-report-type="weekly" onclick="setReportType('weekly')">주간 보고서</button>
+          <button class="report-type-btn" data-report-type="monthly" onclick="setReportType('monthly')">월간 보고서</button>
+        </div>
+        <div class="cal-panel-hint" id="cal-panel-hint">날짜를 탭하면 해당 날짜의 수업을 볼 수 있어요</div>
       </div>
     </div>
     <div class="md-left" id="md-left">
@@ -563,6 +574,8 @@
       <div id="status-area"></div>
       <div id="class-list-area" class="class-list-area"></div>
       <div id="schedule-list-area" class="schedule-list-area" style="display:none"></div>
+      <div id="report-list-area" class="class-list-area" style="display:none"></div>
+      <div id="tuition-list-area" class="class-list-area" style="display:none"></div>
     </div>
     <div class="md-right" id="md-right">
       <div class="md-right-empty" id="md-right-empty">👈 왼쪽에서 수업을 선택하면 상세정보가 표시돼요</div>
@@ -592,6 +605,7 @@
           <button class="bulk-send-btn" id="bulk-send-tab-btn" disabled onclick="sendBulkForClass(SELECTED_CLASS_ID)">📩 보고서 일괄 전송</button>
         </div>
         <div class="right-tab-body" id="right-tab-body"></div>
+        <div id="report-tuition-detail" style="display:none"></div>
       </div>
     </div>
   </div>
@@ -729,6 +743,11 @@ function topbarLogout() {
 const GET_CLASSES_URL = SUPABASE_URL + "/functions/v1/get-classes"
 const GET_CLASS_DETAIL_URL = SUPABASE_URL + "/functions/v1/get-class-detail"
 const GET_SCHEDULES_URL = SUPABASE_URL + "/functions/v1/get-schedules"
+const GET_REPORTS_URL = SUPABASE_URL + "/functions/v1/get-reports"
+const GET_TUITIONS_URL = SUPABASE_URL + "/functions/v1/get-tuitions"
+const SEND_WEEKLY_REPORT_URL = SUPABASE_URL + "/functions/v1/send-weekly-report"
+const SEND_MONTHLY_REPORT_URL = SUPABASE_URL + "/functions/v1/send-monthly-report"
+const SEND_TUITION_URL = SUPABASE_URL + "/functions/v1/send-tuition-notice"
 
 // get-classes가 내려주는 status 값은 이모지를 뺀 순수 텍스트(출석/보강/결석)이므로 키도 그에 맞춥니다.
 const statusBadgeClass = {
@@ -785,6 +804,11 @@ let SELECTED_SCHEDULE_ID = null
 let CALENDAR_OPEN = false
 let CAL_PANEL_MONTH = kstToday().slice(0, 7)
 let CAL_PANEL_ITEMS = {}
+let REPORT_TYPE = "weekly" // "weekly" | "monthly"
+let REPORTS = []
+let SELECTED_REPORT_ID = null
+let TUITIONS = []
+let SELECTED_TUITION_ID = null
 
 function formatDateLabel(dateStr) {
   const d = new Date(dateStr + "T00:00:00+09:00")
@@ -814,18 +838,32 @@ function setDomain(domain) {
   document.querySelectorAll(".domain-tab").forEach(function (b) { b.classList.toggle("active", b.dataset.domain === domain) })
   el("class-list-area").style.display = domain === "class" ? "flex" : "none"
   el("schedule-list-area").style.display = domain === "schedule" ? "flex" : "none"
+  el("report-list-area").style.display = domain === "report" ? "flex" : "none"
+  el("tuition-list-area").style.display = domain === "tuition" ? "flex" : "none"
   el("right-tabs-row").style.display = domain === "class" ? "flex" : "none"
   el("right-summary-toggle").style.display = domain === "class" ? "inline-flex" : "none"
+  el("report-tuition-detail").style.display = (domain === "report" || domain === "tuition") ? "block" : "none"
+  el("cal-panel-report-toggle").style.display = domain === "report" ? "flex" : "none"
   el("bulk-send-tab-btn").disabled = true
   el("right-summary-body").classList.remove("show")
   el("md-right-empty").style.display = "block"
   el("md-right-content").style.display = "none"
-  el("md-right-empty").textContent = domain === "class" ? "👈 왼쪽에서 수업을 선택하면 상세정보가 표시돼요" : "👈 왼쪽에서 일정을 선택하면 상세정보가 표시돼요"
+  el("md-right-empty").textContent = domain === "class" ? "👈 왼쪽에서 수업을 선택하면 상세정보가 표시돼요"
+    : domain === "schedule" ? "👈 왼쪽에서 일정을 선택하면 상세정보가 표시돼요"
+    : domain === "report" ? "👈 왼쪽에서 학생을 선택하면 보고서 상세가 표시돼요"
+    : "👈 왼쪽에서 학생을 선택하면 수강료 상세가 표시돼요"
   SELECTED_CLASS_ID = null
   SELECTED_SCHEDULE_ID = null
+  SELECTED_REPORT_ID = null
+  SELECTED_TUITION_ID = null
   closeMobileDetail()
+  if (domain === "report" || domain === "tuition") {
+    if (!CALENDAR_OPEN) toggleCalendarPanel()
+    CAL_PANEL_MONTH = kstToday().slice(0, 7)
+    loadCalendarPanel()
+  }
   loadCenterList()
-  if (CALENDAR_OPEN) loadCalendarPanel()
+  if (CALENDAR_OPEN && domain !== "report" && domain !== "tuition") loadCalendarPanel()
 }
 
 // ---------------- 캘린더 사이드패널 (열고/닫기) ----------------
@@ -855,11 +893,13 @@ function shiftCalendarMonth(delta) {
   const d = new Date(y, m - 1 + delta, 1)
   CAL_PANEL_MONTH = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")
   loadCalendarPanel()
+  if (DOMAIN === "report" || DOMAIN === "tuition") loadCenterList()
 }
 
 function goCalendarPanelToday() {
   CAL_PANEL_MONTH = kstToday().slice(0, 7)
   loadCalendarPanel()
+  if (DOMAIN === "report" || DOMAIN === "tuition") loadCenterList()
 }
 
 async function loadCalendarPanel() {
@@ -871,6 +911,7 @@ async function loadCalendarPanel() {
 
 // 캘린더에 표시된 달의 날짜별로 수업/일정이 있는지 조회해서 점을 표시해요.
 async function loadCalPanelDots() {
+  if (DOMAIN === "report" || DOMAIN === "tuition") { CAL_PANEL_ITEMS = {}; renderCalPanel(); return }
   const month = CAL_PANEL_MONTH
   const parts = month.split("-").map(Number)
   const y = parts[0], m = parts[1]
@@ -941,12 +982,165 @@ function shiftDate(delta) {
 
 function loadCenterList() {
   if (DOMAIN === "class") loadClassList(CURRENT_DATE)
-  else loadScheduleList(CURRENT_DATE)
+  else if (DOMAIN === "schedule") loadScheduleList(CURRENT_DATE)
+  else if (DOMAIN === "report") loadReportList(CAL_PANEL_MONTH)
+  else loadTuitionList(CAL_PANEL_MONTH)
 }
 
 function renderCenterList() {
   if (DOMAIN === "class") renderClassList()
-  else renderScheduleList()
+  else if (DOMAIN === "schedule") renderScheduleList()
+  else if (DOMAIN === "report") renderReportList()
+  else renderTuitionList()
+}
+
+// ---------------- 보고서 탭 (주간/월간) ----------------
+function setReportType(type) {
+  if (REPORT_TYPE === type) return
+  REPORT_TYPE = type
+  document.querySelectorAll(".report-type-btn").forEach(function (b) { b.classList.toggle("active", b.dataset.reportType === type) })
+  loadReportList(CAL_PANEL_MONTH)
+}
+
+async function loadReportList(month) {
+  el("report-list-area").innerHTML = '<div class="loading">불러오는 중...</div>'
+  try {
+    const res = await fetch(GET_REPORTS_URL + "?type=" + REPORT_TYPE + "&month=" + month, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || ("조회 실패: " + res.status))
+    REPORTS = data.reports || []
+    if (month !== CAL_PANEL_MONTH) return
+    renderReportList()
+  } catch (err) {
+    el("report-list-area").innerHTML = '<div class="empty">조회 실패: ' + esc(err.message) + '</div>'
+  }
+}
+
+function renderReportList() {
+  const term = SEARCH_TERM
+  const list = REPORTS.filter(function (r) { return !term || (r.studentName || "").toLowerCase().includes(term) })
+  if (!list.length) {
+    el("report-list-area").innerHTML = '<div class="empty">해당 월에 해당하는 보고서가 없어요</div>'
+    return
+  }
+  el("report-list-area").innerHTML = list.map(function (r) {
+    const active = r.reportId === SELECTED_REPORT_ID ? " selected" : ""
+    const period = r.period ? (r.period.start || "") + (r.period.end && r.period.end !== r.period.start ? " ~ " + r.period.end : "") : ""
+    return '<div class="class-card' + active + '" onclick="selectReport(' + JSON.stringify(r.reportId) + ')">'
+      + '<div class="class-card-title">' + esc(r.studentName || r.title) + '</div>'
+      + '<div class="class-card-sub">' + esc(period) + (r.sentBy ? ' · ✅ 발송완료' : '') + '</div>'
+      + '</div>'
+  }).join("")
+}
+
+function selectReport(reportId) {
+  SELECTED_REPORT_ID = reportId
+  renderReportList()
+  const r = REPORTS.find(function (x) { return x.reportId === reportId })
+  if (!r) return
+  el("md-right-empty").style.display = "none"
+  el("md-right-content").style.display = "block"
+  el("right-title").textContent = r.studentName || r.title
+  el("right-page-link").style.display = "none"
+  const period = r.period ? (r.period.start || "") + (r.period.end && r.period.end !== r.period.start ? " ~ " + r.period.end : "") : "-"
+  el("right-time").textContent = period
+  el("right-sub").textContent = r.evalMonth || ""
+  el("right-summary-toggle").style.display = "none"
+  const sendFnName = REPORT_TYPE === "monthly" ? "월간" : "주간"
+  el("report-tuition-detail").innerHTML = '<div class="right-tab-body">'
+    + '<p><strong>선생님 한마디</strong></p><p>' + esc(r.teacherComment || "(작성된 내용이 없어요)") + '</p>'
+    + '<button class="bulk-send-btn" style="margin-top:12px" onclick="sendPeriodReport(' + JSON.stringify(reportId) + ')">📩 ' + sendFnName + ' 보고서 발송</button>'
+    + '</div>'
+  openMobileDetail()
+}
+
+async function sendPeriodReport(reportId) {
+  const url = REPORT_TYPE === "monthly" ? SEND_MONTHLY_REPORT_URL : SEND_WEEKLY_REPORT_URL
+  try {
+    showToast("발송 중...")
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
+      body: JSON.stringify({ reportId: reportId }),
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || ("발송 실패: " + res.status))
+    showToast("발송이 완료되었어요.")
+  } catch (err) {
+    showToast("발송 실패: " + err.message)
+  }
+}
+
+// ---------------- 수강료 탭 ----------------
+async function loadTuitionList(month) {
+  el("tuition-list-area").innerHTML = '<div class="loading">불러오는 중...</div>'
+  try {
+    const res = await fetch(GET_TUITIONS_URL + "?month=" + month, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || ("조회 실패: " + res.status))
+    TUITIONS = data.tuitions || []
+    if (month !== CAL_PANEL_MONTH) return
+    renderTuitionList()
+  } catch (err) {
+    el("tuition-list-area").innerHTML = '<div class="empty">조회 실패: ' + esc(err.message) + '</div>'
+  }
+}
+
+function renderTuitionList() {
+  const term = SEARCH_TERM
+  const list = TUITIONS.filter(function (t) { return !term || (t.studentInfo || "").toLowerCase().includes(term) })
+  if (!list.length) {
+    el("tuition-list-area").innerHTML = '<div class="empty">해당 월에 해당하는 청구 내역이 없어요</div>'
+    return
+  }
+  el("tuition-list-area").innerHTML = list.map(function (t) {
+    const active = t.tuitionId === SELECTED_TUITION_ID ? " selected" : ""
+    const statusIcon = (t.paymentStatus || "").includes("미납") ? "🔴" : (t.paymentStatus || "").includes("완료") ? "🟢" : "🟠"
+    return '<div class="class-card' + active + '" onclick="selectTuition(' + JSON.stringify(t.tuitionId) + ')">'
+      + '<div class="class-card-title">' + esc(t.studentInfo || t.title) + '</div>'
+      + '<div class="class-card-sub">' + statusIcon + ' ' + esc(t.paymentStatus || "") + (t.amount != null ? ' · ' + Number(t.amount).toLocaleString("ko-KR") + '원' : '') + '</div>'
+      + '</div>'
+  }).join("")
+}
+
+function selectTuition(tuitionId) {
+  SELECTED_TUITION_ID = tuitionId
+  renderTuitionList()
+  const t = TUITIONS.find(function (x) { return x.tuitionId === tuitionId })
+  if (!t) return
+  el("md-right-empty").style.display = "none"
+  el("md-right-content").style.display = "block"
+  el("right-title").textContent = t.studentInfo || t.title
+  el("right-page-link").style.display = "none"
+  const period = t.period ? (t.period.start || "") + (t.period.end && t.period.end !== t.period.start ? " ~ " + t.period.end : "") : "-"
+  el("right-time").textContent = period
+  el("right-sub").textContent = t.paymentStatus || ""
+  el("right-summary-toggle").style.display = "none"
+  el("report-tuition-detail").innerHTML = '<div class="right-tab-body">'
+    + '<p><strong>청구금액</strong></p><p>' + (t.amount != null ? Number(t.amount).toLocaleString("ko-KR") + '원' : "-") + '</p>'
+    + '<button class="bulk-send-btn" style="margin-top:12px" onclick="sendTuitionNotice(' + JSON.stringify(tuitionId) + ')">📩 수강료 안내 발송</button>'
+    + '</div>'
+  openMobileDetail()
+}
+
+async function sendTuitionNotice(tuitionId) {
+  try {
+    showToast("발송 중...")
+    const res = await fetch(SEND_TUITION_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
+      body: JSON.stringify({ tuitionId: tuitionId }),
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || ("발송 실패: " + res.status))
+    showToast("발송이 완료되었어요.")
+  } catch (err) {
+    showToast("발송 실패: " + err.message)
+  }
 }
 
 // ---------------- 수업 목록(중앙) ----------------

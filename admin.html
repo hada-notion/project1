@@ -364,12 +364,12 @@
 
     <div class="view-toggle" id="view-toggle">
       <div class="view-tabs">
-        <button id="view-tab-registration" class="view-tab active" title="등록 보기 · 학생 구분 없이 등록 단위로 나열합니다">📋 등록 보기</button>
+        <button id="view-tab-registration" class="view-tab active" onclick="switchAdminTab('registration')" title="등록 보기 · 학생 구분 없이 등록 단위로 나열합니다">📋 등록 보기</button>
+        <button id="view-tab-sendlog" class="view-tab" onclick="switchAdminTab('sendlog')" title="전송 로그 · 일일/주간/월간 보고서 및 수강료 안내 발송 이력을 확인합니다">🧾 전송 로그</button>
       </div>
       <div class="bulk-actions" id="bulk-actions">
         <span class="selected-count" id="selected-count"></span>
         <button class="icon-btn" id="bulk-sync-btn" onclick="bulkSyncSelected()" title="선택 동기화 · 체크한 등록을 한 번에 최신화합니다">🔄️</button>
-        <button class="icon-btn" id="bulk-alimtalk-btn" onclick="bulkAlimtalkSelected()" title="선택 알림톡 일괄 전송 · 체크한 학생 중 오늘 수업이 있는 학생에게 알림톡을 전송합니다">📩</button>
         <button class="icon-btn" id="bulk-disable-btn" onclick="bulkDisableSelected()" title="선택 비활성화 · 체크한 링크를 비활성화합니다">🔒</button>
         <button class="icon-btn danger" id="bulk-regen-btn" onclick="bulkRegenerateSelected()" title="선택 링크 변경 · 체크한 링크를 새로 발급합니다">♻️</button>
       </div>
@@ -393,13 +393,27 @@
         <option value="none">미생성</option>
         <option value="fail">실패</option>
       </select>
-      <label class="today-only-toggle">
-        <input type="checkbox" id="filter-today" onchange="onFilterChange()">
-        오늘 수업만
-      </label>
     </div>
 
     <div id="app"><div class="loading">불러오는 중...</div></div>
+
+    <div id="sendlog-view" style="display:none;">
+      <div class="filter-bar">
+        <select id="sendlog-filter-category" onchange="loadSendLogs()">
+          <option value="">발송 구분 전체</option>
+          <option value="일일 보고서">일일 보고서</option>
+          <option value="주간 보고서">주간 보고서</option>
+          <option value="월간 보고서">월간 보고서</option>
+          <option value="수강료 안내">수강료 안내</option>
+        </select>
+        <select id="sendlog-filter-status" onchange="loadSendLogs()">
+          <option value="">발송 상태 전체</option>
+          <option value="성공">성공</option>
+          <option value="실패">실패</option>
+        </select>
+      </div>
+      <div id="sendlog-app"><div class="loading">불러오는 중...</div></div>
+    </div>
   </div>
 </div>
 
@@ -418,17 +432,6 @@
   </div>
 </div>
 
-<div class="modal-overlay" id="alimtalk-modal">
-  <div class="modal-box">
-    <h3>📩 알림톡을 발송할까요?</h3>
-    <p id="alimtalk-modal-body"></p>
-    <div class="modal-actions">
-      <button class="cancel" onclick="closeAlimtalkModal()">취소</button>
-      <button class="confirm" onclick="confirmAlimtalkSend()">발송</button>
-    </div>
-  </div>
-</div>
-
 <div class="toast" id="toast"></div>
 
 <script>
@@ -439,6 +442,7 @@ const STUDENTS_CACHE_STORAGE = "admin_students_cache"
 const FILTER_STORAGE = "admin_filters"
 const COLLAPSE_STORAGE = "admin_collapsed_groups"
 const STALE_DAYS = 7
+const SEND_LOG_URL = SUPABASE_URL + "/functions/v1/get-send-logs"
 
 function esc(s) {
   if (s === null || s === undefined) return ""
@@ -686,7 +690,6 @@ function loadFilters() {
     document.getElementById("search-input").value = saved.query || ""
     document.getElementById("filter-course").value = saved.course || "all"
     document.getElementById("filter-report").value = saved.report || "all"
-    document.getElementById("filter-today").checked = !!saved.todayOnly
   } catch (e) { /* ignore */ }
 }
 
@@ -695,7 +698,6 @@ function currentFilters() {
     query: document.getElementById("search-input").value.trim().toLowerCase(),
     course: document.getElementById("filter-course").value,
     report: document.getElementById("filter-report").value,
-    todayOnly: document.getElementById("filter-today").checked,
   }
 }
 
@@ -792,7 +794,6 @@ function studentMetaLine(s) {
 function matchesFilters(s, filters) {
   if (filters.course !== "all" && s.status !== filters.course) return false
   if (filters.report !== "all" && reportStatus(s) !== filters.report) return false
-  if (filters.todayOnly && !s.hasClassToday) return false
   if (filters.query) {
     const haystack = [s.studentName, s.title, s.school, s.grade, s.teacherName].filter(Boolean).join(" ").toLowerCase()
     if (!haystack.includes(filters.query)) return false
@@ -825,11 +826,9 @@ function renderStats(students) {
   const groups = groupByStudent(students)
   const counts = { ok: 0, stale: 0, none: 0, fail: 0 }
   students.forEach((s) => { counts[reportStatus(s)]++ })
-  const todayStudentCount = groups.filter((g) => g.indices.some((i) => students[i].hasClassToday)).length
   document.getElementById("stats").innerHTML = `
     <div class="stat-card tot"><div class="num">${groups.length}</div><div class="label">전체 학생</div></div>
     <div class="stat-card tot"><div class="num">${students.length}</div><div class="label">전체 등록</div></div>
-    <div class="stat-card tot"><div class="num">${todayStudentCount}</div><div class="label">오늘 수업 학생</div></div>
     <div class="stat-card ok"><div class="num">${counts.ok}</div><div class="label">최신</div></div>
     <div class="stat-card stale"><div class="num">${counts.stale}</div><div class="label">갱신 필요</div></div>
     <div class="stat-card none"><div class="num">${counts.none}</div><div class="label">미생성</div></div>
@@ -950,17 +949,6 @@ async function bulkSyncSelected() {
   }
   if (btn) btn.disabled = SELECTED.size === 0
   showToast(`선택한 ${targets.length}건의 보고서를 생성했습니다.`)
-}
-
-// 선택한 학생 중 오늘 수업이 있는 학생에게만 알림톡을 일괄 전송합니다.
-function bulkAlimtalkSelected() {
-  const targets = selectedIndices().filter((i) => STUDENTS[i].hasClassToday && STUDENTS[i].attendanceId)
-  if (!targets.length) {
-    showToast("선택한 항목 중 오늘 수업이 있는 학생이 없습니다.")
-    return
-  }
-  ALIMTALK_PENDING = { type: "bulk", indices: targets }
-  openAlimtalkModal(`선택한 <strong>${targets.length}명</strong>에게<br>오늘 수업 알림톡을 발송할까요?`)
 }
 
 // 선택한 링크를 일괄 비활성화합니다.
@@ -1129,7 +1117,6 @@ function renderDesktopRow(i, isCollapsed, flat) {
       <td>
         <button class="action ${status === "fail" ? "retry" : ""}" id="btn-${i}" onclick='onActionClick(${i})' title="${esc(actionTitle(status))}">${actionLabel(status)}</button>
         <button class="secondary" id="copy-${i}" onclick='openLink(${JSON.stringify(s.accessToken || "")})' ${s.accessToken ? "" : "disabled"} title="링크 열기 · 학부모용 리포트 페이지를 새 탭에서 열고 링크도 함께 복사합니다">🔗</button>
-        <button class="secondary" id="alimtalk-${i}" onclick='sendAlimtalk(${i})' ${s.hasClassToday ? "" : "disabled"} title="알림톡 전송 · 오늘 수업한 학생에게 카카오 알림톡을 전송합니다">📩</button>
         ${lockToggleButtonHtml(i, "lock")}
         ${regenerateButtonHtml(i, "regen")}
       </td>
@@ -1185,7 +1172,6 @@ function renderMobileReg(i, isCollapsed, flat) {
       <div class="m-actions">
         <button class="action ${status === "fail" ? "retry" : ""}" id="mbtn-${i}" onclick='onActionClick(${i})' title="${esc(actionTitle(status))}">${actionLabel(status)}</button>
         <button class="secondary" onclick='openLink(${JSON.stringify(s.accessToken || "")})' ${s.accessToken ? "" : "disabled"} title="링크 열기 · 학부모용 리포트 페이지를 새 탭에서 열고 링크도 함께 복사합니다">🔗</button>
-        <button class="secondary" id="malimtalk-${i}" onclick='sendAlimtalk(${i})' ${s.hasClassToday ? "" : "disabled"} title="알림톡 전송 · 오늘 수업한 학생에게 카카오 알림톡을 전송합니다">📩</button>
         ${lockToggleButtonHtml(i, "mlock")}
         ${regenerateButtonHtml(i, "mregen")}
       </div>
@@ -1290,92 +1276,6 @@ function openLink(token) {
   navigator.clipboard.writeText(reportUrl(token)).catch(() => {})
 }
 
-// ---------------- Actions: AlimTalk send ----------------
-let ALIMTALK_PENDING = null // { type: "single", index } | { type: "bulk", indices: number[] }
-
-function openAlimtalkModal(bodyHtml) {
-  document.getElementById("alimtalk-modal-body").innerHTML = bodyHtml
-  document.getElementById("alimtalk-modal").classList.add("active")
-}
-
-function closeAlimtalkModal() {
-  ALIMTALK_PENDING = null
-  document.getElementById("alimtalk-modal").classList.remove("active")
-}
-
-// 개별 학생 알림톡 전송: 오늘 수업(attendanceId)이 있는 학생만 보낼 수 있습니다.
-function sendAlimtalk(i) {
-  const s = STUDENTS[i]
-  if (!s.hasClassToday || !s.attendanceId) {
-    showToast("오늘 등록된 수업이 없어 알림톡을 보낼 수 없습니다.")
-    return
-  }
-  ALIMTALK_PENDING = { type: "single", index: i }
-  openAlimtalkModal(`<strong>${esc(s.studentName)}</strong> (${esc(s.title || "")}) 학생에게<br>오늘 수업 알림톡을 발송할까요?`)
-}
-
-// 오늘 수업이 있는(현재 필터에 맞는) 학생 전원에게 일괄 전송합니다.
-function sendAlimtalkBulk() {
-  const filters = currentFilters()
-  const targets = STUDENTS
-    .map((s, i) => i)
-    .filter((i) => matchesFilters(STUDENTS[i], filters))
-    .filter((i) => STUDENTS[i].hasClassToday && STUDENTS[i].attendanceId)
-  if (!targets.length) {
-    showToast("오늘 수업이 있는(필터에 맞는) 학생이 없습니다.")
-    return
-  }
-  ALIMTALK_PENDING = { type: "bulk", indices: targets }
-  openAlimtalkModal(`오늘 수업이 있는 <strong>${targets.length}명</strong>에게<br>알림톡을 일괄 발송할까요?`)
-}
-
-async function confirmAlimtalkSend() {
-  const pending = ALIMTALK_PENDING
-  document.getElementById("alimtalk-modal").classList.remove("active")
-  ALIMTALK_PENDING = null
-  if (!pending) return
-  if (pending.type === "single") {
-    await sendAlimtalkOne(pending.index)
-  } else {
-    await sendAlimtalkBulkRun(pending.indices)
-  }
-}
-
-async function callSendDailyReport(s) {
-  const adminKey = getAdminKey()
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/send-daily-report`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-admin-key": adminKey,
-      "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-      "apikey": SUPABASE_ANON_KEY,
-    },
-    body: JSON.stringify({ registrationId: s.registrationId, attendanceId: s.attendanceId }),
-  })
-  if (!res.ok) throw new Error(`실패: ${res.status} ${await res.text()}`)
-  const result = await res.json()
-  s.accessToken = result.access_token
-  s.updatedAt = new Date().toISOString()
-  delete s.error
-  delete s.lastError
-  return result
-}
-
-async function sendAlimtalkOne(index) {
-  const s = STUDENTS[index]
-  const btn = document.getElementById(`alimtalk-${index}`)
-  const mbtn = document.getElementById(`malimtalk-${index}`)
-  ;[btn, mbtn].forEach((b) => { if (b) { b.disabled = true; b.textContent = "전송 중..." } })
-  try {
-    await callSendDailyReport(s)
-    showToast(`${s.studentName}에게 알림톡을 발송했습니다.`)
-    renderAll()
-  } catch (err) {
-    alert("알림톡 전송 오류: " + err.message)
-    ;[btn, mbtn].forEach((b) => { if (b) { b.disabled = false; b.textContent = "📩" } })
-  }
-}
 
 // ---------------- Actions: report link enable/disable ----------------
 // 링크 상태를 변경하거나(access_token 유지) 새 링크를 발급합니다(access_token 재발급).
@@ -1490,23 +1390,6 @@ function closeAllMenus() {
 
 document.addEventListener("click", closeAllMenus)
 
-async function sendAlimtalkBulkRun(indices) {
-  let done = 0
-  let failed = 0
-  showToast(`알림톡 일괄 전송을 시작합니다. (0/${indices.length})`)
-  for (const i of indices) {
-    try {
-      await callSendDailyReport(STUDENTS[i])
-      done++
-    } catch (err) {
-      failed++
-      STUDENTS[i].error = err.message
-    }
-    showToast(`알림톡 전송 중... (${done + failed}/${indices.length})`)
-  }
-  renderAll()
-  showToast(`알림톡 일괄 전송 완료: 성공 ${done}건${failed ? `, 실패 ${failed}건` : ""}`)
-}
 
 // ---------------- Debug clock ----------------
 // 진단용: 이 프론트엔드(밌단)가 현재 묵 시각을 어뚒게 인식하는지 화인하기 위해 추가합니다.
@@ -1521,6 +1404,82 @@ function updateDebugClock() {
     weekday: "short", hour12: false,
   }).format(now)
   el.textContent = `현재 인식 시각(Asia/Seoul): ${parts}`
+}
+
+// ---------------- 전송 로그 탭 ----------------
+function switchAdminTab(tab) {
+  const regTab = document.getElementById("view-tab-registration")
+  const logTab = document.getElementById("view-tab-sendlog")
+  const filterBar = document.querySelector(".filter-bar")
+  const appEl = document.getElementById("app")
+  const logView = document.getElementById("sendlog-view")
+  const statsEl = document.getElementById("stats")
+  const bulkActions = document.getElementById("bulk-actions")
+  if (tab === "sendlog") {
+    regTab.classList.remove("active")
+    logTab.classList.add("active")
+    if (filterBar) filterBar.style.display = "none"
+    if (statsEl) statsEl.style.display = "none"
+    if (bulkActions) bulkActions.style.display = "none"
+    appEl.style.display = "none"
+    logView.style.display = "block"
+    loadSendLogs()
+  } else {
+    logTab.classList.remove("active")
+    regTab.classList.add("active")
+    if (filterBar) filterBar.style.display = ""
+    if (statsEl) statsEl.style.display = ""
+    if (bulkActions) bulkActions.style.display = ""
+    logView.style.display = "none"
+    appEl.style.display = ""
+  }
+}
+
+function sendLogStatusBadge(status) {
+  if (status === "성공") return `<span class="badge ok">성공</span>`
+  if (status === "실패") return `<span class="badge fail">실패</span>`
+  return esc(status || "-")
+}
+
+async function loadSendLogs() {
+  const category = document.getElementById("sendlog-filter-category").value
+  const status = document.getElementById("sendlog-filter-status").value
+  const el = document.getElementById("sendlog-app")
+  el.innerHTML = '<div class="loading">불러오는 중...</div>'
+  try {
+    const params = new URLSearchParams()
+    if (category) params.set("category", category)
+    if (status) params.set("status", status)
+    const res = await fetch(`${SEND_LOG_URL}?${params.toString()}`, {
+      headers: { "x-admin-key": getAdminKey(), "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "apikey": SUPABASE_ANON_KEY },
+    })
+    if (!res.ok) throw new Error(`조회 실패: ${res.status}`)
+    const { logs } = await res.json()
+    if (!logs.length) {
+      el.innerHTML = '<div class="empty">해당 조건의 전송 기록이 없습니다.</div>'
+      return
+    }
+    el.innerHTML = `
+      <table>
+        <thead><tr><th>이름</th><th>구분</th><th>상태</th><th>발송일시</th><th>기간</th><th>채널</th><th>실패 사유</th></tr></thead>
+        <tbody>
+          ${logs.map((log) => `
+            <tr>
+              <td>${esc(log.name)}</td>
+              <td>${esc(log.category)}</td>
+              <td>${sendLogStatusBadge(log.status)}</td>
+              <td>${log.sentAt ? formatDate(log.sentAt) : "-"}</td>
+              <td>${log.periodStart ? esc(log.periodStart) + (log.periodEnd && log.periodEnd !== log.periodStart ? " ~ " + esc(log.periodEnd) : "") : "-"}</td>
+              <td>${esc(log.channel)}</td>
+              <td>${esc(log.failReason)}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `
+  } catch (err) {
+    el.innerHTML = `<div class="empty">조회 실패: ${esc(err.message)}</div>`
+  }
 }
 
 // ---------------- Boot ----------------
