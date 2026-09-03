@@ -792,6 +792,18 @@ function formatDateLabel(dateStr) {
   return dateStr.replace(/-/g, ".") + " (" + days[d.getDay()] + ")"
 }
 
+// 날짜를 이동해서 새로 불러오는 동안, 이전 날짜의 상세정보가 남아있어 착각하지 않도록 오른쪽 패널을 비워요.
+function clearRightPanel() {
+  el("md-right-empty").style.display = "block"
+  el("md-right-content").style.display = "none"
+  el("md-right-empty").textContent = DOMAIN === "class" ? "👈 왼쪽에서 수업을 선택하면 상세정보가 표시돼요" : "👈 왼쪽에서 일정을 선택하면 상세정보가 표시돼요"
+  SELECTED_CLASS_ID = null
+  SELECTED_SCHEDULE_ID = null
+  el("bulk-send-tab-btn").disabled = true
+  el("right-summary-body").classList.remove("show")
+  closeMobileDetail()
+}
+
 // ---------------- 수업/일정 모드 전환 ----------------
 function setDomain(domain) {
   if (DOMAIN === domain) return
@@ -950,6 +962,9 @@ async function loadClassList(dateStr) {
     return
   }
   setStatus("loading", "수업 목록을 불러오는 중이에요...")
+  CLASSES = []
+  renderClassList()
+  clearRightPanel()
   await refreshClassList(dateStr, false)
 }
 
@@ -1144,7 +1159,7 @@ function renderStudentsTab(c, body) {
     const cls = statusBadgeClass[s.status] || "gray"
     const canSend = !!s.attendanceId
     const homeworkCls = s.homework ? (homeworkBadgeClass[s.homework.status] || "tone-gray") : ""
-    const homeworkBadge = s.homework ? ' <span class="badge ' + homeworkCls + '">' + s.homework.status + '</span>' : ""
+    const homeworkBadge = s.homework ? ' <span class="badge ' + homeworkCls + '">과제 ' + s.homework.status + '</span>' : ""
     const evalCls = s.evaluation ? attendanceRateTone(s.evaluation.score) : ""
     const evalBadge = s.evaluation ? ' <span class="badge ' + evalCls + '">' + s.evaluation.score + '점</span>' : ""
     return '<div class="student-row"><span class="stu-name">🧑‍🎓 ' + esc(s.name) +
@@ -1215,6 +1230,9 @@ async function loadScheduleList(dateStr) {
     return
   }
   setStatus("loading", "일정 목록을 불러오는 중이에요...")
+  SCHEDULES = []
+  renderScheduleList()
+  clearRightPanel()
   await refreshScheduleList(dateStr, false)
 }
 
