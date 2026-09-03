@@ -429,6 +429,13 @@
 .rate-badge.tone-yellow { background:#fff9db; color:#b9971d; }
 .rate-badge.tone-green { background:#e6f7ee; color:#1e9e5c; }
 .rate-badge.tone-blue { background:#eaf1fd; color:#2f6fd9; }
+#report-tuition-detail { padding:0; }
+#report-tuition-detail .detail-meta-row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+#report-tuition-detail .info-card { background:#fff; border-radius:14px; padding:14px 16px; margin-bottom:10px; box-shadow:0 1px 4px rgba(0,0,0,0.06); border:1px solid var(--border); }
+#report-tuition-detail .info-card:last-of-type { margin-bottom:0; }
+#report-tuition-detail .info-card h3 { font-size:13px; margin:0 0 8px; display:flex; align-items:center; gap:6px; color:var(--text); font-weight:700; }
+#report-tuition-detail .info-card .info-content { font-size:12.5px; color:#6b6b68; line-height:1.6; white-space:pre-wrap; }
+#report-tuition-detail .info-card .info-content.empty { color:#bbb; }
 .mini-cal .mc-grid { display:grid; grid-template-columns: repeat(7, 1fr); gap:4px; margin-bottom:2px; }
 .mini-cal .mc-dow { text-align:center; font-size:12px; color:#999; font-weight:600; padding-bottom:2px; }
 .mini-cal .mc-day { aspect-ratio:1; display:flex; align-items:center; justify-content:center; position:relative; font-size:13px; border-radius:8px; cursor:pointer; background:#f7f7f9; color:#bbb; transition:transform 0.1s; }
@@ -445,8 +452,6 @@
 .mini-cal .mc-day.week-selected.today { box-shadow: inset 0 0 0 2px #6c5ce7; }
 .mini-cal .mc-day.no-select { cursor:default; }
 .mini-cal .mc-day.no-select:hover { background:#f7f7f9; }
-.mini-cal .mc-day.empty.week-selected { visibility:visible; background:#e4e1fb; cursor:default; }
-.mini-cal .mc-day.empty.week-selected:hover { background:#e4e1fb; }
 
 .mobile-back-btn { display:none; background:#f0f0ee; color:var(--text); border:none; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; margin-bottom:12px; }
 .mobile-back-btn:hover { background:#e6e6e3; }
@@ -645,7 +650,7 @@ async function submitLogin() {
   const key = input.value.trim()
   const btn = document.getElementById("login-btn")
   const errEl = document.getElementById("login-error")
-  if (!key) { errEl.textContent = "비밀번호를 입력하세요."; return }
+  if (!key) { errEl.textContent = "비밀번호를 입��하세요."; return }
   btn.disabled = true
   btn.textContent = "확인 중..."
   errEl.textContent = ""
@@ -825,7 +830,7 @@ function formatDateLabel(dateStr) {
   return dateStr.replace(/-/g, ".") + " (" + days[d.getDay()] + ")"
 }
 
-// 날짜를 이동해서 새로 불러오는 동안, 이전 날짜의 상세정보가 남아있어 착각하지 않도록 오른쪽 패널을 비워요.
+// 날짜를 이동해서 새로 ��러오는 동안, 이전 날짜의 상세정보가 남아있어 착각하지 않도록 오른쪽 패널을 비워요.
 function clearRightPanel() {
   el("md-right-empty").style.display = "block"
   el("md-right-content").style.display = "none"
@@ -918,7 +923,6 @@ async function loadCalendarPanel() {
   const parts = CAL_PANEL_MONTH.split("-").map(Number)
   el("cal-panel-month-label").textContent = parts[0] + "년 " + parts[1] + "월"
   renderCalPanel()
-  updateDateNavLabel()
   loadCalPanelDots()
 }
 
@@ -967,7 +971,6 @@ function selectCalWeek(weekStartStr) {
   SELECTED_WEEK_START = weekStartStr
   SELECTED_WEEK_END = weekEndOf(weekStartStr)
   renderCalPanel()
-  updateDateNavLabel()
   renderReportList()
 }
 
@@ -982,18 +985,7 @@ function renderCalPanel() {
   const isWeeklyReport = DOMAIN === "report" && REPORT_TYPE === "weekly"
   const isMonthOnly = DOMAIN === "tuition" || (DOMAIN === "report" && REPORT_TYPE === "monthly")
   let cells = dows.map(function (d) { return '<div class="mc-dow">' + d + '</div>' }).join("")
-  function ymdOf(day) {
-    const dt = new Date(y, m - 1, day)
-    return dt.getFullYear() + "-" + String(dt.getMonth() + 1).padStart(2, "0") + "-" + String(dt.getDate()).padStart(2, "0")
-  }
-  for (let i = 0; i < startWeekday; i++) {
-    let leadCls = "mc-day empty"
-    if (isWeeklyReport) {
-      const leadDateStr = ymdOf(i - startWeekday + 1)
-      if (SELECTED_WEEK_START && leadDateStr >= SELECTED_WEEK_START && leadDateStr <= SELECTED_WEEK_END) leadCls += " week-selected"
-    }
-    cells += '<div class="' + leadCls + '"></div>'
-  }
+  for (let i = 0; i < startWeekday; i++) cells += '<div class="mc-day empty"></div>'
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = CAL_PANEL_MONTH + "-" + String(d).padStart(2, "0")
     let cls = "mc-day"
@@ -1009,36 +1001,7 @@ function renderCalPanel() {
       cells += '<div class="' + cls + '" onclick="goToDateFromCalendarPanel(' + attrSafe(dateStr) + ')">' + d + dot + '</div>'
     }
   }
-  if (isWeeklyReport) {
-    const trailing = (7 - ((startWeekday + daysInMonth) % 7)) % 7
-    for (let j = 1; j <= trailing; j++) {
-      let trailCls = "mc-day empty"
-      const trailDateStr = ymdOf(daysInMonth + j)
-      if (SELECTED_WEEK_START && trailDateStr >= SELECTED_WEEK_START && trailDateStr <= SELECTED_WEEK_END) trailCls += " week-selected"
-      cells += '<div class="' + trailCls + '"></div>'
-    }
-  }
   el("cal-panel-area").innerHTML = '<div class="mc-grid">' + cells + '</div>'
-}
-
-function formatWeekRangeLabel(startStr, endStr) {
-  const days = ["일", "월", "화", "수", "목", "금", "토"]
-  const sd = new Date(startStr + "T00:00:00+09:00")
-  const ed = new Date(endStr + "T00:00:00+09:00")
-  const startText = startStr.replace(/-/g, ".") + " (" + days[sd.getDay()] + ")"
-  const endText = endStr.slice(5).replace(/-/g, ".") + " (" + days[ed.getDay()] + ")"
-  return startText + " ~ " + endText
-}
-
-function updateDateNavLabel() {
-  const labelEl = el("date-nav-label")
-  if (!labelEl) return
-  if (DOMAIN === "report" && REPORT_TYPE === "weekly" && SELECTED_WEEK_START && SELECTED_WEEK_END) {
-    labelEl.textContent = formatWeekRangeLabel(SELECTED_WEEK_START, SELECTED_WEEK_END)
-  } else if ((DOMAIN === "report" && REPORT_TYPE === "monthly") || DOMAIN === "tuition") {
-    const parts2 = CAL_PANEL_MONTH.split("-").map(Number)
-    labelEl.textContent = parts2[0] + "년 " + parts2[1] + "월"
-  }
 }
 
 function goToDateFromCalendarPanel(dateStr) {
@@ -1052,7 +1015,7 @@ function goToDateFromCalendarPanel(dateStr) {
   loadCenterList()
 }
 
-// ---------------- 검색(만능 검색창) ----------------
+// ---------------- 검색(만능 검색���) ----------------
 function onSearchInput(term) {
   SEARCH_TERM = (term || "").trim().toLowerCase()
   renderCenterList()
@@ -1087,7 +1050,6 @@ function setReportType(type) {
   document.querySelectorAll(".report-type-btn").forEach(function (b) { b.classList.toggle("active", b.dataset.reportType === type) })
   if (type === "weekly") initDefaultWeek()
   renderCalPanel()
-  updateDateNavLabel()
   loadReportList(CAL_PANEL_MONTH)
 }
 
@@ -1126,9 +1088,12 @@ function renderReportList() {
   el("report-list-area").innerHTML = list.map(function (r) {
     const active = r.reportId === SELECTED_REPORT_ID ? " selected" : ""
     const period = r.period ? (r.period.start || "") + (r.period.end && r.period.end !== r.period.start ? " ~ " + r.period.end : "") : ""
-    return '<div class="class-card' + active + '" onclick="selectReport(' + JSON.stringify(r.reportId) + ')">'
-      + '<div class="class-card-title">' + esc(r.studentName || r.title) + '</div>'
-      + '<div class="class-card-sub">' + esc(period) + (r.sentBy ? ' · ✅ 발송완료' : '') + '</div>'
+    const sentBadge = r.sentBy ? '<span class="badge tone-blue">발송완료</span>' : '<span class="badge tone-gray">미발송</span>'
+    return '<div class="class-item' + active + '">'
+      + '<div class="class-item-head" onclick="selectReport(' + JSON.stringify(r.reportId) + ')">'
+        + '<div class="class-item-title-row"><span class="class-item-title">🧑‍🎓 ' + esc(r.studentName || r.title) + '</span><span class="class-item-time">' + esc(period) + '</span></div>'
+        + '<div class="class-item-badges">' + sentBadge + '</div>'
+      + '</div>'
       + '</div>'
   }).join("")
 }
@@ -1147,10 +1112,10 @@ function selectReport(reportId) {
   el("right-sub").textContent = r.evalMonth || ""
   el("right-summary-toggle").style.display = "none"
   const sendFnName = REPORT_TYPE === "monthly" ? "월간" : "주간"
-  el("report-tuition-detail").innerHTML = '<div class="right-tab-body">'
-    + '<p><strong>선생님 한마디</strong></p><p>' + esc(r.teacherComment || "(작성된 내용이 없어요)") + '</p>'
+  const sentBadge = r.sentBy ? '<span class="badge tone-blue">✅ 발송완료</span>' : '<span class="badge tone-gray">미발송</span>'
+  el("report-tuition-detail").innerHTML = '<div class="detail-meta-row">' + sentBadge + '</div>'
+    + '<div class="info-card"><h3>💬 선생님 한마디</h3><div class="info-content' + (r.teacherComment ? '' : ' empty') + '">' + esc(r.teacherComment || "작성된 내용이 없어요") + '</div></div>'
     + '<button class="bulk-send-btn" style="margin-top:12px" onclick="sendPeriodReport(' + JSON.stringify(reportId) + ')">📩 ' + sendFnName + ' 보고서 발송</button>'
-    + '</div>'
   openMobileDetail()
 }
 
@@ -1188,6 +1153,14 @@ async function loadTuitionList(month) {
   }
 }
 
+function paymentStatusTone(status) {
+  const s = String(status || "")
+  if (s.includes("미납")) return "tone-red"
+  if (s.includes("완료") || s.includes("완납")) return "tone-green"
+  if (s.includes("부분")) return "tone-orange"
+  return "tone-gray"
+}
+
 function renderTuitionList() {
   const term = SEARCH_TERM
   const list = TUITIONS.filter(function (t) { return !term || (t.studentInfo || "").toLowerCase().includes(term) })
@@ -1197,10 +1170,13 @@ function renderTuitionList() {
   }
   el("tuition-list-area").innerHTML = list.map(function (t) {
     const active = t.tuitionId === SELECTED_TUITION_ID ? " selected" : ""
-    const statusIcon = (t.paymentStatus || "").includes("미납") ? "🔴" : (t.paymentStatus || "").includes("완료") ? "🟢" : "🟠"
-    return '<div class="class-card' + active + '" onclick="selectTuition(' + JSON.stringify(t.tuitionId) + ')">'
-      + '<div class="class-card-title">' + esc(t.studentInfo || t.title) + '</div>'
-      + '<div class="class-card-sub">' + statusIcon + ' ' + esc(t.paymentStatus || "") + (t.amount != null ? ' · ' + Number(t.amount).toLocaleString("ko-KR") + '원' : '') + '</div>'
+    const amountText = t.amount != null ? Number(t.amount).toLocaleString("ko-KR") + '원' : ''
+    const statusBadge = t.paymentStatus ? '<span class="badge ' + paymentStatusTone(t.paymentStatus) + '">' + esc(t.paymentStatus) + '</span>' : ''
+    return '<div class="class-item' + active + '">'
+      + '<div class="class-item-head" onclick="selectTuition(' + JSON.stringify(t.tuitionId) + ')">'
+        + '<div class="class-item-title-row"><span class="class-item-title">🧑‍🎓 ' + esc(t.studentInfo || t.title) + '</span><span class="class-item-time">' + esc(amountText) + '</span></div>'
+        + '<div class="class-item-badges">' + statusBadge + '</div>'
+      + '</div>'
       + '</div>'
   }).join("")
 }
@@ -1218,10 +1194,10 @@ function selectTuition(tuitionId) {
   el("right-time").textContent = period
   el("right-sub").textContent = t.paymentStatus || ""
   el("right-summary-toggle").style.display = "none"
-  el("report-tuition-detail").innerHTML = '<div class="right-tab-body">'
-    + '<p><strong>청구금액</strong></p><p>' + (t.amount != null ? Number(t.amount).toLocaleString("ko-KR") + '원' : "-") + '</p>'
+  const statusBadge = t.paymentStatus ? '<span class="badge ' + paymentStatusTone(t.paymentStatus) + '">' + esc(t.paymentStatus) + '</span>' : ''
+  el("report-tuition-detail").innerHTML = '<div class="detail-meta-row">' + statusBadge + '</div>'
+    + '<div class="info-card"><h3>💰 청구금액</h3><div class="info-content">' + (t.amount != null ? Number(t.amount).toLocaleString("ko-KR") + '원' : "-") + '</div></div>'
     + '<button class="bulk-send-btn" style="margin-top:12px" onclick="sendTuitionNotice(' + JSON.stringify(tuitionId) + ')">📩 수강료 안내 발송</button>'
-    + '</div>'
   openMobileDetail()
 }
 
