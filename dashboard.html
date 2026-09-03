@@ -778,6 +778,8 @@ let SELECTED_CLASS_ID = null
 let EXPANDED_CLASS_ID = null
 let RIGHT_TAB = "students"
 let CLASS_DETAIL_CACHE = {}
+let CLASS_LIST_CACHE = {} // 날짜별 수업 목록 캐시 (key: dateStr)
+let SCHEDULE_LIST_CACHE = {} // 날짜별 일정 목록 캐시 (key: dateStr)
 let SCHEDULES = []
 let SELECTED_SCHEDULE_ID = null
 let CALENDAR_OPEN = false
@@ -937,19 +939,35 @@ function renderCenterList() {
 
 // ---------------- 수업 목록(중앙) ----------------
 async function loadClassList(dateStr) {
-  setStatus("loading", "수업 목록을 불러오는 중이에요...")
   el("date-nav-label").textContent = formatDateLabel(dateStr)
+  const cached = CLASS_LIST_CACHE[dateStr]
+  if (cached) {
+    // 이미 본 날짜는 캐시된 내용을 바로 보여주고, 뒤에서 최신 데이터로 조용히 갱신해요.
+    CLASSES = cached
+    renderClassList()
+    setStatus(null)
+    refreshClassList(dateStr, true)
+    return
+  }
+  setStatus("loading", "수업 목록을 불러오는 중이에요...")
+  await refreshClassList(dateStr, false)
+}
+
+async function refreshClassList(dateStr, silent) {
   try {
     const res = await fetch(GET_CLASSES_URL + "?date=" + dateStr, {
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
-    CLASSES = data.classes || []
+    const classes = data.classes || []
+    CLASS_LIST_CACHE[dateStr] = classes
+    if (dateStr !== CURRENT_DATE || DOMAIN !== "class") return
+    CLASSES = classes
     renderClassList()
     setStatus(null)
   } catch (err) {
-    setStatus("error", "불러오기 실패: " + err.message)
+    if (!silent) setStatus("error", "불러오기 실패: " + err.message)
   }
 }
 
@@ -1187,19 +1205,34 @@ async function renderTaskTab(c, body, kind) {
 
 // ---------------- 일정 목록(중앙) ----------------
 async function loadScheduleList(dateStr) {
-  setStatus("loading", "일정 목록을 불러오는 중이에요...")
   el("date-nav-label").textContent = formatDateLabel(dateStr)
+  const cached = SCHEDULE_LIST_CACHE[dateStr]
+  if (cached) {
+    SCHEDULES = cached
+    renderScheduleList()
+    setStatus(null)
+    refreshScheduleList(dateStr, true)
+    return
+  }
+  setStatus("loading", "일정 목록을 불러오는 중이에요...")
+  await refreshScheduleList(dateStr, false)
+}
+
+async function refreshScheduleList(dateStr, silent) {
   try {
     const res = await fetch(GET_SCHEDULES_URL + "?date=" + dateStr, {
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
-    SCHEDULES = data.schedules || []
+    const schedules = data.schedules || []
+    SCHEDULE_LIST_CACHE[dateStr] = schedules
+    if (dateStr !== CURRENT_DATE || DOMAIN !== "schedule") return
+    SCHEDULES = schedules
     renderScheduleList()
     setStatus(null)
   } catch (err) {
-    setStatus("error", "불러오기 실패: " + err.message)
+    if (!silent) setStatus("error", "불러오기 실패: " + err.message)
   }
 }
 
