@@ -469,6 +469,10 @@
 .right-summary-body .info-card .info-content { font-size:12.5px; color:#6b6b68; line-height:1.6; white-space:pre-wrap; }
 .right-summary-body .info-card .info-content.empty { color:#bbb; }
 .right-summary-body .bulk-send-btn { margin-top:4px; }
+.student-row.with-sub { flex-direction:column; align-items:stretch; gap:4px; }
+.student-row.with-sub .stu-top { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.student-row .stu-sub { font-size:12px; color:var(--muted); line-height:1.5; }
+.student-row .stu-sub.empty { color:#bbb; }
 .summary-two-col { display:flex; gap:10px; margin-bottom:10px; }
 .summary-two-col .info-card.half { flex:1; margin-bottom:0; }
 .stat-row { display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--text); padding:3px 0; }
@@ -614,7 +618,7 @@
             <button class="right-tab" data-tab="assignment" onclick="setRightTab('assignment')">📝 과제</button>
             <button class="right-tab" data-tab="evaluation" onclick="setRightTab('evaluation')">✅ 평가</button>
           </div>
-          <button class="bulk-send-btn" id="bulk-send-tab-btn" disabled onclick="sendBulkForClass(SELECTED_CLASS_ID)">📩 보고서 일괄 전송</button>
+          <button class="bulk-send-btn" id="bulk-send-tab-btn" disabled onclick="sendBulkForClass(SELECTED_CLASS_ID)">📩 보고��� 일괄 전송</button>
         </div>
         <div class="right-tab-body" id="right-tab-body"></div>
         <div id="report-tuition-detail" style="display:none"></div>
@@ -1145,7 +1149,7 @@ function renderReportList() {
     const sentCount = g.items.filter(function (r) { return r.sentBy }).length
     return '<div class="class-item' + active + '">'
       + '<div class="class-item-head" onclick="selectReportClass(' + attrSafe(g.classId) + ')">'
-        + '<div class="class-item-title-row"><span class="class-item-title">📚 ' + esc(g.className) + '</span><span class="class-item-time">' + g.items.length + '명</span></div>'
+        + '<div class="class-item-title-row"><span class="class-item-title">' + resolveClassEmoji(g.classId, g.className) + ' ' + esc(g.className) + '</span><span class="class-item-time">' + g.items.length + '명</span></div>'
         + '<div class="class-item-badges"><span class="badge tone-blue">발송 ' + sentCount + '</span><span class="badge tone-gray">미발송 ' + (g.items.length - sentCount) + '</span></div>'
       + '</div>'
       + '</div>'
@@ -1168,21 +1172,26 @@ function renderReportClassDetail() {
   }
   el("md-right-empty").style.display = "none"
   el("md-right-content").style.display = "block"
-  el("right-title").textContent = list[0].className || "미배정"
+  const detailClassId = list[0].classId || "__unassigned__"
+  const detailClassName = list[0].className || "미배정"
+  el("right-title").textContent = (detailClassId !== "__unassigned__" ? resolveClassEmoji(detailClassId, detailClassName) + " " : "") + detailClassName
   el("right-page-link").style.display = "none"
   const sentCount = list.filter(function (r) { return r.sentBy }).length
   el("right-time").textContent = list.length + "명 중 발송완료 " + sentCount + "명"
   el("right-sub").textContent = ""
   el("right-summary-toggle").style.display = "none"
   const sendFnName = REPORT_TYPE === "monthly" ? "월간" : "주간"
+  // 수업 탭 오른쪽 패널과 같은 .student-row 패턴으로 학생을 나열해요 (DESIGN 문서 "학생 목록 표준 디자인" 규칙 참고).
   el("report-tuition-detail").innerHTML = list.map(function (r) {
     const period = r.period ? (r.period.start || "") + (r.period.end && r.period.end !== r.period.start ? " ~ " + r.period.end : "") : ""
     const sentBadge = r.sentBy ? '<span class="badge tone-blue">발송완료</span>' : '<span class="badge tone-gray">미발송</span>'
-    return '<div class="info-card">'
-      + '<div class="detail-meta-row" style="margin-bottom:6px;align-items:center"><h3 style="margin:0">🧑‍🎓 ' + esc(r.studentName || r.title) + '</h3>' + sentBadge + '</div>'
-      + '<div class="info-content" style="margin-bottom:8px">' + esc(period) + '</div>'
-      + '<div class="info-content' + (r.teacherComment ? '' : ' empty') + '" style="margin-bottom:10px">💬 ' + esc(r.teacherComment || "작성된 선생님 한마디가 없어요") + '</div>'
-      + '<button class="bulk-send-btn" onclick="sendPeriodReport(' + attrSafe(r.reportId) + ')">📩 ' + sendFnName + ' 보고서 발송</button>'
+    const subParts = []
+    if (period) subParts.push(period)
+    subParts.push("💬 " + (r.teacherComment || "작성된 선생님 한마디가 없어요"))
+    return '<div class="student-row with-sub">'
+      + '<div class="stu-top"><span class="stu-name">🧑‍🎓 ' + esc(r.studentName || r.title) + ' ' + sentBadge + '</span>'
+      + '<button class="send-btn" onclick="sendPeriodReport(' + attrSafe(r.reportId) + ')">📩 ' + sendFnName + ' 발송</button></div>'
+      + '<div class="stu-sub' + (r.teacherComment ? '' : ' empty') + '">' + esc(subParts.join("  • ")) + '</div>'
     + '</div>'
   }).join("")
   openMobileDetail()
@@ -1251,7 +1260,7 @@ function renderTuitionList() {
     const totalAmount = g.items.reduce(function (sum, t) { return sum + (t.amount || 0) }, 0)
     return '<div class="class-item' + active + '">'
       + '<div class="class-item-head" onclick="selectTuitionClass(' + attrSafe(g.classId) + ')">'
-        + '<div class="class-item-title-row"><span class="class-item-title">📚 ' + esc(g.className) + '</span><span class="class-item-time">' + Number(totalAmount).toLocaleString("ko-KR") + '원</span></div>'
+        + '<div class="class-item-title-row"><span class="class-item-title">' + resolveClassEmoji(g.classId, g.className) + ' ' + esc(g.className) + '</span><span class="class-item-time">' + Number(totalAmount).toLocaleString("ko-KR") + '원</span></div>'
         + '<div class="class-item-badges"><span class="badge tone-gray">' + g.items.length + '명</span>' + (unpaidCount ? '<span class="badge tone-red">미납 ' + unpaidCount + '</span>' : '<span class="badge tone-green">완납</span>') + '</div>'
       + '</div>'
       + '</div>'
@@ -1274,18 +1283,22 @@ function renderTuitionClassDetail() {
   }
   el("md-right-empty").style.display = "none"
   el("md-right-content").style.display = "block"
-  el("right-title").textContent = list[0].className || "미배정"
+  const detailClassId = list[0].classId || "__unassigned__"
+  const detailClassName = list[0].className || "미배정"
+  el("right-title").textContent = (detailClassId !== "__unassigned__" ? resolveClassEmoji(detailClassId, detailClassName) + " " : "") + detailClassName
   el("right-page-link").style.display = "none"
   const totalAmount = list.reduce(function (sum, t) { return sum + (t.amount || 0) }, 0)
   el("right-time").textContent = list.length + "명 · 총 " + Number(totalAmount).toLocaleString("ko-KR") + "원"
   el("right-sub").textContent = ""
   el("right-summary-toggle").style.display = "none"
+  // 수업 탭 오른쪽 패널과 같은 .student-row 패턴으로 학생을 나열해요 (DESIGN 문서 "학생 목록 표준 디자인" 규칙 참고).
   el("report-tuition-detail").innerHTML = list.map(function (t) {
     const statusBadge = t.paymentStatus ? '<span class="badge ' + paymentStatusTone(t.paymentStatus) + '">' + esc(t.paymentStatus) + '</span>' : ''
-    return '<div class="info-card">'
-      + '<div class="detail-meta-row" style="margin-bottom:6px;align-items:center"><h3 style="margin:0">🧑‍🎓 ' + esc(t.studentInfo || t.title) + '</h3>' + statusBadge + '</div>'
-      + '<div class="info-content" style="margin-bottom:10px">💰 청구금액 ' + (t.amount != null ? Number(t.amount).toLocaleString("ko-KR") + '원' : "-") + '</div>'
-      + '<button class="bulk-send-btn" onclick="sendTuitionNotice(' + attrSafe(t.tuitionId) + ')">📩 수강료 안내 발송</button>'
+    const amountText = '💰 청구금액 ' + (t.amount != null ? Number(t.amount).toLocaleString("ko-KR") + '원' : "-")
+    return '<div class="student-row with-sub">'
+      + '<div class="stu-top"><span class="stu-name">🧑‍🎓 ' + esc(t.studentInfo || t.title) + ' ' + statusBadge + '</span>'
+      + '<button class="send-btn" onclick="sendTuitionNotice(' + attrSafe(t.tuitionId) + ')">📩 안내 발송</button></div>'
+      + '<div class="stu-sub">' + esc(amountText) + '</div>'
     + '</div>'
   }).join("")
   openMobileDetail()
@@ -1337,6 +1350,7 @@ async function refreshClassList(dateStr, silent) {
     if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
     const classes = data.classes || []
     CLASS_LIST_CACHE[dateStr] = classes
+    classes.forEach(function (c) { rememberClassEmoji(c.id, c) })
     if (dateStr !== CURRENT_DATE || DOMAIN !== "class") return
     CLASSES = classes
     renderClassList()
@@ -1364,6 +1378,19 @@ function classEmoji(c) {
   if (n.indexOf("중") >= 0) return "📘"
   if (n.indexOf("초") >= 0) return "🐣"
   return "📚"
+}
+
+// 수업 탭에서 조회한 클래스의 실제 이모지를 classId 기준으로 기억해뒀다가,
+// 보고서/수강료 탭처럼 클래스 목록을 직접 내려주지 않는 화면에서도 같은 이모지를 재사용해요.
+const CLASS_EMOJI_MAP = {}
+function rememberClassEmoji(classId, c) {
+  if (!classId) return
+  const emoji = classEmoji(c)
+  if (emoji) CLASS_EMOJI_MAP[classId] = emoji
+}
+function resolveClassEmoji(classId, className) {
+  if (classId && CLASS_EMOJI_MAP[classId]) return CLASS_EMOJI_MAP[classId]
+  return classEmoji({ className: className })
 }
 
 function teacherColorClass(name) {
@@ -1529,7 +1556,7 @@ function renderStudentsTab(c, body) {
   }).join("")
 }
 
-// 과제/평가 탭은 수업(학원) DB의 "과제 안내"/"평가 결과" 수식 값을 그대로 보여줍니다.
+// 과제/평가 탭은 수업(학원) DB의 "과제 안내"/"평가 결과" 수식 값을 그대로 ���여줍니다.
 // 이 값은 클래스 목록을 불러올 때 이미 함께 계산되어 있으므로, 탭을 열 때마다
 // 별도로 과제 상세 페이지를 다시 불러올 필요가 없습니다(더 빠르게 표시됨).
 async function fetchClassDetail(classId) {
@@ -1627,7 +1654,7 @@ async function renderTaskTab(c, body, kind) {
       html = records.map(function (r) {
         const due = pickField(r, ["dueDate", "due_iso", "due", "dueAt", "과제마감일", "과제 마감일"]) || dueByRecordId[r.id] || null
         // r.content는 이미 자체적인 서식(줄바꿈, 자체 불릿 등)을 포함하고 있을 수 있어서,
-        // "내용:" 라벨로 감싸면 이중 불릿·줄바꿈 깨짐이 생겨요. 그래서 원본 그대로 별도 줄에 보여줘요.
+        // "내용:" 라벨로 감싸면 이중 불릿·줄바꿈 깨짐이 생겨요. 그래서 원본 그대��� 별도 줄에 보여줘요.
         return '<div class="record-card"><div class="title"><a href="' + r.url + '" target="_blank">' + esc(r.title) + '</a></div>' +
           '<div class="meta">교재: ' + esc(r.book) + (r.range ? " · 범위: " + esc(r.range) : "") + '</div>' +
           (r.content ? '<div class="meta" style="margin-top:4px">' + esc(r.content) + '</div>' : "") +
