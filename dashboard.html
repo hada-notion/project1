@@ -440,6 +440,11 @@
 .mini-cal .mc-day.selected:hover { background:#6c5ce7; }
 .mini-cal .mc-day-dot { position:absolute; bottom:3px; left:50%; transform:translateX(-50%); width:5px; height:5px; border-radius:50%; background:#6c5ce7; }
 .mini-cal .mc-day.selected .mc-day-dot { background:#fff; }
+.mini-cal .mc-day.week-selected { background:#e4e1fb; color:#4b3fd6; font-weight:700; }
+.mini-cal .mc-day.week-selected:hover { background:#d8d4fa; }
+.mini-cal .mc-day.week-selected.today { box-shadow: inset 0 0 0 2px #6c5ce7; }
+.mini-cal .mc-day.no-select { cursor:default; }
+.mini-cal .mc-day.no-select:hover { background:#f7f7f9; }
 
 .mobile-back-btn { display:none; background:#f0f0ee; color:var(--text); border:none; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; margin-bottom:12px; }
 .mobile-back-btn:hover { background:#e6e6e3; }
@@ -809,6 +814,8 @@ let REPORTS = []
 let SELECTED_REPORT_ID = null
 let TUITIONS = []
 let SELECTED_TUITION_ID = null
+let SELECTED_WEEK_START = null // 주간 보고서용: 선택된 주의 시작일(일요일, YYYY-MM-DD)
+let SELECTED_WEEK_END = null
 
 function formatDateLabel(dateStr) {
   const d = new Date(dateStr + "T00:00:00+09:00")
@@ -860,6 +867,7 @@ function setDomain(domain) {
   if (domain === "report" || domain === "tuition") {
     if (!CALENDAR_OPEN) toggleCalendarPanel()
     CAL_PANEL_MONTH = kstToday().slice(0, 7)
+    if (domain === "report") initDefaultWeek()
     loadCalendarPanel()
   }
   loadCenterList()
@@ -892,12 +900,14 @@ function shiftCalendarMonth(delta) {
   const y = parts[0], m = parts[1]
   const d = new Date(y, m - 1 + delta, 1)
   CAL_PANEL_MONTH = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")
+  if (DOMAIN === "report" && REPORT_TYPE === "weekly") initDefaultWeek()
   loadCalendarPanel()
   if (DOMAIN === "report" || DOMAIN === "tuition") loadCenterList()
 }
 
 function goCalendarPanelToday() {
   CAL_PANEL_MONTH = kstToday().slice(0, 7)
+  if (DOMAIN === "report" && REPORT_TYPE === "weekly") initDefaultWeek()
   loadCalendarPanel()
   if (DOMAIN === "report" || DOMAIN === "tuition") loadCenterList()
 }
@@ -934,6 +944,29 @@ async function loadCalPanelDots() {
   renderCalPanel()
 }
 
+function weekStartOf(dateStr) {
+  const d = new Date(dateStr + "T00:00:00+09:00")
+  d.setDate(d.getDate() - d.getDay())
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(d)
+}
+function weekEndOf(weekStartStr) {
+  const d = new Date(weekStartStr + "T00:00:00+09:00")
+  d.setDate(d.getDate() + 6)
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(d)
+}
+function initDefaultWeek() {
+  const today = kstToday()
+  const base = today.slice(0, 7) === CAL_PANEL_MONTH ? today : (CAL_PANEL_MONTH + "-01")
+  SELECTED_WEEK_START = weekStartOf(base)
+  SELECTED_WEEK_END = weekEndOf(SELECTED_WEEK_START)
+}
+function selectCalWeek(weekStartStr) {
+  SELECTED_WEEK_START = weekStartStr
+  SELECTED_WEEK_END = weekEndOf(weekStartStr)
+  renderCalPanel()
+  renderReportList()
+}
+
 function renderCalPanel() {
   const parts = CAL_PANEL_MONTH.split("-").map(Number)
   const y = parts[0], m = parts[1]
@@ -942,15 +975,24 @@ function renderCalPanel() {
   const daysInMonth = new Date(y, m, 0).getDate()
   const today = kstToday()
   const dows = ["일", "월", "화", "수", "목", "금", "토"]
+  const isWeeklyReport = DOMAIN === "report" && REPORT_TYPE === "weekly"
+  const isMonthOnly = DOMAIN === "tuition" || (DOMAIN === "report" && REPORT_TYPE === "monthly")
   let cells = dows.map(function (d) { return '<div class="mc-dow">' + d + '</div>' }).join("")
   for (let i = 0; i < startWeekday; i++) cells += '<div class="mc-day empty"></div>'
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = CAL_PANEL_MONTH + "-" + String(d).padStart(2, "0")
     let cls = "mc-day"
     if (dateStr === today) cls += " today"
-    if (dateStr === CURRENT_DATE) cls += " selected"
-    const dot = CAL_PANEL_ITEMS[dateStr] ? '<span class="mc-day-dot"></span>' : ""
-    cells += '<div class="' + cls + '" onclick="goToDateFromCalendarPanel(' + attrSafe(dateStr) + ')">' + d + dot + '</div>'
+    if (isWeeklyReport) {
+      if (SELECTED_WEEK_START && dateStr >= SELECTED_WEEK_START && dateStr <= SELECTED_WEEK_END) cls += " week-selected"
+      cells += '<div class="' + cls + '" onclick="selectCalWeek(' + attrSafe(weekStartOf(dateStr)) + ')">' + d + '</div>'
+    } else if (isMonthOnly) {
+      cells += '<div class="' + cls + ' no-select">' + d + '</div>'
+    } else {
+      if (dateStr === CURRENT_DATE) cls += " selected"
+      const dot = CAL_PANEL_ITEMS[dateStr] ? '<span class="mc-day-dot"></span>' : ""
+      cells += '<div class="' + cls + '" onclick="goToDateFromCalendarPanel(' + attrSafe(dateStr) + ')">' + d + dot + '</div>'
+    }
   }
   el("cal-panel-area").innerHTML = '<div class="mc-grid">' + cells + '</div>'
 }
@@ -999,6 +1041,8 @@ function setReportType(type) {
   if (REPORT_TYPE === type) return
   REPORT_TYPE = type
   document.querySelectorAll(".report-type-btn").forEach(function (b) { b.classList.toggle("active", b.dataset.reportType === type) })
+  if (type === "weekly") initDefaultWeek()
+  renderCalPanel()
   loadReportList(CAL_PANEL_MONTH)
 }
 
@@ -1020,9 +1064,18 @@ async function loadReportList(month) {
 
 function renderReportList() {
   const term = SEARCH_TERM
-  const list = REPORTS.filter(function (r) { return !term || (r.studentName || "").toLowerCase().includes(term) })
+  let list = REPORTS
+  if (REPORT_TYPE === "weekly" && SELECTED_WEEK_START) {
+    list = list.filter(function (r) {
+      const p = r.period
+      if (!p || !p.start) return false
+      const rEnd = p.end || p.start
+      return p.start <= SELECTED_WEEK_END && rEnd >= SELECTED_WEEK_START
+    })
+  }
+  list = list.filter(function (r) { return !term || (r.studentName || "").toLowerCase().includes(term) })
   if (!list.length) {
-    el("report-list-area").innerHTML = '<div class="empty">해당 월에 해당하는 보고서가 없어요</div>'
+    el("report-list-area").innerHTML = '<div class="empty">' + (REPORT_TYPE === "weekly" ? "해당 주에 해당하는 보고서가 없어요" : "해당 월에 해당하는 보고서가 없어요") + '</div>'
     return
   }
   el("report-list-area").innerHTML = list.map(function (r) {
