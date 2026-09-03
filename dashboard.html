@@ -1214,15 +1214,30 @@ async function renderTaskTab(c, body, kind) {
     try {
       const data = await fetchClassDetail(c.id)
       const records = (data.evaluations && data.evaluations.records) || (data.tests && data.tests.records) || []
+      const activities = (data.evaluations && data.evaluations.activities) || []
+      // 점수/정답/전체 문항은 반 전체 공통 설명인 records가 아니라, 학생별 인스턴스인 activities에만 있어요.
+      // (레코드에는 title/book/range만 있고 점수 필드 자체가 없어서 예전 코드는 항상 점수가 비어 보였어요.)
+      if (activities.length > 0) {
+        const recordById = {}
+        records.forEach(function (r) { recordById[r.id] = r })
+        body.innerHTML = activities.map(function (a) {
+          const rec = recordById[a.recordId] || {}
+          const total = pickField(a, ["totalCount", "totalQuestions", "total", "전체문항", "전체 문항"])
+          const correct = pickField(a, ["correctCount", "correctQuestions", "correct", "정답문항", "정답 문항"])
+          const score = pickField(a, ["score", "점수"])
+          const scoreText = (score !== null ? score + "점" : "") + (total ? " (" + (correct !== null ? correct : "?") + "/" + total + ")" : "")
+          return '<div class="record-card"><div class="title"><a href="' + (a.url || rec.url || "#") + '" target="_blank">' + esc(rec.title || "평가") + '</a></div>' +
+            '<div class="meta">교재: ' + esc(rec.book || "-") + (rec.range ? " · 범위: " + esc(rec.range) : "") + '</div>' +
+            bulletLine("학생", a.studentName) +
+            (scoreText ? bulletLine("점수", scoreText) : "") +
+            '</div>'
+        }).join("")
+        return
+      }
       if (records.length > 0) {
         body.innerHTML = records.map(function (r) {
-          const total = pickField(r, ["totalQuestions", "total", "전체문항", "전체 문항"])
-          const correct = pickField(r, ["correctQuestions", "correct", "정답문항", "정답 문항"])
-          const score = pickField(r, ["score", "점수"])
-          const scoreText = (score !== null ? score + "점" : "") + (total ? " (" + (correct !== null ? correct : "?") + "/" + total + ")" : "")
           return '<div class="record-card"><div class="title"><a href="' + r.url + '" target="_blank">' + esc(r.title || "평가") + '</a></div>' +
             '<div class="meta">교재: ' + esc(r.book || "-") + (r.range ? " · 범위: " + esc(r.range) : "") + '</div>' +
-            (scoreText ? bulletLine("점수", scoreText) : "") +
             '</div>'
         }).join("")
         return
@@ -1240,15 +1255,24 @@ async function renderTaskTab(c, body, kind) {
   try {
     const data = await fetchClassDetail(c.id)
     const records = (data.assignments && data.assignments.records) || []
+    const activities = (data.assignments && data.assignments.activities) || []
+    // 마감일은 반 전체 공통 설명인 records가 아니라, 학생별 인스턴스인 activities에만 있어요(같은 과제면 보통 동일해요).
+    // recordId로 매칭되는 첫 번째 activity의 마감일을 해당 기록의 마감일로 사용해요.
+    const dueByRecordId = {}
+    activities.forEach(function (a) {
+      if (a.recordId && a.dueDate && !dueByRecordId[a.recordId]) dueByRecordId[a.recordId] = a.dueDate
+    })
     let html = ""
     if (records.length === 0) {
       html = '<div class="empty">등록된 과제 설명이 없어요</div>'
     } else {
       html = records.map(function (r) {
-        const due = pickField(r, ["dueDate", "due_iso", "due", "dueAt", "과제마감일", "과제 마감일"])
+        const due = pickField(r, ["dueDate", "due_iso", "due", "dueAt", "과제마감일", "과제 마감일"]) || dueByRecordId[r.id] || null
+        // r.content는 이미 자체적인 서식(줄바꿈, 자체 불릿 등)을 포함하고 있을 수 있어서,
+        // "내용:" 라벨로 감싸면 이중 불릿·줄바꿈 깨짐이 생겨요. 그래서 원본 그대로 별도 줄에 보여줘요.
         return '<div class="record-card"><div class="title"><a href="' + r.url + '" target="_blank">' + esc(r.title) + '</a></div>' +
           '<div class="meta">교재: ' + esc(r.book) + (r.range ? " · 범위: " + esc(r.range) : "") + '</div>' +
-          bulletLine("내용", r.content) +
+          (r.content ? '<div class="meta" style="margin-top:4px">' + esc(r.content) + '</div>' : "") +
           bulletLine("마감일", due ? formatDateLabel(due) : "미정") +
           '</div>'
       }).join("")
@@ -1371,7 +1395,44 @@ async function callSendDailyReport(payload) {
   return data
 }
 
-async function sendStudentReport(i) {
+// 전송 버튼을 누르면 곰바로 발송하지 않고, HTML에 이미 있던 확인 모달(alimtalk-modal)을 먼저 보여줘요.
+// 사용자가 "발송"을 누르면 confirmAlimtalkSend()가 실제 발송 로직을 실행해요.
+let ALIMTALK_PENDING = null // { kind: "student", index } | { kind: "bulk", classId }
+
+function openAlimtalkModal(kind, payload) {
+  ALIMTALK_PENDING = { kind: kind, payload: payload }
+  const textEl = el("alimtalk-modal-text")
+  textEl.textContent = kind === "student"
+    ? payload.studentName + " 학생에게 오늘의 학습 리포트 알림톡을 발송하시겠습니까?"
+    : payload.count + "명의 학생에게 오늘의 학습 리포트 알림톡을 일괄 발송하시겠습니까?"
+  el("alimtalk-modal").classList.add("show")
+}
+
+function closeAlimtalkModal() {
+  el("alimtalk-modal").classList.remove("show")
+  ALIMTALK_PENDING = null
+}
+
+async function confirmAlimtalkSend() {
+  const pending = ALIMTALK_PENDING
+  closeAlimtalkModal()
+  if (!pending) return
+  if (pending.kind === "student") {
+    await doSendStudentReport(pending.payload.index)
+  } else if (pending.kind === "bulk") {
+    await doSendBulkForClass(pending.payload.classId)
+  }
+}
+
+function sendStudentReport(i) {
+  const c = findClass(SELECTED_CLASS_ID)
+  if (!c) return
+  const s = (c.students || [])[i]
+  if (!s || !s.attendanceId) return
+  openAlimtalkModal("student", { index: i, studentName: s.name })
+}
+
+async function doSendStudentReport(i) {
   const c = findClass(SELECTED_CLASS_ID)
   if (!c) return
   const s = (c.students || [])[i]
@@ -1388,7 +1449,15 @@ async function sendStudentReport(i) {
   }
 }
 
-async function sendBulkForClass(classId) {
+function sendBulkForClass(classId) {
+  const c = findClass(classId)
+  if (!c) return
+  const targets = (c.students || []).filter(function (s) { return s.attendanceId })
+  if (targets.length === 0) { showToast("전송할 학생이 없어요"); return }
+  openAlimtalkModal("bulk", { classId: classId, count: targets.length })
+}
+
+async function doSendBulkForClass(classId) {
   const c = findClass(classId)
   if (!c) return
   const targets = (c.students || []).filter(function (s) { return s.attendanceId })
