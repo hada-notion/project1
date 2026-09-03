@@ -830,7 +830,7 @@ function formatDateLabel(dateStr) {
   return dateStr.replace(/-/g, ".") + " (" + days[d.getDay()] + ")"
 }
 
-// 날짜를 이동해서 새로 ��러오는 동안, 이전 날짜의 상세정보가 남아있어 착각하지 않도록 오른쪽 패널을 비워요.
+// 날짜를 이동해서 �����로 ��러오는 동안, 이전 날짜의 상세정보가 남아있어 착각하지 않도록 오른쪽 패널을 비워요.
 function clearRightPanel() {
   el("md-right-empty").style.display = "block"
   el("md-right-content").style.display = "none"
@@ -923,7 +923,30 @@ async function loadCalendarPanel() {
   const parts = CAL_PANEL_MONTH.split("-").map(Number)
   el("cal-panel-month-label").textContent = parts[0] + "년 " + parts[1] + "월"
   renderCalPanel()
+  updateDateNavLabel()
   loadCalPanelDots()
+}
+
+// 상단 날짜 영역: 수업/일정은 하루 날짜를, 보고서(주간/월간)와 수강료는 해당 기간을 보여줘요.
+function formatWeekRangeLabel(startStr, endStr) {
+  const days = ["일", "월", "화", "수", "목", "금", "토"]
+  const sd = new Date(startStr + "T00:00:00+09:00")
+  const ed = new Date(endStr + "T00:00:00+09:00")
+  const startText = startStr.replace(/-/g, ".") + " (" + days[sd.getDay()] + ")"
+  const endText = endStr.replace(/-/g, ".") + " (" + days[ed.getDay()] + ")"
+  return startText + " ~ " + endText
+}
+function updateDateNavLabel() {
+  const labelEl = el("date-nav-label")
+  if (!labelEl) return
+  if (DOMAIN === "report" && REPORT_TYPE === "weekly") {
+    const start = SELECTED_WEEK_START || weekStartOf(CAL_PANEL_MONTH + "-01")
+    const end = SELECTED_WEEK_END || weekEndOf(start)
+    labelEl.textContent = formatWeekRangeLabel(start, end)
+  } else if ((DOMAIN === "report" && REPORT_TYPE === "monthly") || DOMAIN === "tuition") {
+    const parts2 = CAL_PANEL_MONTH.split("-").map(Number)
+    labelEl.textContent = parts2[0] + "년 " + parts2[1] + "월"
+  }
 }
 
 // 캘린더에 표시된 달의 날짜별로 수업/일정이 있는지 조회해서 점을 표시해요.
@@ -971,6 +994,7 @@ function selectCalWeek(weekStartStr) {
   SELECTED_WEEK_START = weekStartStr
   SELECTED_WEEK_END = weekEndOf(weekStartStr)
   renderCalPanel()
+  updateDateNavLabel()
   renderReportList()
 }
 
@@ -1015,7 +1039,7 @@ function goToDateFromCalendarPanel(dateStr) {
   loadCenterList()
 }
 
-// ---------------- 검색(만능 검색���) ----------------
+// ---------------- 검색(만능 검������) ----------------
 function onSearchInput(term) {
   SEARCH_TERM = (term || "").trim().toLowerCase()
   renderCenterList()
@@ -1050,6 +1074,7 @@ function setReportType(type) {
   document.querySelectorAll(".report-type-btn").forEach(function (b) { b.classList.toggle("active", b.dataset.reportType === type) })
   if (type === "weekly") initDefaultWeek()
   renderCalPanel()
+  updateDateNavLabel()
   loadReportList(CAL_PANEL_MONTH)
 }
 
@@ -1090,7 +1115,7 @@ function renderReportList() {
     const period = r.period ? (r.period.start || "") + (r.period.end && r.period.end !== r.period.start ? " ~ " + r.period.end : "") : ""
     const sentBadge = r.sentBy ? '<span class="badge tone-blue">발송완료</span>' : '<span class="badge tone-gray">미발송</span>'
     return '<div class="class-item' + active + '">'
-      + '<div class="class-item-head" onclick="selectReport(' + JSON.stringify(r.reportId) + ')">'
+      + '<div class="class-item-head" onclick="selectReport(' + attrSafe(r.reportId) + ')">'
         + '<div class="class-item-title-row"><span class="class-item-title">🧑‍🎓 ' + esc(r.studentName || r.title) + '</span><span class="class-item-time">' + esc(period) + '</span></div>'
         + '<div class="class-item-badges">' + sentBadge + '</div>'
       + '</div>'
@@ -1115,7 +1140,7 @@ function selectReport(reportId) {
   const sentBadge = r.sentBy ? '<span class="badge tone-blue">✅ 발송완료</span>' : '<span class="badge tone-gray">미발송</span>'
   el("report-tuition-detail").innerHTML = '<div class="detail-meta-row">' + sentBadge + '</div>'
     + '<div class="info-card"><h3>💬 선생님 한마디</h3><div class="info-content' + (r.teacherComment ? '' : ' empty') + '">' + esc(r.teacherComment || "작성된 내용이 없어요") + '</div></div>'
-    + '<button class="bulk-send-btn" style="margin-top:12px" onclick="sendPeriodReport(' + JSON.stringify(reportId) + ')">📩 ' + sendFnName + ' 보고서 발송</button>'
+    + '<button class="bulk-send-btn" style="margin-top:12px" onclick="sendPeriodReport(' + attrSafe(reportId) + ')">📩 ' + sendFnName + ' 보고서 발송</button>'
   openMobileDetail()
 }
 
@@ -1173,7 +1198,7 @@ function renderTuitionList() {
     const amountText = t.amount != null ? Number(t.amount).toLocaleString("ko-KR") + '원' : ''
     const statusBadge = t.paymentStatus ? '<span class="badge ' + paymentStatusTone(t.paymentStatus) + '">' + esc(t.paymentStatus) + '</span>' : ''
     return '<div class="class-item' + active + '">'
-      + '<div class="class-item-head" onclick="selectTuition(' + JSON.stringify(t.tuitionId) + ')">'
+      + '<div class="class-item-head" onclick="selectTuition(' + attrSafe(t.tuitionId) + ')">'
         + '<div class="class-item-title-row"><span class="class-item-title">🧑‍🎓 ' + esc(t.studentInfo || t.title) + '</span><span class="class-item-time">' + esc(amountText) + '</span></div>'
         + '<div class="class-item-badges">' + statusBadge + '</div>'
       + '</div>'
@@ -1197,7 +1222,7 @@ function selectTuition(tuitionId) {
   const statusBadge = t.paymentStatus ? '<span class="badge ' + paymentStatusTone(t.paymentStatus) + '">' + esc(t.paymentStatus) + '</span>' : ''
   el("report-tuition-detail").innerHTML = '<div class="detail-meta-row">' + statusBadge + '</div>'
     + '<div class="info-card"><h3>💰 청구금액</h3><div class="info-content">' + (t.amount != null ? Number(t.amount).toLocaleString("ko-KR") + '원' : "-") + '</div></div>'
-    + '<button class="bulk-send-btn" style="margin-top:12px" onclick="sendTuitionNotice(' + JSON.stringify(tuitionId) + ')">📩 수강료 안내 발송</button>'
+    + '<button class="bulk-send-btn" style="margin-top:12px" onclick="sendTuitionNotice(' + attrSafe(tuitionId) + ')">📩 수강료 안내 발송</button>'
   openMobileDetail()
 }
 
@@ -1663,7 +1688,7 @@ async function callSendDailyReport(payload) {
   return data
 }
 
-// 전송 버튼을 누르면 곰바로 발송하지 않고, HTML에 이미 있던 확인 모달(alimtalk-modal)을 먼저 보여줘요.
+// 전송 버튼을 누르면 곰바로 발송하지 않고, HTML에 이미 있던 확인 모달(alimtalk-modal)을 ��저 보여줘요.
 // 사용자가 "발송"을 누르면 confirmAlimtalkSend()가 실제 발송 로직을 실행해요.
 let ALIMTALK_PENDING = null // { kind: "student", index } | { kind: "bulk", classId }
 
