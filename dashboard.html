@@ -645,7 +645,7 @@ async function submitLogin() {
   const key = input.value.trim()
   const btn = document.getElementById("login-btn")
   const errEl = document.getElementById("login-error")
-  if (!key) { errEl.textContent = "비밀번호를 입����하세요."; return }
+  if (!key) { errEl.textContent = "비밀번호를 입력하세요."; return }
   btn.disabled = true
   btn.textContent = "확인 중..."
   errEl.textContent = ""
@@ -1022,7 +1022,7 @@ function renderCalPanel() {
 }
 
 function formatWeekRangeLabel(startStr, endStr) {
-  const days = ["일", "월", "��", "수", "목", "금", "토"]
+  const days = ["일", "월", "화", "수", "목", "금", "토"]
   const sd = new Date(startStr + "T00:00:00+09:00")
   const ed = new Date(endStr + "T00:00:00+09:00")
   const startText = startStr.replace(/-/g, ".") + " (" + days[sd.getDay()] + ")"
@@ -1192,7 +1192,7 @@ function renderTuitionList() {
   const term = SEARCH_TERM
   const list = TUITIONS.filter(function (t) { return !term || (t.studentInfo || "").toLowerCase().includes(term) })
   if (!list.length) {
-    el("tuition-list-area").innerHTML = '<div class="empty">해당 월에 해당하는 청�� 내역이 없어요</div>'
+    el("tuition-list-area").innerHTML = '<div class="empty">해당 월에 해당하는 청구 내역이 없어요</div>'
     return
   }
   el("tuition-list-area").innerHTML = list.map(function (t) {
@@ -1255,7 +1255,7 @@ async function loadClassList(dateStr) {
     refreshClassList(dateStr, true)
     return
   }
-  setStatus("loading", "수업 목록을 ���러오는 중이에요...")
+  setStatus("loading", "수업 목록을 불러오는 중이에요...")
   CLASSES = []
   renderClassList()
   clearRightPanel()
