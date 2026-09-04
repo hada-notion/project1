@@ -981,7 +981,7 @@ function updateDateNavLabel() {
   }
 }
 
-// 캘린더에 표시된 달의 날짜별로 수업/일정이 있는지 조회해서 ��을 ��시해요.
+// 캘린더에 표시된 달의 날짜별로 수업/일정이 있는지 조회해서 ���을 ��시해요.
 async function loadCalPanelDots() {
   if (DOMAIN === "report" || DOMAIN === "tuition") { CAL_PANEL_ITEMS = {}; renderCalPanel(); return }
   const month = CAL_PANEL_MONTH
@@ -1163,7 +1163,7 @@ function renderReportList() {
   const list = getFilteredReports()
   if (!list.length) {
     SELECTED_REPORT_CLASS = null
-    el("report-list-area").innerHTML = '<div class="empty">' + (REPORT_TYPE === "weekly" ? "해당 주에 해당하는 보고서가 없어요" : "해당 월��� 해당하는 보고서가 없어요") + '</div>'
+    el("report-list-area").innerHTML = '<div class="empty">' + (REPORT_TYPE === "weekly" ? "해당 주에 해당하는 보고서가 없어요" : "해당 ������ 해당하는 보고서가 없어요") + '</div>'
     renderReportClassDetail()
     return
   }
@@ -1356,7 +1356,7 @@ async function loadClassList(dateStr) {
   }
   setStatus("loading", "수업 목록을 불러오는 중이에요...")
   CLASSES = []
-  renderClassList()
+  el("class-list-area").innerHTML = '<div class="loading">불러오는 중...</div>'
   clearRightPanel()
   await refreshClassList(dateStr, false)
 }
@@ -1376,7 +1376,10 @@ async function refreshClassList(dateStr, silent) {
     renderClassList()
     setStatus(null)
   } catch (err) {
-    if (!silent) setStatus("error", "불러오기 실패: " + err.message)
+    if (!silent && dateStr === CURRENT_DATE && DOMAIN === "class") {
+      setStatus("error", "불러오기 실패: " + err.message)
+      el("class-list-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '</div>'
+    }
   }
 }
 
@@ -1706,7 +1709,7 @@ async function loadScheduleList(dateStr) {
   }
   setStatus("loading", "일정 목록을 불러오는 중이에요...")
   SCHEDULES = []
-  renderScheduleList()
+  el("schedule-list-area").innerHTML = '<div class="loading">불러오는 중...</div>'
   clearRightPanel()
   await refreshScheduleList(dateStr, false)
 }
@@ -1725,7 +1728,10 @@ async function refreshScheduleList(dateStr, silent) {
     renderScheduleList()
     setStatus(null)
   } catch (err) {
-    if (!silent) setStatus("error", "불러오기 실패: " + err.message)
+    if (!silent && dateStr === CURRENT_DATE && DOMAIN === "schedule") {
+      setStatus("error", "불러오기 실패: " + err.message)
+      el("schedule-list-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '</div>'
+    }
   }
 }
 
