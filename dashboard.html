@@ -621,6 +621,9 @@
           <button class="bulk-send-btn" id="bulk-send-tab-btn" disabled onclick="sendBulkForClass(SELECTED_CLASS_ID)">📩 보고서 일괄 전송</button>
         </div>
         <div class="right-tab-body" id="right-tab-body"></div>
+        <div class="right-tabs-row" id="report-tuition-bulk-row" style="display:none; justify-content:flex-end;">
+          <button class="bulk-send-btn" id="report-tuition-bulk-btn" onclick="sendBulkReportsOrTuitions()">📩 일괄 전송</button>
+        </div>
         <div id="report-tuition-detail" style="display:none"></div>
       </div>
     </div>
@@ -788,6 +791,11 @@ function esc(s) {
   })
 }
 
+// 보고서/수강료 수식이 이름 뒤에 강제로 붙이는 " 학생" 접미를 떼어내고, 수업 탭과 동일하게 이름만 보여줍니다.
+function displayStudentName(name) {
+  return String(name || "").replace(/\s*학생\s*$/, "").trim()
+}
+
 function showToast(msg) {
   const t = document.getElementById("toast")
   t.textContent = msg
@@ -861,8 +869,11 @@ function setDomain(domain) {
   el("report-list-area").style.display = domain === "report" ? "flex" : "none"
   el("tuition-list-area").style.display = domain === "tuition" ? "flex" : "none"
   el("right-tabs-row").style.display = domain === "class" ? "flex" : "none"
+  el("right-tab-body").style.display = domain === "class" ? "block" : "none"
+  if (domain !== "class") el("right-tab-body").innerHTML = ""
   el("right-summary-toggle").style.display = domain === "class" ? "inline-flex" : "none"
   el("report-tuition-detail").style.display = (domain === "report" || domain === "tuition") ? "block" : "none"
+  el("report-tuition-bulk-row").style.display = (domain === "report" || domain === "tuition") ? "flex" : "none"
   el("cal-panel-report-toggle").style.display = domain === "report" ? "flex" : "none"
   el("bulk-send-tab-btn").disabled = true
   el("right-summary-body").classList.remove("show")
@@ -1182,19 +1193,15 @@ function renderReportClassDetail() {
   el("right-sub").textContent = ""
   el("right-summary-toggle").style.display = "none"
   const sendFnName = REPORT_TYPE === "monthly" ? "월간" : "주간"
-  // 수업 탭 오른쪽 패널과 같은 .student-row 패턴으로 학생을 나열해요 (DESIGN 문서 "학생 목록 표준 디자인" 규칙 참고).
+  // 수업 탭 오른쪽 패널과 같은 .student-row 한줄 패턴으로 학생을 나열해요 (DESIGN 문서 "학생 목록 표준 디자인" 규칙 참고).
   el("report-tuition-detail").innerHTML = list.map(function (r) {
-    const period = r.period ? (r.period.start || "") + (r.period.end && r.period.end !== r.period.start ? " ~ " + r.period.end : "") : ""
     const sentBadge = r.sentBy ? '<span class="badge tone-blue">발송완료</span>' : '<span class="badge tone-gray">미발송</span>'
-    const subParts = []
-    if (period) subParts.push(period)
-    subParts.push("💬 " + (r.teacherComment || "작성된 선생님 한마디가 없어요"))
-    return '<div class="student-row with-sub">'
-      + '<div class="stu-top"><span class="stu-name">🧑‍🎓 ' + esc(r.studentName || r.title) + ' ' + sentBadge + '</span>'
+    const rate = parseAttendanceRate(r.attendanceSummary)
+    const rateBadge = rate ? ' <span class="rate-badge ' + attendanceRateTone(rate.pct) + '">' + rate.text + '</span>' : ""
+    return '<div class="student-row"><span class="stu-name">' + esc(displayStudentName(r.studentName || r.title)) + ' ' + sentBadge + rateBadge + '</span>'
       + '<button class="send-btn" onclick="sendPeriodReport(' + attrSafe(r.reportId) + ')">📩 ' + sendFnName + ' 발송</button></div>'
-      + '<div class="stu-sub' + (r.teacherComment ? '' : ' empty') + '">' + esc(subParts.join("  • ")) + '</div>'
-    + '</div>'
   }).join("")
+  el("report-tuition-bulk-btn").textContent = "📩 " + sendFnName + " 보고서 일괄 전송"
   openMobileDetail()
 }
 
@@ -1292,16 +1299,14 @@ function renderTuitionClassDetail() {
   el("right-time").textContent = list.length + "명 · 총 " + Number(totalAmount).toLocaleString("ko-KR") + "원"
   el("right-sub").textContent = ""
   el("right-summary-toggle").style.display = "none"
-  // 수업 탭 오른쪽 패널과 같은 .student-row 패턴으로 학생을 나열해요 (DESIGN 문서 "학생 목록 표준 디자인" 규칙 참고).
+  // 수업 탭 오른쪽 패널과 같은 .student-row 한줄 패턴으로 학생을 나열해요 (DESIGN 문서 "학생 목록 표준 디자인" 규칙 참고).
   el("report-tuition-detail").innerHTML = list.map(function (t) {
     const statusBadge = t.paymentStatus ? '<span class="badge ' + paymentStatusTone(t.paymentStatus) + '">' + esc(t.paymentStatus) + '</span>' : ''
-    const amountText = '💰 청구금액 ' + (t.amount != null ? Number(t.amount).toLocaleString("ko-KR") + '원' : "-")
-    return '<div class="student-row with-sub">'
-      + '<div class="stu-top"><span class="stu-name">🧑‍🎓 ' + esc(t.studentInfo || t.title) + ' ' + statusBadge + '</span>'
+    const amountBadge = ' <span class="badge tone-gray">' + (t.amount != null ? Number(t.amount).toLocaleString("ko-KR") + '원' : "-") + '</span>'
+    return '<div class="student-row"><span class="stu-name">' + esc(displayStudentName(t.studentInfo || t.title)) + ' ' + statusBadge + amountBadge + '</span>'
       + '<button class="send-btn" onclick="sendTuitionNotice(' + attrSafe(t.tuitionId) + ')">📩 안내 발송</button></div>'
-      + '<div class="stu-sub">' + esc(amountText) + '</div>'
-    + '</div>'
   }).join("")
+  el("report-tuition-bulk-btn").textContent = "📩 수강료 안내 일괄 전송"
   openMobileDetail()
 }
 
@@ -1554,7 +1559,7 @@ function renderStudentsTab(c, body) {
     const homeworkBadge = s.homework ? ' <span class="badge ' + homeworkCls + '">과제 ' + s.homework.status + '</span>' : ""
     const evalCls = s.evaluation ? attendanceRateTone(s.evaluation.score) : ""
     const evalBadge = s.evaluation ? ' <span class="badge ' + evalCls + '">' + s.evaluation.score + '점</span>' : ""
-    return '<div class="student-row"><span class="stu-name">🧑‍🎓 ' + esc(s.name) +
+    return '<div class="student-row"><span class="stu-name">' + esc(s.name) +
       (s.url ? ' <a class="stu-view" href="' + s.url + '" target="_blank">노션에서 보기 ↗</a>' : "") + ' ' +
       (s.status ? '<span class="badge ' + cls + '">' + s.status + '</span>' : "") + homeworkBadge + evalBadge + '</span>' +
       '<button class="send-btn" id="stu-send-' + i + '" onclick="sendStudentReport(' + i + ')" ' + (canSend ? "" : "disabled") + '>📩 전송</button></div>'
