@@ -389,7 +389,11 @@
 .md-right-title { font-size:18px; font-weight:700; }
 .md-right-time { font-size:13px; color:var(--muted); margin-top:4px; }
 .md-right-sub { font-size:13px; color:var(--muted); margin-top:2px; }
-.md-right-link { font-size:12px; color:var(--accent); text-decoration:none; }
+.md-right-link { font-size:12px; color:var(--accent); text-decoration:none; display:inline-flex; align-items:center; }
+.md-right-link svg { display:block; }
+.md-right-link:hover { opacity:0.7; }
+.report-view-link { font-size:14px; text-decoration:none; margin-left:4px; }
+.report-view-link:hover { opacity:0.7; }
 .right-tabs-row { display:flex; align-items:center; justify-content:space-between; gap:10px; border-bottom:1px solid var(--border); margin-bottom:16px; min-height:44px; }
 .right-tabs { display:flex; gap:6px; }
 .right-tabs-row .bulk-send-btn { margin:0; flex-shrink:0; }
@@ -408,8 +412,9 @@
 .student-detail.show { display:block; }
 .student-detail .row { margin:6px 0; }
 .student-detail .row b { color:var(--muted); font-weight:600; font-size:11px; display:block; margin-bottom:2px; }
-.student-row .stu-view { font-size:11px; color:var(--muted); text-decoration:none; margin-left:6px; }
-.student-row .stu-view:hover { text-decoration:underline; }
+.student-row .stu-view { display:inline-flex; align-items:center; text-decoration:none; margin-left:6px; }
+.student-row .stu-view:hover { opacity:0.7; }
+.student-row .stu-view svg { display:block; }
 .search-row { display:flex; }
 .search-box { flex:1; border:1px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family:inherit; background:#fff; }
 .search-box:focus { outline:none; border-color:var(--accent); }
@@ -600,7 +605,7 @@
         <div class="md-right-header">
           <div class="md-right-title-row">
             <div class="md-right-title" id="right-title"></div>
-            <a class="md-right-link" id="right-page-link" target="_blank" href="#">노션에서 보기 ↗</a>
+            <a class="md-right-link" id="right-page-link" target="_blank" href="#" title="노션에서 보기"><svg viewBox="0 0 100 100" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" rx="22" fill="#000"/><path d="M30 24 L66 21.5 C69 21.3 70 23 70 25.5 L70 74 C70 76.5 69 78 66.5 78.2 L31.5 80.3 C29 80.4 28 79 28 76.5 L28 27.5 C28 25 29 24.2 30 24 Z M36 33 L36 71 L60 69.6 L60 32 L52.5 31.5 L52.5 60 L45.5 33.6 L36 33 Z" fill="#fff"/></svg></a>
           </div>
           <div class="md-right-time" id="right-time"></div>
           <div class="md-right-sub-row">
@@ -670,7 +675,7 @@ async function submitLogin() {
       },
     })
     if (res.status === 401) {
-      errEl.textContent = "비밀번호가 올바르�� 않습니다."
+      errEl.textContent = "비밀번호가 올바르지 않습니다."
       btn.disabled = false
       btn.textContent = "로그인"
       return
@@ -783,6 +788,14 @@ const homeworkBadgeClass = {
 
 function el(id) { return document.getElementById(id) }
 function attrSafe(value) { return JSON.stringify(value).replace(/"/g, "&quot;").replace(/'/g, "&#39;") }
+
+// 링크 라벨 텍스트 대신 사용하는 작은 노션 로고 아이콘이에요.
+const NOTION_ICON_SVG = '<svg viewBox="0 0 100 100" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" rx="22" fill="#000"/><path d="M30 24 L66 21.5 C69 21.3 70 23 70 25.5 L70 74 C70 76.5 69 78 66.5 78.2 L31.5 80.3 C29 80.4 28 79 28 76.5 L28 27.5 C28 25 29 24.2 30 24 Z M36 33 L36 71 L60 69.6 L60 32 L52.5 31.5 L52.5 60 L45.5 33.6 L36 33 Z" fill="#fff"/></svg>'
+
+function notionPageUrl(id) {
+  if (!id) return ""
+  return "https://www." + "notion.so/" + String(id).replace(/-/g, "")
+}
 
 function esc(s) {
   if (s === null || s === undefined) return ""
@@ -968,7 +981,7 @@ function updateDateNavLabel() {
   }
 }
 
-// 캘린더에 표시된 달의 날짜별로 수업/일정이 있는지 조회해서 점을 표시해요.
+// 캘린더에 표시된 달의 날짜별로 수업/일정이 있는지 조회해서 ��을 ��시해요.
 async function loadCalPanelDots() {
   if (DOMAIN === "report" || DOMAIN === "tuition") { CAL_PANEL_ITEMS = {}; renderCalPanel(); return }
   const month = CAL_PANEL_MONTH
@@ -1150,7 +1163,7 @@ function renderReportList() {
   const list = getFilteredReports()
   if (!list.length) {
     SELECTED_REPORT_CLASS = null
-    el("report-list-area").innerHTML = '<div class="empty">' + (REPORT_TYPE === "weekly" ? "해당 주에 해당하는 보고서가 없어요" : "해당 월에 해당하는 보고서가 없어요") + '</div>'
+    el("report-list-area").innerHTML = '<div class="empty">' + (REPORT_TYPE === "weekly" ? "해당 주에 해당하는 보고서가 없어요" : "해당 월��� 해당하는 보고서가 없어요") + '</div>'
     renderReportClassDetail()
     return
   }
@@ -1198,7 +1211,8 @@ function renderReportClassDetail() {
     const sentBadge = r.sentBy ? '<span class="badge tone-blue">발송완료</span>' : '<span class="badge tone-gray">미발송</span>'
     const rate = parseAttendanceRate(r.attendanceSummary)
     const rateBadge = rate ? ' <span class="rate-badge ' + attendanceRateTone(rate.pct) + '">' + rate.text + '</span>' : ""
-    return '<div class="student-row"><span class="stu-name">' + esc(displayStudentName(r.studentName || r.title)) + ' ' + sentBadge + rateBadge + '</span>'
+    const reportLink = r.reportId ? ' <a class="report-view-link" href="' + notionPageUrl(r.reportId) + '" target="_blank" title="보고서 보기">📋</a>' : ''
+    return '<div class="student-row"><span class="stu-name">' + esc(displayStudentName(r.studentName || r.title)) + ' ' + sentBadge + rateBadge + reportLink + '</span>'
       + '<button class="send-btn" onclick="sendPeriodReport(' + attrSafe(r.reportId) + ')">📩 ' + sendFnName + ' 발송</button></div>'
   }).join("")
   el("report-tuition-bulk-btn").textContent = "📩 " + sendFnName + " 보고서 일괄 전송"
@@ -1342,7 +1356,7 @@ async function loadClassList(dateStr) {
   }
   setStatus("loading", "수업 목록을 불러오는 중이에요...")
   CLASSES = []
-  el("class-list-area").innerHTML = '<div class="loading">불러오는 중...</div>'
+  renderClassList()
   clearRightPanel()
   await refreshClassList(dateStr, false)
 }
@@ -1362,10 +1376,7 @@ async function refreshClassList(dateStr, silent) {
     renderClassList()
     setStatus(null)
   } catch (err) {
-    if (!silent) {
-      setStatus("error", "불러오기 실패: " + err.message)
-      el("class-list-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '</div>'
-    }
+    if (!silent) setStatus("error", "불러오기 실패: " + err.message)
   }
 }
 
@@ -1563,7 +1574,7 @@ function renderStudentsTab(c, body) {
     const evalCls = s.evaluation ? attendanceRateTone(s.evaluation.score) : ""
     const evalBadge = s.evaluation ? ' <span class="badge ' + evalCls + '">' + s.evaluation.score + '점</span>' : ""
     return '<div class="student-row"><span class="stu-name">' + esc(s.name) +
-      (s.url ? ' <a class="stu-view" href="' + s.url + '" target="_blank">노션에서 보기 ↗</a>' : "") + ' ' +
+      (s.url ? ' <a class="stu-view" href="' + s.url + '" target="_blank" title="노션에서 보기">' + NOTION_ICON_SVG + '</a>' : "") + ' ' +
       (s.status ? '<span class="badge ' + cls + '">' + s.status + '</span>' : "") + homeworkBadge + evalBadge + '</span>' +
       '<button class="send-btn" id="stu-send-' + i + '" onclick="sendStudentReport(' + i + ')" ' + (canSend ? "" : "disabled") + '>📩 전송</button></div>'
   }).join("")
@@ -1614,7 +1625,7 @@ async function renderTaskTab(c, body, kind) {
       const records = (data.evaluations && data.evaluations.records) || (data.tests && data.tests.records) || []
       const activities = (data.evaluations && data.evaluations.activities) || []
       // 점수/정답/전체 문항은 반 전체 공통 설명인 records가 아니라, 학생별 인스턴스인 activities에만 있어요.
-      // (레코드에는 title/book/range만 있고 점수 필드 자체가 없어서 예전 코드는 항상 점수가 비어 보였어요.)
+      // (레코드���는 title/book/range만 있고 점수 필드 자체가 없어서 예전 코드는 항상 점수가 비어 보였어요.)
       if (activities.length > 0) {
         const recordById = {}
         records.forEach(function (r) { recordById[r.id] = r })
@@ -1695,7 +1706,7 @@ async function loadScheduleList(dateStr) {
   }
   setStatus("loading", "일정 목록을 불러오는 중이에요...")
   SCHEDULES = []
-  el("schedule-list-area").innerHTML = '<div class="loading">불러오는 중...</div>'
+  renderScheduleList()
   clearRightPanel()
   await refreshScheduleList(dateStr, false)
 }
@@ -1714,10 +1725,7 @@ async function refreshScheduleList(dateStr, silent) {
     renderScheduleList()
     setStatus(null)
   } catch (err) {
-    if (!silent) {
-      setStatus("error", "불러오기 실패: " + err.message)
-      el("schedule-list-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '</div>'
-    }
+    if (!silent) setStatus("error", "불러오기 실패: " + err.message)
   }
 }
 
