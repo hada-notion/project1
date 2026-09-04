@@ -670,7 +670,7 @@ async function submitLogin() {
       },
     })
     if (res.status === 401) {
-      errEl.textContent = "비밀번호가 올바르지 않습니다."
+      errEl.textContent = "비밀번호가 올바르�� 않습니다."
       btn.disabled = false
       btn.textContent = "로그인"
       return
@@ -1342,7 +1342,7 @@ async function loadClassList(dateStr) {
   }
   setStatus("loading", "수업 목록을 불러오는 중이에요...")
   CLASSES = []
-  renderClassList()
+  el("class-list-area").innerHTML = '<div class="loading">불러오는 중...</div>'
   clearRightPanel()
   await refreshClassList(dateStr, false)
 }
@@ -1362,7 +1362,10 @@ async function refreshClassList(dateStr, silent) {
     renderClassList()
     setStatus(null)
   } catch (err) {
-    if (!silent) setStatus("error", "불러오기 실패: " + err.message)
+    if (!silent) {
+      setStatus("error", "불러오기 실패: " + err.message)
+      el("class-list-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '</div>'
+    }
   }
 }
 
@@ -1692,7 +1695,7 @@ async function loadScheduleList(dateStr) {
   }
   setStatus("loading", "일정 목록을 불러오는 중이에요...")
   SCHEDULES = []
-  renderScheduleList()
+  el("schedule-list-area").innerHTML = '<div class="loading">불러오는 중...</div>'
   clearRightPanel()
   await refreshScheduleList(dateStr, false)
 }
@@ -1711,7 +1714,10 @@ async function refreshScheduleList(dateStr, silent) {
     renderScheduleList()
     setStatus(null)
   } catch (err) {
-    if (!silent) setStatus("error", "불러오기 실패: " + err.message)
+    if (!silent) {
+      setStatus("error", "불러오기 실패: " + err.message)
+      el("schedule-list-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '</div>'
+    }
   }
 }
 
