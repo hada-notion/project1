@@ -147,14 +147,6 @@
   }
   .refresh-btn:hover { background: #f0f0ee; }
 
-  .status-banner {
-    padding: 10px 14px;
-    border-radius: 8px;
-    font-size: 13px;
-    margin-bottom: 16px;
-  }
-  .status-banner.loading { background: #eef4fd; color: var(--accent); }
-  .status-banner.error { background: #fdecec; color: var(--red); }
 
   .cards {
     display: grid;
@@ -233,6 +225,15 @@
     font-size: 13px;
     padding: 20px 0;
     text-align: center;
+  }
+  .loading {
+    background: #eef4fd;
+    color: var(--accent);
+    font-size: 13px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    text-align: center;
+    margin: 8px 0;
   }
   .summary-row {
     display: flex;
@@ -536,7 +537,7 @@
 
 <div id="app-screen" style="display:none">
 <div class="topbar">
-  <div class="brand">하다 학원관리</div>
+  <div class="brand">하다 학원���리</div>
   <button class="nav-btn active" data-tab="dashboard" onclick="showTab('dashboard')">📊 <span class="btn-label">대시보드</span></button>
   <button class="nav-btn" data-tab="admin" onclick="showTab('admin')">🗂️ <span class="btn-label">리포트 관리</span></button>
   <button class="nav-btn" data-tab="kiosk" onclick="showTab('kiosk')">🖊️ <span class="btn-label">키오스크</span></button>
@@ -592,7 +593,6 @@
       <div class="search-row">
         <input type="text" id="search-input" class="search-box" placeholder="🔍 검색 (수업명 · 강사 · 학생 등)" oninput="onSearchInput(this.value)">
       </div>
-      <div id="status-area"></div>
       <div id="class-list-area" class="class-list-area"></div>
       <div id="schedule-list-area" class="schedule-list-area" style="display:none"></div>
       <div id="report-list-area" class="class-list-area" style="display:none"></div>
@@ -675,12 +675,12 @@ async function submitLogin() {
       },
     })
     if (res.status === 401) {
-      errEl.textContent = "비밀번호가 올바르지 않습니다."
+      errEl.textContent = "비밀번호가 올바르지 않습니��."
       btn.disabled = false
       btn.textContent = "로그인"
       return
     }
-    if (!res.ok) throw new Error(`서버 오류: ${res.status}`)
+    if (!res.ok) throw new Error(`서�� 오류: ${res.status}`)
     localStorage.setItem(ADMIN_KEY_STORAGE, key)
     showAppScreen()
   } catch (err) {
@@ -816,12 +816,6 @@ function showToast(msg) {
   setTimeout(function () { t.classList.remove("show") }, 1800)
 }
 
-function setStatus(type, message) {
-  const area = el("status-area")
-  if (!type) { area.innerHTML = ""; return }
-  area.innerHTML = '<div class="status-banner ' + type + '">' + message + '</div>'
-}
-
 function kstToday() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date())
 }
@@ -857,7 +851,7 @@ function formatDateLabel(dateStr) {
   return dateStr.replace(/-/g, ".") + " (" + days[d.getDay()] + ")"
 }
 
-// 날짜를 이동해서 �����로 ��러오는 동안, 이전 날짜의 상세정보가 남아있어 착각하지 않도록 오른쪽 패널을 비워요.
+// 날짜�� 이동해서 �����로 ��러오는 동안, 이전 날짜의 상세정보가 남아있어 착각하지 않도록 오른쪽 패널을 비워요.
 function clearRightPanel() {
   el("md-right-empty").style.display = "block"
   el("md-right-content").style.display = "none"
@@ -913,7 +907,7 @@ function setDomain(domain) {
   if (CALENDAR_OPEN && domain !== "report" && domain !== "tuition") loadCalendarPanel()
 }
 
-// ---------------- 캘린더 사이드패널 (열고/닫기) ----------------
+// ---------------- 캘린더 사이드패널 (열고/��기) ----------------
 function toggleCalendarPanel() {
   CALENDAR_OPEN = !CALENDAR_OPEN
   el("calendar-panel").classList.toggle("open", CALENDAR_OPEN)
@@ -959,7 +953,7 @@ async function loadCalendarPanel() {
   loadCalPanelDots()
 }
 
-// 상단 날짜 영역: 수업/일정은 하루 날짜를, 보고서(주간/월간)와 수강료는 해당 기간을 보여줘요.
+// 상단 날짜 영역: 수업/��정은 하루 날짜를, 보고서(주간/월간)와 수강료는 해당 기간을 보여줘요.
 function formatWeekRangeLabel(startStr, endStr) {
   const days = ["일", "월", "화", "수", "목", "금", "토"]
   const sd = new Date(startStr + "T00:00:00+09:00")
@@ -1117,12 +1111,13 @@ async function loadReportList(month) {
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
     })
     const data = await res.json()
-    if (!res.ok) throw new Error(data.error || ("조회 실패: " + res.status))
+    if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
     REPORTS = data.reports || []
-    if (month !== CAL_PANEL_MONTH) return
+    if (month !== CAL_PANEL_MONTH || DOMAIN !== "report") return
     renderReportList()
   } catch (err) {
-    el("report-list-area").innerHTML = '<div class="empty">조회 실패: ' + esc(err.message) + '</div>'
+    if (month !== CAL_PANEL_MONTH || DOMAIN !== "report") return
+    el("report-list-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '</div>'
   }
 }
 
@@ -1163,7 +1158,7 @@ function renderReportList() {
   const list = getFilteredReports()
   if (!list.length) {
     SELECTED_REPORT_CLASS = null
-    el("report-list-area").innerHTML = '<div class="empty">' + (REPORT_TYPE === "weekly" ? "해당 주에 해당하는 보고서가 없어요" : "해당 ������ 해당하는 보고서가 없어요") + '</div>'
+    el("report-list-area").innerHTML = '<div class="empty">' + (REPORT_TYPE === "weekly" ? "해당 주에 해당하는 보고서가 없어요" : "해당 월에 해당하는 보고서가 없어요") + '</div>'
     renderReportClassDetail()
     return
   }
@@ -1211,9 +1206,9 @@ function renderReportClassDetail() {
     const sentBadge = r.sentBy ? '<span class="badge tone-blue">발송완료</span>' : '<span class="badge tone-gray">미발송</span>'
     const rate = parseAttendanceRate(r.attendanceSummary)
     const rateBadge = rate ? ' <span class="rate-badge ' + attendanceRateTone(rate.pct) + '">' + rate.text + '</span>' : ""
-    const reportLink = r.reportId
-      ? ' <a class="report-view-link" href="' + notionPageUrl(r.reportId) + '" target="_blank" title="보고서 보기">📋</a>'
-      : ' <span class="report-view-link" style="opacity:0.35;cursor:default" title="이 보고서에는 아직 연결된 노션 페이지가 없어요">📋</span>'
+    const reportLink = r.reportUrl
+      ? ' <a class="report-view-link" href="' + r.reportUrl + '" target="_blank" title="학부모 보고서 페이지 보기">📋</a>'
+      : ' <span class="report-view-link" style="opacity:0.35;cursor:default" title="이 학생의 등록에 토큰이 아직 없어요">📋</span>'
     return '<div class="student-row"><span class="stu-name">' + esc(displayStudentName(r.studentName || r.title)) + ' ' + sentBadge + rateBadge + reportLink + '</span>'
       + '<button class="send-btn" onclick="sendPeriodReport(' + attrSafe(r.reportId) + ')">📩 ' + sendFnName + ' 발송</button></div>'
   }).join("")
@@ -1246,12 +1241,13 @@ async function loadTuitionList(month) {
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
     })
     const data = await res.json()
-    if (!res.ok) throw new Error(data.error || ("조회 실패: " + res.status))
+    if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
     TUITIONS = data.tuitions || []
-    if (month !== CAL_PANEL_MONTH) return
+    if (month !== CAL_PANEL_MONTH || DOMAIN !== "tuition") return
     renderTuitionList()
   } catch (err) {
-    el("tuition-list-area").innerHTML = '<div class="empty">조회 실패: ' + esc(err.message) + '</div>'
+    if (month !== CAL_PANEL_MONTH || DOMAIN !== "tuition") return
+    el("tuition-list-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '</div>'
   }
 }
 
@@ -1352,11 +1348,9 @@ async function loadClassList(dateStr) {
     CLASSES = cached
     renderClassList()
     clearRightPanel()
-    setStatus(null)
     refreshClassList(dateStr, true)
     return
   }
-  setStatus("loading", "수업 목록을 불러오는 중이에요...")
   CLASSES = []
   el("class-list-area").innerHTML = '<div class="loading">불러오는 중...</div>'
   clearRightPanel()
@@ -1376,10 +1370,8 @@ async function refreshClassList(dateStr, silent) {
     if (dateStr !== CURRENT_DATE || DOMAIN !== "class") return
     CLASSES = classes
     renderClassList()
-    setStatus(null)
   } catch (err) {
     if (!silent && dateStr === CURRENT_DATE && DOMAIN === "class") {
-      setStatus("error", "불러오기 실패: " + err.message)
       el("class-list-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '</div>'
     }
   }
@@ -1468,7 +1460,7 @@ function renderClassList() {
       '<div class="class-item-body' + (expanded ? " show" : "") + '">' +
         '<div class="row"><b>출석현황</b>' + esc(c.attendanceStatus || "-") + '</div>' +
         '<div class="row"><b>학습 내용</b>' + esc(c.studySummary || "-") + '</div>' +
-        '<div class="row"><b>과제 안내</b>' + esc(c.assignmentSummary || "-") + '</div>' +
+        '<div class="row"><b>��제 안내</b>' + esc(c.assignmentSummary || "-") + '</div>' +
         '<div class="row"><b>평가 결과</b>' + esc(c.evaluationSummary || "-") + '</div>' +
         '<button class="bulk-send-btn" onclick="sendBulkForClass(' + attrSafe(c.id) + ')">📩 보고서 일괄 전송</button>' +
       '</div>' +
@@ -1578,8 +1570,11 @@ function renderStudentsTab(c, body) {
     const homeworkBadge = s.homework ? ' <span class="badge ' + homeworkCls + '">과제 ' + s.homework.status + '</span>' : ""
     const evalCls = s.evaluation ? attendanceRateTone(s.evaluation.score) : ""
     const evalBadge = s.evaluation ? ' <span class="badge ' + evalCls + '">' + s.evaluation.score + '점</span>' : ""
+    const reportLink = s.reportUrl
+      ? ' <a class="report-view-link" href="' + s.reportUrl + '" target="_blank" title="학부모 보고서 페이지 보기">📋</a>'
+      : ' <span class="report-view-link" style="opacity:0.35;cursor:default" title="이 학생의 등록에 토큰이 아직 없어요">📋</span>'
     return '<div class="student-row"><span class="stu-name">' + esc(s.name) +
-      (s.url ? ' <a class="stu-view" href="' + s.url + '" target="_blank" title="노션에서 보기">' + NOTION_ICON_SVG + '</a>' : "") + ' ' +
+      (s.url ? ' <a class="stu-view" href="' + s.url + '" target="_blank" title="노션에서 보기">' + NOTION_ICON_SVG + '</a>' : "") + reportLink + ' ' +
       (s.status ? '<span class="badge ' + cls + '">' + s.status + '</span>' : "") + homeworkBadge + evalBadge + '</span>' +
       '<button class="send-btn" id="stu-send-' + i + '" onclick="sendStudentReport(' + i + ')" ' + (canSend ? "" : "disabled") + '>📩 전송</button></div>'
   }).join("")
@@ -1601,8 +1596,8 @@ async function fetchClassDetail(classId) {
   return data
 }
 
-// 여러 후보 필드명 중 값이 있는 첫 번째 필드를 그대로 반환해요.
-// 백엔드 응답 필드명이 바뀌거나 통일되지 않은 경우에도 값을 놓치지 않기 위한 방어적 처리예요.
+// ���러 후보 필드명 중 값이 있는 첫 번째 필���를 그대로 반환해요.
+// 백엔드 응답 필드명이 바뀌거나 통일되지 않은 경우에도 값을 놓치지 않기 위한 ��어적 처리예요.
 function pickField(obj, keys) {
   if (!obj) return null
   for (let i = 0; i < keys.length; i++) {
@@ -1624,7 +1619,7 @@ function bulletLine(label, value) {
 
 async function renderTaskTab(c, body, kind) {
   if (kind === "evaluation") {
-    body.innerHTML = '<div class="empty">불러오는 중...</div>'
+    body.innerHTML = '<div class="loading">불러오는 중...</div>'
     try {
       const data = await fetchClassDetail(c.id)
       const records = (data.evaluations && data.evaluations.records) || (data.tests && data.tests.records) || []
@@ -1665,7 +1660,7 @@ async function renderTaskTab(c, body, kind) {
       : '<div class="empty">등록된 평가 정보가 없어요</div>'
     return
   }
-  body.innerHTML = '<div class="empty">불러오는 중...</div>'
+  body.innerHTML = '<div class="loading">불러오는 중...</div>'
   try {
     const data = await fetchClassDetail(c.id)
     const records = (data.assignments && data.assignments.records) || []
@@ -1705,11 +1700,9 @@ async function loadScheduleList(dateStr) {
     SCHEDULES = cached
     renderScheduleList()
     clearRightPanel()
-    setStatus(null)
     refreshScheduleList(dateStr, true)
     return
   }
-  setStatus("loading", "일정 목록을 불러오는 중이에요...")
   SCHEDULES = []
   el("schedule-list-area").innerHTML = '<div class="loading">불러오는 중...</div>'
   clearRightPanel()
@@ -1728,10 +1721,8 @@ async function refreshScheduleList(dateStr, silent) {
     if (dateStr !== CURRENT_DATE || DOMAIN !== "schedule") return
     SCHEDULES = schedules
     renderScheduleList()
-    setStatus(null)
   } catch (err) {
     if (!silent && dateStr === CURRENT_DATE && DOMAIN === "schedule") {
-      setStatus("error", "불러오기 실패: " + err.message)
       el("schedule-list-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '</div>'
     }
   }
