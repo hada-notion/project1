@@ -837,8 +837,12 @@ let CAL_PANEL_MONTH = kstToday().slice(0, 7)
 let CAL_PANEL_ITEMS = {}
 let REPORT_TYPE = "weekly" // "weekly" | "monthly"
 let REPORTS = []
+let REPORT_LOADING = false // 보고서 목록 조회가 진행 중인 동안, 다른 곳(주 선택 등)에서 목록을 다시 그려도 파란 로딩 박스를 유지해요.
+let reportLoadGen = 0
 let SELECTED_REPORT_ID = null
 let TUITIONS = []
+let TUITION_LOADING = false // 수강료 목록 조회가 진행 중인 동안, 목록을 다시 그려도 파란 로딩 박스를 유지해요.
+let tuitionLoadGen = 0
 let SELECTED_TUITION_ID = null
 let SELECTED_WEEK_START = null // 주간 보고서용: 선택된 주의 시작일(일요일, YYYY-MM-DD)
 let SELECTED_WEEK_END = null
@@ -1105,6 +1109,8 @@ function setReportType(type) {
 }
 
 async function loadReportList(month) {
+  const myGen = ++reportLoadGen
+  REPORT_LOADING = true
   el("report-list-area").innerHTML = '<div class="loading">불러오는 중...</div>'
   try {
     const res = await fetch(GET_REPORTS_URL + "?type=" + REPORT_TYPE + "&month=" + month, {
@@ -1113,10 +1119,15 @@ async function loadReportList(month) {
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
     REPORTS = data.reports || []
-    if (month !== CAL_PANEL_MONTH || DOMAIN !== "report") return
+    // 이 요청보다 능은(다른 달/탭) 요청이 이미 시작되었으면 이 응답은 무시해요(오래된 응답이 나중에 도착해서 덜어쓰는 것 방지).
+    if (myGen !== reportLoadGen) return
+    if (month !== CAL_PANEL_MONTH || DOMAIN !== "report") { REPORT_LOADING = false; return }
+    REPORT_LOADING = false
     renderReportList()
   } catch (err) {
-    if (month !== CAL_PANEL_MONTH || DOMAIN !== "report") return
+    if (myGen !== reportLoadGen) return
+    if (month !== CAL_PANEL_MONTH || DOMAIN !== "report") { REPORT_LOADING = false; return }
+    REPORT_LOADING = false
     el("report-list-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '</div>'
   }
 }
@@ -1155,6 +1166,8 @@ function getFilteredReports() {
 }
 
 function renderReportList() {
+  // 보고서 목록을 불러오는 중이면(주/유형 전환 등으로 이 함수가 별도로 호출되더라도) 파란 로딩 박스를 그대로 유지하고, "없어요" 등 결과 화면은 데이터가 실제로 도착한 뒤에만 보여줘요.
+  if (REPORT_LOADING) return
   const list = getFilteredReports()
   if (!list.length) {
     SELECTED_REPORT_CLASS = null
@@ -1235,6 +1248,8 @@ async function sendPeriodReport(reportId) {
 
 // ---------------- 수강료 탭 ----------------
 async function loadTuitionList(month) {
+  const myGen = ++tuitionLoadGen
+  TUITION_LOADING = true
   el("tuition-list-area").innerHTML = '<div class="loading">불러오는 중...</div>'
   try {
     const res = await fetch(GET_TUITIONS_URL + "?month=" + month, {
@@ -1243,10 +1258,14 @@ async function loadTuitionList(month) {
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
     TUITIONS = data.tuitions || []
-    if (month !== CAL_PANEL_MONTH || DOMAIN !== "tuition") return
+    if (myGen !== tuitionLoadGen) return
+    if (month !== CAL_PANEL_MONTH || DOMAIN !== "tuition") { TUITION_LOADING = false; return }
+    TUITION_LOADING = false
     renderTuitionList()
   } catch (err) {
-    if (month !== CAL_PANEL_MONTH || DOMAIN !== "tuition") return
+    if (myGen !== tuitionLoadGen) return
+    if (month !== CAL_PANEL_MONTH || DOMAIN !== "tuition") { TUITION_LOADING = false; return }
+    TUITION_LOADING = false
     el("tuition-list-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '</div>'
   }
 }
@@ -1265,6 +1284,8 @@ function getFilteredTuitions() {
 }
 
 function renderTuitionList() {
+  // 수강료 목록을 불러오는 중이면 파란 로딩 박스를 그대로 유지하고, 결과 화면은 데이터가 실제로 도착한 뒤에만 보여줘요.
+  if (TUITION_LOADING) return
   const list = getFilteredTuitions()
   if (!list.length) {
     SELECTED_TUITION_CLASS = null
