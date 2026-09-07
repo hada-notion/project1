@@ -346,6 +346,7 @@
 .schedule-item-title-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .schedule-item-title { font-size:13.5px; font-weight:600; }
 .schedule-item-badges { display:flex; gap:6px; flex-wrap:wrap; }
+.sched-tag-more { color:var(--muted); }
 .schedule-list-area { display:flex; flex-direction:column; gap:0; }
 .sched-date-group { display:flex; flex-direction:column; }
 .sched-date-label { font-size:12px; font-weight:700; color:var(--muted); padding:14px 12px 4px; }
@@ -2131,9 +2132,42 @@ function filteredSchedules() {
 
 function findSchedule(id) { return SCHEDULES.find(function (s) { return s.id === id }) }
 
+// 같은 일정이 여러 반/강사에 걸쳐 있으면 API가 행을 나눠서 줄 수 있어요.
+// 날짜+이름+구분+상태가 같으면 한 줄로 합치고 강사/반 이름만 모아줘요.
+function dedupeSchedules(list) {
+  const map = new Map()
+  const order = []
+  list.forEach(function (s) {
+    const d = (s.date || "").slice(0, 10)
+    const key = [d, s.name, s.category || "", s.status || ""].join("||")
+    if (!map.has(key)) {
+      map.set(key, Object.assign({}, s, { teacherNames: (s.teacherNames || []).slice(), classNames: (s.classNames || []).slice() }))
+      order.push(key)
+    } else {
+      const merged = map.get(key)
+      ;(s.teacherNames || []).forEach(function (n) { if (merged.teacherNames.indexOf(n) === -1) merged.teacherNames.push(n) })
+      ;(s.classNames || []).forEach(function (n) { if (merged.classNames.indexOf(n) === -1) merged.classNames.push(n) })
+    }
+  })
+  return order.map(function (k) { return map.get(k) })
+}
+
+// 강사/반 이름 태그가 너무 많아지지 않도록 최대 2개만 보여주고 나머지는 "+N"으로 축약해요.
+function renderScheduleTagBadges(s) {
+  const names = []
+  ;(s.teacherNames || []).forEach(function (n) { if (names.indexOf(n) === -1) names.push(n) })
+  ;(s.classNames || []).forEach(function (n) { if (names.indexOf(n) === -1) names.push(n) })
+  if (names.length === 0) return ""
+  const MAX_TAGS = 2
+  const shown = names.slice(0, MAX_TAGS)
+  const extra = names.length - shown.length
+  return shown.map(function (n) { return '<span class="badge gray">' + esc(n) + '</span>' }).join("") +
+    (extra > 0 ? '<span class="badge gray sched-tag-more">+' + extra + '</span>' : "")
+}
+
 function renderScheduleList() {
   const listEl = el("schedule-list-area")
-  const list = filteredSchedules()
+  const list = dedupeSchedules(filteredSchedules())
   if (list.length === 0) {
     listEl.innerHTML = '<div class="empty">다가오는 일주일에 일정이 없어요</div>'
     return
@@ -2162,9 +2196,7 @@ function renderScheduleList() {
           '<div class="schedule-item-title-row"><span class="schedule-item-title">' + esc(s.name) + '</span></div>' +
           '<div class="schedule-item-badges">' +
             (s.category ? '<span class="badge ' + s.categoryColor + '">' + esc(s.category) + '</span>' : "") +
-            (s.status ? '<span class="badge gray">' + esc(s.status) + '</span>' : "") +
-            (s.teacherNames || []).map(function (n) { return '<span class="badge blue">' + esc(n) + '</span>' }).join("") +
-            (s.classNames || []).map(function (n) { return '<span class="badge gray">' + esc(n) + '</span>' }).join("") +
+            renderScheduleTagBadges(s) +
           '</div>' +
         '</div>'
       }).join("") +
