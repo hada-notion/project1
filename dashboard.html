@@ -357,9 +357,10 @@
 .class-badge.tb-purple { border-color:#cfc0e0; color:#6b4d99; }
 .class-badge.tb-pink { border-color:#e8bfd8; color:#a3467c; }
 .class-badge.tb-red { border-color:#f0bcbc; color:#af4141; }
-#right-summary-body .student-select-all { margin-bottom:6px; }
-#right-summary-body .student-row { border-bottom:1px solid var(--border); padding:6px 0; }
-#right-summary-body .student-row:last-child { border-bottom:none; }
+#right-tab-body .student-select-all { margin-bottom:6px; }
+#right-tab-body .student-row { border-bottom:1px solid var(--border); padding:6px 0; }
+#right-tab-body .student-row:last-child { border-bottom:none; }
+.sched-msg-title { font-size:13px; font-weight:700; color:var(--text); margin-bottom:10px; }
 .sched-msg-filters { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
 .sched-msg-filters select { flex:1 1 45%; font-size:12px; padding:5px 6px; border:1px solid var(--border); border-radius:6px; background:#fff; color:var(--text); }
 .sched-msg-count { font-size:12px; color:var(--muted); margin-bottom:6px; }
@@ -1708,7 +1709,7 @@ async function prioritizeSelectedClassStudents(id) {
 
 // 선택된 수업이 없을 때, 뒤에서 조용히 그날 전체 수업의 학생 정보를 하나씩 미리 불러와요.
 // 사용자가 나중에 아무 수업이나 클릭해도 이미 캐시된 학생 정보가 바로 나오도록 하기 위함이에요.
-// 도중에 사용자가 수업을 선택하면 fetchSessionStudentsOnce가 요청을 공유하므로 중복 요청 없이 그대로 이어받아요.
+// 도중에 사용자가 수업을 선택하면 fetchSessionStudentsOnce가 요청을 공유하므로 중복 요청 없이 그�����로 이어받아요.
 async function backgroundPrefetchAllStudents(dateStr) {
   const token = ++BACKGROUND_PREFETCH_TOKEN
   const ids = CLASSES.map(function (c) { return c.id })
@@ -2259,37 +2260,48 @@ function selectSchedule(id) {
   el("right-summary-toggle").style.display = "inline-flex"
   el("right-summary-body").classList.remove("show")
   el("right-summary-toggle").classList.remove("open")
-  RIGHT_SUMMARY_CLOSED_LABEL = "📩 안내 메시지 보내기"
+  RIGHT_SUMMARY_CLOSED_LABEL = "더보기"
+  RIGHT_SUMMARY_ON_OPEN = null
   el("right-summary-toggle-label").textContent = RIGHT_SUMMARY_CLOSED_LABEL
-  el("right-summary-body").innerHTML = ""
   el("bulk-send-tab-btn").style.display = "inline-flex"
   el("bulk-send-tab-btn").textContent = "📩 선택한 학생에게 안내 발송"
   el("bulk-send-tab-btn").disabled = true
   SCHEDULE_MSG_SELECTED = {}
   SCHEDULE_MSG_FILTERS = { grade: "", school: "", className: "", status: "" }
-  RIGHT_SUMMARY_ON_OPEN = function () {
-    if (STUDENTS_LOAD_STATE === "loaded") renderScheduleMsgBody()
-    else ensureAllStudentsLoaded()
-  }
+  // 상세 정보(관련 대상·메모·태그)는 수업 탭처럼 "더보기" 접기 안에 담아요.
   renderScheduleDetail(s)
+  // 안내 대상 학생 목록은 접기와 무관하게 항상 보이는 영역(right-tab-body)에 그려요(수업 탭의 수강생 명단과 동일한 위치).
+  if (STUDENTS_LOAD_STATE === "loaded") renderScheduleMsgBody()
+  else ensureAllStudentsLoaded()
   openMobileDetail()
 }
 
+// 강사/반 이름은 이미 정리된 배열(teacherNames/classNames)을 그대로 써서, 원본 관련항목 텍스트에 섞여있을 수 있는 중복을 피해요.
+function renderScheduleRelatedBadges(s) {
+  const teacherBadges = []
+  const seenTeachers = {}
+  ;(s.teacherNames || []).forEach(function (n) { if (!seenTeachers[n]) { seenTeachers[n] = true; teacherBadges.push('<span class="teacher-badge ' + teacherColorClass(n) + '">' + esc(n) + '</span>') } })
+  const classBadges = []
+  const seenClasses = {}
+  ;(s.classNames || []).forEach(function (n) { if (!seenClasses[n]) { seenClasses[n] = true; classBadges.push('<span class="class-badge ' + teacherColorClass(n) + '">' + esc(n) + '</span>') } })
+  return teacherBadges.concat(classBadges).join(" ")
+}
+
+// "더보기" 접기 안에 들어갈 상세 정보 카드예요. 날짜·구분·진행상태는 이미 상단(제목/날짜/배지)에 표시되므로 여기서는 반복하지 않고,
+// 관련 대상·메모·태그처럼 상단에 없는 정보만 모아서 중복을 없애요.
 function renderScheduleDetail(s) {
-  const body = el("right-tab-body")
+  const body = el("right-summary-body")
   function field(label, valueHtml) {
     return '<div class="schedule-detail-field"><b>' + esc(label) + '</b><div class="val">' + valueHtml + '</div></div>'
   }
-  let html = ""
-  html += field("날짜", esc(s.date ? formatDateLabel(s.date.slice(0, 10)) : "-"))
-  html += field("구분", s.category ? '<span class="badge ' + s.categoryColor + '">' + esc(s.category) + '</span>' : "-")
-  html += field("진행상태", s.status ? '<span class="badge gray">' + esc(s.status) + '</span>' : "-")
-  if (s.relatedText) html += field("관련 대상", esc(s.relatedText))
-  if (s.memo) html += field("메모", esc(s.memo).replace(/\n/g, "<br>"))
+  const relatedBadges = renderScheduleRelatedBadges(s)
   // 구분·진행상태와 겹치는 태그(예: "휴원", "시작 전")는 한 번만 보이도록 걸러내요.
   const extraTags = (s.tags || []).filter(function (t) { return t !== s.category && t !== s.status })
-  if (extraTags.length) html += field("태그", extraTags.map(function (t) { return '<span class="badge gray">' + esc(t) + '</span>' }).join(" "))
-  body.innerHTML = html
+  let fieldsHtml = ""
+  if (relatedBadges) fieldsHtml += field("관련 대상", relatedBadges)
+  if (s.memo) fieldsHtml += field("메모", esc(s.memo).replace(/\n/g, "<br>"))
+  if (extraTags.length) fieldsHtml += field("태그", extraTags.map(function (t) { return '<span class="badge gray">' + esc(t) + '</span>' }).join(" "))
+  body.innerHTML = '<div class="info-card"><h3>📋 상세 정보</h3>' + (fieldsHtml || '<div class="empty">추가 정보가 없어요</div>') + '</div>'
 }
 
 // ---------------- 일정 안내 메시지: 학생(학원) DB 전체 명단 + 필터 + 선택 발송 (발송 백엔드��� 추후 연동) ----------------
@@ -2358,7 +2370,7 @@ function setScheduleMsgFilter(key, value) {
 
 // 필터 + 학생 체크박스 + 발송버튼을 통통 다시 그려요. SCHEDULE_MSG_SELECTED는 id 기준으로 유지되니까 필터를 바꿔도 선택이 풀리지 않아요.
 function renderScheduleMsgBody() {
-  const bodyEl = el("right-summary-body")
+  const bodyEl = el("right-tab-body")
   if (!bodyEl) return
   if (STUDENTS_LOAD_STATE === "loading") {
     bodyEl.innerHTML = '<div class="loading">학생 목록 불러오는 중...</div>'
@@ -2387,6 +2399,7 @@ function renderScheduleMsgBody() {
       }).join("")
     : '<div class="empty" style="padding:8px 0">조건에 맞는 학생이 없어요</div>'
   bodyEl.innerHTML =
+    '<div class="sched-msg-title">📩 안내 대상 학생</div>' +
     '<div class="sched-msg-filters">' +
       '<select onchange="setScheduleMsgFilter(\'grade\', this.value)">' + scheduleMsgFilterOptionsHtml(SCHEDULE_MSG_FILTERS.grade, grades, "학년 전체") + '</select>' +
       '<select onchange="setScheduleMsgFilter(\'school\', this.value)">' + scheduleMsgFilterOptionsHtml(SCHEDULE_MSG_FILTERS.school, schools, "학교 전체") + '</select>' +
