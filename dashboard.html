@@ -1978,7 +1978,7 @@ function formatSummaryBlock(text) {
 }
 
 // 과제 ��내/평가 결과 카드는 기존 과제·평가 탭에서 쓰던 구조화 레코드(제목 링크 + 교재·범위 + 마감/내용)를
-// 그대로 재사용해���. 탭이 없�����진 대신 더보기 안에서 바로 이 정보를 보여줍니다.
+// 그대로 재사용해���. 탭이 없�������진 대신 더보기 안에서 바로 이 정보를 보여줍니다.
 async function loadSummaryRecordDetails(c) {
   const assignEl = el("summary-assignment-body")
   const evalEl = el("summary-evaluation-body")
@@ -2344,7 +2344,8 @@ function setScheduleMsgSearch(value) {
   renderScheduleMsgBody()
 }
 
-// 필터 + 학생 체크박스 + 발송버튼을 통통 다시 그려요. SCHEDULE_MSG_SELECTED는 id 기준으로 유지되니까 필터를 바꿔도 선택이 풀리지 않아요.
+// 검색창(input) 자체는 처음 한 번만 만들고, 검색어가 바뀜 때마다 아래 목록 부분만 갱신해요.
+// input 요소를 매 키입력마다 통째로 교체하면 한글 조합(IME) 상태가 깨져서 자음·모음이 따로따로 나오는 문제가 생기므로 이를 피해요.
 function renderScheduleMsgBody() {
   const bodyEl = el("right-tab-body")
   if (!bodyEl) return
@@ -2358,6 +2359,22 @@ function renderScheduleMsgBody() {
     el("bulk-send-tab-btn").disabled = true
     return
   }
+  // 이미 검색창 쉬샘(input 포함)이 그려져 있으면 input은 건드리지 않고 목록만 갱신해요.
+  if (!bodyEl.querySelector(".sched-msg-search input")) {
+    bodyEl.innerHTML =
+      '<div class="sched-msg-title">📩 안내 대상 학생</div>' +
+      '<div class="sched-msg-search"><input type="text" placeholder="이름·학년·학교·클래스·수강상태 검색" value="' + esc(SCHEDULE_MSG_SEARCH) + '" oninput="setScheduleMsgSearch(this.value)"></div>' +
+      '<div class="sched-msg-count"></div>' +
+      '<label class="student-select-all"><input type="checkbox" onchange="toggleScheduleMsgSelectAll(this.checked)"> 이 목록 전체 선택</label>' +
+      '<div id="sched-msg-student-rows"></div>'
+  }
+  renderScheduleMsgList()
+}
+
+// 검색어·체크박스 변화마다 이 함수만 불려서 검색창(input)은 손대지 않고 아래 목록/카운트/전체선택만 갱신해요.
+function renderScheduleMsgList() {
+  const bodyEl = el("right-tab-body")
+  if (!bodyEl) return
   const list = filteredScheduleMsgStudents()
   const eligibleIds = list.map(function (s) { return s.id })
   const allSelected = eligibleIds.length > 0 && eligibleIds.every(function (id) { return SCHEDULE_MSG_SELECTED[id] })
@@ -2370,21 +2387,13 @@ function renderScheduleMsgBody() {
         '</div>'
       }).join("")
     : '<div class="empty" style="padding:8px 0">조건에 맞는 학생이 없어요</div>'
-  // 검색창에 포커스가 있는 상태로 다시 그릴 때는 커서 위치를 유지해요(매 입력마다 innerHTML을 통째로 바꾸므로).
-  const prevInput = bodyEl.querySelector(".sched-msg-search input")
-  const hadFocus = prevInput && document.activeElement === prevInput
-  const caretPos = hadFocus ? prevInput.selectionStart : null
-  bodyEl.innerHTML =
-    '<div class="sched-msg-title">📩 안내 대상 학생</div>' +
-    '<div class="sched-msg-search"><input type="text" placeholder="이름·학년·학교·클래스·수강상태 검색" value="' + esc(SCHEDULE_MSG_SEARCH) + '" oninput="setScheduleMsgSearch(this.value)"></div>' +
-    '<div class="sched-msg-count">' + list.length + '명 · 선택 ' + selectedCount + '명</div>' +
-    '<label class="student-select-all"><input type="checkbox" ' + (allSelected ? "checked" : "") + ' onchange="toggleScheduleMsgSelectAll(this.checked)" ' + (eligibleIds.length ? "" : "disabled") + '> 이 목록 전체 선택</label>' +
-    '<div id="sched-msg-student-rows">' + rowsHtml + '</div>'
+  const countEl = bodyEl.querySelector(".sched-msg-count")
+  if (countEl) countEl.textContent = list.length + "명 · 선택 " + selectedCount + "명"
+  const selectAllEl = bodyEl.querySelector(".student-select-all input")
+  if (selectAllEl) { selectAllEl.checked = allSelected; selectAllEl.disabled = !eligibleIds.length }
+  const rowsEl = bodyEl.querySelector("#sched-msg-student-rows")
+  if (rowsEl) rowsEl.innerHTML = rowsHtml
   el("bulk-send-tab-btn").disabled = selectedCount === 0
-  if (hadFocus) {
-    const newInput = bodyEl.querySelector(".sched-msg-search input")
-    if (newInput) { newInput.focus(); newInput.setSelectionRange(caretPos, caretPos) }
-  }
 }
 
 function toggleScheduleMsgStudent(id, checked) {
