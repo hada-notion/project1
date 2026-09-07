@@ -639,7 +639,7 @@
 </div>
 
 <script>
-// ============ 공용 로그인 (admin.html과 같은 localStorage 키를 사용해 한 번만 로그인하면 됩니다) ============
+// ============ 공��� 로그인 (admin.html과 같은 localStorage 키를 사용해 한 번만 로그인하면 됩니다) ============
 const ADMIN_KEY_STORAGE = "admin_key"
 const ADMIN_SESSION_TTL_MS = 24 * 60 * 60 * 1000 // 24다 난 후 자동 만료(admin.html과 공유되땄 마잦뭐려). 구형신 문자열 키 간이란띄 캐 럤뒜로 따랑을 적용해요.
 function getAdminKey() {
@@ -846,6 +846,7 @@ let EXPANDED_CLASS_ID = null
 let RIGHT_TAB = "students"
 let CLASS_DETAIL_CACHE = {}
 let CLASS_LIST_CACHE = {} // 날짜별 수업 목록 캐시 (key: dateStr)
+let SESSION_STUDENTS_CACHE = {} // 개별로 미리 불러온 수업별 학생 정보 캐시 (key: sessionId, 날짜와 무관하게 유지되어 재방문 시 다시 불러오지 않아요)
 let SCHEDULE_LIST_CACHE = {} // 날짜별 일정 목록 캐시 (key: dateStr)
 let SCHEDULES = []
 let SELECTED_SCHEDULE_ID = null
@@ -1428,7 +1429,7 @@ function renderTuitionClassDetail() {
   const paidCount = list.filter(function (t) { return paymentStatusTone(t.paymentStatus) === "tone-green" }).length
   const partialCount = list.filter(function (t) { return paymentStatusTone(t.paymentStatus) === "tone-orange" }).length
   const unpaidCount = list.filter(function (t) { return paymentStatusTone(t.paymentStatus) === "tone-red" }).length
-  // 수업 탭 배지와 같�� 자리에, 수강료 현황을 컴팩트 배지로 요약해요.
+  // 수업 탭 배지와 같��� 자리에, 수강료 현황을 컴팩트 배지로 요약해요.
   el("right-sub").innerHTML =
     '<span class="badge tone-green">완납 ' + paidCount + '명</span>' +
     '<span class="badge tone-orange">부분납 ' + partialCount + '명</span>' +
@@ -1492,41 +1493,29 @@ async function loadClassList(dateStr) {
 }
 
 async function refreshClassList(dateStr, silent) {
-  // 1단계: fast=1로 학생 정보(출석/과제/평가) 없이 수업 카드만 먼저 받아와서 보여줘요(기다리는 체감을 줄임).
-  // 이미 캐시된(학생 포함) 목록이 있으면 굳이 fast 단계를 거치지 않고 바로 전체 조회로 넘어가요.
-  if (!CLASS_LIST_CACHE[dateStr]) {
-    try {
-      const fastRes = await fetch(GET_CLASSES_URL + "?date=" + dateStr + "&fast=1", {
-        headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
-      })
-      const fastData = await fastRes.json()
-      if (fastRes.ok && Array.isArray(fastData.classes)) {
-        const fastClasses = fastData.classes
-        fastClasses.forEach(function (c) { rememberClassEmoji(c.id, c) })
-        if (dateStr === CURRENT_DATE && DOMAIN === "class" && !CLASS_LIST_CACHE[dateStr]) {
-          CLASSES = fastClasses
-          renderClassList()
-        }
-      }
-    } catch (err) {
-      console.error("수업 카드 빠른 미리보기 실패(무시하고 전체 조회로 진행):", err)
-    }
-  }
-  // 2단계: 학생 정보까지 포함된 전체 데이터를 이어서 받아와 최종 반영해요.
+  // 수업 카드는 fast=1로 학생 정보 없이 빠르게만 받아오고, 학생 정보는 사용자가 수업을 클릭할 때마다 개별적으로 불러와요(prioritizeSelectedClassStudents).
+  // 이렇게 하면 하나의 날짜 요청이 그날 전체 수업의 학생을 한꺼번에 불러오지 않아서, 선택하지 않은 수업은 계속 "불러오는 중"으로 남아있어요.
   try {
-    const res = await fetch(GET_CLASSES_URL + "?date=" + dateStr, {
+    const fastRes = await fetch(GET_CLASSES_URL + "?date=" + dateStr + "&fast=1", {
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
     })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
-    const classes = data.classes || []
-    CLASS_LIST_CACHE[dateStr] = classes
-    classes.forEach(function (c) { rememberClassEmoji(c.id, c) })
+    const fastData = await fastRes.json()
+    if (!fastRes.ok) throw new Error(fastData.error || ("HTTP " + fastRes.status))
+    const fastClasses = fastData.classes || []
+    fastClasses.forEach(function (c) {
+      rememberClassEmoji(c.id, c)
+      // 이미 개별적으로 불러온 수업이면(SESSION_STUDENTS_CACHE) 학생 정보를 그대로 이어붙여서 다시 "불러오는 중"으로 되돌아가지 않게 해요.
+      if (SESSION_STUDENTS_CACHE[c.id]) Object.assign(c, SESSION_STUDENTS_CACHE[c.id])
+    })
+    CLASS_LIST_CACHE[dateStr] = fastClasses
     if (dateStr !== CURRENT_DATE || DOMAIN !== "class") return
-    CLASSES = classes
+    CLASSES = fastClasses
     renderClassList()
-    // fast 단계에서 이미 수업을 선택해둔 상태라면, 학생 정보가 들어온 지금 오른쪽 패널도 다시 그려줘요.
-    if (SELECTED_CLASS_ID && findClass(SELECTED_CLASS_ID)) selectClass(SELECTED_CLASS_ID)
+    // 이미 선택된 수업이 있고 아직 학생 정보가 없으면(students === null) 우선적으로 이어서 불러와요.
+    if (SELECTED_CLASS_ID && findClass(SELECTED_CLASS_ID)) {
+      selectClass(SELECTED_CLASS_ID)
+      prioritizeSelectedClassStudents(SELECTED_CLASS_ID)
+    }
   } catch (err) {
     if (!silent && dateStr === CURRENT_DATE && DOMAIN === "class" && !CLASSES.length) {
       el("class-list-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '<br><button class="retry-btn" onclick="refreshClassList(CURRENT_DATE, false)">다시 시도</button></div>'
@@ -1621,12 +1610,42 @@ function renderClassList() {
 function onClassClick(id) {
   const prevId = SELECTED_CLASS_ID
   selectClass(id)
-  // 다시 메려적인 목록 전슠(renderClassList) 대신, 선택 상태가 목록이 이달리지 앞았다시 새로 그리지 앞으먼 바뀌땴옥을 따랑해요.
   const listEl = el("class-list-area")
   if (listEl && prevId !== id) {
     if (prevId) { const prevEl = listEl.querySelector('.class-item[data-id="' + prevId + '"]'); if (prevEl) prevEl.classList.remove("selected") }
     const nextEl = listEl.querySelector('.class-item[data-id="' + id + '"]')
     if (nextEl) nextEl.classList.add("selected")
+  }
+  // 선택한 수업의 학생 정보가 아직 없으면(students === null, fast 단계에서만 온 카드), 그날 전체 수업 목록을 다 기다리지 않고
+  // 이 수업 하나만 우선적으로 불러와서 오른쪽 패널에 반영해요.
+  prioritizeSelectedClassStudents(id)
+}
+
+// 선택한 수업 하나의 학생 정보만 콜어 미리 불러와요(그날 전체 수업 목록을 기다릴 필요 없이 바로 학생 목록이 채움).
+async function prioritizeSelectedClassStudents(id) {
+  const c = findClass(id)
+  if (!c || c.students != null) return // 이미 학생 정보가 있으면(개별 로딩 완료 또는 빈 배열) 따로 요청하지 않아요.
+  try {
+    const res = await fetch(GET_CLASSES_URL + "?date=" + CURRENT_DATE + "&sessionId=" + encodeURIComponent(id), {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
+    const fresh = (data.classes || [])[0]
+    if (!fresh) return
+    // 이 수업은 이제 개별적으로 다 불러왔으니, 같은 날짜로 다시 돌아와도(fast 카드 재조회) "불러오는 중"으로 되돌아가지 않게 보관해놓아요.
+    SESSION_STUDENTS_CACHE[id] = fresh
+    const idx = CLASSES.findIndex(function (x) { return x.id === id })
+    if (idx !== -1) CLASSES[idx] = Object.assign({}, CLASSES[idx], fresh)
+    const cached = CLASS_LIST_CACHE[CURRENT_DATE]
+    if (cached) {
+      const cIdx = cached.findIndex(function (x) { return x.id === id })
+      if (cIdx !== -1) cached[cIdx] = Object.assign({}, cached[cIdx], fresh)
+    }
+    if (SELECTED_CLASS_ID === id) selectClass(id)
+  } catch (err) {
+    console.error("선택 수업 개별 로딩 실패:", err)
+    if (SELECTED_CLASS_ID === id) showToast("학생 정보를 불러오지 못했어요. 다시 선택해 보세요.")
   }
 }
 
@@ -1741,13 +1760,13 @@ function studentRowHtml(c, s) {
   const i = allStudents.indexOf(s)
   const cls = statusBadgeClass[s.status] || "gray"
   const canSend = !!s.attendanceId
-  const sentBadge = canSend ? (s.sentByMe ? ' <span class="badge tone-blue">전송완료</span>' : ' <span class="badge tone-gray">미전송</span>') : ""
+  const sentBadge = canSend ? (s.sentByMe ? ' <span class="badge tone-blue">전송완료</span>' : ' <span class="badge tone-gray">미전��</span>') : ""
   const homeworkCls = s.homework ? (homeworkBadgeClass[s.homework.status] || "tone-gray") : ""
   const homeworkBadge = s.homework ? ' <span class="badge ' + homeworkCls + '">과제 ' + s.homework.status + '</span>' : ""
   const evalCls = s.evaluation ? attendanceRateTone(s.evaluation.score) : ""
   const evalBadge = s.evaluation ? ' <span class="badge ' + evalCls + '">' + s.evaluation.score + '점</span>' : ""
   const reportLink = s.reportUrl
-    ? ' <a class="report-view-link" href="' + s.reportUrl + '" target="_blank" title="학부모 보고서 페이지 보기">📋</a>'
+    ? ' <a class="report-view-link" href="' + s.reportUrl + '" target="_blank" title="학��모 보고서 페이지 보기">📋</a>'
     : ' <span class="report-view-link" style="opacity:0.35;cursor:default" title="이 학생의 등록에 토큰이 아직 없어요">📋</span>'
   const checkboxHtml = canSend
     ? '<input type="checkbox" class="stu-checkbox" ' + (SELECTED_STUDENT_IDS[s.attendanceId] ? "checked" : "") + ' onchange="toggleStudentSelected(' + attrSafe(s.attendanceId) + ', this.checked)">'
@@ -1777,6 +1796,8 @@ function renderStudentRows(c) {
 }
 
 function renderStudentsTab(c, body) {
+  // students가 null이면 아직 물어오는 중(로딩)이라는 뜻이고, 빈 배열([])이면 실제로 출석 기록이 없다는 뜻이에요.
+  if (c.students == null) { body.innerHTML = '<div class="empty">학생 정보 불러오는 중...</div>'; return }
   const allStudents = c.students || []
   if (allStudents.length === 0) { body.innerHTML = '<div class="empty">출석 기록이 없어요</div>'; return }
   const eligibleIds = allStudents.filter(function (s) { return s.attendanceId }).map(function (s) { return s.attendanceId })
@@ -1966,7 +1987,7 @@ async function renderTaskTab(c, body, kind) {
     } else {
       html = records.map(function (r) {
         const due = pickField(r, ["dueDate", "due_iso", "due", "dueAt", "과제마감일", "과제 마감일"]) || dueByRecordId[r.id] || null
-        // r.content는 이미 자체적인 서식(줄바꿈, 자체 불릿 등)을 포함하고 있을 수 있어서,
+        // r.content는 이미 자체적인 서식(줄바꿈, 자체 불릿 등)을 ���함하고 있을 수 있어서,
         // "내용:" 라벨로 감싸면 이중 불릿·줄바꿈 깨짐이 생겨요. 그래서 원��� 그대로 별도 줄에 보여줘요.
         return '<div class="record-card"><div class="title"><a href="' + r.url + '" target="_blank">' + esc(r.title) + '</a></div>' +
           '<div class="meta">교재: ' + esc(r.book) + (r.range ? " · 범위: " + esc(r.range) : "") + '</div>' +
@@ -2055,7 +2076,7 @@ function selectSchedule(id) {
   SELECTED_SCHEDULE_ID = id
   const s = findSchedule(id)
   if (!s) return
-  // 리스트 전슠(renderScheduleList) 대신, 선택 상태만 DOM에서 바되 츠김해요(다순 클릭도 연산 적상지 은담하땄 적용).
+  // 리스트 전슠(renderScheduleList) 대신, 선택 상태만 DOM에서 바되 츠김해요(��순 클릭도 연산 적상지 은담하땄 적용).
   const listEl = el("schedule-list-area")
   if (listEl && prevId !== id) {
     if (prevId) { const prevEl = listEl.querySelector('.schedule-item[data-id="' + prevId + '"]'); if (prevEl) prevEl.classList.remove("selected") }
