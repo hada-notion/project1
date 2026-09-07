@@ -346,7 +346,10 @@
 .schedule-item-title-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .schedule-item-title { font-size:13.5px; font-weight:600; }
 .schedule-item-badges { display:flex; gap:6px; flex-wrap:wrap; }
-.schedule-list-area { display:flex; flex-direction:column; gap:8px; }
+.schedule-list-area { display:flex; flex-direction:column; gap:0; }
+.sched-date-group { display:flex; flex-direction:column; }
+.sched-date-label { font-size:12px; font-weight:700; color:var(--muted); padding:14px 12px 4px; }
+.sched-date-group:first-child .sched-date-label { padding-top:4px; }
 .schedule-detail-field { margin: 12px 0; }
 .schedule-detail-field b { color: var(--muted); font-weight:600; font-size:11px; display:block; margin-bottom:4px; text-transform:uppercase; letter-spacing:.02em; }
 .schedule-detail-field .val { font-size:14px; color:var(--text); }
@@ -850,6 +853,7 @@ let SESSION_STUDENTS_CACHE = {} // 개별로 미리 불러온 수업별 학생 �
 const STUDENTS_FETCH_PROMISES = {} // 진행 중인 수업별 학생 정보 요청(key: sessionId) - 우선 로딩과 백그라운드 프리페치가 같은 수업을 중복으로 요청하지 않도록 공유해요.
 let BACKGROUND_PREFETCH_TOKEN = 0 // 날짜 이동/재진입 시 이전 백그라운드 프리페치 루프를 중단시키기 위한 토큰
 let SCHEDULE_LIST_CACHE = {} // 날짜별 일정 목록 캐시 (key: dateStr)
+const SCHEDULE_WINDOW_DAYS = 7 // 일정 탭은 선택한 날짜부터 다가오는 일주일치를 한번에 보여줘요
 let SCHEDULES = []
 let SELECTED_SCHEDULE_ID = null
 let CALENDAR_OPEN = false
@@ -2054,37 +2058,63 @@ async function renderTaskTab(c, body, kind) {
 }
 
 // ---------------- 일정 목록(중앙) ----------------
+// 선택한 날짜(CURRENT_DATE)부터 다가오는 일주일(SCHEDULE_WINDOW_DAYS)치 일정을 한번에 모아서 보여줘요.
+function upcomingDateRange(startStr, days) {
+  const result = []
+  const d = new Date(startStr + "T00:00:00+09:00")
+  for (let i = 0; i < days; i++) {
+    result.push(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(d))
+    d.setDate(d.getDate() + 1)
+  }
+  return result
+}
+
+function updateScheduleDateNavLabel(dates) {
+  const labelEl = el("date-nav-label")
+  if (!labelEl || DOMAIN !== "schedule") return
+  labelEl.textContent = formatWeekRangeLabel(dates[0], dates[dates.length - 1])
+}
+
+function mergeScheduleDates(dates) {
+  const merged = []
+  dates.forEach(function (d) { (SCHEDULE_LIST_CACHE[d] || []).forEach(function (s) { merged.push(s) }) })
+  return merged
+}
+
 async function loadScheduleList(dateStr) {
-  el("date-nav-label").textContent = formatDateLabel(dateStr)
-  const cached = SCHEDULE_LIST_CACHE[dateStr]
-  if (cached) {
-    SCHEDULES = cached
+  const dates = upcomingDateRange(dateStr, SCHEDULE_WINDOW_DAYS)
+  updateScheduleDateNavLabel(dates)
+  const allCached = dates.every(function (d) { return SCHEDULE_LIST_CACHE[d] })
+  if (allCached) {
+    SCHEDULES = mergeScheduleDates(dates)
     renderScheduleList()
     clearRightPanel()
-    refreshScheduleList(dateStr, true)
+    refreshScheduleWeek(dates, true)
     return
   }
   SCHEDULES = []
   el("schedule-list-area").innerHTML = '<div class="loading">불러오는 중...</div>'
   clearRightPanel()
-  await refreshScheduleList(dateStr, false)
+  await refreshScheduleWeek(dates, false)
 }
 
-async function refreshScheduleList(dateStr, silent) {
+async function refreshScheduleWeek(dates, silent) {
+  const anchor = dates[0]
   try {
-    const res = await fetch(GET_SCHEDULES_URL + "?date=" + dateStr, {
-      headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
-    })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
-    const schedules = data.schedules || []
-    SCHEDULE_LIST_CACHE[dateStr] = schedules
-    if (dateStr !== CURRENT_DATE || DOMAIN !== "schedule") return
-    SCHEDULES = schedules
+    await Promise.all(dates.map(async function (dateStr) {
+      const res = await fetch(GET_SCHEDULES_URL + "?date=" + dateStr, {
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
+      SCHEDULE_LIST_CACHE[dateStr] = data.schedules || []
+    }))
+    if (anchor !== CURRENT_DATE || DOMAIN !== "schedule") return
+    SCHEDULES = mergeScheduleDates(dates)
     renderScheduleList()
   } catch (err) {
-    if (!silent && dateStr === CURRENT_DATE && DOMAIN === "schedule") {
-      el("schedule-list-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '<br><button class="retry-btn" onclick="refreshScheduleList(CURRENT_DATE, false)">다시 시도</button></div>'
+    if (!silent && anchor === CURRENT_DATE && DOMAIN === "schedule") {
+      el("schedule-list-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '<br><button class="retry-btn" onclick="refreshScheduleWeek(upcomingDateRange(CURRENT_DATE, SCHEDULE_WINDOW_DAYS), false)">다시 시도</button></div>'
     }
   }
 }
@@ -2105,19 +2135,39 @@ function renderScheduleList() {
   const listEl = el("schedule-list-area")
   const list = filteredSchedules()
   if (list.length === 0) {
-    listEl.innerHTML = '<div class="empty">해당 날짜에 일정이 없어요</div>'
+    listEl.innerHTML = '<div class="empty">다가오는 일주일에 일정이 없어요</div>'
     return
   }
-  listEl.innerHTML = list.map(function (s) {
-    const selected = SELECTED_SCHEDULE_ID === s.id
-    return '<div class="schedule-item' + (selected ? " selected" : "") + '" data-id="' + s.id + '" onclick="selectSchedule(' + attrSafe(s.id) + ')">' +
-      '<div class="schedule-item-title-row"><span class="schedule-item-title">' + esc(s.name) + '</span></div>' +
-      '<div class="schedule-item-badges">' +
-        (s.category ? '<span class="badge ' + s.categoryColor + '">' + esc(s.category) + '</span>' : "") +
-        (s.status ? '<span class="badge gray">' + esc(s.status) + '</span>' : "") +
-        (s.teacherNames || []).map(function (n) { return '<span class="badge blue">' + esc(n) + '</span>' }).join("") +
-        (s.classNames || []).map(function (n) { return '<span class="badge gray">' + esc(n) + '</span>' }).join("") +
-      '</div>' +
+  // 학습기록 타임라인과 동일한 규칙: 날짜는 카드 안이 아니라 그룹 바깥(.sched-date-label)에 표시하고, 같은 날짜끼리 묶어요.
+  const sorted = list.slice().sort(function (a, b) {
+    const da = (a.date || "").slice(0, 10), db = (b.date || "").slice(0, 10)
+    return da < db ? -1 : da > db ? 1 : 0
+  })
+  const groups = []
+  let currentGroup = null
+  sorted.forEach(function (s) {
+    const d = (s.date || "").slice(0, 10)
+    if (!currentGroup || currentGroup.date !== d) {
+      currentGroup = { date: d, items: [] }
+      groups.push(currentGroup)
+    }
+    currentGroup.items.push(s)
+  })
+  listEl.innerHTML = groups.map(function (g) {
+    return '<div class="sched-date-group">' +
+      '<div class="sched-date-label">' + esc(g.date ? formatDateLabel(g.date) : "날짜 미정") + '</div>' +
+      g.items.map(function (s) {
+        const selected = SELECTED_SCHEDULE_ID === s.id
+        return '<div class="schedule-item' + (selected ? " selected" : "") + '" data-id="' + s.id + '" onclick="selectSchedule(' + attrSafe(s.id) + ')">' +
+          '<div class="schedule-item-title-row"><span class="schedule-item-title">' + esc(s.name) + '</span></div>' +
+          '<div class="schedule-item-badges">' +
+            (s.category ? '<span class="badge ' + s.categoryColor + '">' + esc(s.category) + '</span>' : "") +
+            (s.status ? '<span class="badge gray">' + esc(s.status) + '</span>' : "") +
+            (s.teacherNames || []).map(function (n) { return '<span class="badge blue">' + esc(n) + '</span>' }).join("") +
+            (s.classNames || []).map(function (n) { return '<span class="badge gray">' + esc(n) + '</span>' }).join("") +
+          '</div>' +
+        '</div>'
+      }).join("") +
     '</div>'
   }).join("")
 }
