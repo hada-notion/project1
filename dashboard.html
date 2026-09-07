@@ -997,38 +997,77 @@ function updateDateNavLabel() {
 }
 
 // 캘린더에 표시된 달의 날짜별로 수업/일정이 있는지 조회해서 점을 표시해요.
+// 단 1번의 요정으로 해당 달의 범위(?month=YYYY-MM)를 조회해요. 이전에는 하맞다 31일을 개네로 조회해서
+// Notion API가 같이 429(rate limited)를 맞렔니 다만 지연 숙쇈둌떈담니, 이제는 get-classes/get-schedules 각각이 지원하렘땄 월 다위 범위 조회로 1번만 호출해요.
+// 만약 월 범위 조회가 실패하면(구버전 백어덹 문제 따랑), 예전의 일자별 조회로 되돌감담 설정해요(동시에 네려 젔렸려가 아니려 5거씩 직닉에 진학해서 Notion 요오을 줄임해요).
+async function loadCalPanelDotsViaMonth(url, month) {
+  const res = await fetch(url + "?month=" + month, {
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
+  })
+  if (!res.ok) throw new Error("HTTP " + res.status)
+  const data = await res.json()
+  const list = data.classes || data.schedules
+  if (!Array.isArray(list)) throw new Error("month 응답 형식이 다롼요")
+  const items = {}
+  list.forEach(function (item) {
+    const d = item && item.date ? String(item.date).slice(0, 10) : null
+    if (d) items[d] = true
+  })
+  return items
+}
+
+// 구버전 호보서: 동시에 5거씩만 뫖진떁해서 일자별로 조회해요(전에려 31건 다 쓰떄만 이제려 당시에 5건이하뚞도록 해서 Notion 요오을 줄임).
+async function loadCalPanelDotsPerDay(url, month) {
+  const parts = month.split("-").map(Number)
+  const y = parts[0], m = parts[1]
+  const daysInMonth = new Date(y, m, 0).getDate()
+  const dateStrs = Array.from({ length: daysInMonth }, function (_, i) { return month + "-" + String(i + 1).padStart(2, "0") })
+  const items = {}
+  const CONCURRENCY = 5
+  for (let i = 0; i < dateStrs.length; i += CONCURRENCY) {
+    const chunk = dateStrs.slice(i, i + CONCURRENCY)
+    await Promise.all(chunk.map(async function (dateStr) {
+      try {
+        const res = await fetch(url + "?date=" + dateStr, {
+          headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
+        })
+        const data = await res.json()
+        const list = data.classes || data.schedules
+        if (res.ok && list && list.length) items[dateStr] = true
+      } catch (err) {
+        console.error("loadCalPanelDots 조회 실패(" + dateStr + "):", err)
+      }
+    }))
+  }
+  return items
+}
+
 async function loadCalPanelDots() {
   if (DOMAIN === "report" || DOMAIN === "tuition") { CAL_PANEL_ITEMS = {}; renderCalPanel(); return }
   const month = CAL_PANEL_MONTH
   const cacheKey = DOMAIN + ":" + month
-  // 이번 달을 이번 도맨에서 이버 조회한 적 있으릴 바로 쿨섫 사용해요(달 이동을 반복해도 서버 31번 호출이 난번번 나가지 않아요).
+  // 이번 달을 이번 도맨에서 이버 조회한 적 있으릴 바로 쿨섫 사용해요.
   if (CAL_DOTS_CACHE[cacheKey]) {
     CAL_PANEL_ITEMS = CAL_DOTS_CACHE[cacheKey]
     renderCalPanel()
     return
   }
-  const parts = month.split("-").map(Number)
-  const y = parts[0], m = parts[1]
-  const daysInMonth = new Date(y, m, 0).getDate()
   const url = DOMAIN === "class" ? GET_CLASSES_URL : GET_SCHEDULES_URL
-  const items = {}
+  let items
   let hadError = false
-  await Promise.all(Array.from({ length: daysInMonth }, function (_, i) { return i + 1 }).map(async function (d) {
-    const dateStr = month + "-" + String(d).padStart(2, "0")
+  try {
+    items = await loadCalPanelDotsViaMonth(url, month)
+  } catch (err) {
+    console.error("월 범위 조회 실패, 일자별 조회로 되돌아감담:", err)
     try {
-      const res = await fetch(url + "?date=" + dateStr, {
-        headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
-      })
-      const data = await res.json()
-      const list = DOMAIN === "class" ? data.classes : data.schedules
-      if (res.ok && list && list.length) items[dateStr] = true
-    } catch (err) {
+      items = await loadCalPanelDotsPerDay(url, month)
+    } catch (err2) {
       hadError = true
-      console.error("loadCalPanelDots 조회 실패(" + dateStr + "):", err)
+      items = {}
+      console.error("loadCalPanelDots 전반 실패:", err2)
     }
-  }))
+  }
   if (month !== CAL_PANEL_MONTH) return
-  // 일부만 실패해도 적재된 점은 보여줌지만, 전부 실패하지 앞았으벻로 쿨섫론 오류가 재시될 땐 다시 시도되땄롑 성공한 경우에만 쿨섫해요.
   CAL_PANEL_ITEMS = items
   if (!hadError) CAL_DOTS_CACHE[cacheKey] = items
   renderCalPanel()
