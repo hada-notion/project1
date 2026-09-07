@@ -1428,7 +1428,7 @@ function renderTuitionClassDetail() {
   const paidCount = list.filter(function (t) { return paymentStatusTone(t.paymentStatus) === "tone-green" }).length
   const partialCount = list.filter(function (t) { return paymentStatusTone(t.paymentStatus) === "tone-orange" }).length
   const unpaidCount = list.filter(function (t) { return paymentStatusTone(t.paymentStatus) === "tone-red" }).length
-  // 수업 탭 배지와 같은 자리에, 수강료 현황을 컴팩트 배지로 요약해요.
+  // 수업 탭 배지와 같�� 자리에, 수강료 현황을 컴팩트 배지로 요약해요.
   el("right-sub").innerHTML =
     '<span class="badge tone-green">완납 ' + paidCount + '명</span>' +
     '<span class="badge tone-orange">부분납 ' + partialCount + '명</span>' +
@@ -1492,6 +1492,27 @@ async function loadClassList(dateStr) {
 }
 
 async function refreshClassList(dateStr, silent) {
+  // 1단계: fast=1로 학생 정보(출석/과제/평가) 없이 수업 카드만 먼저 받아와서 보여줘요(기다리는 체감을 줄임).
+  // 이미 캐시된(학생 포함) 목록이 있으면 굳이 fast 단계를 거치지 않고 바로 전체 조회로 넘어가요.
+  if (!CLASS_LIST_CACHE[dateStr]) {
+    try {
+      const fastRes = await fetch(GET_CLASSES_URL + "?date=" + dateStr + "&fast=1", {
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
+      })
+      const fastData = await fastRes.json()
+      if (fastRes.ok && Array.isArray(fastData.classes)) {
+        const fastClasses = fastData.classes
+        fastClasses.forEach(function (c) { rememberClassEmoji(c.id, c) })
+        if (dateStr === CURRENT_DATE && DOMAIN === "class" && !CLASS_LIST_CACHE[dateStr]) {
+          CLASSES = fastClasses
+          renderClassList()
+        }
+      }
+    } catch (err) {
+      console.error("수업 카드 빠른 미리보기 실패(무시하고 전체 조회로 진행):", err)
+    }
+  }
+  // 2단계: 학생 정보까지 포함된 전체 데이터를 이어서 받아와 최종 반영해요.
   try {
     const res = await fetch(GET_CLASSES_URL + "?date=" + dateStr, {
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
@@ -1504,8 +1525,10 @@ async function refreshClassList(dateStr, silent) {
     if (dateStr !== CURRENT_DATE || DOMAIN !== "class") return
     CLASSES = classes
     renderClassList()
+    // fast 단계에서 이미 수업을 선택해둔 상태라면, 학생 정보가 들어온 지금 오른쪽 패널도 다시 그려줘요.
+    if (SELECTED_CLASS_ID && findClass(SELECTED_CLASS_ID)) selectClass(SELECTED_CLASS_ID)
   } catch (err) {
-    if (!silent && dateStr === CURRENT_DATE && DOMAIN === "class") {
+    if (!silent && dateStr === CURRENT_DATE && DOMAIN === "class" && !CLASSES.length) {
       el("class-list-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '<br><button class="retry-btn" onclick="refreshClassList(CURRENT_DATE, false)">다시 시도</button></div>'
     }
   }
@@ -2010,7 +2033,7 @@ function renderScheduleList() {
   const listEl = el("schedule-list-area")
   const list = filteredSchedules()
   if (list.length === 0) {
-    listEl.innerHTML = '<div class="empty">해당 날짜에 일정이 없어요</div>'
+    listEl.innerHTML = '<div class="empty">해당 날짜��� 일정이 없어요</div>'
     return
   }
   listEl.innerHTML = list.map(function (s) {
