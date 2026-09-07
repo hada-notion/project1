@@ -1557,8 +1557,15 @@ function renderClassList() {
 }
 
 function onClassClick(id) {
+  const prevId = SELECTED_CLASS_ID
   selectClass(id)
-  renderClassList()
+  // 다시 메려적인 목록 전슠(renderClassList) 대신, 선택 상태가 목록이 이달리지 앞았다시 새로 그리지 앞으먼 바뀌땴옥을 따랑해요.
+  const listEl = el("class-list-area")
+  if (listEl && prevId !== id) {
+    if (prevId) { const prevEl = listEl.querySelector('.class-item[data-id="' + prevId + '"]'); if (prevEl) prevEl.classList.remove("selected") }
+    const nextEl = listEl.querySelector('.class-item[data-id="' + id + '"]')
+    if (nextEl) nextEl.classList.add("selected")
+  }
 }
 
 function findClass(id) { return CLASSES.find(function (c) { return c.id === id }) }
@@ -1969,7 +1976,7 @@ function renderScheduleList() {
   }
   listEl.innerHTML = list.map(function (s) {
     const selected = SELECTED_SCHEDULE_ID === s.id
-    return '<div class="schedule-item' + (selected ? " selected" : "") + '" onclick="selectSchedule(' + attrSafe(s.id) + ')">' +
+    return '<div class="schedule-item' + (selected ? " selected" : "") + '" data-id="' + s.id + '" onclick="selectSchedule(' + attrSafe(s.id) + ')">' +
       '<div class="schedule-item-title-row"><span class="schedule-item-title">' + esc(s.name) + '</span></div>' +
       '<div class="schedule-item-badges">' +
         (s.category ? '<span class="badge ' + s.categoryColor + '">' + esc(s.category) + '</span>' : "") +
@@ -1982,10 +1989,17 @@ function renderScheduleList() {
 }
 
 function selectSchedule(id) {
+  const prevId = SELECTED_SCHEDULE_ID
   SELECTED_SCHEDULE_ID = id
   const s = findSchedule(id)
   if (!s) return
-  renderScheduleList()
+  // 리스트 전슠(renderScheduleList) 대신, 선택 상태만 DOM에서 바되 츠김해요(다순 클릭도 연산 적상지 은담하땄 적용).
+  const listEl = el("schedule-list-area")
+  if (listEl && prevId !== id) {
+    if (prevId) { const prevEl = listEl.querySelector('.schedule-item[data-id="' + prevId + '"]'); if (prevEl) prevEl.classList.remove("selected") }
+    const nextEl = listEl.querySelector('.schedule-item[data-id="' + id + '"]')
+    if (nextEl) nextEl.classList.add("selected")
+  }
   // 다른 탭(보고서/수강료/수업)에서 남은 값이 섞여 보이지 않도록, 공유 헤더 요소를 이 함수에서 매번 전부 새로 지정해요.
   el("md-right-empty").style.display = "none"
   el("md-right-content").style.display = "block"
