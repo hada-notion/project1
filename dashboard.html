@@ -639,7 +639,7 @@
 </div>
 
 <script>
-// ============ 공��� 로그인 (admin.html과 같은 localStorage 키를 사용해 한 번만 로그인하면 됩니다) ============
+// ============ 공통 로그인 (admin.html과 같은 localStorage 키를 사용해 한 번만 로그인하면 됩니다) ============
 const ADMIN_KEY_STORAGE = "admin_key"
 const ADMIN_SESSION_TTL_MS = 24 * 60 * 60 * 1000 // 24다 난 후 자동 만료(admin.html과 공유되땄 마잦뭐려). 구형신 문자열 키 간이란띄 캐 럤뒜로 따랑을 적용해요.
 function getAdminKey() {
@@ -1377,7 +1377,7 @@ function getFilteredTuitions() {
 }
 
 function renderTuitionList() {
-  // 수강료 목록을 불러오는 중이면 파란 로딩 박스를 그대로 유지하고, 결과 화면은 데이터가 실제로 도착한 ��에만 보여줘요.
+  // 수강료 목록을 불러오는 중이면 파란 로딩 박스를 그대로 유지하고, 결과 화면은 데이터가 실제로 도착한 후에만 보여줘요.
   if (TUITION_LOADING) return
   const list = getFilteredTuitions()
   if (!list.length) {
@@ -1429,7 +1429,7 @@ function renderTuitionClassDetail() {
   const paidCount = list.filter(function (t) { return paymentStatusTone(t.paymentStatus) === "tone-green" }).length
   const partialCount = list.filter(function (t) { return paymentStatusTone(t.paymentStatus) === "tone-orange" }).length
   const unpaidCount = list.filter(function (t) { return paymentStatusTone(t.paymentStatus) === "tone-red" }).length
-  // 수업 탭 배지와 같��� 자리에, 수강료 현황을 컴팩트 배지로 요약해요.
+  // 수업 탭 배지와 같은 자리에, 수강료 현황을 컴팩트 배지로 요약해요.
   el("right-sub").innerHTML =
     '<span class="badge tone-green">완납 ' + paidCount + '명</span>' +
     '<span class="badge tone-orange">부분납 ' + partialCount + '명</span>' +
@@ -1760,13 +1760,13 @@ function studentRowHtml(c, s) {
   const i = allStudents.indexOf(s)
   const cls = statusBadgeClass[s.status] || "gray"
   const canSend = !!s.attendanceId
-  const sentBadge = canSend ? (s.sentByMe ? ' <span class="badge tone-blue">전송완료</span>' : ' <span class="badge tone-gray">미전��</span>') : ""
+  const sentBadge = canSend ? (s.sentByMe ? ' <span class="badge tone-blue">전송완료</span>' : ' <span class="badge tone-gray">미전송</span>') : ""
   const homeworkCls = s.homework ? (homeworkBadgeClass[s.homework.status] || "tone-gray") : ""
   const homeworkBadge = s.homework ? ' <span class="badge ' + homeworkCls + '">과제 ' + s.homework.status + '</span>' : ""
   const evalCls = s.evaluation ? attendanceRateTone(s.evaluation.score) : ""
   const evalBadge = s.evaluation ? ' <span class="badge ' + evalCls + '">' + s.evaluation.score + '점</span>' : ""
   const reportLink = s.reportUrl
-    ? ' <a class="report-view-link" href="' + s.reportUrl + '" target="_blank" title="학��모 보고서 페이지 보기">📋</a>'
+    ? ' <a class="report-view-link" href="' + s.reportUrl + '" target="_blank" title="학습 보고서 페이지 보기">📋</a>'
     : ' <span class="report-view-link" style="opacity:0.35;cursor:default" title="이 학생의 등록에 토큰이 아직 없어요">📋</span>'
   const checkboxHtml = canSend
     ? '<input type="checkbox" class="stu-checkbox" ' + (SELECTED_STUDENT_IDS[s.attendanceId] ? "checked" : "") + ' onchange="toggleStudentSelected(' + attrSafe(s.attendanceId) + ', this.checked)">'
@@ -1866,7 +1866,7 @@ function pickField(obj, keys) {
   return null
 }
 
-// 평가 탭은 우선 get-class-detail의 학습기록(평가) 레코드를 조회해서 리포트 페이지처럼 "N점 (정답/전체)" 형태�� 보여주���,
+// 평가 탭은 우선 get-class-detail의 학습기록(평가) 레코드를 조회해서 리포트 페이지처럼 "N점 (정답/전체)" 형태로 보여주고,
 // 이 정보가 없으면 기존의 "평가 결과" 요약 텍스트로 대체해요(하위 호환).
 // 과제 탭은 마감일을 반영하기 위해 get-class-detail을 통해 학습기록(과제) 목록을 따로 조회합니다.
 // (조금 느리지만 마감일을 다시 보여줄 수 있습니다.) 결과는 CLASS_DETAIL_CACHE에 캐싱되어 재조회를 최소화합니다.
@@ -1987,8 +1987,8 @@ async function renderTaskTab(c, body, kind) {
     } else {
       html = records.map(function (r) {
         const due = pickField(r, ["dueDate", "due_iso", "due", "dueAt", "과제마감일", "과제 마감일"]) || dueByRecordId[r.id] || null
-        // r.content는 이미 자체적인 서식(줄바꿈, 자체 불릿 등)을 ���함하고 있을 수 있어서,
-        // "내용:" 라벨로 감싸면 이중 불릿·줄바꿈 깨짐이 생겨요. 그래서 원��� 그대로 별도 줄에 보여줘요.
+        // r.content는 이미 자체적인 서식(줄바꿈, 자체 불릿 등)을 포함하고 있을 수 있어서,
+        // "내용:" 라벨로 감싸면 이중 불릿·줄바꿈 깨짐이 생겨요. 그래서 원문 그대로 별도 줄에 보여줘요.
         return '<div class="record-card"><div class="title"><a href="' + r.url + '" target="_blank">' + esc(r.title) + '</a></div>' +
           '<div class="meta">교재: ' + esc(r.book) + (r.range ? " · 범위: " + esc(r.range) : "") + '</div>' +
           (r.content ? '<div class="meta" style="margin-top:4px">' + esc(r.content) + '</div>' : "") +
@@ -2054,7 +2054,7 @@ function renderScheduleList() {
   const listEl = el("schedule-list-area")
   const list = filteredSchedules()
   if (list.length === 0) {
-    listEl.innerHTML = '<div class="empty">해당 날짜��� 일정이 없어요</div>'
+    listEl.innerHTML = '<div class="empty">해당 날짜에 일정이 없어요</div>'
     return
   }
   listEl.innerHTML = list.map(function (s) {
@@ -2076,7 +2076,7 @@ function selectSchedule(id) {
   SELECTED_SCHEDULE_ID = id
   const s = findSchedule(id)
   if (!s) return
-  // 리스트 전슠(renderScheduleList) 대신, 선택 상태만 DOM에서 바되 츠김해요(��순 클릭도 연산 적상지 은담하땄 적용).
+  // 리스트 전체를 다시 그리는(renderScheduleList) 대신, 선택 상태만 DOM에서 바로 토글해요(단순 클릭도 연산을 절감하도록 적용).
   const listEl = el("schedule-list-area")
   if (listEl && prevId !== id) {
     if (prevId) { const prevEl = listEl.querySelector('.schedule-item[data-id="' + prevId + '"]'); if (prevEl) prevEl.classList.remove("selected") }
