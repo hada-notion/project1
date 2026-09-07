@@ -847,8 +847,8 @@ let RIGHT_TAB = "students"
 let CLASS_DETAIL_CACHE = {}
 let CLASS_LIST_CACHE = {} // 날짜별 수업 목록 캐시 (key: dateStr)
 let SESSION_STUDENTS_CACHE = {} // 개별로 미리 불러온 수업별 학생 정보 캐시 (key: sessionId, 날짜와 무관하게 유지되어 재방문 시 다시 불러오지 않아요)
-let SESSION_STUDENTS_INFLIGHT = {} // 진행 중인 개별 학생 로딩 요청 (key: sessionId -> Promise). 같은 수업을 빠르게 여러 번 클릭해도 요청이 중복으로 나가지 않게 해요.
-let SESSION_STUDENTS_FAILED = {} // 개별 학생 로딩이 실패한 수업 (key: sessionId -> true). 실패 시 무한 "불러오는 중"에 멈추지 않고 재시도 버튼을 보여줘요.
+const STUDENTS_FETCH_PROMISES = {} // 진행 중인 수업별 학생 정보 요청(key: sessionId) - 우선 로딩과 백그라운드 프리페치가 같은 수업을 중복으로 요청하지 않도록 공유해요.
+let BACKGROUND_PREFETCH_TOKEN = 0 // 날짜 이동/재진입 시 이전 백그라운드 프리페치 루프를 중단시키기 위한 토큰
 let SCHEDULE_LIST_CACHE = {} // 날짜별 일정 목록 캐시 (key: dateStr)
 let SCHEDULES = []
 let SELECTED_SCHEDULE_ID = null
@@ -1480,7 +1480,7 @@ async function loadClassList(dateStr) {
   el("date-nav-label").textContent = formatDateLabel(dateStr)
   const cached = CLASS_LIST_CACHE[dateStr]
   if (cached) {
-    // 이미 본 날짜는 캐시된 내용을 바로 보여주고, 뒤에서 최신 데이터로 조용히 갱신해요.
+    // 이미 본 날짜는 캐시된 내용을 바로 보여주고, 뒤에��� 최신 데이터로 조용히 갱신해요.
     // 이전 날짜에 선택된 수업 상세가 그대로 남아있지 않도록 오른쪽 패널을 함께 비워요.
     CLASSES = cached
     renderClassList()
@@ -1492,13 +1492,6 @@ async function loadClassList(dateStr) {
   el("class-list-area").innerHTML = '<div class="loading">불러오는 중...</div>'
   clearRightPanel()
   await refreshClassList(dateStr, false)
-}
-
-// 수업 카드 목록의 리렌더링 관련 필드만 모아 문자열로 만들어요(학생 정보는 개별로만 바뀌므로 제외). 이전 상태와 비교해 실제로 바뀜 때만 전체 목록을 다시 그려서 깜박임을 줄여요.
-function classCardSignature(list) {
-  return JSON.stringify((list || []).map(function (c) {
-    return [c.id, c.className, c.timeRange, c.teacherName, c.method, c.attendanceRate, c.emoji]
-  }))
 }
 
 async function refreshClassList(dateStr, silent) {
@@ -1518,14 +1511,15 @@ async function refreshClassList(dateStr, silent) {
     })
     CLASS_LIST_CACHE[dateStr] = fastClasses
     if (dateStr !== CURRENT_DATE || DOMAIN !== "class") return
-    const prevSignature = classCardSignature(CLASSES)
     CLASSES = fastClasses
-    // 카드 정보가 실제로 바뀌었을 때만 다시 그려서, 조용히 백그라운드 갱신될 때까지 목록이 깜박이지 않게 해요.
-    if (classCardSignature(CLASSES) !== prevSignature) renderClassList()
+    renderClassList()
     // 이미 선택된 수업이 있고 아직 학생 정보가 없으면(students === null) 우선적으로 이어서 불러와요.
     if (SELECTED_CLASS_ID && findClass(SELECTED_CLASS_ID)) {
       selectClass(SELECTED_CLASS_ID)
       prioritizeSelectedClassStudents(SELECTED_CLASS_ID)
+    } else {
+      // 선택된 수업이 없으면, 뒤에서 조용히 그날 전체 수업의 학생 정보를 미리 불러와요.
+      backgroundPrefetchAllStudents(dateStr)
     }
   } catch (err) {
     if (!silent && dateStr === CURRENT_DATE && DOMAIN === "class" && !CLASSES.length) {
@@ -1632,53 +1626,71 @@ function onClassClick(id) {
   prioritizeSelectedClassStudents(id)
 }
 
-// 선택한 수업 하나의 학생 정보만 콜어 미리 불러와요(그날 전체 수업 목록을 기다릴 필요 없이 바로 학생 목록이 채움).
-function prioritizeSelectedClassStudents(id, forceRetry) {
-  const c = findClass(id)
-  if (!c || c.students != null) return SESSION_STUDENTS_INFLIGHT[id] || Promise.resolve() // 이미 학생 정보가 있으면(개별 로딩 완료 또는 빈 배열) 따로 요청하지 않아요.
-  if (!forceRetry && SESSION_STUDENTS_FAILED[id]) return Promise.resolve() // 이미 실패한 수업은 사용자가 "다시 시도"를 눌렀을 때만 재요청해요.
-  // 같은 수업에 대한 요청이 이미 진행 중이면 새로 fetch하지 않고 그 요청을 그대로 재사용해요(중복 요청 방지).
-  if (SESSION_STUDENTS_INFLIGHT[id]) return SESSION_STUDENTS_INFLIGHT[id]
-  delete SESSION_STUDENTS_FAILED[id]
-  const promise = (async function () {
-    try {
-      const res = await fetch(GET_CLASSES_URL + "?date=" + CURRENT_DATE + "&sessionId=" + encodeURIComponent(id), {
-        headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
-      })
-      const data = await res.json()
+// 여러 곳(우선 로딩, 백그라운드 프리페치)에서 같은 수업을 동시에 요청해도 네트워크 요청이 하나만 나가도록 공유해요.
+function fetchSessionStudentsOnce(id) {
+  if (SESSION_STUDENTS_CACHE[id]) return Promise.resolve(SESSION_STUDENTS_CACHE[id])
+  if (STUDENTS_FETCH_PROMISES[id]) return STUDENTS_FETCH_PROMISES[id]
+  const p = fetch(GET_CLASSES_URL + "?date=" + CURRENT_DATE + "&sessionId=" + encodeURIComponent(id), {
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
+  }).then(function (res) {
+    return res.json().then(function (data) {
       if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
-      const fresh = (data.classes || [])[0]
-      if (!fresh) return
-      // 이 수업은 이제 개별적으로 다 불러왔으니, 같은 날짜로 다시 돌아와도(fast 카드 재조회) "불러오는 중"으로 되돌아가지 않게 보관해놓아요.
-      SESSION_STUDENTS_CACHE[id] = fresh
-      const idx = CLASSES.findIndex(function (x) { return x.id === id })
-      if (idx !== -1) CLASSES[idx] = Object.assign({}, CLASSES[idx], fresh)
-      const cached = CLASS_LIST_CACHE[CURRENT_DATE]
-      if (cached) {
-        const cIdx = cached.findIndex(function (x) { return x.id === id })
-        if (cIdx !== -1) cached[cIdx] = Object.assign({}, cached[cIdx], fresh)
-      }
-      if (SELECTED_CLASS_ID === id) selectClass(id)
-    } catch (err) {
-      console.error("선택 수업 개별 로딩 실패:", err)
-      SESSION_STUDENTS_FAILED[id] = true
-      if (SELECTED_CLASS_ID === id) {
-        showToast("학생 정보를 불러오지 못했어요. 다시 시도해 보세요.")
-        selectClass(id) // 로딩중 -> 실패(재시도 버튼) 상태로 오른쪽 패널을 갱신해요.
-      }
-    } finally {
-      delete SESSION_STUDENTS_INFLIGHT[id]
+      return data
+    })
+  }).then(function (data) {
+    const fresh = (data.classes || [])[0]
+    if (!fresh) return null
+    // 이 수업은 이제 개별적으로 다 불러왔으니, 같은 날짜로 다시 돌아와도(fast 카드 재조회) "불러오는 중"으로 되돌아가지 않게 보관해놓아요.
+    SESSION_STUDENTS_CACHE[id] = fresh
+    const idx = CLASSES.findIndex(function (x) { return x.id === id })
+    if (idx !== -1) CLASSES[idx] = Object.assign({}, CLASSES[idx], fresh)
+    const cached = CLASS_LIST_CACHE[CURRENT_DATE]
+    if (cached) {
+      const cIdx = cached.findIndex(function (x) { return x.id === id })
+      if (cIdx !== -1) cached[cIdx] = Object.assign({}, cached[cIdx], fresh)
     }
-  })()
-  SESSION_STUDENTS_INFLIGHT[id] = promise
-  return promise
+    return fresh
+  }).finally(function () {
+    delete STUDENTS_FETCH_PROMISES[id]
+  })
+  STUDENTS_FETCH_PROMISES[id] = p
+  return p
 }
 
-// 실패한 개별 학생 로딩을 사용자가 "다시 시도" 버튼으로 재요청할 때 써요.
-function retryLoadStudents(id) {
-  prioritizeSelectedClassStudents(id, true)
+// 선택한 수업 하나의 학생 정보만 콜어 미리 불러와요(그날 전체 수업 목록을 기다릴 필요 없이 바로 학생 목록이 채움).
+async function prioritizeSelectedClassStudents(id) {
   const c = findClass(id)
-  if (c) renderStudentsTab(c, el("right-tab-body")) // 즉시 "불러오는 중..."으로 되돌려서 재시도가 시작됐음을 보여줘요.
+  if (!c || c.students != null) return // 이미 학생 정보가 있으면(개별 로딩 완료 또는 빈 배열) 따로 요청하지 않아요.
+  try {
+    const fresh = await fetchSessionStudentsOnce(id)
+    if (!fresh) return
+    if (SELECTED_CLASS_ID === id) selectClass(id)
+  } catch (err) {
+    console.error("선택 수업 개별 로딩 실패:", err)
+    if (SELECTED_CLASS_ID === id) showToast("학생 정보를 불러오지 못했어요. 다시 선택해 보세요.")
+  }
+}
+
+// 선택된 수업이 없을 때, 뒤에서 조용히 그날 전체 수업의 학생 정보를 하나씩 미리 불러와요.
+// 사용자가 나중에 아무 수업이나 클릭해도 이미 캐시된 학생 정보가 바로 나오도록 하기 위함이에요.
+// 도중에 사용자가 수업을 선택하면 fetchSessionStudentsOnce가 요청을 공유하므로 중복 요청 없이 그대로 이어받아요.
+async function backgroundPrefetchAllStudents(dateStr) {
+  const token = ++BACKGROUND_PREFETCH_TOKEN
+  const ids = CLASSES.map(function (c) { return c.id })
+  for (let i = 0; i < ids.length; i++) {
+    // 다른 날짜로 이동했거나, 새 프리페치가 시작되었거나, 화면이 수업 탭을 벗어난 경우 중단해요.
+    if (token !== BACKGROUND_PREFETCH_TOKEN || dateStr !== CURRENT_DATE || DOMAIN !== "class") return
+    const id = ids[i]
+    const c = findClass(id)
+    if (!c || c.students != null) continue // 이미 불러온 수업(선택으로 먼저 불러온 경우 포함)은 건너뛰어요.
+    try {
+      const fresh = await fetchSessionStudentsOnce(id)
+      if (fresh && SELECTED_CLASS_ID === id) selectClass(id) // 프리페치 도중에 마침 이 수업을 선택했으면 화면을 채워줘요.
+    } catch (err) {
+      console.error("백그라운드 학생 정보 미리 불러오기 실패:", id, err)
+      // 한 수업이 실패해도 전체 프리페치가 멈추지 않고 다음 수업으로 계속 진행해요.
+    }
+  }
 }
 
 function findClass(id) { return CLASSES.find(function (c) { return c.id === id }) }
@@ -1781,7 +1793,7 @@ function summarizeStudents(students) {
   return stat
 }
 
-// 이름�� 아니라 학교·학년으로도 검색할 수 있도록, 학생 하나당 검색용 문자열을 만들어요.
+// 이름뿐 아니라 학교·학년으로도 검색할 수 있도록, 학생 하나당 검색용 문자열을 만들어요.
 // 백엔드가 아직 학교/학년(school/grade) 값을 안 내려주는 학생은 이름만으로 매칭돼요.
 function studentSearchHaystack(s) {
   return [s.name, s.school, s.grade].filter(Boolean).join(" ").toLowerCase()
@@ -1798,7 +1810,7 @@ function studentRowHtml(c, s) {
   const evalCls = s.evaluation ? attendanceRateTone(s.evaluation.score) : ""
   const evalBadge = s.evaluation ? ' <span class="badge ' + evalCls + '">' + s.evaluation.score + '점</span>' : ""
   const reportLink = s.reportUrl
-    ? ' <a class="report-view-link" href="' + s.reportUrl + '" target="_blank" title="학습 보고서 페���지 보기">📋</a>'
+    ? ' <a class="report-view-link" href="' + s.reportUrl + '" target="_blank" title="학습 보고서 페이지 보기">📋</a>'
     : ' <span class="report-view-link" style="opacity:0.35;cursor:default" title="이 학생의 등록에 토큰이 아직 없어요">📋</span>'
   const checkboxHtml = canSend
     ? '<input type="checkbox" class="stu-checkbox" ' + (SELECTED_STUDENT_IDS[s.attendanceId] ? "checked" : "") + ' onchange="toggleStudentSelected(' + attrSafe(s.attendanceId) + ', this.checked)">'
@@ -1829,15 +1841,7 @@ function renderStudentRows(c) {
 
 function renderStudentsTab(c, body) {
   // students가 null이면 아직 물어오는 중(로딩)이라는 뜻이고, 빈 배열([])이면 실제로 출석 기록이 없다는 뜻이에요.
-  if (c.students == null) {
-    // 이전 시도가 실패한 상태면 무한 로딩으로 보이지 않도록 재시도 버튼을 보여줘요.
-    if (SESSION_STUDENTS_FAILED[c.id]) {
-      body.innerHTML = '<div class="empty">학생 정보를 불러오지 못했어요<br><button class="retry-btn" onclick="retryLoadStudents(' + attrSafe(c.id) + ')">다시 시도</button></div>'
-    } else {
-      body.innerHTML = '<div class="empty">학생 정보 불러오는 중...</div>'
-    }
-    return
-  }
+  if (c.students == null) { body.innerHTML = '<div class="empty">학생 정보 불러오는 중...</div>'; return }
   const allStudents = c.students || []
   if (allStudents.length === 0) { body.innerHTML = '<div class="empty">출석 기록이 없어요</div>'; return }
   const eligibleIds = allStudents.filter(function (s) { return s.attendanceId }).map(function (s) { return s.attendanceId })
@@ -2015,7 +2019,7 @@ async function renderTaskTab(c, body, kind) {
     const data = await fetchClassDetail(c.id)
     const records = (data.assignments && data.assignments.records) || []
     const activities = (data.assignments && data.assignments.activities) || []
-    // 마감일은 반 전체 공통 설명인 records가 아니라, 학생별 인스턴스인 activities에만 있어요(같은 과제면 보통 동일해요).
+    // 마감일은 반 전체 공통 설명인 records가 아니라, 학생별 인스턴스인 activities에만 있어요(같은 과제면 ���통 동일해요).
     // recordId로 매칭되는 첫 번째 activity의 마감일을 해당 기록의 마감일로 사용해요.
     const dueByRecordId = {}
     activities.forEach(function (a) {
