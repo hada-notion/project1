@@ -360,6 +360,11 @@
 .sched-msg-section { margin-top:18px; }
 .sched-msg-body .student-select-all { margin-bottom:6px; }
 .sched-msg-body .bulk-send-btn { margin-top:10px; width:100%; }
+.sched-msg-filters { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
+.sched-msg-filters select { flex:1 1 45%; font-size:12px; padding:5px 6px; border:1px solid var(--border); border-radius:6px; background:#fff; color:var(--text); }
+.sched-msg-count { font-size:12px; color:var(--muted); margin-bottom:6px; }
+.sched-msg-body .student-row { border-bottom:1px solid var(--border); }
+.sched-msg-body .student-row:last-child { border-bottom:none; }
 .schedule-list-area { display:flex; flex-direction:column; gap:0; }
 .sched-date-group { display:flex; flex-direction:column; }
 .sched-date-label { font-size:12px; font-weight:700; color:var(--muted); padding:14px 12px 4px; }
@@ -800,6 +805,7 @@ const GET_CLASS_DETAIL_URL = SUPABASE_URL + "/functions/v1/get-class-detail"
 const GET_SCHEDULES_URL = SUPABASE_URL + "/functions/v1/get-schedules"
 const GET_REPORTS_URL = SUPABASE_URL + "/functions/v1/get-reports"
 const GET_TUITIONS_URL = SUPABASE_URL + "/functions/v1/get-tuitions"
+const GET_STUDENTS_URL = SUPABASE_URL + "/functions/v1/get-students" // 학생(학원) DB 전체 목록 (일정 안내 메시지용, 백엔드는 추후 구축)
 const SEND_WEEKLY_REPORT_URL = SUPABASE_URL + "/functions/v1/send-weekly-report"
 const SEND_MONTHLY_REPORT_URL = SUPABASE_URL + "/functions/v1/send-monthly-report"
 const SEND_TUITION_URL = SUPABASE_URL + "/functions/v1/send-tuition-notice"
@@ -2247,6 +2253,7 @@ function selectSchedule(id) {
   el("bulk-send-tab-btn").style.display = "none"
   el("bulk-send-tab-btn").disabled = true
   SCHEDULE_MSG_SELECTED = {}
+  SCHEDULE_MSG_FILTERS = { grade: "", school: "", className: "", status: "" }
   renderScheduleDetail(s)
   openMobileDetail()
 }
@@ -2268,33 +2275,20 @@ function renderScheduleDetail(s) {
   body.innerHTML = html
 }
 
-// ---------------- 일정 안내 메시지 (UI만 먼저 준비, 발송 백엔드는 추후 연동) ----------------
-// 수업 탭의 학생 선택/일괄전송 UI(student-row, student-select-all, bulk-send-btn)와 동일한 디자인을 재사용해요.
-let SCHEDULE_MSG_SELECTED = {}
-
-function scheduleMessageTargets(s) {
-  // TODO: 백엔드(get-schedule-students 등) 연동 후, 이 일정과 연결된 실제 학생 목록으로 교체해주세요.
-  // 지금은 UI 배치만을 위해 관련 반 이름을 임시 자리표시자로 써요.
-  if (s.classNames && s.classNames.length) return s.classNames.map(function (name) { return { id: name, label: name + " 학생 전체" } })
-  return []
-}
+// ---------------- 일정 안내 메시지: 학생(학원) DB 전체 명단 + 필터 + 선택 발송 (발송 백엔드는 추후 연동) ----------------
+// 수업 탭의 학생 선택 UI(student-row, student-select-all, bulk-send-btn)와 동일한 디자인을 재사용해요.
+let SCHEDULE_MSG_SELECTED = {} // key: 학생 id
+let ALL_STUDENTS_CACHE = null // 학생(학원) DB 전체 목록 캐시 (여러 일정에서 공유, 한번만 불러와요)
+let STUDENTS_LOAD_STATE = "idle" // idle | loading | loaded | error
+let STUDENTS_LOAD_ERROR = ""
+let SCHEDULE_MSG_FILTERS = { grade: "", school: "", className: "", status: "" }
 
 function renderScheduleMessageSectionHtml(s) {
-  const targets = scheduleMessageTargets(s)
-  const rowsHtml = targets.length
-    ? targets.map(function (t) {
-        return '<div class="student-row"><span class="stu-name"><input type="checkbox" class="stu-checkbox" data-target-id="' + attrSafe(t.id) + '" onchange="toggleScheduleMsgTarget(' + attrSafe(t.id) + ', this.checked)"> ' + esc(t.label) + '</span></div>'
-      }).join("")
-    : '<div class="empty" style="padding:8px 0">연결된 학생 목록이 아직 없어요</div>'
   return '<div class="sched-msg-section">' +
     '<button class="right-summary-toggle" id="sched-msg-toggle" onclick="toggleScheduleMessageSection()">' +
       '<span id="sched-msg-toggle-label">📩 안내 메시지 보내기</span><span class="right-summary-chevron">▾</span>' +
     '</button>' +
-    '<div class="right-summary-body sched-msg-body" id="sched-msg-body">' +
-      '<label class="student-select-all"><input type="checkbox" onchange="toggleScheduleMsgSelectAll(this.checked)" ' + (targets.length ? "" : "disabled") + '> 전체 선택</label>' +
-      '<div id="sched-msg-student-rows">' + rowsHtml + '</div>' +
-      '<button class="bulk-send-btn" id="sched-msg-send-btn" disabled onclick="handleScheduleMessageSend()">📩 선택한 대상에게 안내 발송</button>' +
-    '</div>' +
+    '<div class="right-summary-body sched-msg-body" id="sched-msg-body"></div>' +
   '</div>'
 }
 
@@ -2304,28 +2298,121 @@ function toggleScheduleMessageSection() {
   if (!body || !btn) return
   const isOpen = body.classList.toggle("show")
   btn.classList.toggle("open", isOpen)
+  if (isOpen) {
+    if (STUDENTS_LOAD_STATE === "loaded") renderScheduleMsgBody()
+    else ensureAllStudentsLoaded()
+  }
 }
 
-function toggleScheduleMsgTarget(targetId, checked) {
-  if (checked) SCHEDULE_MSG_SELECTED[targetId] = true
-  else delete SCHEDULE_MSG_SELECTED[targetId]
-  el("sched-msg-send-btn").disabled = Object.keys(SCHEDULE_MSG_SELECTED).length === 0
+// 학생(학원) DB 전체 목록을 한번 불러와서 캐시해요. 기대 응답 형태:
+// { students: [{ id, name, grade, school, classNames: ["반 이름", ...], status: "🔵수강중", phone, parentPhone }, ...] }
+// (학생이름→name, 학년→grade, 학교→school, 등록 클래스→classNames, 상태→status 프로퍼티와 매핑되어야 해요)
+async function ensureAllStudentsLoaded() {
+  if (STUDENTS_LOAD_STATE === "loaded" || STUDENTS_LOAD_STATE === "loading") return
+  STUDENTS_LOAD_STATE = "loading"
+  renderScheduleMsgBody()
+  try {
+    const res = await fetch(GET_STUDENTS_URL, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || ("HTTP " + res.status))
+    ALL_STUDENTS_CACHE = data.students || []
+    STUDENTS_LOAD_STATE = "loaded"
+  } catch (err) {
+    STUDENTS_LOAD_ERROR = err.message
+    STUDENTS_LOAD_STATE = "error"
+  }
+  renderScheduleMsgBody()
+}
+
+function scheduleMsgUniqueValues(pick) {
+  const seen = {}
+  const out = []
+  ;(ALL_STUDENTS_CACHE || []).forEach(function (st) {
+    const v = pick(st)
+    ;(Array.isArray(v) ? v : [v]).forEach(function (name) { if (name && !seen[name]) { seen[name] = true; out.push(name) } })
+  })
+  return out
+}
+
+function filteredScheduleMsgStudents() {
+  const f = SCHEDULE_MSG_FILTERS
+  return (ALL_STUDENTS_CACHE || []).filter(function (st) {
+    if (f.grade && st.grade !== f.grade) return false
+    if (f.school && st.school !== f.school) return false
+    if (f.className && (st.classNames || []).indexOf(f.className) === -1) return false
+    if (f.status && st.status !== f.status) return false
+    return true
+  })
+}
+
+function scheduleMsgFilterOptionsHtml(value, options, allLabel) {
+  return '<option value="">' + esc(allLabel) + '</option>' +
+    options.map(function (o) { return '<option value="' + attrSafe(o) + '"' + (value === o ? " selected" : "") + '>' + esc(o) + '</option>' }).join("")
+}
+
+function setScheduleMsgFilter(key, value) {
+  SCHEDULE_MSG_FILTERS[key] = value
+  renderScheduleMsgBody()
+}
+
+// 필터 + 학생 체크박스 + 발송버튼을 통통 다시 그려요. SCHEDULE_MSG_SELECTED는 id 기준으로 유지되니까 필터를 바꿔도 선택이 풀리지 않아요.
+function renderScheduleMsgBody() {
+  const bodyEl = el("sched-msg-body")
+  if (!bodyEl) return
+  if (STUDENTS_LOAD_STATE === "loading") {
+    bodyEl.innerHTML = '<div class="loading">학생 목록 불러오는 중...</div>'
+    return
+  }
+  if (STUDENTS_LOAD_STATE === "error") {
+    bodyEl.innerHTML = '<div class="empty">불러오기 실패: ' + esc(STUDENTS_LOAD_ERROR) + '<br><button class="retry-btn" onclick="ensureAllStudentsLoaded()">다시 시도</button></div>'
+    return
+  }
+  const grades = scheduleMsgUniqueValues(function (s) { return s.grade })
+  const schools = scheduleMsgUniqueValues(function (s) { return s.school })
+  const classNames = scheduleMsgUniqueValues(function (s) { return s.classNames })
+  const statuses = scheduleMsgUniqueValues(function (s) { return s.status })
+  const list = filteredScheduleMsgStudents()
+  const eligibleIds = list.map(function (s) { return s.id })
+  const allSelected = eligibleIds.length > 0 && eligibleIds.every(function (id) { return SCHEDULE_MSG_SELECTED[id] })
+  const selectedCount = Object.keys(SCHEDULE_MSG_SELECTED).length
+  const rowsHtml = list.length
+    ? list.map(function (s) {
+        const meta = [s.grade, s.school].filter(Boolean).join(" · ")
+        return '<div class="student-row"><span class="stu-name"><input type="checkbox" class="stu-checkbox" ' + (SCHEDULE_MSG_SELECTED[s.id] ? "checked" : "") + ' onchange="toggleScheduleMsgStudent(' + attrSafe(s.id) + ', this.checked)"> ' + esc(s.name) + (meta ? ' <span class="stu-meta">' + esc(meta) + '</span>' : "") + '</span>' +
+          (s.status ? '<span class="badge gray">' + esc(s.status) + '</span>' : "") +
+        '</div>'
+      }).join("")
+    : '<div class="empty" style="padding:8px 0">조건에 맞는 학생이 없어요</div>'
+  bodyEl.innerHTML =
+    '<div class="sched-msg-filters">' +
+      '<select onchange="setScheduleMsgFilter(\'grade\', this.value)">' + scheduleMsgFilterOptionsHtml(SCHEDULE_MSG_FILTERS.grade, grades, "학년 전체") + '</select>' +
+      '<select onchange="setScheduleMsgFilter(\'school\', this.value)">' + scheduleMsgFilterOptionsHtml(SCHEDULE_MSG_FILTERS.school, schools, "학교 전체") + '</select>' +
+      '<select onchange="setScheduleMsgFilter(\'className\', this.value)">' + scheduleMsgFilterOptionsHtml(SCHEDULE_MSG_FILTERS.className, classNames, "클래스 전체") + '</select>' +
+      '<select onchange="setScheduleMsgFilter(\'status\', this.value)">' + scheduleMsgFilterOptionsHtml(SCHEDULE_MSG_FILTERS.status, statuses, "수강상태 전체") + '</select>' +
+    '</div>' +
+    '<div class="sched-msg-count">' + list.length + '명 · 선택 ' + selectedCount + '명</div>' +
+    '<label class="student-select-all"><input type="checkbox" ' + (allSelected ? "checked" : "") + ' onchange="toggleScheduleMsgSelectAll(this.checked)" ' + (eligibleIds.length ? "" : "disabled") + '> 이 목록 전체 선택</label>' +
+    '<div id="sched-msg-student-rows">' + rowsHtml + '</div>' +
+    '<button class="bulk-send-btn" id="sched-msg-send-btn" ' + (selectedCount ? "" : "disabled") + ' onclick="handleScheduleMessageSend()">📩 선택한 학생에게 안내 발송</button>'
+}
+
+function toggleScheduleMsgStudent(id, checked) {
+  if (checked) SCHEDULE_MSG_SELECTED[id] = true
+  else delete SCHEDULE_MSG_SELECTED[id]
+  renderScheduleMsgBody()
 }
 
 function toggleScheduleMsgSelectAll(checked) {
-  const boxes = document.querySelectorAll("#sched-msg-student-rows .stu-checkbox")
-  boxes.forEach(function (cb) {
-    cb.checked = checked
-    const id = cb.getAttribute("data-target-id")
-    if (checked) SCHEDULE_MSG_SELECTED[id] = true
-    else delete SCHEDULE_MSG_SELECTED[id]
-  })
-  el("sched-msg-send-btn").disabled = Object.keys(SCHEDULE_MSG_SELECTED).length === 0
+  filteredScheduleMsgStudents().forEach(function (s) { if (checked) SCHEDULE_MSG_SELECTED[s.id] = true; else delete SCHEDULE_MSG_SELECTED[s.id] })
+  renderScheduleMsgBody()
 }
 
 function handleScheduleMessageSend() {
-  // TODO: 백엔드 준비 후 실제 알림톡/문자 발송 호출로 교체해주세요.
-  showToast("일정 안내 메시지 발송 기능은 준비 중이에요")
+  const targets = (ALL_STUDENTS_CACHE || []).filter(function (s) { return SCHEDULE_MSG_SELECTED[s.id] })
+  // TODO: 백엔드(예: send-schedule-notice) 준비 후, targets(선택된 학생 목록)를 실제 발송 API 호출로 교체해주세요.
+  showToast(targets.length + "명에게 보낼 준비가 됐어요 (발송 기능은 아직 준비 중이에요)")
 }
 
 // ---------------- 알림톡 발송 ----------------
