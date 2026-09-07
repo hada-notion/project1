@@ -954,7 +954,7 @@ async function loadCalendarPanel() {
   loadCalPanelDots()
 }
 
-// 상단 날짜 영역: 수��/��정은 하루 날짜를, 보고서(주간/월간)와 수강료는 해당 기간을 보여줘요.
+// 상단 날짜 영역: 수��/����은 하루 날짜를, 보고서(주간/월간)와 수강료는 해당 기간을 보여줘요.
 function formatWeekRangeLabel(startStr, endStr) {
   const days = ["일", "월", "화", "수", "목", "금", "토"]
   const sd = new Date(startStr + "T00:00:00+09:00")
@@ -1211,8 +1211,13 @@ function renderReportClassDetail() {
   el("right-sub").textContent = ""
   el("right-summary-toggle").style.display = "none"
   const sendFnName = REPORT_TYPE === "monthly" ? "월간" : "주간"
-  // 수업 탭 오른쪽 패널과 같은 .student-row 한줄 패턴으로 학생을 나열해요 (DESIGN 문서 "학생 목록 표준 디자인" 규칙 참고).
-  el("report-tuition-detail").innerHTML = list.map(function (r) {
+  // 오른쪽 상단은 수업 탭과 같은 info-card 요약(발송 현황)으로, 아래 목록은 수업 탭과 같은 .student-row 한줄 패턴으로 통일해요 (DESIGN 문서 "학생 목록 표준 디자인" 규칙 참고).
+  const summaryHtml = '<div class="info-card"><h3>✅ 발송 현황</h3>' +
+    '<div style="display:flex;gap:18px;flex-wrap:wrap">' +
+      '<div class="stat-row stat-text blue">발송완료 <b>' + sentCount + '</b>명</div>' +
+      '<div class="stat-row stat-text gray">미발송 <b>' + (list.length - sentCount) + '</b>명</div>' +
+    '</div></div>'
+  const rowsHtml = list.map(function (r) {
     const sentBadge = r.sentBy ? '<span class="badge tone-blue">발송완료</span>' : '<span class="badge tone-gray">미발송</span>'
     const rate = parseAttendanceRate(r.attendanceSummary)
     const rateBadge = rate ? ' <span class="rate-badge ' + attendanceRateTone(rate.pct) + '">' + rate.text + '</span>' : ""
@@ -1222,6 +1227,7 @@ function renderReportClassDetail() {
     return '<div class="student-row"><span class="stu-name">' + esc(displayStudentName(r.studentName || r.title)) + ' ' + sentBadge + rateBadge + reportLink + '</span>'
       + '<button class="send-btn" onclick="sendPeriodReport(' + attrSafe(r.reportId) + ')">📩 ' + sendFnName + ' 발송</button></div>'
   }).join("")
+  el("report-tuition-detail").innerHTML = summaryHtml + rowsHtml
   el("report-tuition-bulk-btn").textContent = "📩 " + sendFnName + " 보고서 일괄 전송"
   openMobileDetail()
 }
@@ -1271,7 +1277,7 @@ function paymentStatusTone(status) {
   const s = String(status || "")
   if (s.includes("미납")) return "tone-red"
   if (s.includes("완료") || s.includes("완납")) return "tone-green"
-  if (s.includes("부분")) return "tone-orange"
+  if (s.includes("���분")) return "tone-orange"
   return "tone-gray"
 }
 
@@ -1329,13 +1335,25 @@ function renderTuitionClassDetail() {
   el("right-time").textContent = list.length + "명 · 총 " + Number(totalAmount).toLocaleString("ko-KR") + "원"
   el("right-sub").textContent = ""
   el("right-summary-toggle").style.display = "none"
-  // 수업 탭 오른쪽 패널과 같은 .student-row 한줄 패턴으로 학생을 나열해요 (DESIGN 문서 "학생 목록 표준 디자인" 규칙 참고).
-  el("report-tuition-detail").innerHTML = list.map(function (t) {
+  // 오른쪽 상단은 수업 탭과 같은 info-card 요약(수강료 현황)으로, 아래 목록은 수업 탭과 같은 .student-row 한줄 패턴으로 통일해요 (DESIGN 문서 "학생 목록 표준 디자인" 규칙 참고).
+  const paidCount = list.filter(function (t) { return paymentStatusTone(t.paymentStatus) === "tone-green" }).length
+  const partialCount = list.filter(function (t) { return paymentStatusTone(t.paymentStatus) === "tone-orange" }).length
+  const unpaidCount = list.filter(function (t) { return paymentStatusTone(t.paymentStatus) === "tone-red" }).length
+  const summaryHtml = '<div class="info-card"><h3>💰 수강료 현황</h3>' +
+    '<div style="display:flex;gap:18px;flex-wrap:wrap">' +
+      '<div class="stat-row stat-text green">완납 <b>' + paidCount + '</b>명</div>' +
+      '<div class="stat-row stat-text orange">부분납 <b>' + partialCount + '</b>명</div>' +
+      '<div class="stat-row stat-text red">미납 <b>' + unpaidCount + '</b>명</div>' +
+    '</div>' +
+    '<div class="stat-row" style="margin-top:8px;font-weight:600">총 수강료액 <b>' + Number(totalAmount).toLocaleString("ko-KR") + '원</b></div>' +
+  '</div>'
+  const rowsHtml = list.map(function (t) {
     const statusBadge = t.paymentStatus ? '<span class="badge ' + paymentStatusTone(t.paymentStatus) + '">' + esc(t.paymentStatus) + '</span>' : ''
     const amountBadge = ' <span class="badge tone-gray">' + (t.amount != null ? Number(t.amount).toLocaleString("ko-KR") + '원' : "-") + '</span>'
     return '<div class="student-row"><span class="stu-name">' + esc(displayStudentName(t.studentInfo || t.title)) + ' ' + statusBadge + amountBadge + '</span>'
       + '<button class="send-btn" onclick="sendTuitionNotice(' + attrSafe(t.tuitionId) + ')">📩 안내 발송</button></div>'
   }).join("")
+  el("report-tuition-detail").innerHTML = summaryHtml + rowsHtml
   el("report-tuition-bulk-btn").textContent = "📩 수강료 안내 일괄 전송"
   openMobileDetail()
 }
@@ -1618,7 +1636,7 @@ function pickField(obj, keys) {
 // 이 정보가 없으면 기존의 "평가 결과" 요약 텍스트로 대체해요(하위 호환).
 // 과제 탭은 마감일을 반영하기 위해 get-class-detail을 통해 학습기록(과제) 목록을 따로 조회합니다.
 // (조금 느리지만 마감일을 다시 보여줄 수 있습니다.) 결과는 CLASS_DETAIL_CACHE에 캐싱되어 재조회를 최소화합니다.
-// 보고서 페이지와 동일하게, 부가 정보는 제목 아래에 "  • 라벨: 값" 형태로 한 줄씩 통일해서 보여줘요.
+// 보고서 페이지와 동일하게, 부가 정보는 제목 아래에 "  �� 라벨: 값" 형태로 한 줄씩 통일해서 보여줘요.
 function bulletLine(label, value) {
   if (value === null || value === undefined || value === "") return ""
   return '<div class="meta" style="margin-top:4px">' + esc("  • " + label + ": " + value) + '</div>'
@@ -1731,7 +1749,7 @@ async function renderTaskTab(c, body, kind) {
     } else {
       html = records.map(function (r) {
         const due = pickField(r, ["dueDate", "due_iso", "due", "dueAt", "과제마감일", "과제 마감일"]) || dueByRecordId[r.id] || null
-        // r.content는 이미 자체적인 서식(줄바꿈, 자체 불릿 등)을 포함하고 있을 수 있어서,
+        // r.content는 이미 자체적인 서식(줄바���, 자체 불릿 등)을 포함하고 있을 수 있어서,
         // "내용:" 라벨로 감싸면 이중 불릿·줄바꿈 깨짐이 생겨요. 그래서 원본 그대��� 별도 줄에 보여줘요.
         return '<div class="record-card"><div class="title"><a href="' + r.url + '" target="_blank">' + esc(r.title) + '</a></div>' +
           '<div class="meta">교재: ' + esc(r.book) + (r.range ? " · 범위: " + esc(r.range) : "") + '</div>' +
@@ -1841,7 +1859,7 @@ function renderScheduleDetail(s) {
   if (s.relatedText) html += field("관련 대상", esc(s.relatedText))
   if (s.memo) html += field("메모", esc(s.memo).replace(/\n/g, "<br>"))
   if ((s.tags || []).length) html += field("태그", s.tags.map(function (t) { return '<span class="badge gray">' + esc(t) + '</span>' }).join(" "))
-  html += '<div class="schedule-detail-hint" style="margin-top:16px;color:var(--muted);font-size:12px">✏️ 수정은 노션에서 해주세요 (대시보드는 보기 전용이에요)</div>'
+  html += '<div class="schedule-detail-hint" style="margin-top:16px;color:var(--muted);font-size:12px">✏️ 수���은 노션에서 해주세요 (대시보드는 보기 전용이에요)</div>'
   body.innerHTML = html
 }
 
