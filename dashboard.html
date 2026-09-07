@@ -1978,7 +1978,7 @@ function formatSummaryBlock(text) {
 }
 
 // 과제 ��내/평가 결과 카드는 기존 과제·평가 탭에서 쓰던 구조화 레코드(제목 링크 + 교재·범위 + 마감/내용)를
-// 그대로 재사용해���. 탭이 없���진 대신 더보기 안에서 바로 이 정보를 보여줍니다.
+// 그대로 재사용해���. 탭이 없�����진 대신 더보기 안에서 바로 이 정보를 보여줍니다.
 async function loadSummaryRecordDetails(c) {
   const assignEl = el("summary-assignment-body")
   const evalEl = el("summary-evaluation-body")
@@ -2376,7 +2376,7 @@ function renderScheduleMsgBody() {
   const caretPos = hadFocus ? prevInput.selectionStart : null
   bodyEl.innerHTML =
     '<div class="sched-msg-title">📩 안내 대상 학생</div>' +
-    '<div class="sched-msg-search"><input type="text" placeholder="이름·학년·학교·클래스·수강상태 검색" value="' + attrSafe(SCHEDULE_MSG_SEARCH) + '" oninput="setScheduleMsgSearch(this.value)"></div>' +
+    '<div class="sched-msg-search"><input type="text" placeholder="이름·학년·학교·클래스·수강상태 검색" value="' + esc(SCHEDULE_MSG_SEARCH) + '" oninput="setScheduleMsgSearch(this.value)"></div>' +
     '<div class="sched-msg-count">' + list.length + '명 · 선택 ' + selectedCount + '명</div>' +
     '<label class="student-select-all"><input type="checkbox" ' + (allSelected ? "checked" : "") + ' onchange="toggleScheduleMsgSelectAll(this.checked)" ' + (eligibleIds.length ? "" : "disabled") + '> 이 목록 전체 선택</label>' +
     '<div id="sched-msg-student-rows">' + rowsHtml + '</div>'
