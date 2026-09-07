@@ -533,7 +533,7 @@
 
 <div id="app-screen" style="display:none">
 <div class="topbar">
-  <div class="brand">하다 학원���������리</div>
+  <div class="brand">하다 학원관리</div>
   <button class="nav-btn active" data-tab="dashboard" onclick="showTab('dashboard')">📊 <span class="btn-label">대시보드</span></button>
   <button class="nav-btn" data-tab="admin" onclick="showTab('admin')">🗂️ <span class="btn-label">리포트 관리</span></button>
   <button class="nav-btn" data-tab="kiosk" onclick="showTab('kiosk')">🖊️ <span class="btn-label">키오스크</span></button>
@@ -647,7 +647,7 @@ async function submitLogin() {
   const key = input.value.trim()
   const btn = document.getElementById("login-btn")
   const errEl = document.getElementById("login-error")
-  if (!key) { errEl.textContent = "비밀번호를 입��하세요."; return }
+  if (!key) { errEl.textContent = "비밀번호를 입력하세요."; return }
   btn.disabled = true
   btn.textContent = "확인 중..."
   errEl.textContent = ""
@@ -660,12 +660,12 @@ async function submitLogin() {
       },
     })
     if (res.status === 401) {
-      errEl.textContent = "비밀번호가 올바����� 않습니��."
+      errEl.textContent = "비밀번호가 올바르지 않습니다."
       btn.disabled = false
       btn.textContent = "로그인"
       return
     }
-    if (!res.ok) throw new Error(`서�� 오류: ${res.status}`)
+    if (!res.ok) throw new Error(`서버 오류: ${res.status}`)
     localStorage.setItem(ADMIN_KEY_STORAGE, key)
     showAppScreen()
   } catch (err) {
@@ -789,7 +789,7 @@ function esc(s) {
   })
 }
 
-// 보고서/수강료 수식이 이름 뒤에 강제로 붙이는 " 학생" 접미를 떼어내고, 수업 탭과 동일하게 이름만 보���줍니다.
+// 보고서/수강료 수식이 이름 뒤에 강제로 붙이는 " 학생" 접미를 떼어내고, 수업 탭과 동일하게 이름만 보여줍니다.
 function displayStudentName(name) {
   return String(name || "").replace(/\s*학생\s*$/, "").trim()
 }
@@ -829,7 +829,7 @@ let TUITIONS = []
 let TUITION_LOADING = false // 수강료 목록 조회가 진행 중인 동안, 목록을 다시 그려도 파란 로딩 박스를 유지해요.
 let tuitionLoadGen = 0
 let SELECTED_TUITION_ID = null
-let SELECTED_WEEK_START = null // 주간 보고서용: 선택된 주의 ���작일(월요일, YYYY-MM-DD)
+let SELECTED_WEEK_START = null // 주간 보고서용: 선택된 주의 시작일(월요일, YYYY-MM-DD)
 let SELECTED_WEEK_END = null
 let SELECTED_REPORT_CLASS = null // 보고서 탭: 가운데에서 선택된 클래스 id (미배정은 "__unassigned__")
 let SELECTED_TUITION_CLASS = null // 수강료 탭: 가운데에서 선택된 클래스 id
@@ -840,7 +840,7 @@ function formatDateLabel(dateStr) {
   return dateStr.replace(/-/g, ".") + " (" + days[d.getDay()] + ")"
 }
 
-// 날짜�� 이동해��� �����로 ��러오는 동안, 이전 날짜의 상세정보가 남아있어 착각하지 않도록 오른쪽 패��을 비워요.
+// 날짜를 이동해서 새로 불러오는 동안, 이전 날짜의 상세정보가 남아있어 착각하지 않도록 오른쪽 패널을 비워요.
 function clearRightPanel() {
   el("md-right-empty").style.display = "block"
   el("md-right-content").style.display = "none"
@@ -895,7 +895,7 @@ function setDomain(domain) {
   if (CALENDAR_OPEN && domain !== "report" && domain !== "tuition") loadCalendarPanel()
 }
 
-// ---------------- 캘린더 사이드패널 (열고/��기) ----------------
+// ---------------- 캘린더 사이드패널 (열고/닫기) ----------------
 function toggleCalendarPanel() {
   CALENDAR_OPEN = !CALENDAR_OPEN
   el("calendar-panel").classList.toggle("open", CALENDAR_OPEN)
@@ -941,7 +941,7 @@ async function loadCalendarPanel() {
   loadCalPanelDots()
 }
 
-// 상단 날짜 영역: 수��/������은 하루 날짜를, 보고서(주간/월간)와 수강료는 해당 기간을 보여줘요.
+// 상단 날짜 영역: 수업/일정은 하루 날짜를, 보고서(주간/월간)와 수강료는 해당 기간을 보여줘요.
 function formatWeekRangeLabel(startStr, endStr) {
   const days = ["일", "월", "화", "수", "목", "금", "토"]
   const sd = new Date(startStr + "T00:00:00+09:00")
@@ -963,7 +963,7 @@ function updateDateNavLabel() {
   }
 }
 
-// 캘린더에 표시된 달의 날짜별로 수업/일정이 있는지 조회해서 ���을 ��시해요.
+// 캘린더에 표시된 달의 날짜별로 수업/일정이 있는지 조회해서 점을 표시해요.
 async function loadCalPanelDots() {
   if (DOMAIN === "report" || DOMAIN === "tuition") { CAL_PANEL_ITEMS = {}; renderCalPanel(); return }
   const month = CAL_PANEL_MONTH
@@ -1053,13 +1053,13 @@ function goToDateFromCalendarPanel(dateStr) {
   loadCenterList()
 }
 
-// ---------------- 검색(만능 검������) ----------------
+// ---------------- 검색(만능 검색) ----------------
 function onSearchInput(term) {
   SEARCH_TERM = (term || "").trim().toLowerCase()
   renderCenterList()
 }
 
-// ---------------- 날짜 ��동(하루씨) ----------------
+// ---------------- 날짜 이동(하루씩) ----------------
 function shiftDate(delta) {
   const d = new Date(CURRENT_DATE + "T00:00:00+09:00")
   d.setDate(d.getDate() + delta)
@@ -1150,7 +1150,7 @@ function getFilteredReports() {
 }
 
 function renderReportList() {
-  // 보고서 목록을 불러오는 중이면(주/유형 전환 등으로 이 함수가 별도로 호출되더라도) 파란 로딩 박스를 그대로 유지하고, "없어요" 등 결과 화면은 ���이터가 실제로 도착한 뒤에만 보여줘요.
+  // 보고서 목록을 불러오는 중이면(주/유형 전환 등으로 이 함수가 별도로 호출되더라도) 파란 로딩 박스를 그대로 유지하고, "없어요" 등 결과 화면은 데이터가 실제로 도착한 뒤에만 보여줘요.
   if (REPORT_LOADING) return
   const list = getFilteredReports()
   if (!list.length) {
@@ -1272,7 +1272,7 @@ function paymentStatusTone(status) {
   const s = String(status || "")
   if (s.includes("미납")) return "tone-red"
   if (s.includes("완료") || s.includes("완납")) return "tone-green"
-  if (s.includes("���분")) return "tone-orange"
+  if (s.includes("부분")) return "tone-orange"
   return "tone-gray"
 }
 
@@ -1428,7 +1428,7 @@ function filteredClasses() {
 }
 
 function classEmoji(c) {
-  // 노션 클래스(학원) DB의 "이모지" 속성 값을 그대로 사용���요. 백엔드가 emoji 필드를 안 내려주는 동안만 학년별 기본값으로 대체해요.
+  // 노션 클래스(학원) DB의 "이모지" 속성 값을 그대로 사용해요. 백엔드가 emoji 필드를 안 내려주는 동안만 학년별 기본값으로 대체해요.
   if (c && c.emoji) return c.emoji
   const n = String((c && c.className) || "")
   if (n.indexOf("고") >= 0) return "🎓"
@@ -1437,8 +1437,8 @@ function classEmoji(c) {
   return "📚"
 }
 
-// 수�� 탭에서 조회한 클래스의 실제 이모지를 classId 기준으로 기억해뒀다가,
-// ���고서/수강료 탭처��� 클래스 목록을 직접 내려주지 않는 화면에서도 같은 이모지를 재사용해요.
+// 수업 탭에서 조회한 클래스의 실제 이모지를 classId 기준으로 기억해둠다가,
+// 보고서/수강료 탭처럼 클래스 목록을 직접 내려주지 않는 화면에서도 같은 이모지를 재사용해요.
 const CLASS_EMOJI_MAP = {}
 function rememberClassEmoji(classId, c) {
   if (!classId) return
@@ -1477,7 +1477,7 @@ function attendanceRateTone(pct) {
   return "tone-red"
 }
 
-// 가운데 목록은 여러 수업을 한눈에 봐서 선택만 하는 용도다. 상세 내용은 오른쪽 패넬이 다루���다.
+// 가운데 목록은 여러 수업을 한눈에 봐서 선택만 하는 용도다. 상세 내용은 오른쪽 패널이 다룹니다.
 function renderClassList() {
   const listEl = el("class-list-area")
   const list = filteredClasses()
@@ -1508,6 +1508,23 @@ function onClassClick(id) {
 
 function findClass(id) { return CLASSES.find(function (c) { return c.id === id }) }
 
+// 수업 탭 헤더(교사/수업방식/출석률 배지)에 이어, 수업 로딩톡 발송 현황(전송완료/미전송)을 같은 자리에 요약해요.
+function classSendSummaryBadge(c) {
+  const students = c.students || []
+  const eligible = students.filter(function (s) { return s.attendanceId })
+  if (!eligible.length) return ""
+  const sentCount = eligible.filter(function (s) { return s.sentByMe }).length
+  return ' <span class="badge tone-blue">전송완료 ' + sentCount + '명</span> <span class="badge tone-gray">미전송 ' + (eligible.length - sentCount) + '명</span>'
+}
+
+function renderClassRightSub(c) {
+  el("right-sub").innerHTML =
+    (c.teacherName ? '<span class="teacher-badge ' + teacherColorClass(c.teacherName) + '">' + esc(c.teacherName) + '</span>' : "") +
+    (c.method ? '<span class="badge blue">' + esc(c.method) + '</span>' : "") +
+    (function () { const r = parseAttendanceRate(c.attendanceRate); return r ? '<span class="rate-badge ' + attendanceRateTone(r.pct) + '">' + esc(r.text) + '</span>' : "" })() +
+    classSendSummaryBadge(c)
+}
+
 function selectClass(id) {
   SELECTED_CLASS_ID = id
   const c = findClass(id)
@@ -1516,10 +1533,7 @@ function selectClass(id) {
   el("md-right-content").style.display = "block"
   el("right-title").textContent = classEmoji(c) + " " + c.className
   el("right-time").textContent = (CURRENT_DATE ? CURRENT_DATE.replace(/-/g, ".") + " " : "") + (c.timeRange || "")
-  el("right-sub").innerHTML =
-    (c.teacherName ? '<span class="teacher-badge ' + teacherColorClass(c.teacherName) + '">' + esc(c.teacherName) + '</span>' : "") +
-    (c.method ? '<span class="badge blue">' + esc(c.method) + '</span>' : "") +
-    (function () { const r = parseAttendanceRate(c.attendanceRate); return r ? '<span class="rate-badge ' + attendanceRateTone(r.pct) + '">' + esc(r.text) + '</span>' : "" })()
+  renderClassRightSub(c)
   el("right-page-link").href = c.url
   el("right-summary-toggle").style.display = "inline-flex"
   const stat = summarizeStudents(c.students)
@@ -1596,6 +1610,7 @@ function renderStudentsTab(c, body) {
   body.innerHTML = students.map(function (s, i) {
     const cls = statusBadgeClass[s.status] || "gray"
     const canSend = !!s.attendanceId
+    const sentBadge = canSend ? (s.sentByMe ? ' <span class="badge tone-blue">전송완료</span>' : ' <span class="badge tone-gray">미전송</span>') : ""
     const homeworkCls = s.homework ? (homeworkBadgeClass[s.homework.status] || "tone-gray") : ""
     const homeworkBadge = s.homework ? ' <span class="badge ' + homeworkCls + '">과제 ' + s.homework.status + '</span>' : ""
     const evalCls = s.evaluation ? attendanceRateTone(s.evaluation.score) : ""
@@ -1605,12 +1620,12 @@ function renderStudentsTab(c, body) {
       : ' <span class="report-view-link" style="opacity:0.35;cursor:default" title="이 학생의 등록에 토큰이 아직 없어요">📋</span>'
     return '<div class="student-row"><span class="stu-name">' + esc(s.name) +
       (s.url ? ' <a class="stu-view" href="' + s.url + '" target="_blank" title="노션에서 보기">' + NOTION_ICON_SVG + '</a>' : "") + reportLink + ' ' +
-      (s.status ? '<span class="badge ' + cls + '">' + s.status + '</span>' : "") + homeworkBadge + evalBadge + '</span>' +
-      '<button class="send-btn" id="stu-send-' + i + '" onclick="sendStudentReport(' + i + ')" ' + (canSend ? "" : "disabled") + '>📩 전송</button></div>'
+      (s.status ? '<span class="badge ' + cls + '">' + s.status + '</span>' : "") + homeworkBadge + evalBadge + sentBadge + '</span>' +
+      '<button class="send-btn" id="stu-send-' + i + '" onclick="sendStudentReport(' + i + ')" ' + (canSend ? "" : "disabled") + '>' + (s.sentByMe ? '📩 재전송' : '📩 전송') + '</button></div>'
   }).join("")
 }
 
-// 과제/평가 탭은 수업(학원) DB의 "과제 안내"/"평가 결과" 수식 값을 그대로 ���여줍니다.
+// 과제/평가 탭은 수업(학원) DB의 "과제 안내"/"평가 결과" 수식 값을 그대로 보여줍니다.
 // 이 값은 클래스 목록을 불러올 때 이미 함께 계산되어 있으므로, 탭을 열 때마다
 // 별도로 과제 상세 페이지를 다시 불러올 필요가 없습니다(더 빠르게 표시됨).
 async function fetchClassDetail(classId) {
@@ -1626,8 +1641,8 @@ async function fetchClassDetail(classId) {
   return data
 }
 
-// ���러 후보 필드명 중 값이 있는 첫 번째 필���를 그대로 반환해요.
-// 백엔드 응답 필드명이 바뀌거나 통일되지 않은 경우에도 값을 놓치지 않기 위한 ��어적 처리예요.
+// 여러 후보 필드명 중 값이 있는 첫 번째 필드를 그대로 반환해요.
+// 백엔드 응답 필드명이 바뀌거나 통일되지 않은 경우에도 값을 놓치지 않기 위한 방어적 처리예요.
 function pickField(obj, keys) {
   if (!obj) return null
   for (let i = 0; i < keys.length; i++) {
@@ -1637,11 +1652,11 @@ function pickField(obj, keys) {
   return null
 }
 
-// 평가 탭은 우선 get-class-detail의 학습기��(평가) 레코드를 조회해서 리포트 페이지처럼 "N점 (정답/전체)" 형태로 보여주고,
+// 평가 탭은 우선 get-class-detail의 학습기록(평가) 레코드를 조회해서 리포트 페이지처럼 "N점 (정답/전체)" 형태로 보여주고,
 // 이 정보가 없으면 기존의 "평가 결과" 요약 텍스트로 대체해요(하위 호환).
 // 과제 탭은 마감일을 반영하기 위해 get-class-detail을 통해 학습기록(과제) 목록을 따로 조회합니다.
 // (조금 느리지만 마감일을 다시 보여줄 수 있습니다.) 결과는 CLASS_DETAIL_CACHE에 캐싱되어 재조회를 최소화합니다.
-// 보고서 페이지와 동일하게, 부가 정보는 제목 아래에 "  �� 라벨: 값" 형태로 한 줄씩 통일해서 보여줘요.
+// 보고서 페이지와 동일하게, 부가 정보는 제목 아래에 "  · 라벨: 값" 형태로 한 줄씩 통일해서 보여줘요.
 function bulletLine(label, value) {
   if (value === null || value === undefined || value === "") return ""
   return '<div class="meta" style="margin-top:4px">' + esc("  • " + label + ": " + value) + '</div>'
@@ -1702,7 +1717,7 @@ async function renderTaskTab(c, body, kind) {
       const records = (data.evaluations && data.evaluations.records) || (data.tests && data.tests.records) || []
       const activities = (data.evaluations && data.evaluations.activities) || []
       // 점수/정답/전체 문항은 반 전체 공통 설명인 records가 아니라, 학생별 인스턴스인 activities에만 있어요.
-      // (레코드���는 title/book/range만 있고 점수 필드 자체가 없어서 예전 코드는 항상 점수가 비어 보였어요.)
+      // (레코드에는 title/book/range만 있고 점수 필드 자체가 없어서 예전 코드는 항상 점수가 비어 보였어요.)
       if (activities.length > 0) {
         const recordById = {}
         records.forEach(function (r) { recordById[r.id] = r })
@@ -1712,7 +1727,7 @@ async function renderTaskTab(c, body, kind) {
           const correct = pickField(a, ["correctCount", "correctQuestions", "correct", "정답문항", "정답 문항"])
           const score = pickField(a, ["score", "점수"])
           const scoreText = (score !== null ? score + "점" : "") + (total ? " (" + (correct !== null ? correct : "?") + "/" + total + ")" : "")
-          return '<div class="record-card"><div class="title"><a href="' + (a.url || rec.url || "#") + '" target="_blank">' + esc(rec.title || "������") + '</a></div>' +
+          return '<div class="record-card"><div class="title"><a href="' + (a.url || rec.url || "#") + '" target="_blank">' + esc(rec.title || "제목 없음") + '</a></div>' +
             '<div class="meta">교재: ' + esc(rec.book || "-") + (rec.range ? " · 범위: " + esc(rec.range) : "") + '</div>' +
             bulletLine("학생", a.studentName) +
             (scoreText ? bulletLine("점수", scoreText) : "") +
@@ -1754,8 +1769,8 @@ async function renderTaskTab(c, body, kind) {
     } else {
       html = records.map(function (r) {
         const due = pickField(r, ["dueDate", "due_iso", "due", "dueAt", "과제마감일", "과제 마감일"]) || dueByRecordId[r.id] || null
-        // r.content는 이미 ���체���인 서식(줄바���, 자체 불릿 등)을 포함하고 있을 수 있어서,
-        // "내용:" 라벨로 감싸면 이중 불릿·줄바꿈 깨짐이 생겨요. 그래서 원본 그대����� 별도 줄에 보여줘요.
+        // r.content는 이미 자체적인 서식(줄바꿈, 자체 불릿 등)을 포함하고 있을 수 있어서,
+        // "내용:" 라벨로 감싸면 이중 불릿·줄바꿈 깨짐이 생겨요. 그래서 원본 그대로 별도 줄에 보여줘요.
         return '<div class="record-card"><div class="title"><a href="' + r.url + '" target="_blank">' + esc(r.title) + '</a></div>' +
           '<div class="meta">교재: ' + esc(r.book) + (r.range ? " · 범위: " + esc(r.range) : "") + '</div>' +
           (r.content ? '<div class="meta" style="margin-top:4px">' + esc(r.content) + '</div>' : "") +
@@ -1871,7 +1886,7 @@ function renderScheduleDetail(s) {
   if (s.relatedText) html += field("관련 대상", esc(s.relatedText))
   if (s.memo) html += field("메모", esc(s.memo).replace(/\n/g, "<br>"))
   if ((s.tags || []).length) html += field("태그", s.tags.map(function (t) { return '<span class="badge gray">' + esc(t) + '</span>' }).join(" "))
-  html += '<div class="schedule-detail-hint" style="margin-top:16px;color:var(--muted);font-size:12px">✏️ 수���은 노션에서 해주세요 (대시보드는 보기 전용이에요)</div>'
+  html += '<div class="schedule-detail-hint" style="margin-top:16px;color:var(--muted);font-size:12px">✏️ 수정은 노션에서 해주세요 (대시보드는 보기 전용이에요)</div>'
   body.innerHTML = html
 }
 
@@ -1887,7 +1902,7 @@ async function callSendDailyReport(payload) {
   return data
 }
 
-// 전송 버튼을 누르면 곰바로 발송하지 않고, HTML에 이미 있던 확인 모달(alimtalk-modal)을 ��저 보여줘요.
+// 전송 버튼을 누르면 곰바로 발송하지 않고, HTML에 이미 있던 확인 모달(alimtalk-modal)을 먼저 보여줘요.
 // 사용자가 "발송"을 누르면 confirmAlimtalkSend()가 실제 발송 로직을 실행해요.
 let ALIMTALK_PENDING = null // { kind: "student", index } | { kind: "bulk", classId }
 
@@ -2022,11 +2037,14 @@ async function doSendStudentReport(i) {
   if (btn) { btn.disabled = true; btn.textContent = "발송중..." }
   try {
     await callSendDailyReport({ registrationId: s.registrationId, attendanceId: s.attendanceId })
+    s.sentByMe = true
     showToast(esc(s.name) + "에게 알림톡을 발송했어요")
+    renderClassRightSub(c)
+    renderRightTabBody()
   } catch (err) {
     showToast("발송 실패: " + err.message)
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "📩 전송" }
+    if (btn) { btn.disabled = false; btn.textContent = s.sentByMe ? "📩 재전송" : "📩 전송" }
   }
 }
 
@@ -2047,12 +2065,15 @@ async function doSendBulkForClass(classId) {
   for (const s of targets) {
     try {
       await callSendDailyReport({ registrationId: s.registrationId, attendanceId: s.attendanceId })
+      s.sentByMe = true
       success++
     } catch (_e) {
       fail++
     }
   }
   showToast(success + "건 발송 완료" + (fail ? ", " + fail + "건 실패" : ""))
+  renderClassRightSub(c)
+  renderRightTabBody()
 }
 
 // ---------------- 초기 로딩 ----------------
