@@ -357,14 +357,12 @@
 .class-badge.tb-purple { border-color:#cfc0e0; color:#6b4d99; }
 .class-badge.tb-pink { border-color:#e8bfd8; color:#a3467c; }
 .class-badge.tb-red { border-color:#f0bcbc; color:#af4141; }
-.sched-msg-section { margin-top:18px; }
-.sched-msg-body .student-select-all { margin-bottom:6px; }
-.sched-msg-body .bulk-send-btn { margin-top:10px; width:100%; }
+#right-summary-body .student-select-all { margin-bottom:6px; }
+#right-summary-body .student-row { border-bottom:1px solid var(--border); padding:6px 0; }
+#right-summary-body .student-row:last-child { border-bottom:none; }
 .sched-msg-filters { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
 .sched-msg-filters select { flex:1 1 45%; font-size:12px; padding:5px 6px; border:1px solid var(--border); border-radius:6px; background:#fff; color:var(--text); }
 .sched-msg-count { font-size:12px; color:var(--muted); margin-bottom:6px; }
-.sched-msg-body .student-row { border-bottom:1px solid var(--border); }
-.sched-msg-body .student-row:last-child { border-bottom:none; }
 .schedule-list-area { display:flex; flex-direction:column; gap:0; }
 .sched-date-group { display:flex; flex-direction:column; }
 .sched-date-label { font-size:12px; font-weight:700; color:var(--muted); padding:14px 12px 4px; }
@@ -867,6 +865,8 @@ let STUDENT_SORT_NAME_ASC = false
 let SELECTED_STUDENT_IDS = {}
 let EXPANDED_CLASS_ID = null
 let RIGHT_TAB = "students"
+let RIGHT_SUMMARY_CLOSED_LABEL = "더보기" // 더보기/접기 버튼의 접힌 상태 라벨(탭마다 다르게 설정)
+let RIGHT_SUMMARY_ON_OPEN = null // 더보기를 펼칠 때 실행할 콜백(예: 일정 탭 학생 목록 지연 로딩)
 let CLASS_DETAIL_CACHE = {}
 let CLASS_LIST_CACHE = {} // 날짜별 수업 목록 캐시 (key: dateStr)
 let SESSION_STUDENTS_CACHE = {} // 개별로 미리 불러온 수업별 학생 정보 캐시 (key: sessionId, 날짜와 무관하게 유지되어 재방문 시 다시 불러오지 않아요)
@@ -924,10 +924,10 @@ function setDomain(domain) {
   el("schedule-list-area").style.display = domain === "schedule" ? "flex" : "none"
   el("report-list-area").style.display = domain === "report" ? "flex" : "none"
   el("tuition-list-area").style.display = domain === "tuition" ? "flex" : "none"
-  el("bulk-send-tab-btn").style.display = domain === "schedule" ? "none" : "inline-flex"
+  el("bulk-send-tab-btn").style.display = "inline-flex"
   el("right-tab-body").style.display = (domain === "class" || domain === "schedule") ? "block" : "none"
   if (domain !== "class" && domain !== "schedule") el("right-tab-body").innerHTML = ""
-  el("right-summary-toggle").style.display = domain === "schedule" ? "none" : "inline-flex"
+  el("right-summary-toggle").style.display = "inline-flex"
   el("report-tuition-detail").style.display = (domain === "report" || domain === "tuition") ? "block" : "none"
   el("cal-panel-report-toggle").style.display = domain === "report" ? "flex" : "none"
   el("bulk-send-tab-btn").disabled = true
@@ -1102,7 +1102,7 @@ async function loadCalPanelDots() {
 
 function weekStartOf(dateStr) {
   const d = new Date(dateStr + "T00:00:00+09:00")
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7)) // 월요일을 주 시작으로 통일
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7)) // 월요일을 ��� 시작으로 통일
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(d)
 }
 function weekEndOf(weekStartStr) {
@@ -1327,7 +1327,9 @@ function renderReportClassDetail() {
   el("right-summary-toggle").style.display = "inline-flex"
   el("right-summary-body").classList.remove("show")
   el("right-summary-toggle").classList.remove("open")
-  el("right-summary-toggle-label").textContent = "더보기"
+  RIGHT_SUMMARY_CLOSED_LABEL = "더보기"
+  RIGHT_SUMMARY_ON_OPEN = null
+  el("right-summary-toggle-label").textContent = RIGHT_SUMMARY_CLOSED_LABEL
   // 더보기를 펼치면 나오는 상세 요약카드는 수업 탭과 같은 info-card 패턴, 아래 목록은 수업 탭과 같은 .student-row 한줄 패턴으로 통일해요 (DESIGN 문서 "학생 목록 표준 디자인" 규칙 참고).
   el("right-summary-body").innerHTML = '<div class="info-card"><h3>✅ 발송 현황</h3>' +
     '<div style="display:flex;gap:18px;flex-wrap:wrap">' +
@@ -1463,7 +1465,9 @@ function renderTuitionClassDetail() {
   el("right-summary-toggle").style.display = "inline-flex"
   el("right-summary-body").classList.remove("show")
   el("right-summary-toggle").classList.remove("open")
-  el("right-summary-toggle-label").textContent = "더보기"
+  RIGHT_SUMMARY_CLOSED_LABEL = "더보기"
+  RIGHT_SUMMARY_ON_OPEN = null
+  el("right-summary-toggle-label").textContent = RIGHT_SUMMARY_CLOSED_LABEL
   // 더보기를 펼치면 나오는 상세 요약카드는 수업 탭과 같은 info-card 패턴, 아래 목록은 수업 탭과 같은 .student-row 한줄 패턴으로 통일해요 (DESIGN 문서 "학생 목록 표준 디자인" 규칙 참고).
   el("right-summary-body").innerHTML = '<div class="info-card"><h3>💰 수강료 현황</h3>' +
     '<div style="display:flex;gap:18px;flex-wrap:wrap">' +
@@ -1778,7 +1782,10 @@ function selectClass(id) {
   el("bulk-send-tab-btn").disabled = false
   el("right-summary-body").classList.remove("show")
   el("right-summary-toggle").classList.remove("open")
-  el("right-summary-toggle-label").textContent = "더보기"
+  RIGHT_SUMMARY_CLOSED_LABEL = "더보기"
+  RIGHT_SUMMARY_ON_OPEN = null
+  el("right-summary-toggle-label").textContent = RIGHT_SUMMARY_CLOSED_LABEL
+  el("bulk-send-tab-btn").textContent = "📩 보고서 일괄 전송"
   setRightTab(RIGHT_TAB, true)
   openMobileDetail()
 }
@@ -1790,7 +1797,8 @@ function toggleRightSummary() {
   const open = !body.classList.contains("show")
   body.classList.toggle("show", open)
   btn.classList.toggle("open", open)
-  label.textContent = open ? "접기" : "더보기"
+  label.textContent = open ? "접기" : RIGHT_SUMMARY_CLOSED_LABEL
+  if (open && typeof RIGHT_SUMMARY_ON_OPEN === "function") RIGHT_SUMMARY_ON_OPEN()
 }
 
 function setRightTab(tab, force) {
@@ -2248,12 +2256,21 @@ function selectSchedule(id) {
   el("right-sub").textContent = [s.category, s.status].filter(Boolean).join(" · ")
   el("right-page-link").style.display = ""
   el("right-page-link").href = s.url
-  el("right-summary-toggle").style.display = "none"
+  el("right-summary-toggle").style.display = "inline-flex"
   el("right-summary-body").classList.remove("show")
-  el("bulk-send-tab-btn").style.display = "none"
+  el("right-summary-toggle").classList.remove("open")
+  RIGHT_SUMMARY_CLOSED_LABEL = "📩 안내 메시지 보내기"
+  el("right-summary-toggle-label").textContent = RIGHT_SUMMARY_CLOSED_LABEL
+  el("right-summary-body").innerHTML = ""
+  el("bulk-send-tab-btn").style.display = "inline-flex"
+  el("bulk-send-tab-btn").textContent = "📩 선택한 학생에게 안내 발송"
   el("bulk-send-tab-btn").disabled = true
   SCHEDULE_MSG_SELECTED = {}
   SCHEDULE_MSG_FILTERS = { grade: "", school: "", className: "", status: "" }
+  RIGHT_SUMMARY_ON_OPEN = function () {
+    if (STUDENTS_LOAD_STATE === "loaded") renderScheduleMsgBody()
+    else ensureAllStudentsLoaded()
+  }
   renderScheduleDetail(s)
   openMobileDetail()
 }
@@ -2269,13 +2286,13 @@ function renderScheduleDetail(s) {
   html += field("진행상태", s.status ? '<span class="badge gray">' + esc(s.status) + '</span>' : "-")
   if (s.relatedText) html += field("관련 대상", esc(s.relatedText))
   if (s.memo) html += field("메모", esc(s.memo).replace(/\n/g, "<br>"))
-  if ((s.tags || []).length) html += field("태그", s.tags.map(function (t) { return '<span class="badge gray">' + esc(t) + '</span>' }).join(" "))
-  html += renderScheduleMessageSectionHtml(s)
-  html += '<div class="schedule-detail-hint" style="margin-top:16px;color:var(--muted);font-size:12px">✏️ 수정은 노션에서 해주세요 (대시보드는 보기 전용이에요)</div>'
+  // 구분·진행상태와 겹치는 태그(예: "휴원", "시작 전")는 한 번만 보이도록 걸러내요.
+  const extraTags = (s.tags || []).filter(function (t) { return t !== s.category && t !== s.status })
+  if (extraTags.length) html += field("태그", extraTags.map(function (t) { return '<span class="badge gray">' + esc(t) + '</span>' }).join(" "))
   body.innerHTML = html
 }
 
-// ---------------- 일정 안내 메시지: 학생(학원) DB 전체 명단 + 필터 + 선택 발송 (발송 백엔드는 추후 연동) ----------------
+// ---------------- 일정 안내 메시지: 학생(학원) DB 전체 명단 + 필터 + 선택 발송 (발송 백엔드��� 추후 연동) ----------------
 // 수업 탭의 학생 선택 UI(student-row, student-select-all, bulk-send-btn)와 동일한 디자인을 재사용해요.
 let SCHEDULE_MSG_SELECTED = {} // key: 학생 id
 let ALL_STUDENTS_CACHE = null // 학생(학원) DB 전체 목록 캐시 (여러 일정에서 공유, 한번만 불러와요)
@@ -2283,26 +2300,8 @@ let STUDENTS_LOAD_STATE = "idle" // idle | loading | loaded | error
 let STUDENTS_LOAD_ERROR = ""
 let SCHEDULE_MSG_FILTERS = { grade: "", school: "", className: "", status: "" }
 
-function renderScheduleMessageSectionHtml(s) {
-  return '<div class="sched-msg-section">' +
-    '<button class="right-summary-toggle" id="sched-msg-toggle" onclick="toggleScheduleMessageSection()">' +
-      '<span id="sched-msg-toggle-label">📩 안내 메시지 보내기</span><span class="right-summary-chevron">▾</span>' +
-    '</button>' +
-    '<div class="right-summary-body sched-msg-body" id="sched-msg-body"></div>' +
-  '</div>'
-}
-
-function toggleScheduleMessageSection() {
-  const body = el("sched-msg-body")
-  const btn = el("sched-msg-toggle")
-  if (!body || !btn) return
-  const isOpen = body.classList.toggle("show")
-  btn.classList.toggle("open", isOpen)
-  if (isOpen) {
-    if (STUDENTS_LOAD_STATE === "loaded") renderScheduleMsgBody()
-    else ensureAllStudentsLoaded()
-  }
-}
+// 안내 메시지 UI는 수업 탭과 동일한 상단 공통 "더보기" 토글(right-summary-toggle/right-summary-body)과
+// 일괄 전송 버튼(bulk-send-tab-btn)을 그대로 재사용해요(배선은 selectSchedule 참고).
 
 // 학생(학원) DB 전체 목록을 한번 불러와서 캐시해요. 기대 응답 형태:
 // { students: [{ id, name, grade, school, classNames: ["반 이름", ...], status: "🔵수강중", phone, parentPhone }, ...] }
@@ -2359,14 +2358,16 @@ function setScheduleMsgFilter(key, value) {
 
 // 필터 + 학생 체크박스 + 발송버튼을 통통 다시 그려요. SCHEDULE_MSG_SELECTED는 id 기준으로 유지되니까 필터를 바꿔도 선택이 풀리지 않아요.
 function renderScheduleMsgBody() {
-  const bodyEl = el("sched-msg-body")
+  const bodyEl = el("right-summary-body")
   if (!bodyEl) return
   if (STUDENTS_LOAD_STATE === "loading") {
     bodyEl.innerHTML = '<div class="loading">학생 목록 불러오는 중...</div>'
+    el("bulk-send-tab-btn").disabled = true
     return
   }
   if (STUDENTS_LOAD_STATE === "error") {
     bodyEl.innerHTML = '<div class="empty">불러오기 실패: ' + esc(STUDENTS_LOAD_ERROR) + '<br><button class="retry-btn" onclick="ensureAllStudentsLoaded()">다시 시도</button></div>'
+    el("bulk-send-tab-btn").disabled = true
     return
   }
   const grades = scheduleMsgUniqueValues(function (s) { return s.grade })
@@ -2394,8 +2395,8 @@ function renderScheduleMsgBody() {
     '</div>' +
     '<div class="sched-msg-count">' + list.length + '명 · 선택 ' + selectedCount + '명</div>' +
     '<label class="student-select-all"><input type="checkbox" ' + (allSelected ? "checked" : "") + ' onchange="toggleScheduleMsgSelectAll(this.checked)" ' + (eligibleIds.length ? "" : "disabled") + '> 이 목록 전체 선택</label>' +
-    '<div id="sched-msg-student-rows">' + rowsHtml + '</div>' +
-    '<button class="bulk-send-btn" id="sched-msg-send-btn" ' + (selectedCount ? "" : "disabled") + ' onclick="handleScheduleMessageSend()">📩 선택한 학생에게 안내 발송</button>'
+    '<div id="sched-msg-student-rows">' + rowsHtml + '</div>'
+  el("bulk-send-tab-btn").disabled = selectedCount === 0
 }
 
 function toggleScheduleMsgStudent(id, checked) {
@@ -2472,6 +2473,8 @@ function handleBulkSendClick() {
     sendBulkReportsForClass()
   } else if (DOMAIN === "tuition") {
     sendBulkTuitionsForClass()
+  } else if (DOMAIN === "schedule") {
+    handleScheduleMessageSend()
   }
 }
 
