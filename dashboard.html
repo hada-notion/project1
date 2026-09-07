@@ -417,6 +417,14 @@
 .search-row { display:flex; }
 .search-box { flex:1; border:1px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13px; font-family:inherit; background:#fff; }
 .search-box:focus { outline:none; border-color:var(--accent); }
+.student-list-controls { display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
+.student-select-all { display:flex; align-items:center; gap:4px; font-size:12px; color:var(--muted); cursor:pointer; white-space:nowrap; }
+.student-select-all input { width:14px; height:14px; cursor:pointer; }
+.student-sort-btn { border:1px solid var(--border); background:#fff; border-radius:8px; padding:5px 10px; font-size:12px; font-family:inherit; cursor:pointer; color:var(--muted); white-space:nowrap; }
+.student-sort-btn.active { color:var(--accent); border-color:var(--accent); }
+.student-search-box { flex:1; min-width:100px; border:1px solid var(--border); border-radius:8px; padding:6px 10px; font-size:12px; font-family:inherit; background:#fff; }
+.student-search-box:focus { outline:none; border-color:var(--accent); }
+.stu-checkbox { width:15px; height:15px; cursor:pointer; margin-right:2px; flex-shrink:0; }
 .teacher-badge { font-size:11px; padding:2px 7px; border-radius:999px; white-space:nowrap; }
 .teacher-badge.tb-gray { background:#f1f1ef; color:#5a5a57; }
 .teacher-badge.tb-brown { background:#efe4dd; color:#8c5b3f; }
@@ -810,6 +818,9 @@ let SEARCH_TERM = ""
 let CURRENT_DATE = kstToday()
 let CLASSES = []
 let SELECTED_CLASS_ID = null
+let STUDENT_SEARCH_TERM = ""
+let STUDENT_SORT_NAME_ASC = false
+let SELECTED_STUDENT_IDS = {}
 let EXPANDED_CLASS_ID = null
 let RIGHT_TAB = "students"
 let CLASS_DETAIL_CACHE = {}
@@ -1508,13 +1519,14 @@ function onClassClick(id) {
 
 function findClass(id) { return CLASSES.find(function (c) { return c.id === id }) }
 
-// 수업 탭 헤더(교사/수업방식/출석률 배지)에 이어, 수업 로딩톡 발송 현황(전송완료/미전송)을 같은 자리에 요약해요.
 function classSendSummaryBadge(c) {
   const students = c.students || []
   const eligible = students.filter(function (s) { return s.attendanceId })
   if (!eligible.length) return ""
   const sentCount = eligible.filter(function (s) { return s.sentByMe }).length
-  return ' <span class="badge tone-blue">전송완료 ' + sentCount + '명</span> <span class="badge tone-gray">미전송 ' + (eligible.length - sentCount) + '명</span>'
+  const pct = Math.round((sentCount / eligible.length) * 100)
+  const tone = pct >= 100 ? "tone-blue" : pct <= 0 ? "tone-gray" : "tone-orange"
+  return ' <span class="badge ' + tone + '">발송 ' + sentCount + '/' + eligible.length + '명</span>'
 }
 
 function renderClassRightSub(c) {
@@ -1526,6 +1538,7 @@ function renderClassRightSub(c) {
 }
 
 function selectClass(id) {
+  if (SELECTED_CLASS_ID !== id) { STUDENT_SEARCH_TERM = ""; STUDENT_SORT_NAME_ASC = false; SELECTED_STUDENT_IDS = {} }
   SELECTED_CLASS_ID = id
   const c = findClass(id)
   if (!c) return
@@ -1605,24 +1618,69 @@ function summarizeStudents(students) {
 }
 
 function renderStudentsTab(c, body) {
-  const students = c.students || []
-  if (students.length === 0) { body.innerHTML = '<div class="empty">출석 기록이 없어요</div>'; return }
-  body.innerHTML = students.map(function (s, i) {
-    const cls = statusBadgeClass[s.status] || "gray"
-    const canSend = !!s.attendanceId
-    const sentBadge = canSend ? (s.sentByMe ? ' <span class="badge tone-blue">전송완료</span>' : ' <span class="badge tone-gray">미전송</span>') : ""
-    const homeworkCls = s.homework ? (homeworkBadgeClass[s.homework.status] || "tone-gray") : ""
-    const homeworkBadge = s.homework ? ' <span class="badge ' + homeworkCls + '">과제 ' + s.homework.status + '</span>' : ""
-    const evalCls = s.evaluation ? attendanceRateTone(s.evaluation.score) : ""
-    const evalBadge = s.evaluation ? ' <span class="badge ' + evalCls + '">' + s.evaluation.score + '점</span>' : ""
-    const reportLink = s.reportUrl
-      ? ' <a class="report-view-link" href="' + s.reportUrl + '" target="_blank" title="학부모 보고서 페이지 보기">📋</a>'
-      : ' <span class="report-view-link" style="opacity:0.35;cursor:default" title="이 학생의 등록에 토큰이 아직 없어요">📋</span>'
-    return '<div class="student-row"><span class="stu-name">' + esc(s.name) +
-      (s.url ? ' <a class="stu-view" href="' + s.url + '" target="_blank" title="노션에서 보기">' + NOTION_ICON_SVG + '</a>' : "") + reportLink + ' ' +
-      (s.status ? '<span class="badge ' + cls + '">' + s.status + '</span>' : "") + homeworkBadge + evalBadge + sentBadge + '</span>' +
-      '<button class="send-btn" id="stu-send-' + i + '" onclick="sendStudentReport(' + i + ')" ' + (canSend ? "" : "disabled") + '>' + (s.sentByMe ? '📩 재전송' : '📩 전송') + '</button></div>'
-  }).join("")
+  const allStudents = c.students || []
+  if (allStudents.length === 0) { body.innerHTML = '<div class="empty">출석 기록이 없어요</div>'; return }
+  const term = STUDENT_SEARCH_TERM.trim().toLowerCase()
+  let students = term ? allStudents.filter(function (s) { return String(s.name || "").toLowerCase().indexOf(term) >= 0 }) : allStudents.slice()
+  if (STUDENT_SORT_NAME_ASC) students = students.slice().sort(function (a, b) { return String(a.name || "").localeCompare(String(b.name || ""), "ko") })
+  const eligibleIds = allStudents.filter(function (s) { return s.attendanceId }).map(function (s) { return s.attendanceId })
+  const selectedCount = eligibleIds.filter(function (id) { return SELECTED_STUDENT_IDS[id] }).length
+  const allSelected = eligibleIds.length > 0 && selectedCount === eligibleIds.length
+  const controlsHtml = '<div class="student-list-controls">' +
+      '<label class="student-select-all"><input type="checkbox" ' + (allSelected ? "checked" : "") + ' onchange="toggleSelectAllStudents(this.checked)" ' + (eligibleIds.length ? "" : "disabled") + '> 전체 선택</label>' +
+      '<button class="student-sort-btn' + (STUDENT_SORT_NAME_ASC ? " active" : "") + '" onclick="toggleStudentNameSort()">이름 ' + (STUDENT_SORT_NAME_ASC ? "▲" : "↕") + '</button>' +
+      '<input type="text" class="student-search-box" placeholder="🔍 이름 검색" value="' + esc(STUDENT_SEARCH_TERM) + '" oninput="onStudentSearchInput(this.value)">' +
+    '</div>'
+  const rowsHtml = students.length === 0
+    ? '<div class="empty">검색 결과가 없어요</div>'
+    : students.map(function (s) {
+        const i = allStudents.indexOf(s)
+        const cls = statusBadgeClass[s.status] || "gray"
+        const canSend = !!s.attendanceId
+        const sentBadge = canSend ? (s.sentByMe ? ' <span class="badge tone-blue">전송완료</span>' : ' <span class="badge tone-gray">미전송</span>') : ""
+        const homeworkCls = s.homework ? (homeworkBadgeClass[s.homework.status] || "tone-gray") : ""
+        const homeworkBadge = s.homework ? ' <span class="badge ' + homeworkCls + '">과제 ' + s.homework.status + '</span>' : ""
+        const evalCls = s.evaluation ? attendanceRateTone(s.evaluation.score) : ""
+        const evalBadge = s.evaluation ? ' <span class="badge ' + evalCls + '">' + s.evaluation.score + '점</span>' : ""
+        const reportLink = s.reportUrl
+          ? ' <a class="report-view-link" href="' + s.reportUrl + '" target="_blank" title="학부모 보고서 페이지 보기">📋</a>'
+          : ' <span class="report-view-link" style="opacity:0.35;cursor:default" title="이 학생의 등록에 토큰이 아직 없어요">📋</span>'
+        const checkboxHtml = canSend
+          ? '<input type="checkbox" class="stu-checkbox" ' + (SELECTED_STUDENT_IDS[s.attendanceId] ? "checked" : "") + ' onchange="toggleStudentSelected(' + attrSafe(s.attendanceId) + ', this.checked)">'
+          : '<input type="checkbox" class="stu-checkbox" disabled>'
+        return '<div class="student-row"><span class="stu-name">' + checkboxHtml + ' ' + esc(s.name) +
+          (s.url ? ' <a class="stu-view" href="' + s.url + '" target="_blank" title="노션에서 보기">' + NOTION_ICON_SVG + '</a>' : "") + reportLink + ' ' +
+          (s.status ? '<span class="badge ' + cls + '">' + s.status + '</span>' : "") + homeworkBadge + evalBadge + sentBadge + '</span>' +
+          '<button class="send-btn" id="stu-send-' + i + '" onclick="sendStudentReport(' + i + ')" ' + (canSend ? "" : "disabled") + '>📩 ' + (s.sentByMe ? "재전송" : "전송") + '</button></div>'
+      }).join("")
+  body.innerHTML = controlsHtml + rowsHtml
+}
+
+function onStudentSearchInput(term) {
+  STUDENT_SEARCH_TERM = term || ""
+  const c = findClass(SELECTED_CLASS_ID)
+  if (c) renderStudentsTab(c, el("right-tab-body"))
+}
+
+function toggleStudentNameSort() {
+  STUDENT_SORT_NAME_ASC = !STUDENT_SORT_NAME_ASC
+  const c = findClass(SELECTED_CLASS_ID)
+  if (c) renderStudentsTab(c, el("right-tab-body"))
+}
+
+function toggleStudentSelected(attendanceId, checked) {
+  if (checked) SELECTED_STUDENT_IDS[attendanceId] = true
+  else delete SELECTED_STUDENT_IDS[attendanceId]
+  const c = findClass(SELECTED_CLASS_ID)
+  if (c) renderStudentsTab(c, el("right-tab-body"))
+}
+
+function toggleSelectAllStudents(checked) {
+  const c = findClass(SELECTED_CLASS_ID)
+  if (!c) return
+  const eligible = (c.students || []).filter(function (s) { return s.attendanceId })
+  eligible.forEach(function (s) { if (checked) SELECTED_STUDENT_IDS[s.attendanceId] = true; else delete SELECTED_STUDENT_IDS[s.attendanceId] })
+  renderStudentsTab(c, el("right-tab-body"))
 }
 
 // 과제/평가 탭은 수업(학원) DB의 "과제 안내"/"평가 결과" 수식 값을 그대로 보여줍니다.
@@ -2038,42 +2096,42 @@ async function doSendStudentReport(i) {
   try {
     await callSendDailyReport({ registrationId: s.registrationId, attendanceId: s.attendanceId })
     s.sentByMe = true
+    delete SELECTED_STUDENT_IDS[s.attendanceId]
     showToast(esc(s.name) + "에게 알림톡을 발송했어요")
     renderClassRightSub(c)
-    renderRightTabBody()
+    renderStudentsTab(c, el("right-tab-body"))
   } catch (err) {
     showToast("발송 실패: " + err.message)
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = s.sentByMe ? "📩 재전송" : "📩 전송" }
+    if (btn) { btn.disabled = false }
   }
 }
 
 function sendBulkForClass(classId) {
   const c = findClass(classId)
   if (!c) return
-  const targets = (c.students || []).filter(function (s) { return s.attendanceId })
-  if (targets.length === 0) { showToast("전송할 학생이 없어요"); return }
+  const targets = (c.students || []).filter(function (s) { return s.attendanceId && SELECTED_STUDENT_IDS[s.attendanceId] })
+  if (targets.length === 0) { showToast("선택된 학생이 없어요"); return }
   openAlimtalkModal("bulk", { classId: classId, count: targets.length })
 }
 
 async function doSendBulkForClass(classId) {
   const c = findClass(classId)
   if (!c) return
-  const targets = (c.students || []).filter(function (s) { return s.attendanceId })
-  if (targets.length === 0) { showToast("전송할 학생이 없어요"); return }
+  const targets = (c.students || []).filter(function (s) { return s.attendanceId && SELECTED_STUDENT_IDS[s.attendanceId] })
+  if (targets.length === 0) { showToast("선택된 학생이 없어요"); return }
   let success = 0, fail = 0
   for (const s of targets) {
     try {
       await callSendDailyReport({ registrationId: s.registrationId, attendanceId: s.attendanceId })
       s.sentByMe = true
+      delete SELECTED_STUDENT_IDS[s.attendanceId]
       success++
     } catch (_e) {
       fail++
     }
   }
   showToast(success + "건 발송 완료" + (fail ? ", " + fail + "건 실패" : ""))
-  renderClassRightSub(c)
-  renderRightTabBody()
 }
 
 // ---------------- 초기 로딩 ----------------
