@@ -537,7 +537,7 @@
 
 <div id="app-screen" style="display:none">
 <div class="topbar">
-  <div class="brand">하다 학원���리</div>
+  <div class="brand">하다 학원�����리</div>
   <button class="nav-btn active" data-tab="dashboard" onclick="showTab('dashboard')">📊 <span class="btn-label">대시보드</span></button>
   <button class="nav-btn" data-tab="admin" onclick="showTab('admin')">🗂️ <span class="btn-label">리포트 관리</span></button>
   <button class="nav-btn" data-tab="kiosk" onclick="showTab('kiosk')">🖊️ <span class="btn-label">키오스크</span></button>
@@ -618,10 +618,7 @@
         <div class="right-summary-body" id="right-summary-body"></div>
         <div class="right-tabs-row" id="right-tabs-row">
           <div class="right-tabs" id="right-tabs">
-            <button class="right-tab active" data-tab="students" onclick="setRightTab('students')">👥 학생</button>
-            <button class="right-tab" data-tab="record" onclick="setRightTab('record')">📖 학습기록</button>
-            <button class="right-tab" data-tab="assignment" onclick="setRightTab('assignment')">📝 과제</button>
-            <button class="right-tab" data-tab="evaluation" onclick="setRightTab('evaluation')">✅ 평가</button>
+            <span class="right-tab active" style="cursor:default">👥 학생 목록</span>
           </div>
           <button class="bulk-send-btn" id="bulk-send-tab-btn" disabled onclick="sendBulkForClass(SELECTED_CLASS_ID)">📩 보고서 일괄 전송</button>
         </div>
@@ -675,7 +672,7 @@ async function submitLogin() {
       },
     })
     if (res.status === 401) {
-      errEl.textContent = "비밀번호가 올바르지 않습니��."
+      errEl.textContent = "비밀번호가 올바����� 않습니��."
       btn.disabled = false
       btn.textContent = "로그인"
       return
@@ -855,7 +852,7 @@ function formatDateLabel(dateStr) {
   return dateStr.replace(/-/g, ".") + " (" + days[d.getDay()] + ")"
 }
 
-// 날짜�� 이동해서 �����로 ��러오는 동안, 이전 날짜의 상세정보가 남아있어 착각하지 않도록 오른쪽 패널을 비워요.
+// 날짜�� 이동해��� �����로 ��러오는 동안, 이전 날짜의 상세정보가 남아있어 착각하지 않도록 오른쪽 패널을 비워요.
 function clearRightPanel() {
   el("md-right-empty").style.display = "block"
   el("md-right-content").style.display = "none"
@@ -957,7 +954,7 @@ async function loadCalendarPanel() {
   loadCalPanelDots()
 }
 
-// 상단 날짜 영역: 수업/��정은 하루 날짜를, 보고서(주간/월간)와 수강료는 해당 기간을 보여줘요.
+// 상단 날짜 영역: 수��/��정은 하루 날짜를, 보고서(주간/월간)와 수강료는 해당 기간을 보여줘요.
 function formatWeekRangeLabel(startStr, endStr) {
   const days = ["일", "월", "화", "수", "목", "금", "토"]
   const sd = new Date(startStr + "T00:00:00+09:00")
@@ -1075,7 +1072,7 @@ function onSearchInput(term) {
   renderCenterList()
 }
 
-// ---------------- 날짜 이동(하루씨) ----------------
+// ---------------- 날짜 ��동(하루씨) ----------------
 function shiftDate(delta) {
   const d = new Date(CURRENT_DATE + "T00:00:00+09:00")
   d.setDate(d.getDate() + delta)
@@ -1458,6 +1455,7 @@ function attendanceRateTone(pct) {
   return "tone-red"
 }
 
+// 가운데 목록은 여러 수업을 한눈에 봐서 선택만 하는 용도다. 상세 내용은 오른쪽 패넬이 다루는다.
 function renderClassList() {
   const listEl = el("class-list-area")
   const list = filteredClasses()
@@ -1466,7 +1464,6 @@ function renderClassList() {
     return
   }
   listEl.innerHTML = list.map(function (c) {
-    const expanded = EXPANDED_CLASS_ID === c.id
     const selected = SELECTED_CLASS_ID === c.id
     const rate = parseAttendanceRate(c.attendanceRate)
     return '<div class="class-item' + (selected ? " selected" : "") + '" data-id="' + c.id + '">' +
@@ -1477,13 +1474,6 @@ function renderClassList() {
           (c.method ? '<span class="badge blue">' + esc(c.method) + '</span>' : "") +
           (rate ? '<span class="rate-badge ' + attendanceRateTone(rate.pct) + '">' + esc(rate.text) + '</span>' : "") +
         '</div>' +
-      '</div>' +
-      '<div class="class-item-body' + (expanded ? " show" : "") + '">' +
-        '<div class="row"><b>출석현황</b>' + esc(c.attendanceStatus || "-") + '</div>' +
-        '<div class="row"><b>학습 내용</b>' + esc(c.studySummary || "-") + '</div>' +
-        '<div class="row"><b>��제 안내</b>' + esc(c.assignmentSummary || "-") + '</div>' +
-        '<div class="row"><b>평가 결과</b>' + esc(c.evaluationSummary || "-") + '</div>' +
-        '<button class="bulk-send-btn" onclick="sendBulkForClass(' + attrSafe(c.id) + ')">📩 보고서 일괄 전송</button>' +
       '</div>' +
     '</div>'
   }).join("")
@@ -1524,9 +1514,10 @@ function selectClass(id) {
         '<div class="stat-row stat-text red">미완료 <b>' + stat.none + '</b>명</div>' +
       '</div>' +
     '</div>' +
-    '<div class="info-card"><h3>📖 학습 내용</h3><div class="info-content' + (c.studySummary ? '' : ' empty') + '">' + esc(c.studySummary || "기록 없음") + '</div></div>' +
-    '<div class="info-card"><h3>📝 과제 안내</h3><div class="info-content' + (c.assignmentSummary ? '' : ' empty') + '">' + esc(c.assignmentSummary || "기록 없음") + '</div></div>' +
-    '<div class="info-card"><h3>📄 ��가 결과</h3><div class="info-content' + (c.evaluationSummary ? '' : ' empty') + '">' + esc(c.evaluationSummary || "기록 없음") + '</div></div>'
+    '<div class="info-card"><h3>📖 학습 내용</h3>' + formatSummaryBlock(c.studySummary) + '</div>' +
+    '<div class="info-card"><h3>📝 과제 안내</h3><div class="info-content" id="summary-assignment-body">불러오는 중...</div></div>' +
+    '<div class="info-card"><h3>📄 평가 결과</h3><div class="info-content" id="summary-evaluation-body">불러오는 중...</div></div>'
+  loadSummaryRecordDetails(c)
   el("bulk-send-tab-btn").disabled = false
   el("right-summary-body").classList.remove("show")
   el("right-summary-toggle").classList.remove("open")
@@ -1556,13 +1547,8 @@ function renderRightTabBody() {
   const c = findClass(SELECTED_CLASS_ID)
   const body = el("right-tab-body")
   if (!c) { body.innerHTML = ""; return }
-  if (RIGHT_TAB === "students") {
-    renderStudentsTab(c, body)
-  } else if (RIGHT_TAB === "record") {
-    body.innerHTML = '<div class="record-card"><div class="title">📖 학습 내용</div><div class="meta">' + esc(c.studySummary || "등록된 내용이 없어요") + '</div></div>'
-  } else if (RIGHT_TAB === "assignment" || RIGHT_TAB === "evaluation") {
-    renderTaskTab(c, body, RIGHT_TAB)
-  }
+  // 학습기록/과제/평가 탭은 "더보기" 요약에 통합된다. 오른쪽 리스트에는 학생 목록만 남습니다.
+  renderStudentsTab(c, body)
 }
 
 // 학생 목록의 출결/과제 상태를 집계해서 출석 현황·과제 현황 두 박스에 표시할 인원수를 계산해요.
@@ -1636,6 +1622,53 @@ function pickField(obj, keys) {
 function bulletLine(label, value) {
   if (value === null || value === undefined || value === "") return ""
   return '<div class="meta" style="margin-top:4px">' + esc("  • " + label + ": " + value) + '</div>'
+}
+
+// 학습 내용 요약(수식 텍스트)의 첫 줄은 제목처럼, 나머지 줄은 학습기록 카드와 같은
+// NBSP 불릿("  • ")으로 보여줘서 리포트 페이지(log-row)와 톤을 맞춰요.
+function formatSummaryBlock(text) {
+  const lines2 = String(text || "").split(/\n+/).map(function (s) { return s.trim() }).filter(Boolean)
+  if (lines2.length === 0) return '<div class="info-content empty">기록 없음</div>'
+  const title = lines2[0]
+  const rest = lines2.slice(1)
+  return '<div class="info-content"><div style="font-weight:600;color:var(--text);margin-bottom:4px">' + esc(title) + '</div>' +
+    rest.map(function (l) { return '<div style="margin-top:2px">' + esc("    • " + l) + '</div>' }).join("") +
+  '</div>'
+}
+
+// 과제 안내/평가 결과 카드는 기존 과제·평가 탭에서 쓰던 구조화 레코드(제목 링크 + 교재·범위 + 마감/내용)를
+// 그대로 재사용해요. 탭이 없어진 대신 더보기 안에서 바로 이 정보를 보여줍니다.
+async function loadSummaryRecordDetails(c) {
+  const assignEl = el("summary-assignment-body")
+  const evalEl = el("summary-evaluation-body")
+  try {
+    const data = await fetchClassDetail(c.id)
+    const aRecords = (data.assignments && data.assignments.records) || []
+    const aActivities = (data.assignments && data.assignments.activities) || []
+    const dueByRecordId = {}
+    aActivities.forEach(function (a) { if (a.recordId && a.dueDate && !dueByRecordId[a.recordId]) dueByRecordId[a.recordId] = a.dueDate })
+    if (assignEl) {
+      assignEl.innerHTML = aRecords.length ? aRecords.map(function (r) {
+        const due = pickField(r, ["dueDate", "due_iso", "due", "dueAt", "과제마감일", "과제 마감일"]) || dueByRecordId[r.id] || null
+        return '<div class="record-card"><div class="title"><a href="' + r.url + '" target="_blank">' + esc(r.title || "과제") + '</a></div>' +
+          '<div class="meta">교재: ' + esc(r.book || "-") + (r.range ? " · 범위: " + esc(r.range) : "") + '</div>' +
+          (r.content ? '<div class="meta" style="margin-top:4px">' + esc(r.content) + '</div>' : "") +
+          bulletLine("마감일", due ? formatDateLabel(due) : "미정") +
+        '</div>'
+      }).join("") : '<div class="info-content empty">기록 없음</div>'
+    }
+    const eRecords = (data.evaluations && data.evaluations.records) || (data.tests && data.tests.records) || []
+    if (evalEl) {
+      evalEl.innerHTML = eRecords.length ? eRecords.map(function (r) {
+        return '<div class="record-card"><div class="title"><a href="' + r.url + '" target="_blank">' + esc(r.title || "평가") + '</a></div>' +
+          '<div class="meta">교재: ' + esc(r.book || "-") + (r.range ? " · 범위: " + esc(r.range) : "") + '</div>' +
+        '</div>'
+      }).join("") : '<div class="info-content empty">기록 없음</div>'
+    }
+  } catch (err) {
+    if (assignEl) assignEl.innerHTML = '<div class="info-content empty">불러오기 실패</div>'
+    if (evalEl) evalEl.innerHTML = '<div class="info-content empty">불러오기 실패</div>'
+  }
 }
 
 async function renderTaskTab(c, body, kind) {
