@@ -395,9 +395,7 @@
 .md-right-link:hover { opacity:0.7; }
 .report-view-link { font-size:14px; text-decoration:none; margin-left:4px; }
 .report-view-link:hover { opacity:0.7; }
-.right-tabs-row { display:flex; align-items:center; justify-content:space-between; gap:10px; border-bottom:1px solid var(--border); margin-bottom:16px; min-height:44px; }
 .right-tabs { display:flex; gap:6px; }
-.right-tabs-row .bulk-send-btn { margin:0; flex-shrink:0; }
 .right-tab { border:none; background:none; padding:8px 12px; font-size:13px; cursor:pointer; color:var(--muted); font-family:inherit; border-bottom:2px solid transparent; }
 .right-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight:600; }
 .record-card { border:none; border-bottom:1px solid var(--border); border-radius:0; padding:12px 14px; margin-bottom:0; background:transparent; }
@@ -505,8 +503,6 @@
   .md-right { display: none; padding: 18px 16px; }
   .md-right.mobile-detail-open { display: block; flex: 1; overflow-y: auto; }
   .md-right-header { flex-wrap: wrap; gap: 8px; }
-  .right-tabs-row { flex-direction: column-reverse; align-items: stretch; gap: 8px; }
-  .right-tabs-row .bulk-send-btn { width: 100%; }
   .right-tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
   .right-tab { white-space: nowrap; flex-shrink: 0; }
   .mobile-back-btn { display: inline-flex; align-items: center; gap: 6px; }
@@ -537,7 +533,7 @@
 
 <div id="app-screen" style="display:none">
 <div class="topbar">
-  <div class="brand">하다 학원�������리</div>
+  <div class="brand">하다 학원���������리</div>
   <button class="nav-btn active" data-tab="dashboard" onclick="showTab('dashboard')">📊 <span class="btn-label">대시보드</span></button>
   <button class="nav-btn" data-tab="admin" onclick="showTab('admin')">🗂️ <span class="btn-label">리포트 관리</span></button>
   <button class="nav-btn" data-tab="kiosk" onclick="showTab('kiosk')">🖊️ <span class="btn-label">키오스크</span></button>
@@ -606,7 +602,7 @@
           <div class="md-right-title-row">
             <div class="md-right-title" id="right-title"></div>
             <a class="md-right-link" id="right-page-link" target="_blank" href="#" title="노션에서 보기"><img src="data:image/png;base64,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" width="14" height="14" style="vertical-align:middle;border-radius:3px" alt="Notion" /></a>
-            <button class="bulk-send-btn" id="bulk-send-tab-btn" disabled onclick="sendBulkForClass(SELECTED_CLASS_ID)" style="margin-left:auto">📩 보고서 일괄 전송</button>
+            <button class="bulk-send-btn" id="bulk-send-tab-btn" disabled onclick="handleBulkSendClick()" style="margin-left:auto">📩 보고서 일괄 전송</button>
           </div>
           <div class="md-right-time" id="right-time"></div>
           <div class="md-right-sub-row">
@@ -618,9 +614,6 @@
         </div>
         <div class="right-summary-body" id="right-summary-body"></div>
         <div class="right-tab-body" id="right-tab-body"></div>
-        <div class="right-tabs-row" id="report-tuition-bulk-row" style="display:none; justify-content:flex-end;">
-          <button class="bulk-send-btn" id="report-tuition-bulk-btn" onclick="sendBulkReportsOrTuitions()">📩 일괄 전송</button>
-        </div>
         <div id="report-tuition-detail" style="display:none"></div>
       </div>
     </div>
@@ -796,7 +789,7 @@ function esc(s) {
   })
 }
 
-// 보고서/수강료 수식이 이름 뒤에 강제로 붙이는 " 학생" 접미를 떼어내고, 수업 탭과 동일하게 이름만 보여줍니다.
+// 보고서/수강료 수식이 이름 뒤에 강제로 붙이는 " 학생" 접미를 떼어내고, 수업 탭과 동일하게 이름만 보���줍니다.
 function displayStudentName(name) {
   return String(name || "").replace(/\s*학생\s*$/, "").trim()
 }
@@ -836,7 +829,7 @@ let TUITIONS = []
 let TUITION_LOADING = false // 수강료 목록 조회가 진행 중인 동안, 목록을 다시 그려도 파란 로딩 박스를 유지해요.
 let tuitionLoadGen = 0
 let SELECTED_TUITION_ID = null
-let SELECTED_WEEK_START = null // 주간 보고서용: 선택된 주의 시작일(월요일, YYYY-MM-DD)
+let SELECTED_WEEK_START = null // 주간 보고서용: 선택된 주의 ���작일(월요일, YYYY-MM-DD)
 let SELECTED_WEEK_END = null
 let SELECTED_REPORT_CLASS = null // 보고서 탭: 가운데에서 선택된 클래스 id (미배정은 "__unassigned__")
 let SELECTED_TUITION_CLASS = null // 수강료 탭: 가운데에서 선택된 클래스 id
@@ -847,7 +840,7 @@ function formatDateLabel(dateStr) {
   return dateStr.replace(/-/g, ".") + " (" + days[d.getDay()] + ")"
 }
 
-// 날짜�� 이동해��� �����로 ��러오는 동안, 이전 날짜의 상세정보가 남아있어 착각하지 않도록 오른쪽 패널을 비워요.
+// 날짜�� 이동해��� �����로 ��러오는 동안, 이전 날짜의 상세정보가 남아있어 착각하지 않도록 오른쪽 패��을 비워요.
 function clearRightPanel() {
   el("md-right-empty").style.display = "block"
   el("md-right-content").style.display = "none"
@@ -871,12 +864,11 @@ function setDomain(domain) {
   el("schedule-list-area").style.display = domain === "schedule" ? "flex" : "none"
   el("report-list-area").style.display = domain === "report" ? "flex" : "none"
   el("tuition-list-area").style.display = domain === "tuition" ? "flex" : "none"
-  el("bulk-send-tab-btn").style.display = domain === "class" ? "inline-flex" : "none"
+  el("bulk-send-tab-btn").style.display = domain === "schedule" ? "none" : "inline-flex"
   el("right-tab-body").style.display = (domain === "class" || domain === "schedule") ? "block" : "none"
   if (domain !== "class" && domain !== "schedule") el("right-tab-body").innerHTML = ""
-  el("right-summary-toggle").style.display = domain === "class" ? "inline-flex" : "none"
+  el("right-summary-toggle").style.display = domain === "schedule" ? "none" : "inline-flex"
   el("report-tuition-detail").style.display = (domain === "report" || domain === "tuition") ? "block" : "none"
-  el("report-tuition-bulk-row").style.display = (domain === "report" || domain === "tuition") ? "flex" : "none"
   el("cal-panel-report-toggle").style.display = domain === "report" ? "flex" : "none"
   el("bulk-send-tab-btn").disabled = true
   el("right-summary-body").classList.remove("show")
@@ -1158,7 +1150,7 @@ function getFilteredReports() {
 }
 
 function renderReportList() {
-  // 보고서 목록을 불러오는 중이면(주/유형 전환 등으로 이 함수가 별도로 호출되더라도) 파란 로딩 박스를 그대로 유지하고, "없어요" 등 결과 화면은 데이터가 실제로 도착한 뒤에만 보여줘요.
+  // 보고서 목록을 불러오는 중이면(주/유형 전환 등으로 이 함수가 별도로 호출되더라도) 파란 로딩 박스를 그대로 유지하고, "없어요" 등 결과 화면은 ���이터가 실제로 도착한 뒤에만 보여줘요.
   if (REPORT_LOADING) return
   const list = getFilteredReports()
   if (!list.length) {
@@ -1201,15 +1193,22 @@ function renderReportClassDetail() {
   const detailClassName = list[0].className || "미배정"
   el("right-title").textContent = (detailClassId !== "__unassigned__" ? resolveClassEmoji(detailClassId, detailClassName, list[0].emoji) + " " : "") + detailClassName
   el("right-page-link").style.display = "none"
-  el("bulk-send-tab-btn").style.display = "none"
-  el("bulk-send-tab-btn").disabled = true
+  const sendFnName = REPORT_TYPE === "monthly" ? "월간" : "주간"
+  el("bulk-send-tab-btn").style.display = "inline-flex"
+  el("bulk-send-tab-btn").disabled = false
+  el("bulk-send-tab-btn").textContent = "📩 " + sendFnName + " 보고서 일괄 전송"
   const sentCount = list.filter(function (r) { return r.sentBy }).length
   el("right-time").textContent = list.length + "명 중 발송완료 " + sentCount + "명"
-  el("right-sub").textContent = ""
-  el("right-summary-toggle").style.display = "none"
-  const sendFnName = REPORT_TYPE === "monthly" ? "월간" : "주간"
-  // 오른쪽 상단은 수업 탭과 같은 info-card 요약(발송 현황)으로, 아래 목록은 수업 탭과 같은 .student-row 한줄 패턴으로 통일해요 (DESIGN 문서 "학생 목록 표준 디자인" 규칙 참고).
-  const summaryHtml = '<div class="info-card"><h3>✅ 발송 현황</h3>' +
+  // 수업 탭 배지(출석률 등)와 같은 자리에, 발송현황을 컴팩트 배지로 요약해요.
+  el("right-sub").innerHTML =
+    '<span class="badge tone-blue">발송완료 ' + sentCount + '명</span>' +
+    '<span class="badge tone-gray">미발송 ' + (list.length - sentCount) + '명</span>'
+  el("right-summary-toggle").style.display = "inline-flex"
+  el("right-summary-body").classList.remove("show")
+  el("right-summary-toggle").classList.remove("open")
+  el("right-summary-toggle-label").textContent = "더보기"
+  // 더보기를 펼치면 나오는 상세 요약카드는 수업 탭과 같은 info-card 패턴, 아래 목록은 수업 탭과 같은 .student-row 한줄 패턴으로 통일해요 (DESIGN 문서 "학생 목록 표준 디자인" 규칙 참고).
+  el("right-summary-body").innerHTML = '<div class="info-card"><h3>✅ 발송 현황</h3>' +
     '<div style="display:flex;gap:18px;flex-wrap:wrap">' +
       '<div class="stat-row stat-text blue">발송완료 <b>' + sentCount + '</b>명</div>' +
       '<div class="stat-row stat-text gray">미발송 <b>' + (list.length - sentCount) + '</b>명</div>' +
@@ -1224,8 +1223,7 @@ function renderReportClassDetail() {
     return '<div class="student-row"><span class="stu-name">' + esc(displayStudentName(r.studentName || r.title)) + ' ' + sentBadge + rateBadge + reportLink + '</span>'
       + '<button class="send-btn" onclick="sendPeriodReport(' + attrSafe(r.reportId) + ')">📩 ' + sendFnName + ' 발송</button></div>'
   }).join("")
-  el("report-tuition-detail").innerHTML = summaryHtml + rowsHtml
-  el("report-tuition-bulk-btn").textContent = "📩 " + sendFnName + " 보고서 일괄 전송"
+  el("report-tuition-detail").innerHTML = rowsHtml
   openMobileDetail()
 }
 
@@ -1328,18 +1326,25 @@ function renderTuitionClassDetail() {
   const detailClassName = list[0].className || "미배정"
   el("right-title").textContent = (detailClassId !== "__unassigned__" ? resolveClassEmoji(detailClassId, detailClassName, list[0].emoji) + " " : "") + detailClassName
   el("right-page-link").style.display = "none"
-  el("right-summary-body").classList.remove("show")
-  el("bulk-send-tab-btn").style.display = "none"
-  el("bulk-send-tab-btn").disabled = true
+  el("bulk-send-tab-btn").style.display = "inline-flex"
+  el("bulk-send-tab-btn").disabled = false
+  el("bulk-send-tab-btn").textContent = "📩 수강료 안내 일괄 전송"
   const totalAmount = list.reduce(function (sum, t) { return sum + (t.amount || 0) }, 0)
   el("right-time").textContent = list.length + "명 · 총 " + Number(totalAmount).toLocaleString("ko-KR") + "원"
-  el("right-sub").textContent = ""
-  el("right-summary-toggle").style.display = "none"
-  // 오른쪽 상단은 수업 탭과 같은 info-card 요약(수강료 현황)으로, 아래 목록은 수업 탭과 같은 .student-row 한줄 패턴으로 통일해요 (DESIGN 문서 "학생 목록 표준 디자인" 규칙 참고).
   const paidCount = list.filter(function (t) { return paymentStatusTone(t.paymentStatus) === "tone-green" }).length
   const partialCount = list.filter(function (t) { return paymentStatusTone(t.paymentStatus) === "tone-orange" }).length
   const unpaidCount = list.filter(function (t) { return paymentStatusTone(t.paymentStatus) === "tone-red" }).length
-  const summaryHtml = '<div class="info-card"><h3>💰 수강료 현황</h3>' +
+  // 수업 탭 배지와 같은 자리에, 수강료 현황을 컴팩트 배지로 요약해요.
+  el("right-sub").innerHTML =
+    '<span class="badge tone-green">완납 ' + paidCount + '명</span>' +
+    '<span class="badge tone-orange">부분납 ' + partialCount + '명</span>' +
+    '<span class="badge tone-red">미납 ' + unpaidCount + '명</span>'
+  el("right-summary-toggle").style.display = "inline-flex"
+  el("right-summary-body").classList.remove("show")
+  el("right-summary-toggle").classList.remove("open")
+  el("right-summary-toggle-label").textContent = "더보기"
+  // 더보기를 펼치면 나오는 상세 요약카드는 수업 탭과 같은 info-card 패턴, 아래 목록은 수업 탭과 같은 .student-row 한줄 패턴으로 통일해요 (DESIGN 문서 "학생 목록 표준 디자인" 규칙 참고).
+  el("right-summary-body").innerHTML = '<div class="info-card"><h3>💰 수강료 현황</h3>' +
     '<div style="display:flex;gap:18px;flex-wrap:wrap">' +
       '<div class="stat-row stat-text green">완납 <b>' + paidCount + '</b>명</div>' +
       '<div class="stat-row stat-text orange">부분납 <b>' + partialCount + '</b>명</div>' +
@@ -1353,8 +1358,7 @@ function renderTuitionClassDetail() {
     return '<div class="student-row"><span class="stu-name">' + esc(displayStudentName(t.studentInfo || t.title)) + ' ' + statusBadge + amountBadge + '</span>'
       + '<button class="send-btn" onclick="sendTuitionNotice(' + attrSafe(t.tuitionId) + ')">📩 안내 발송</button></div>'
   }).join("")
-  el("report-tuition-detail").innerHTML = summaryHtml + rowsHtml
-  el("report-tuition-bulk-btn").textContent = "📩 수강료 안내 일괄 전송"
+  el("report-tuition-detail").innerHTML = rowsHtml
   openMobileDetail()
 }
 
@@ -1473,7 +1477,7 @@ function attendanceRateTone(pct) {
   return "tone-red"
 }
 
-// 가운데 목록은 여러 수업을 한눈에 봐서 선택만 하는 용도다. 상세 내용은 오른쪽 패넬이 다루는다.
+// 가운데 목록은 여러 수업을 한눈에 봐서 선택만 하는 용도다. 상세 내용은 오른쪽 패넬이 다루���다.
 function renderClassList() {
   const listEl = el("class-list-area")
   const list = filteredClasses()
@@ -1708,7 +1712,7 @@ async function renderTaskTab(c, body, kind) {
           const correct = pickField(a, ["correctCount", "correctQuestions", "correct", "정답문항", "정답 문항"])
           const score = pickField(a, ["score", "점수"])
           const scoreText = (score !== null ? score + "점" : "") + (total ? " (" + (correct !== null ? correct : "?") + "/" + total + ")" : "")
-          return '<div class="record-card"><div class="title"><a href="' + (a.url || rec.url || "#") + '" target="_blank">' + esc(rec.title || "평가") + '</a></div>' +
+          return '<div class="record-card"><div class="title"><a href="' + (a.url || rec.url || "#") + '" target="_blank">' + esc(rec.title || "������") + '</a></div>' +
             '<div class="meta">교재: ' + esc(rec.book || "-") + (rec.range ? " · 범위: " + esc(rec.range) : "") + '</div>' +
             bulletLine("학생", a.studentName) +
             (scoreText ? bulletLine("점수", scoreText) : "") +
@@ -1750,7 +1754,7 @@ async function renderTaskTab(c, body, kind) {
     } else {
       html = records.map(function (r) {
         const due = pickField(r, ["dueDate", "due_iso", "due", "dueAt", "과제마감일", "과제 마감일"]) || dueByRecordId[r.id] || null
-        // r.content는 이미 자체���인 서식(줄바���, 자체 불릿 등)을 포함하고 있을 수 있어서,
+        // r.content는 이미 ���체���인 서식(줄바���, 자체 불릿 등)을 포함하고 있을 수 있어서,
         // "내용:" 라벨로 감싸면 이중 불릿·줄바꿈 깨짐이 생겨요. 그래서 원본 그대����� 별도 줄에 보여줘요.
         return '<div class="record-card"><div class="title"><a href="' + r.url + '" target="_blank">' + esc(r.title) + '</a></div>' +
           '<div class="meta">교재: ' + esc(r.book) + (r.range ? " · 범위: " + esc(r.range) : "") + '</div>' +
@@ -1890,9 +1894,13 @@ let ALIMTALK_PENDING = null // { kind: "student", index } | { kind: "bulk", clas
 function openAlimtalkModal(kind, payload) {
   ALIMTALK_PENDING = { kind: kind, payload: payload }
   const textEl = el("alimtalk-modal-text")
-  textEl.textContent = kind === "student"
-    ? payload.studentName + " 학생에게 오늘의 학�� 리포트 알림톡을 발송하시겠습니까?"
-    : payload.count + "명의 학생에게 오늘의 학습 리포트 알림톡을 일괄 발송하시겠습니까?"
+  const textByKind = {
+    student: payload.studentName + " 학생에게 오늘의 학습 리포트 알림톡을 발송하시겠습니까?",
+    bulk: payload.count + "명의 학생에게 오늘의 학습 리포트 알림톡을 일괄 발송하시겠습니까?",
+    "bulk-report": payload.count + "명의 학부모에게 " + payload.sendFnName + " 보고서 알림톡을 일괄 발송하시겠습니까?",
+    "bulk-tuition": payload.count + "명의 학부모에게 수강료 안내 알림톡을 일괄 발송하시겠습니까?",
+  }
+  textEl.textContent = textByKind[kind] || textByKind.bulk
   el("alimtalk-modal").classList.add("show")
 }
 
@@ -1909,7 +1917,92 @@ async function confirmAlimtalkSend() {
     await doSendStudentReport(pending.payload.index)
   } else if (pending.kind === "bulk") {
     await doSendBulkForClass(pending.payload.classId)
+  } else if (pending.kind === "bulk-report") {
+    await doSendBulkReportsForClass(pending.payload.classId)
+  } else if (pending.kind === "bulk-tuition") {
+    await doSendBulkTuitionsForClass(pending.payload.classId)
   }
+}
+
+// 수업/보고서/수강료 탭이 같은 제목줄 고정 버튼(bulk-send-tab-btn)을 공유하므로, 현재 DOMAIN에 맞는 일괄 전송 흐름으로 나눠줘요.
+function handleBulkSendClick() {
+  if (DOMAIN === "class") {
+    sendBulkForClass(SELECTED_CLASS_ID)
+  } else if (DOMAIN === "report") {
+    sendBulkReportsForClass()
+  } else if (DOMAIN === "tuition") {
+    sendBulkTuitionsForClass()
+  }
+}
+
+function sendBulkReportsForClass() {
+  const list = SELECTED_REPORT_CLASS ? getFilteredReports().filter(function (r) { return (r.classId || "__unassigned__") === SELECTED_REPORT_CLASS }) : []
+  const targets = list.filter(function (r) { return !r.sentBy })
+  if (!targets.length) { showToast("발송할 학생이 없어요"); return }
+  const sendFnName = REPORT_TYPE === "monthly" ? "월간" : "주간"
+  openAlimtalkModal("bulk-report", { classId: SELECTED_REPORT_CLASS, count: targets.length, sendFnName: sendFnName })
+}
+
+async function doSendBulkReportsForClass(classId) {
+  const list = classId ? getFilteredReports().filter(function (r) { return (r.classId || "__unassigned__") === classId }) : []
+  const targets = list.filter(function (r) { return !r.sentBy })
+  if (!targets.length) { showToast("발송할 학생이 없어요"); return }
+  let success = 0, fail = 0
+  for (const r of targets) {
+    try {
+      await sendPeriodReportSilently(r.reportId)
+      success++
+    } catch (_e) {
+      fail++
+    }
+  }
+  showToast(success + "건 발송 완료" + (fail ? ", " + fail + "건 실패" : ""))
+  await loadReportList(CAL_PANEL_MONTH)
+}
+
+async function sendPeriodReportSilently(reportId) {
+  const url = REPORT_TYPE === "monthly" ? SEND_MONTHLY_REPORT_URL : SEND_WEEKLY_REPORT_URL
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
+    body: JSON.stringify({ reportId: reportId }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || ("발송 실패: " + res.status))
+}
+
+function sendBulkTuitionsForClass() {
+  const list = SELECTED_TUITION_CLASS ? getFilteredTuitions().filter(function (t) { return (t.classId || "__unassigned__") === SELECTED_TUITION_CLASS }) : []
+  const targets = list.filter(function (t) { return paymentStatusTone(t.paymentStatus) !== "tone-green" })
+  if (!targets.length) { showToast("발송할 학생이 없어요"); return }
+  openAlimtalkModal("bulk-tuition", { classId: SELECTED_TUITION_CLASS, count: targets.length })
+}
+
+async function doSendBulkTuitionsForClass(classId) {
+  const list = classId ? getFilteredTuitions().filter(function (t) { return (t.classId || "__unassigned__") === classId }) : []
+  const targets = list.filter(function (t) { return paymentStatusTone(t.paymentStatus) !== "tone-green" })
+  if (!targets.length) { showToast("발송할 학생이 없어요"); return }
+  let success = 0, fail = 0
+  for (const t of targets) {
+    try {
+      await sendTuitionNoticeSilently(t.tuitionId)
+      success++
+    } catch (_e) {
+      fail++
+    }
+  }
+  showToast(success + "건 발송 완료" + (fail ? ", " + fail + "건 실패" : ""))
+  await loadTuitionList(CAL_PANEL_MONTH)
+}
+
+async function sendTuitionNoticeSilently(tuitionId) {
+  const res = await fetch(SEND_TUITION_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
+    body: JSON.stringify({ tuitionId: tuitionId }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || ("발송 실패: " + res.status))
 }
 
 function sendStudentReport(i) {
