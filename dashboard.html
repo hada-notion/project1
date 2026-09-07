@@ -399,6 +399,7 @@
 .right-tab { border:none; background:none; padding:8px 12px; font-size:13px; cursor:pointer; color:var(--muted); font-family:inherit; border-bottom:2px solid transparent; }
 .right-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight:600; }
 .record-card { border:none; border-bottom:1px solid var(--border); border-radius:0; padding:12px 14px; margin-bottom:0; background:transparent; }
+.record-card:last-child { border-bottom:none; }
 .record-card a, .activity-row a { color: var(--text); text-decoration:none; }
 .record-card a:hover, .activity-row a:hover { text-decoration:underline; }
 .record-card .title { font-weight:600; font-size:13.5px; margin-bottom:4px; }
@@ -1750,7 +1751,11 @@ function formatSummaryBlock(text) {
   const title = lines2[0]
   const rest = lines2.slice(1)
   return '<div class="info-content"><div style="font-weight:600;color:var(--text);margin-bottom:4px">' + esc(title) + '</div>' +
-    rest.map(function (l) { return '<div style="margin-top:2px">' + esc("    • " + l) + '</div>' }).join("") +
+    rest.map(function (l) {
+      var alreadyBulleted = /^•/.test(l)
+      var prefix = alreadyBulleted ? "    " : "    • "
+      return '<div style="margin-top:2px">' + esc(prefix + l) + '</div>'
+    }).join("") +
   '</div>'
 }
 
