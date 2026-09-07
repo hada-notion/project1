@@ -641,7 +641,24 @@
 <script>
 // ============ 공용 로그인 (admin.html과 같은 localStorage 키를 사용해 한 번만 로그인하면 됩니다) ============
 const ADMIN_KEY_STORAGE = "admin_key"
-function getAdminKey() { return localStorage.getItem(ADMIN_KEY_STORAGE) || "" }
+const ADMIN_SESSION_TTL_MS = 24 * 60 * 60 * 1000 // 24다 난 후 자동 만료(admin.html과 공유되땄 마잦뭐려). 구형신 문자열 키 간이란띄 캐 럤뒜로 따랑을 적용해요.
+function getAdminKey() {
+  const raw = localStorage.getItem(ADMIN_KEY_STORAGE) || ""
+  if (!raw) return ""
+  try {
+    const parsed = JSON.parse(raw)
+    if (parsed && typeof parsed === "object" && parsed.key) {
+      if (Date.now() - (parsed.ts || 0) > ADMIN_SESSION_TTL_MS) {
+        localStorage.removeItem(ADMIN_KEY_STORAGE)
+        return ""
+      }
+      return parsed.key
+    }
+  } catch (e) {
+    // 구형 버전(단순 문자열) 구재걱 랋을 또생 따랑해요: 만료 개니없이 율바로 사용해요.
+  }
+  return raw
+}
 function showLoginScreen(errorMsg) {
   document.getElementById("login-screen").style.display = "flex"
   document.getElementById("app-screen").style.display = "none"
@@ -678,7 +695,7 @@ async function submitLogin() {
       return
     }
     if (!res.ok) throw new Error(`서버 오류: ${res.status}`)
-    localStorage.setItem(ADMIN_KEY_STORAGE, key)
+    localStorage.setItem(ADMIN_KEY_STORAGE, JSON.stringify({ key: key, ts: Date.now() }))
     showAppScreen()
   } catch (err) {
     errEl.textContent = "로그인에 실패했습니다: " + err.message

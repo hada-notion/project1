@@ -457,8 +457,23 @@ function showToast(msg) {
 }
 
 // ---------------- Auth / login screen ----------------
+const ADMIN_SESSION_TTL_MS = 24 * 60 * 60 * 1000 // 24시간 뒤 자동 만료(dashboard.html과 공유되므로 마찬가지 방식으로 적용해요). 구형 문자열 키 형태와도 호환돼요.
 function getAdminKey() {
-  return localStorage.getItem(ADMIN_KEY_STORAGE) || ""
+  const raw = localStorage.getItem(ADMIN_KEY_STORAGE) || ""
+  if (!raw) return ""
+  try {
+    const parsed = JSON.parse(raw)
+    if (parsed && typeof parsed === "object" && parsed.key) {
+      if (Date.now() - (parsed.ts || 0) > ADMIN_SESSION_TTL_MS) {
+        localStorage.removeItem(ADMIN_KEY_STORAGE)
+        return ""
+      }
+      return parsed.key
+    }
+  } catch (e) {
+    // 구형 버전(단순 문자열) 호환: 만료 개념 없이 그대로 사용해요.
+  }
+  return raw
 }
 
 function showLoginScreen(errorMsg) {
@@ -502,7 +517,7 @@ async function submitLogin() {
       return
     }
     if (!res.ok) throw new Error(`서버 오류: ${res.status}`)
-    localStorage.setItem(ADMIN_KEY_STORAGE, key)
+    localStorage.setItem(ADMIN_KEY_STORAGE, JSON.stringify({ key: key, ts: Date.now() }))
     showAppScreen()
   } catch (err) {
     errEl.textContent = "로그인에 실패했습니다: " + err.message
@@ -564,7 +579,7 @@ async function submitPasswordChange() {
     if (!res.ok) throw new Error(`서버 오류: ${res.status} ${await res.text()}`)
 
     // 새 비밀번호로 로그인 상태를 갱신해서 다음 동작도 끄지지 않게 이어지게 합니다.
-    localStorage.setItem(ADMIN_KEY_STORAGE, next)
+    localStorage.setItem(ADMIN_KEY_STORAGE, JSON.stringify({ key: next, ts: Date.now() }))
     closePasswordModal()
     showToast("비밀번호가 바뀌었습니다.")
   } catch (err) {
