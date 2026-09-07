@@ -424,6 +424,7 @@
 .student-sort-btn.active { color:var(--accent); border-color:var(--accent); }
 .student-search-box { flex:1; min-width:100px; border:1px solid var(--border); border-radius:8px; padding:6px 10px; font-size:12px; font-family:inherit; background:#fff; }
 .student-search-box:focus { outline:none; border-color:var(--accent); }
+.student-row .stu-meta { font-size:11px; color:var(--muted); }
 .stu-checkbox { width:15px; height:15px; cursor:pointer; margin-right:2px; flex-shrink:0; }
 .teacher-badge { font-size:11px; padding:2px 7px; border-radius:999px; white-space:nowrap; }
 .teacher-badge.tb-gray { background:#f1f1ef; color:#5a5a57; }
@@ -1617,49 +1618,70 @@ function summarizeStudents(students) {
   return stat
 }
 
+// 이름뿐 아니라 학교·학년으로도 검색할 수 있도록, 학생 하나당 검색용 문자열을 만들어요.
+// 백엔드가 아직 학교/학년(school/grade) 값을 안 내려주는 학생은 이름만으로 매칭돼요.
+function studentSearchHaystack(s) {
+  return [s.name, s.school, s.grade].filter(Boolean).join(" ").toLowerCase()
+}
+
+function studentRowHtml(c, s) {
+  const allStudents = c.students || []
+  const i = allStudents.indexOf(s)
+  const cls = statusBadgeClass[s.status] || "gray"
+  const canSend = !!s.attendanceId
+  const sentBadge = canSend ? (s.sentByMe ? ' <span class="badge tone-blue">전송완료</span>' : ' <span class="badge tone-gray">미전송</span>') : ""
+  const homeworkCls = s.homework ? (homeworkBadgeClass[s.homework.status] || "tone-gray") : ""
+  const homeworkBadge = s.homework ? ' <span class="badge ' + homeworkCls + '">과제 ' + s.homework.status + '</span>' : ""
+  const evalCls = s.evaluation ? attendanceRateTone(s.evaluation.score) : ""
+  const evalBadge = s.evaluation ? ' <span class="badge ' + evalCls + '">' + s.evaluation.score + '점</span>' : ""
+  const reportLink = s.reportUrl
+    ? ' <a class="report-view-link" href="' + s.reportUrl + '" target="_blank" title="학부모 보고서 페이지 보기">📋</a>'
+    : ' <span class="report-view-link" style="opacity:0.35;cursor:default" title="이 학생의 등록에 토큰이 아직 없어요">📋</span>'
+  const checkboxHtml = canSend
+    ? '<input type="checkbox" class="stu-checkbox" ' + (SELECTED_STUDENT_IDS[s.attendanceId] ? "checked" : "") + ' onchange="toggleStudentSelected(' + attrSafe(s.attendanceId) + ', this.checked)">'
+    : '<input type="checkbox" class="stu-checkbox" disabled>'
+  const metaLine = [s.school, s.grade].filter(Boolean).join(" · ")
+  const metaHtml = metaLine ? ' <span class="stu-meta">' + esc(metaLine) + '</span>' : ""
+  return '<div class="student-row"><span class="stu-name">' + checkboxHtml + ' ' + esc(s.name) + metaHtml +
+    (s.url ? ' <a class="stu-view" href="' + s.url + '" target="_blank" title="노션에서 보기">' + NOTION_ICON_SVG + '</a>' : "") + reportLink + ' ' +
+    (s.status ? '<span class="badge ' + cls + '">' + s.status + '</span>' : "") + homeworkBadge + evalBadge + sentBadge + '</span>' +
+    '<button class="send-btn" id="stu-send-' + i + '" onclick="sendStudentReport(' + i + ')" ' + (canSend ? "" : "disabled") + '>📩 ' + (s.sentByMe ? "재전송" : "전송") + '</button></div>'
+}
+
+// 검색/정렬된 학생 행 목록만 만들어요. 검색창을 다시 그리지 않아서, 검색어를 입력하는 도중에도
+// 입력창의 포커스와 커서 위치가 유지돼요(한글 조합 중에도 끊기지 않아요).
+function buildStudentRowsHtml(c) {
+  const allStudents = c.students || []
+  const term = STUDENT_SEARCH_TERM.trim().toLowerCase()
+  let students = term ? allStudents.filter(function (s) { return studentSearchHaystack(s).indexOf(term) >= 0 }) : allStudents.slice()
+  if (STUDENT_SORT_NAME_ASC) students = students.slice().sort(function (a, b) { return String(a.name || "").localeCompare(String(b.name || ""), "ko") })
+  if (students.length === 0) return '<div class="empty">검색 결과가 없어요</div>'
+  return students.map(function (s) { return studentRowHtml(c, s) }).join("")
+}
+
+function renderStudentRows(c) {
+  const rowsBody = el("student-rows-body")
+  if (rowsBody) rowsBody.innerHTML = buildStudentRowsHtml(c)
+}
+
 function renderStudentsTab(c, body) {
   const allStudents = c.students || []
   if (allStudents.length === 0) { body.innerHTML = '<div class="empty">출석 기록이 없어요</div>'; return }
-  const term = STUDENT_SEARCH_TERM.trim().toLowerCase()
-  let students = term ? allStudents.filter(function (s) { return String(s.name || "").toLowerCase().indexOf(term) >= 0 }) : allStudents.slice()
-  if (STUDENT_SORT_NAME_ASC) students = students.slice().sort(function (a, b) { return String(a.name || "").localeCompare(String(b.name || ""), "ko") })
   const eligibleIds = allStudents.filter(function (s) { return s.attendanceId }).map(function (s) { return s.attendanceId })
   const selectedCount = eligibleIds.filter(function (id) { return SELECTED_STUDENT_IDS[id] }).length
   const allSelected = eligibleIds.length > 0 && selectedCount === eligibleIds.length
   const controlsHtml = '<div class="student-list-controls">' +
       '<label class="student-select-all"><input type="checkbox" ' + (allSelected ? "checked" : "") + ' onchange="toggleSelectAllStudents(this.checked)" ' + (eligibleIds.length ? "" : "disabled") + '> 전체 선택</label>' +
       '<button class="student-sort-btn' + (STUDENT_SORT_NAME_ASC ? " active" : "") + '" onclick="toggleStudentNameSort()">이름 ' + (STUDENT_SORT_NAME_ASC ? "▲" : "↕") + '</button>' +
-      '<input type="text" class="student-search-box" placeholder="🔍 이름 검색" value="' + esc(STUDENT_SEARCH_TERM) + '" oninput="onStudentSearchInput(this.value)">' +
+      '<input type="text" class="student-search-box" placeholder="🔍 이름·학교·학년 검색" value="' + esc(STUDENT_SEARCH_TERM) + '" oninput="onStudentSearchInput(this.value)">' +
     '</div>'
-  const rowsHtml = students.length === 0
-    ? '<div class="empty">검색 결과가 없어요</div>'
-    : students.map(function (s) {
-        const i = allStudents.indexOf(s)
-        const cls = statusBadgeClass[s.status] || "gray"
-        const canSend = !!s.attendanceId
-        const sentBadge = canSend ? (s.sentByMe ? ' <span class="badge tone-blue">전송완료</span>' : ' <span class="badge tone-gray">미전송</span>') : ""
-        const homeworkCls = s.homework ? (homeworkBadgeClass[s.homework.status] || "tone-gray") : ""
-        const homeworkBadge = s.homework ? ' <span class="badge ' + homeworkCls + '">과제 ' + s.homework.status + '</span>' : ""
-        const evalCls = s.evaluation ? attendanceRateTone(s.evaluation.score) : ""
-        const evalBadge = s.evaluation ? ' <span class="badge ' + evalCls + '">' + s.evaluation.score + '점</span>' : ""
-        const reportLink = s.reportUrl
-          ? ' <a class="report-view-link" href="' + s.reportUrl + '" target="_blank" title="학부모 보고서 페이지 보기">📋</a>'
-          : ' <span class="report-view-link" style="opacity:0.35;cursor:default" title="이 학생의 등록에 토큰이 아직 없어요">📋</span>'
-        const checkboxHtml = canSend
-          ? '<input type="checkbox" class="stu-checkbox" ' + (SELECTED_STUDENT_IDS[s.attendanceId] ? "checked" : "") + ' onchange="toggleStudentSelected(' + attrSafe(s.attendanceId) + ', this.checked)">'
-          : '<input type="checkbox" class="stu-checkbox" disabled>'
-        return '<div class="student-row"><span class="stu-name">' + checkboxHtml + ' ' + esc(s.name) +
-          (s.url ? ' <a class="stu-view" href="' + s.url + '" target="_blank" title="노션에서 보기">' + NOTION_ICON_SVG + '</a>' : "") + reportLink + ' ' +
-          (s.status ? '<span class="badge ' + cls + '">' + s.status + '</span>' : "") + homeworkBadge + evalBadge + sentBadge + '</span>' +
-          '<button class="send-btn" id="stu-send-' + i + '" onclick="sendStudentReport(' + i + ')" ' + (canSend ? "" : "disabled") + '>📩 ' + (s.sentByMe ? "재전송" : "전송") + '</button></div>'
-      }).join("")
-  body.innerHTML = controlsHtml + rowsHtml
+  body.innerHTML = controlsHtml + '<div id="student-rows-body">' + buildStudentRowsHtml(c) + '</div>'
 }
 
 function onStudentSearchInput(term) {
   STUDENT_SEARCH_TERM = term || ""
   const c = findClass(SELECTED_CLASS_ID)
-  if (c) renderStudentsTab(c, el("right-tab-body"))
+  if (c) renderStudentRows(c)
 }
 
 function toggleStudentNameSort() {
@@ -2132,6 +2154,8 @@ async function doSendBulkForClass(classId) {
     }
   }
   showToast(success + "건 발송 완료" + (fail ? ", " + fail + "건 실패" : ""))
+  renderClassRightSub(c)
+  renderStudentsTab(c, el("right-tab-body"))
 }
 
 // ---------------- 초기 로딩 ----------------
