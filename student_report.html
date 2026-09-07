@@ -1019,7 +1019,7 @@ function renderBookDetail() {
           })
           return groups.length ? groups.map((g) => `
             <div class="log-date-group">
-              <div class="log-date-label">${esc(g.date)}</div>
+              <div class="log-date-label">${esc(withDow(g.date))}</div>
               ${g.items.map((l) => `
                 <div class="log-card ${l.type}">
                   <div class="log-top">
@@ -1650,7 +1650,7 @@ function buildReportTabHtml(r) {
   const attRate = attendanceRows.length ? Math.round((presentCount / attendanceRows.length) * 100) : 0
   const doneHomework = homeworkItems.filter((h) => h.status === "완료").length
   const hwRate = homeworkItems.length ? Math.round((doneHomework / homeworkItems.length) * 100) : 0
-  const periodLabel = reportPeriod === "week" ? `${rangeStart} ~ ${rangeEnd}` : `${rangeStart.slice(0, 7)}`
+  const periodLabel = reportPeriod === "week" ? `${withDow(rangeStart)} ~ ${withDow(rangeEnd)}` : `${rangeStart.slice(0, 7)}`
   const segToggleHtml = `
     <div class="seg-toggle">
       <button class="${reportPeriod === "day" ? "active" : ""}" onclick="setReportPeriod('day')">일간 보고서</button>
@@ -1725,6 +1725,17 @@ function toShortDate(date) {
   return `${y.slice(-2)}.${m}.${d}`
 }
 
+// YYYY-MM-DD 날짜 문자열 뒤에 "(요일)"을 붙여준다. 형식이 다르면 원본을 그대로 반환한다.
+function withDow(date) {
+  if (!date) return date
+  const s = String(date).slice(0, 10)
+  const parts = s.split("-").map(Number)
+  if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) return date
+  const [y, m, d] = parts
+  const weekday = ["일", "월", "화", "수", "목", "금", "토"][new Date(y, m - 1, d).getDay()]
+  return `${s} (${weekday})`
+}
+
 function formatDateLabel(date) {
   const [y, m, d] = date.split("-").map(Number)
   const weekday = ["일", "월", "화", "수", "목", "금", "토"][new Date(y, m - 1, d).getDay()]
@@ -1783,7 +1794,7 @@ function buildDailyBodyHtml(r, date) {
           <div class="log-title-row"><div class="log-title">${esc([nextHomework.book, nextHomework.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${homeworkPillTone(nextHomework.status)}">${esc(nextHomework.status)}</span></div>
           ${nextHomework.unit ? `<div class="log-context">${esc(`  • 단원: ${nextHomework.unit}`)}</div>` : ""}
           ${(nextHomework.note || nextHomework.title) ? `<div class="log-note">${esc(nextHomework.note || nextHomework.title)}</div>` : ""}
-          <div class="log-context">  • 마감: ${esc(nextHomework.due)}</div>
+          <div class="log-context">  • 마감: ${esc(withDow(nextHomework.due))}</div>
         </div>
       ` : '<div class="empty">예정된 과제가 없습니다.</div>'}
     </div>
@@ -1870,7 +1881,7 @@ function renderDetail() {
         })
         return groups.length ? groups.map((g) => `
           <div class="log-date-group">
-            <div class="log-date-label">${esc(g.date)}</div>
+            <div class="log-date-label">${esc(withDow(g.date))}</div>
             ${g.items.map((l) => `
               <div class="log-card ${l.type}">
                 <div class="log-top">
