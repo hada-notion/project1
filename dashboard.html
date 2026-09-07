@@ -639,7 +639,7 @@
 </div>
 
 <script>
-// ============ 공��� 로그인 (admin.html과 같은 localStorage 키를 사용해 한 번만 로그인하면 됩니다) ============
+// ============ 공��� 로그인 (admin.html과 같�� localStorage 키를 사용해 한 번만 로그인하면 됩니다) ============
 const ADMIN_KEY_STORAGE = "admin_key"
 const ADMIN_SESSION_TTL_MS = 24 * 60 * 60 * 1000 // 24다 난 후 자동 만료(admin.html과 공유되땄 마잦뭐려). 구형신 문자열 키 간이란띄 캐 럤뒜로 따랑을 적용해요.
 function getAdminKey() {
@@ -1316,7 +1316,7 @@ function renderReportClassDetail() {
     const rateBadge = rate ? ' <span class="rate-badge ' + attendanceRateTone(rate.pct) + '">' + rate.text + '</span>' : ""
     const reportLink = r.reportUrl
       ? ' <a class="report-view-link" href="' + r.reportUrl + '" target="_blank" title="학부모 보고서 페이지 보기">📋</a>'
-      : ' <span class="report-view-link" style="opacity:0.35;cursor:default" title="이 학생의 등록에 토큰이 아직 없어요">📋</span>'
+      : ' <span class="report-view-link" style="opacity:0.35;cursor:default" title="��� 학생의 등록에 토큰이 아직 없어요">📋</span>'
     return '<div class="student-row"><span class="stu-name">' + esc(displayStudentName(r.studentName || r.title)) + ' ' + sentBadge + rateBadge + reportLink + '</span>'
       + '<button class="send-btn" onclick="sendPeriodReport(' + attrSafe(r.reportId) + ')">📩 ' + sendFnName + ' 발송</button></div>'
   }).join("")
@@ -1499,6 +1499,7 @@ async function refreshClassList(dateStr, silent) {
   // 이렇게 하면 하나의 날짜 요청이 그날 전체 수업의 학생을 한꺼번에 불러오지 않아서, 선택하지 않은 수업은 계속 "불러오는 중"으로 남아있어요.
   try {
     const fastRes = await fetch(GET_CLASSES_URL + "?date=" + dateStr + "&fast=1", {
+      cache: "no-store",
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
     })
     const fastData = await fastRes.json()
@@ -1631,6 +1632,7 @@ function fetchSessionStudentsOnce(id) {
   if (SESSION_STUDENTS_CACHE[id]) return Promise.resolve(SESSION_STUDENTS_CACHE[id])
   if (STUDENTS_FETCH_PROMISES[id]) return STUDENTS_FETCH_PROMISES[id]
   const p = fetch(GET_CLASSES_URL + "?date=" + CURRENT_DATE + "&sessionId=" + encodeURIComponent(id), {
+    cache: "no-store",
     headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
   }).then(function (res) {
     return res.json().then(function (data) {
@@ -1640,6 +1642,11 @@ function fetchSessionStudentsOnce(id) {
   }).then(function (data) {
     const fresh = (data.classes || [])[0]
     if (!fresh) return null
+    // 백엔드가 노션 출석 페이지의 "전송 완료" 속성을 읽어서 내려준 sentBy 값으로
+    // sentByMe를 초기화해서, 새로고침해도(이 함수를 다시 호출해도) 전송완료 배지가 유지되게 해요.
+    if (fresh.students) {
+      fresh.students.forEach(function (s) { s.sentByMe = !!s.sentBy })
+    }
     // 이 수업은 이제 개별적으로 다 불러왔으니, 같은 날짜로 다시 돌아와도(fast 카드 재조회) "불러오는 중"으로 되돌아가지 않게 보관해놓아요.
     SESSION_STUDENTS_CACHE[id] = fresh
     const idx = CLASSES.findIndex(function (x) { return x.id === id })
@@ -1657,7 +1664,7 @@ function fetchSessionStudentsOnce(id) {
   return p
 }
 
-// 선택한 수업 하나의 학생 정보만 콜어 미리 불러와요(그날 전체 수업 목록을 기다릴 필요 없이 바로 학생 목록이 채움).
+// 선택한 수업 하��의 학생 정보만 콜어 미리 불러와요(그날 전체 수업 목록을 기다릴 필요 없이 바로 학생 목록이 채움).
 async function prioritizeSelectedClassStudents(id) {
   const c = findClass(id)
   if (!c || c.students != null) return // 이미 학생 정보가 있으면(개별 로딩 완료 또는 빈 배열) 따로 요청하지 않아요.
@@ -1979,7 +1986,7 @@ async function renderTaskTab(c, body, kind) {
       const records = (data.evaluations && data.evaluations.records) || (data.tests && data.tests.records) || []
       const activities = (data.evaluations && data.evaluations.activities) || []
       // 점수/정답/전체 문항은 반 전체 공통 설명인 records가 아니라, 학생별 인스턴스인 activities에만 있어요.
-      // (레코드에는 title/book/range만 있고 점수 필드 자체가 없어서 예전 코드는 항상 점수가 비어 보였어요.)
+      // (레코드에는 title/book/range만 있고 점수 필드 자��가 없어서 예전 코드는 항상 점수가 비어 보였어요.)
       if (activities.length > 0) {
         const recordById = {}
         records.forEach(function (r) { recordById[r.id] = r })
