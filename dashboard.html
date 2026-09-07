@@ -347,6 +347,19 @@
 .schedule-item-title { font-size:13.5px; font-weight:600; }
 .schedule-item-badges { display:flex; gap:6px; flex-wrap:wrap; }
 .sched-tag-more { color:var(--muted); }
+.class-badge { font-size:11px; padding:2px 7px; border-radius:999px; white-space:nowrap; background:#fff; border:1px solid; }
+.class-badge.tb-gray { border-color:#d9d9d6; color:#5a5a57; }
+.class-badge.tb-brown { border-color:#d8bfae; color:#8c5b3f; }
+.class-badge.tb-orange { border-color:#f0c896; color:#a86227; }
+.class-badge.tb-yellow { border-color:#eddd9e; color:#9b7d1f; }
+.class-badge.tb-green { border-color:#b7d6cd; color:#3a7566; }
+.class-badge.tb-blue { border-color:#b7d2e0; color:#3072a3; }
+.class-badge.tb-purple { border-color:#cfc0e0; color:#6b4d99; }
+.class-badge.tb-pink { border-color:#e8bfd8; color:#a3467c; }
+.class-badge.tb-red { border-color:#f0bcbc; color:#af4141; }
+.sched-msg-section { margin-top:18px; }
+.sched-msg-body .student-select-all { margin-bottom:6px; }
+.sched-msg-body .bulk-send-btn { margin-top:10px; width:100%; }
 .schedule-list-area { display:flex; flex-direction:column; gap:0; }
 .sched-date-group { display:flex; flex-direction:column; }
 .sched-date-label { font-size:12px; font-weight:700; color:var(--muted); padding:14px 12px 4px; }
@@ -1109,7 +1122,7 @@ function renderCalPanel() {
   const parts = CAL_PANEL_MONTH.split("-").map(Number)
   const y = parts[0], m = parts[1]
   const first = new Date(y, m - 1, 1)
-  const startWeekday = (first.getDay() + 6) % 7 // 월요일 시작 기준 오프셋
+  const startWeekday = (first.getDay() + 6) % 7 // ��요일 시작 기준 오프셋
   const daysInMonth = new Date(y, m, 0).getDate()
   const today = kstToday()
   const dows = ["월", "화", "수", "목", "금", "토", "일"]
@@ -1450,7 +1463,7 @@ function renderTuitionClassDetail() {
     '<div style="display:flex;gap:18px;flex-wrap:wrap">' +
       '<div class="stat-row stat-text green">완납 <b>' + paidCount + '</b>명</div>' +
       '<div class="stat-row stat-text orange">부분납 <b>' + partialCount + '</b>명</div>' +
-      '<div class="stat-row stat-text red">미납 <b>' + unpaidCount + '</b>명</div>' +
+      '<div class="stat-row stat-text red">미�� <b>' + unpaidCount + '</b>명</div>' +
     '</div>' +
     '<div class="stat-row" style="margin-top:8px;font-weight:600">총 수강료액 <b>' + Number(totalAmount).toLocaleString("ko-KR") + '원</b></div>' +
   '</div>'
@@ -2152,17 +2165,22 @@ function dedupeSchedules(list) {
   return order.map(function (k) { return map.get(k) })
 }
 
-// 강사/반 이름 태그가 너무 많아지지 않도록 최대 2개만 보여주고 나머지는 "+N"으로 축약해요.
+// 구분(선택 속성)은 노션이 지정한 색을 그대로 쓰고(s.categoryColor), 강사/반은 관계형이라 학원마다 값이 달라져서
+// 이름을 해시해서 고정 팔레트에서 색을 고르는 teacherColorClass를 재사용해요(수업 탭의 강사 배지와 동일한 방식).
+// 강사는 색이 칠해진 teacher-badge, 반은 테두리만 있는 class-badge로 구분해서 한눈에 종류를 알 수 있게 해요.
 function renderScheduleTagBadges(s) {
-  const names = []
-  ;(s.teacherNames || []).forEach(function (n) { if (names.indexOf(n) === -1) names.push(n) })
-  ;(s.classNames || []).forEach(function (n) { if (names.indexOf(n) === -1) names.push(n) })
-  if (names.length === 0) return ""
-  const MAX_TAGS = 2
-  const shown = names.slice(0, MAX_TAGS)
-  const extra = names.length - shown.length
-  return shown.map(function (n) { return '<span class="badge gray">' + esc(n) + '</span>' }).join("") +
-    (extra > 0 ? '<span class="badge gray sched-tag-more">+' + extra + '</span>' : "")
+  const teacherBadges = []
+  const seenTeachers = {}
+  ;(s.teacherNames || []).forEach(function (n) { if (!seenTeachers[n]) { seenTeachers[n] = true; teacherBadges.push('<span class="teacher-badge ' + teacherColorClass(n) + '">' + esc(n) + '</span>') } })
+  const classBadges = []
+  const seenClasses = {}
+  ;(s.classNames || []).forEach(function (n) { if (!seenClasses[n]) { seenClasses[n] = true; classBadges.push('<span class="class-badge ' + teacherColorClass(n) + '">' + esc(n) + '</span>') } })
+  const all = teacherBadges.concat(classBadges)
+  if (all.length === 0) return ""
+  const MAX_TAGS = 3
+  const shown = all.slice(0, MAX_TAGS)
+  const extra = all.length - shown.length
+  return shown.join("") + (extra > 0 ? '<span class="badge gray sched-tag-more">+' + extra + '</span>' : "")
 }
 
 function renderScheduleList() {
@@ -2228,6 +2246,7 @@ function selectSchedule(id) {
   el("right-summary-body").classList.remove("show")
   el("bulk-send-tab-btn").style.display = "none"
   el("bulk-send-tab-btn").disabled = true
+  SCHEDULE_MSG_SELECTED = {}
   renderScheduleDetail(s)
   openMobileDetail()
 }
@@ -2244,8 +2263,69 @@ function renderScheduleDetail(s) {
   if (s.relatedText) html += field("관련 대상", esc(s.relatedText))
   if (s.memo) html += field("메모", esc(s.memo).replace(/\n/g, "<br>"))
   if ((s.tags || []).length) html += field("태그", s.tags.map(function (t) { return '<span class="badge gray">' + esc(t) + '</span>' }).join(" "))
+  html += renderScheduleMessageSectionHtml(s)
   html += '<div class="schedule-detail-hint" style="margin-top:16px;color:var(--muted);font-size:12px">✏️ 수정은 노션에서 해주세요 (대시보드는 보기 전용이에요)</div>'
   body.innerHTML = html
+}
+
+// ---------------- 일정 안내 메시지 (UI만 먼저 준비, 발송 백엔드는 추후 연동) ----------------
+// 수업 탭의 학생 선택/일괄전송 UI(student-row, student-select-all, bulk-send-btn)와 동일한 디자인을 재사용해요.
+let SCHEDULE_MSG_SELECTED = {}
+
+function scheduleMessageTargets(s) {
+  // TODO: 백엔드(get-schedule-students 등) 연동 후, 이 일정과 연결된 실제 학생 목록으로 교체해주세요.
+  // 지금은 UI 배치만을 위해 관련 반 이름을 임시 자리표시자로 써요.
+  if (s.classNames && s.classNames.length) return s.classNames.map(function (name) { return { id: name, label: name + " 학생 전체" } })
+  return []
+}
+
+function renderScheduleMessageSectionHtml(s) {
+  const targets = scheduleMessageTargets(s)
+  const rowsHtml = targets.length
+    ? targets.map(function (t) {
+        return '<div class="student-row"><span class="stu-name"><input type="checkbox" class="stu-checkbox" data-target-id="' + attrSafe(t.id) + '" onchange="toggleScheduleMsgTarget(' + attrSafe(t.id) + ', this.checked)"> ' + esc(t.label) + '</span></div>'
+      }).join("")
+    : '<div class="empty" style="padding:8px 0">연결된 학생 목록이 아직 없어요</div>'
+  return '<div class="sched-msg-section">' +
+    '<button class="right-summary-toggle" id="sched-msg-toggle" onclick="toggleScheduleMessageSection()">' +
+      '<span id="sched-msg-toggle-label">📩 안내 메시지 보내기</span><span class="right-summary-chevron">▾</span>' +
+    '</button>' +
+    '<div class="right-summary-body sched-msg-body" id="sched-msg-body">' +
+      '<label class="student-select-all"><input type="checkbox" onchange="toggleScheduleMsgSelectAll(this.checked)" ' + (targets.length ? "" : "disabled") + '> 전체 선택</label>' +
+      '<div id="sched-msg-student-rows">' + rowsHtml + '</div>' +
+      '<button class="bulk-send-btn" id="sched-msg-send-btn" disabled onclick="handleScheduleMessageSend()">📩 선택한 대상에게 안내 발송</button>' +
+    '</div>' +
+  '</div>'
+}
+
+function toggleScheduleMessageSection() {
+  const body = el("sched-msg-body")
+  const btn = el("sched-msg-toggle")
+  if (!body || !btn) return
+  const isOpen = body.classList.toggle("show")
+  btn.classList.toggle("open", isOpen)
+}
+
+function toggleScheduleMsgTarget(targetId, checked) {
+  if (checked) SCHEDULE_MSG_SELECTED[targetId] = true
+  else delete SCHEDULE_MSG_SELECTED[targetId]
+  el("sched-msg-send-btn").disabled = Object.keys(SCHEDULE_MSG_SELECTED).length === 0
+}
+
+function toggleScheduleMsgSelectAll(checked) {
+  const boxes = document.querySelectorAll("#sched-msg-student-rows .stu-checkbox")
+  boxes.forEach(function (cb) {
+    cb.checked = checked
+    const id = cb.getAttribute("data-target-id")
+    if (checked) SCHEDULE_MSG_SELECTED[id] = true
+    else delete SCHEDULE_MSG_SELECTED[id]
+  })
+  el("sched-msg-send-btn").disabled = Object.keys(SCHEDULE_MSG_SELECTED).length === 0
+}
+
+function handleScheduleMessageSend() {
+  // TODO: 백엔드 준비 후 실제 알림톡/문자 발송 호출로 교체해주세요.
+  showToast("일정 안내 메시지 발송 기능은 준비 중이에요")
 }
 
 // ---------------- 알림톡 발송 ----------------
