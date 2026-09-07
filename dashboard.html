@@ -400,6 +400,8 @@
 .right-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight:600; }
 .record-card { border:none; border-bottom:1px solid var(--border); border-radius:0; padding:12px 14px; margin-bottom:0; background:transparent; }
 .record-card:last-child { border-bottom:none; }
+.retry-btn { margin-top:8px; padding:6px 12px; border:1px solid var(--border); border-radius:6px; background:#fff; color:var(--text); font-size:12.5px; cursor:pointer; font-family:inherit; }
+.retry-btn:hover { background:#f0f0ee; }
 .record-card a, .activity-row a { color: var(--text); text-decoration:none; }
 .record-card a:hover, .activity-row a:hover { text-decoration:underline; }
 .record-card .title { font-weight:600; font-size:13.5px; margin-bottom:4px; }
@@ -597,7 +599,7 @@
         <span class="cal-icon">📅</span><span class="date-nav-label" id="date-nav-label">-</span>
       </div>
       <div class="search-row">
-        <input type="text" id="search-input" class="search-box" placeholder="🔍 검색 (수업명 · 강사 · 학생 등)" oninput="onSearchInput(this.value)">
+        <input type="text" id="search-input" class="search-box" placeholder="🔍 검색 (수업명 · 강사 · 학생 등)" oninput="onSearchInputDebounced(this.value)">
       </div>
       <div id="class-list-area" class="class-list-area"></div>
       <div id="schedule-list-area" class="schedule-list-area" style="display:none"></div>
@@ -833,6 +835,7 @@ let SELECTED_SCHEDULE_ID = null
 let CALENDAR_OPEN = false
 let CAL_PANEL_MONTH = kstToday().slice(0, 7)
 let CAL_PANEL_ITEMS = {}
+let CAL_DOTS_CACHE = {} // 도맨인:월 키로 캐싱해서, 같은 월을 다시 볼 땐 31일을 다시 조회하지 않도록 해요.
 let REPORT_TYPE = "weekly" // "weekly" | "monthly"
 let REPORTS = []
 let REPORT_LOADING = false // 보고서 목록 조회가 진행 중인 동안, 다른 곳(주 선택 등)에서 목록을 다시 그려도 파란 로딩 박스를 유지해요.
@@ -980,11 +983,19 @@ function updateDateNavLabel() {
 async function loadCalPanelDots() {
   if (DOMAIN === "report" || DOMAIN === "tuition") { CAL_PANEL_ITEMS = {}; renderCalPanel(); return }
   const month = CAL_PANEL_MONTH
+  const cacheKey = DOMAIN + ":" + month
+  // 이번 달을 이번 도맨에서 이버 조회한 적 있으릴 바로 쿨섫 사용해요(달 이동을 반복해도 서버 31번 호출이 난번번 나가지 않아요).
+  if (CAL_DOTS_CACHE[cacheKey]) {
+    CAL_PANEL_ITEMS = CAL_DOTS_CACHE[cacheKey]
+    renderCalPanel()
+    return
+  }
   const parts = month.split("-").map(Number)
   const y = parts[0], m = parts[1]
   const daysInMonth = new Date(y, m, 0).getDate()
   const url = DOMAIN === "class" ? GET_CLASSES_URL : GET_SCHEDULES_URL
   const items = {}
+  let hadError = false
   await Promise.all(Array.from({ length: daysInMonth }, function (_, i) { return i + 1 }).map(async function (d) {
     const dateStr = month + "-" + String(d).padStart(2, "0")
     try {
@@ -994,10 +1005,15 @@ async function loadCalPanelDots() {
       const data = await res.json()
       const list = DOMAIN === "class" ? data.classes : data.schedules
       if (res.ok && list && list.length) items[dateStr] = true
-    } catch (err) {}
+    } catch (err) {
+      hadError = true
+      console.error("loadCalPanelDots 조회 실패(" + dateStr + "):", err)
+    }
   }))
   if (month !== CAL_PANEL_MONTH) return
+  // 일부만 실패해도 적재된 점은 보여줌지만, 전부 실패하지 앞았으벻로 쿨섫론 오류가 재시될 땐 다시 시도되땄롑 성공한 경우에만 쿨섫해요.
   CAL_PANEL_ITEMS = items
+  if (!hadError) CAL_DOTS_CACHE[cacheKey] = items
   renderCalPanel()
 }
 
@@ -1067,10 +1083,19 @@ function goToDateFromCalendarPanel(dateStr) {
 }
 
 // ---------------- 검색(만능 검색) ----------------
+// 키 입력를 주먃물메, 목록이 탁 땐 키잌담다 매번 리럌렝되랴 링츠 종킥을 줄여요.
+function debounce(fn, wait) {
+  let timer = null
+  return function (...args) {
+    clearTimeout(timer)
+    timer = setTimeout(function () { fn.apply(null, args) }, wait)
+  }
+}
 function onSearchInput(term) {
   SEARCH_TERM = (term || "").trim().toLowerCase()
   renderCenterList()
 }
+const onSearchInputDebounced = debounce(onSearchInput, 150)
 
 // ---------------- 날짜 이동(하루씩) ----------------
 function shiftDate(delta) {
@@ -1125,7 +1150,7 @@ async function loadReportList(month) {
     if (myGen !== reportLoadGen) return
     if (month !== CAL_PANEL_MONTH || DOMAIN !== "report") { REPORT_LOADING = false; return }
     REPORT_LOADING = false
-    el("report-list-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '</div>'
+    el("report-list-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '<br><button class="retry-btn" onclick="loadReportList(CAL_PANEL_MONTH)">다시 시도</button></div>'
   }
 }
 
@@ -1277,7 +1302,7 @@ async function loadTuitionList(month) {
     if (myGen !== tuitionLoadGen) return
     if (month !== CAL_PANEL_MONTH || DOMAIN !== "tuition") { TUITION_LOADING = false; return }
     TUITION_LOADING = false
-    el("tuition-list-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '</div>'
+    el("tuition-list-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '<br><button class="retry-btn" onclick="loadTuitionList(CAL_PANEL_MONTH)">다시 시도</button></div>'
   }
 }
 
@@ -1295,7 +1320,7 @@ function getFilteredTuitions() {
 }
 
 function renderTuitionList() {
-  // 수강료 목록을 불러오는 중이면 파란 로딩 박스를 그대로 유지하고, 결과 화면은 데이터가 실제로 도착한 뒤에만 보여줘요.
+  // 수강료 목록을 불러오는 중이면 파란 로딩 박스를 그대로 유지하고, 결과 화면은 데이터가 실제로 도착한 ��에만 보여줘요.
   if (TUITION_LOADING) return
   const list = getFilteredTuitions()
   if (!list.length) {
@@ -1425,7 +1450,7 @@ async function refreshClassList(dateStr, silent) {
     renderClassList()
   } catch (err) {
     if (!silent && dateStr === CURRENT_DATE && DOMAIN === "class") {
-      el("class-list-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '</div>'
+      el("class-list-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '<br><button class="retry-btn" onclick="refreshClassList(CURRENT_DATE, false)">다시 시도</button></div>'
     }
   }
 }
@@ -1674,7 +1699,7 @@ function renderStudentsTab(c, body) {
   const controlsHtml = '<div class="student-list-controls">' +
       '<label class="student-select-all"><input type="checkbox" ' + (allSelected ? "checked" : "") + ' onchange="toggleSelectAllStudents(this.checked)" ' + (eligibleIds.length ? "" : "disabled") + '> 전체 선택</label>' +
       '<button class="student-sort-btn' + (STUDENT_SORT_NAME_ASC ? " active" : "") + '" onclick="toggleStudentNameSort()">이름 ' + (STUDENT_SORT_NAME_ASC ? "▲" : "↕") + '</button>' +
-      '<input type="text" class="student-search-box" placeholder="🔍 이름·학교·학년 검색" value="' + esc(STUDENT_SEARCH_TERM) + '" oninput="onStudentSearchInput(this.value)">' +
+      '<input type="text" class="student-search-box" placeholder="🔍 이름·학교·학년 검색" value="' + esc(STUDENT_SEARCH_TERM) + '" oninput="onStudentSearchInputDebounced(this.value)">' +
     '</div>'
   body.innerHTML = controlsHtml + '<div id="student-rows-body">' + buildStudentRowsHtml(c) + '</div>'
 }
@@ -1684,6 +1709,7 @@ function onStudentSearchInput(term) {
   const c = findClass(SELECTED_CLASS_ID)
   if (c) renderStudentRows(c)
 }
+const onStudentSearchInputDebounced = debounce(onStudentSearchInput, 150)
 
 function toggleStudentNameSort() {
   STUDENT_SORT_NAME_ASC = !STUDENT_SORT_NAME_ASC
@@ -1733,7 +1759,7 @@ function pickField(obj, keys) {
   return null
 }
 
-// 평가 탭은 우선 get-class-detail의 학습기록(평가) 레코드를 조회해서 리포트 페이지처럼 "N점 (정답/전체)" 형태로 보여주고,
+// 평가 탭은 우선 get-class-detail의 학습기록(평가) 레코드를 조회해서 리포트 페이지처럼 "N점 (정답/전체)" 형태�� 보여주���,
 // 이 정보가 없으면 기존의 "평가 결과" 요약 텍스트로 대체해요(하위 호환).
 // 과제 탭은 마감일을 반영하기 위해 get-class-detail을 통해 학습기록(과제) 목록을 따로 조회합니다.
 // (조금 느리지만 마감일을 다시 보여줄 수 있습니다.) 결과는 CLASS_DETAIL_CACHE에 캐싱되어 재조회를 최소화합니다.
@@ -1855,7 +1881,7 @@ async function renderTaskTab(c, body, kind) {
       html = records.map(function (r) {
         const due = pickField(r, ["dueDate", "due_iso", "due", "dueAt", "과제마감일", "과제 마감일"]) || dueByRecordId[r.id] || null
         // r.content는 이미 자체적인 서식(줄바꿈, 자체 불릿 등)을 포함하고 있을 수 있어서,
-        // "내용:" 라벨로 감싸면 이중 불릿·줄바꿈 깨짐이 생겨요. 그래서 원본 그대로 별도 줄에 보여줘요.
+        // "내용:" 라벨로 감싸면 이중 불릿·줄바꿈 깨짐이 생겨요. 그래서 원��� 그대로 별도 줄에 보여줘요.
         return '<div class="record-card"><div class="title"><a href="' + r.url + '" target="_blank">' + esc(r.title) + '</a></div>' +
           '<div class="meta">교재: ' + esc(r.book) + (r.range ? " · 범위: " + esc(r.range) : "") + '</div>' +
           (r.content ? '<div class="meta" style="margin-top:4px">' + esc(r.content) + '</div>' : "") +
@@ -1900,7 +1926,7 @@ async function refreshScheduleList(dateStr, silent) {
     renderScheduleList()
   } catch (err) {
     if (!silent && dateStr === CURRENT_DATE && DOMAIN === "schedule") {
-      el("schedule-list-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '</div>'
+      el("schedule-list-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '<br><button class="retry-btn" onclick="refreshScheduleList(CURRENT_DATE, false)">다시 시도</button></div>'
     }
   }
 }
