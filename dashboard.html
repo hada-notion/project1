@@ -1085,7 +1085,7 @@ async function loadCalPanelDots() {
   if (DOMAIN === "report" || DOMAIN === "tuition") { CAL_PANEL_ITEMS = {}; renderCalPanel(); return }
   const month = CAL_PANEL_MONTH
   const cacheKey = DOMAIN + ":" + month
-  // 이번 �������을 이번 도메인에서 이미 조회한 적 있으면 바로 캐시를 사용해요.
+  // 이�� �������을 이번 도메인에서 이미 조회한 적 있으면 바로 캐시를 사용해요.
   if (CAL_DOTS_CACHE[cacheKey]) {
     CAL_PANEL_ITEMS = CAL_DOTS_CACHE[cacheKey]
     renderCalPanel()
@@ -1372,15 +1372,13 @@ function renderReportClassDetail() {
   el("right-summary-toggle-label").textContent = RIGHT_SUMMARY_CLOSED_LABEL
   // 더보기를 펼치면 나오는 상세 요약카드는 수업 탭과 같은 info-card 패턴, 아래 목록은 수업 탭과 같은 .student-row 한줄 패턴으로 통일해요 (DESIGN 문서 "학생 목록 표준 디자인" 규칙 참고).
   // 발송 현황은 보조 정보로 한 줄만 남기고, 학습 현황(출석률/과제이행률/평가 평균점수)을 요약카드의 주 내용으로 보여줘요.
+  // 요약 카드는 위 right-sub 배지와 같은 라벨(출석률/과제이행/평가)로 통일하고, 아래에서 중복되던 발송 현황 카드는 제거해요.
   el("right-summary-body").innerHTML = '<div class="info-card"><h3>📊 학습 현황 평균</h3>' +
     '<div style="display:flex;gap:18px;flex-wrap:wrap">' +
       (avgAttendance != null ? '<div class="stat-row stat-text green">출석률 <b>' + avgAttendance + '%</b></div>' : '<div class="stat-row stat-text gray">출석률 정보 없음</div>') +
-      (avgHomework != null ? '<div class="stat-row stat-text orange">과제이행률 <b>' + avgHomework + '%</b></div>' : '<div class="stat-row stat-text gray">과제이행률 정보 없음</div>') +
-      (avgEval != null ? '<div class="stat-row stat-text blue">평가 평균점수 <b>' + avgEval + '점</b></div>' : '<div class="stat-row stat-text gray">평가 평균점수 정보 없음</div>') +
-    '</div></div>' +
-    '<div class="info-card"><h3>✅ 발송 현황</h3>' +
-      '<div class="stat-row">' + list.length + '명 중 발송완료 <b>' + sentCount + '</b>명 · 미발송 <b>' + (list.length - sentCount) + '</b>명</div>' +
-    '</div>'
+      (avgHomework != null ? '<div class="stat-row stat-text orange">과제이행 <b>' + avgHomework + '%</b></div>' : '<div class="stat-row stat-text gray">과제이행 정보 없음</div>') +
+      (avgEval != null ? '<div class="stat-row stat-text blue">평가 <b>' + avgEval + '점</b></div>' : '<div class="stat-row stat-text gray">평가 정보 없음</div>') +
+    '</div></div>'
   const controlsHtml = reportTuitionListControlsHtml("report")
   el("report-tuition-detail").innerHTML = controlsHtml + '<div id="report-rows-body">' + buildReportRowsHtml(list) + '</div>'
   openMobileDetail()
@@ -1981,7 +1979,7 @@ function renderRightTabBody() {
 function summarizeStudents(students) {
   const stat = { attend: 0, makeup: 0, absent: 0, done: 0, partial: 0, none: 0 }
   ;(students || []).forEach(function (s) {
-    if (s.status === "출석") stat.attend++
+    if (s.status === "출��") stat.attend++
     else if (s.status === "보강") stat.makeup++
     else if (s.status === "결석") stat.absent++
     if (s.homework) {
