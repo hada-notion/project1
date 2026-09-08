@@ -361,9 +361,8 @@
 #right-tab-body .student-row { border-bottom:1px solid var(--border); padding:6px 0; }
 #right-tab-body .student-row:last-child { border-bottom:none; }
 .sched-msg-title { font-size:13px; font-weight:700; color:var(--text); margin-bottom:10px; }
-.sched-msg-search { margin-bottom:8px; display:flex; gap:6px; }
-.sched-msg-search input { flex:1 1 auto; min-width:0; font-size:12px; padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:#fff; color:var(--text); box-sizing:border-box; }
-.sched-msg-search select { flex:0 0 auto; font-size:12px; padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:#fff; color:var(--text); }
+.sched-msg-search { margin-bottom:8px; }
+.sched-msg-search input { width:100%; font-size:12px; padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:#fff; color:var(--text); box-sizing:border-box; }
 .sched-msg-count { font-size:12px; color:var(--muted); margin-bottom:6px; }
 .schedule-list-area { display:flex; flex-direction:column; gap:0; }
 .sched-date-group { display:flex; flex-direction:column; }
@@ -1028,7 +1027,7 @@ function updateDateNavLabel() {
 
 // 캘린더에 표시된 달의 날짜별로 수업/일정이 있는지 조회해서 점을 표시해요.
 // 단 1번의 요정으로 해당 달의 범위(?month=YYYY-MM)를 조회해요. 이전에는 하맞다 31일을 개네로 조회해서
-// Notion API가 같이 429(rate limited)를 맞렔니 다만 지연 숙쇈둌떈담니, 이제는 get-classes/get-schedules 각각이 지원���렘땄 월 다위 범위 조회로 1번만 호출해요.
+// Notion API가 같이 429(rate limited)를 맞렔니 다만 지연 숙쇈둌떈담니, 이제는 get-classes/get-schedules 각각이 지원하렘땄 월 다위 범위 조회로 1번만 호출해요.
 // 만약 월 범위 조회가 실패하면(구버전 백어덹 문제 따랑), 예전의 일자별 조회로 되돌감담 설정해요(동시에 네려 젔렸려가 아니려 5거씩 직닉에 진학해서 Notion 요오을 줄임해요).
 async function loadCalPanelDotsViaMonth(url, month) {
   const res = await fetch(url + "?month=" + month, {
@@ -1456,7 +1455,7 @@ function renderTuitionClassDetail() {
   el("bulk-send-tab-btn").disabled = false
   el("bulk-send-tab-btn").textContent = "📩 수강료 안내 일괄 전송"
   const totalAmount = list.reduce(function (sum, t) { return sum + (t.amount || 0) }, 0)
-  el("right-time").textContent = list.length + "명 · 총 " + Number(totalAmount).toLocaleString("ko-KR") + "원"
+  el("right-time").textContent = list.length + "명 · 총 " + Number(totalAmount).toLocaleString("ko-KR") + "���"
   const paidCount = list.filter(function (t) { return paymentStatusTone(t.paymentStatus) === "tone-green" }).length
   const partialCount = list.filter(function (t) { return paymentStatusTone(t.paymentStatus) === "tone-orange" }).length
   const unpaidCount = list.filter(function (t) { return paymentStatusTone(t.paymentStatus) === "tone-red" }).length
@@ -1471,7 +1470,7 @@ function renderTuitionClassDetail() {
   RIGHT_SUMMARY_CLOSED_LABEL = "더보기"
   RIGHT_SUMMARY_ON_OPEN = null
   el("right-summary-toggle-label").textContent = RIGHT_SUMMARY_CLOSED_LABEL
-  // 더보기를 펼치면 나오는 상세 요약카드는 수업 탭과 같은 info-card 패턴, 아래 목록은 수업 탭과 같은 .student-row 한줄 패턴으로 통일해요 (DESIGN 문서 "학생 목록 표준 디자인" 규칙 참고).
+  // 더보기를 펼치면 나오는 상세 요약카드는 수업 탭과 같은 info-card 패턴, 아래 목록은 수업 탭과 같은 .student-row ���줄 패턴으로 통일해요 (DESIGN 문서 "학생 목록 표준 디자인" 규칙 참고).
   el("right-summary-body").innerHTML = '<div class="info-card"><h3>💰 수강료 현황</h3>' +
     '<div style="display:flex;gap:18px;flex-wrap:wrap">' +
       '<div class="stat-row stat-text green">완납 <b>' + paidCount + '</b>명</div>' +
@@ -1710,7 +1709,7 @@ async function prioritizeSelectedClassStudents(id) {
 }
 
 // 선택된 수업이 없을 때, 뒤에서 조용히 그날 전체 수업의 학생 정보를 하나씩 미리 불러와요.
-// 사용자가 나중에 아무 수업이나 클릭해도 이미 캐시된 학생 정보가 바로 나오도록 하기 위함이에요.
+// 사용자가 나중에 아무 수업이나 클릭해도 이미 캐시된 학생 정보가 바����� 나오도록 하기 위함이에요.
 // 도중에 사용자가 수업을 선택������ fetchSessionStudentsOnce가 요청을 공유하므로 중복 요청 없이 그�����로 이어받아요.
 async function backgroundPrefetchAllStudents(dateStr) {
   const token = ++BACKGROUND_PREFETCH_TOKEN
@@ -1979,7 +1978,7 @@ function formatSummaryBlock(text) {
 }
 
 // 과제 ��내/평가 결과 카드는 기존 과제·평가 탭에서 쓰던 구조화 레코드(제목 링크 + 교재·범위 + 마감/내용)를
-// 그대로 재사용해���. 탭이 없���������진 대신 더보기 안에서 바로 이 정보를 보여줍니다.
+// 그대로 재사용해���. 탭�� 없�����������진 대신 더보기 안에서 바로 이 정보를 보여줍니다.
 async function loadSummaryRecordDetails(c) {
   const assignEl = el("summary-assignment-body")
   const evalEl = el("summary-evaluation-body")
@@ -2143,6 +2142,8 @@ async function refreshScheduleWeek(dates, silent) {
     if (anchor !== CURRENT_DATE || DOMAIN !== "schedule") return
     SCHEDULES = mergeScheduleDates(dates)
     renderScheduleList()
+    // background prefetch: same as class tab, load students in background when no schedule is selected yet
+    if (!SELECTED_SCHEDULE_ID) ensureAllStudentsLoaded()
   } catch (err) {
     if (!silent && anchor === CURRENT_DATE && DOMAIN === "schedule") {
       el("schedule-list-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '<br><button class="retry-btn" onclick="refreshScheduleWeek(upcomingDateRange(CURRENT_DATE, SCHEDULE_WINDOW_DAYS), false)">다시 시도</button></div>'
@@ -2270,10 +2271,9 @@ function selectSchedule(id) {
   el("bulk-send-tab-btn").disabled = true
   SCHEDULE_MSG_SELECTED = {}
   SCHEDULE_MSG_SEARCH = ""
-  SCHEDULE_MSG_STATUS_FILTER = ""
   // 상세 정보(관련 대상·메모·태그)는 수업 탭처럼 "더보기" 접기 안에 담아요.
   renderScheduleDetail(s)
-  // 안내 대상 학생 목록은 접기와 무관하게 항상 보이는 영역(right-tab-body)에 그려요(수업 탭의 수강생 명���과 동일한 위치).
+  // 안내 대상 학��� 목록은 접기와 무관하게 항상 보이는 영역(right-tab-body)에 그려요(수업 탭의 수강생 명���과 동일한 위치).
   if (STUDENTS_LOAD_STATE === "loaded") renderScheduleMsgBody()
   else ensureAllStudentsLoaded()
   openMobileDetail()
@@ -2305,9 +2305,8 @@ let ALL_STUDENTS_CACHE = null // 학생(학원) DB 전체 목록 캐시 (여러 
 let STUDENTS_LOAD_STATE = "idle" // idle | loading | loaded | error
 let STUDENTS_LOAD_ERROR = ""
 let SCHEDULE_MSG_SEARCH = ""
-let SCHEDULE_MSG_STATUS_FILTER = ""
 
-// 안내 메시지 UI는 수업 탭과 동일한 상단 공통 "더보기" 토글(right-summary-toggle/right-summary-body)과
+// 안내 메시지 UI는 수업 탭과 동일한 상단 ���통 "더보기" 토글(right-summary-toggle/right-summary-body)과
 // 일괄 전송 버튼(bulk-send-tab-btn)을 그대로 재사용해요(배선은 selectSchedule 참고).
 
 // 학생(학원) DB 전체 목록을 한번 불러와서 캐시해요. 기대 응답 형태:
@@ -2332,33 +2331,14 @@ async function ensureAllStudentsLoaded() {
   renderScheduleMsgBody()
 }
 
-// 이름·학년·학교·클래스·수강상태 중 하나라도 검색어를 포함하면 보여주고, 수강상태 드롭다운이 선택되어 있으면 그 상태와 정확히 일치하는 학생만 더 걸러내요.
+// 이름·학년·학교·클래스·수강상태 중 하나라도 검색어를 포함하면 보여줘요.
 function filteredScheduleMsgStudents() {
   const q = (SCHEDULE_MSG_SEARCH || "").trim().toLowerCase()
+  if (!q) return ALL_STUDENTS_CACHE || []
   return (ALL_STUDENTS_CACHE || []).filter(function (st) {
-    if (SCHEDULE_MSG_STATUS_FILTER && st.status !== SCHEDULE_MSG_STATUS_FILTER) return false
-    if (!q) return true
     const haystack = [st.name, st.grade, st.school, st.status].concat(st.classNames || []).filter(Boolean).join(" ").toLowerCase()
     return haystack.indexOf(q) !== -1
   })
-}
-
-// 전체 학생 캐시에서 중복 없는 수강상태 목록을 만들어요.
-function scheduleMsgStatusOptions() {
-  const seen = {}
-  const out = []
-  ;(ALL_STUDENTS_CACHE || []).forEach(function (st) { if (st.status && !seen[st.status]) { seen[st.status] = true; out.push(st.status) } })
-  return out
-}
-
-function setScheduleMsgStatusFilter(value) {
-  SCHEDULE_MSG_STATUS_FILTER = value
-  renderScheduleMsgList()
-}
-
-function scheduleMsgStatusOptionsHtml() {
-  return '<option value="">수강상태 전체</option>' +
-    scheduleMsgStatusOptions().map(function (o) { return '<option value="' + esc(o) + '"' + (SCHEDULE_MSG_STATUS_FILTER === o ? " selected" : "") + '>' + esc(o) + '</option>' }).join("")
 }
 
 function setScheduleMsgSearch(value) {
@@ -2385,8 +2365,7 @@ function renderScheduleMsgBody() {
   if (!bodyEl.querySelector(".sched-msg-search input")) {
     bodyEl.innerHTML =
       '<div class="sched-msg-title">📩 안내 대상 학생</div>' +
-      '<div class="sched-msg-search"><input type="text" placeholder="이름·학년·학교·클래스 검색" value="' + esc(SCHEDULE_MSG_SEARCH) + '" oninput="setScheduleMsgSearch(this.value)">' +
-        '<select onchange="setScheduleMsgStatusFilter(this.value)">' + scheduleMsgStatusOptionsHtml() + '</select></div>' +
+      '<div class="sched-msg-search"><input type="text" placeholder="이름·학년·학교·클래스·수강상태 검색" value="' + esc(SCHEDULE_MSG_SEARCH) + '" oninput="setScheduleMsgSearch(this.value)"></div>' +
       '<div class="sched-msg-count"></div>' +
       '<label class="student-select-all"><input type="checkbox" onchange="toggleScheduleMsgSelectAll(this.checked)"> 이 목록 전체 선택</label>' +
       '<div id="sched-msg-student-rows"></div>'
