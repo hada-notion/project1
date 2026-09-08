@@ -360,10 +360,6 @@
 #right-tab-body .student-select-all { margin-bottom:6px; }
 #right-tab-body .student-row { border-bottom:1px solid var(--border); padding:6px 0; }
 #right-tab-body .student-row:last-child { border-bottom:none; }
-.sched-msg-title { font-size:13px; font-weight:700; color:var(--text); margin-bottom:10px; }
-.sched-msg-search { margin-bottom:8px; display:flex; gap:6px; }
-.sched-msg-search input { flex:1 1 auto; min-width:0; font-size:12px; padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:#fff; color:var(--text); box-sizing:border-box; }
-.sched-msg-search select { flex:0 0 auto; font-size:12px; padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:#fff; color:var(--text); }
 .sched-msg-count { font-size:12px; color:var(--muted); margin-bottom:6px; }
 .schedule-list-area { display:flex; flex-direction:column; gap:0; }
 .sched-date-group { display:flex; flex-direction:column; }
@@ -449,6 +445,7 @@
 .student-sort-btn.active { color:var(--accent); border-color:var(--accent); }
 .student-search-box { flex:1; min-width:100px; border:1px solid var(--border); border-radius:8px; padding:6px 10px; font-size:12px; font-family:inherit; background:#fff; }
 .student-search-box:focus { outline:none; border-color:var(--accent); }
+.student-status-filter { flex:0 0 auto; border:1px solid var(--border); border-radius:8px; padding:6px 10px; font-size:12px; font-family:inherit; background:#fff; color:var(--text); }
 .student-row .stu-meta { font-size:11px; color:var(--muted); }
 .stu-checkbox { width:15px; height:15px; cursor:pointer; margin-right:2px; flex-shrink:0; }
 .teacher-badge { font-size:11px; padding:2px 7px; border-radius:999px; white-space:nowrap; }
@@ -614,7 +611,7 @@
           <button class="report-type-btn active" data-report-type="weekly" onclick="setReportType('weekly')">주간 보고서</button>
           <button class="report-type-btn" data-report-type="monthly" onclick="setReportType('monthly')">월간 보고서</button>
         </div>
-        <div class="cal-panel-hint" id="cal-panel-hint">날짜를 탭하면 해당 날짜의 수업을 볼 수 있어요</div>
+        <div class="cal-panel-hint" id="cal-panel-hint">날짜를 탭하면 해당 날짜의 수업을 볼 ��� 있어요</div>
       </div>
     </div>
     <div class="md-left" id="md-left">
@@ -622,7 +619,7 @@
         <span class="cal-icon">📅</span><span class="date-nav-label" id="date-nav-label">-</span>
       </div>
       <div class="search-row">
-        <input type="text" id="search-input" class="search-box" placeholder="통합 검색 (수업명 · 강사 · 학생 등)" oninput="onSearchInputDebounced(this.value)">
+        <input type="text" id="search-input" class="search-box" placeholder="���합 검색 (수업명 · 강사 · 학생 등)" oninput="onSearchInputDebounced(this.value)">
       </div>
       <div class="md-filter-options" id="schedule-category-filter-row" style="display:none"></div>
       <div id="class-list-area" class="class-list-area"></div>
@@ -665,7 +662,7 @@
 <script>
 // ============ 공통 로그인 (admin.html과 같은 localStorage 키를 사용해 한 번만 로그인하면 됩니다) ============
 const ADMIN_KEY_STORAGE = "admin_key"
-const ADMIN_SESSION_TTL_MS = 24 * 60 * 60 * 1000 // 24시간 후 자동 만료(admin.html과 공유되는 만료 시각입니다). 문자열 키 형식이라도 만료 시각 비교를 적용해요.
+const ADMIN_SESSION_TTL_MS = 24 * 60 * 60 * 1000 // 24시간 후 자동 만료(admin.html과 공유되는 만료 ��각입니다). 문자열 키 형식이라도 만료 시각 비교를 적용해요.
 function getAdminKey() {
   const raw = localStorage.getItem(ADMIN_KEY_STORAGE) || ""
   if (!raw) return ""
@@ -900,6 +897,12 @@ let SELECTED_WEEK_START = null // 주간 보고서용: 선택된 주의 시작�
 let SELECTED_WEEK_END = null
 let SELECTED_REPORT_CLASS = null // 보고서 탭: 가운데에서 선택된 클래스 id (미배정은 "__unassigned__")
 let SELECTED_TUITION_CLASS = null // 수강료 탭: 가운데에서 선택된 클래스 id
+let SELECTED_REPORT_IDS = {} // 보고서 탭: 체크된 reportId 집합
+let REPORT_SEARCH_TERM = ""
+let REPORT_SORT_NAME_ASC = false
+let SELECTED_TUITION_IDS = {} // 수강료 탭: 체크된 tuitionId 집합
+let TUITION_SEARCH_TERM = ""
+let TUITION_SORT_NAME_ASC = false
 
 function formatDateLabel(dateStr) {
   const d = new Date(dateStr + "T00:00:00+09:00")
@@ -911,7 +914,7 @@ function formatDateLabel(dateStr) {
 function clearRightPanel() {
   el("md-right-empty").style.display = "block"
   el("md-right-content").style.display = "none"
-  el("md-right-empty").textContent = DOMAIN === "class" ? "👈 왼쪽에서 수업을 선택하면 상세정보가 표시돼요" : "👈 왼쪽에서 일정을 선택하면 상세정보가 표시돼요"
+  el("md-right-empty").textContent = DOMAIN === "class" ? "👈 왼쪽에서 수업�� 선택하면 상세정보가 표시돼요" : "👈 왼쪽에서 일정을 선택하면 상세정보가 표시돼요"
   SELECTED_CLASS_ID = null
   SELECTED_SCHEDULE_ID = null
   el("bulk-send-tab-btn").disabled = true
@@ -1034,7 +1037,7 @@ function updateDateNavLabel() {
 
 // 캘린더에 표시된 달의 날짜별로 수업/일정이 있는지 조회해서 점을 표시해요.
 // 단 1번의 요정으로 해당 달의 범위(?month=YYYY-MM)를 조회해요. 이전에는 하맞다 31일을 개네로 조회해서
-// Notion API가 동시에 429(rate limited)를 맞아 지연이 발생했었는데, 이제는 get-classes/get-schedules 각각이 지원하는 월 단위 범위 조회로 1번만 호출해요.
+// Notion API가 ��시에 429(rate limited)를 맞아 지연이 발생했었는데, 이제는 get-classes/get-schedules 각각이 지원하는 월 단위 범위 조회로 1번만 호출해요.
 // 만약 월 범위 조회가 실패하면(구버전 백어덹 문제 따랑), 예전의 일자별 조회로 되돌감담 설정해요(동시에 네려 젔렸려가 아니려 5거씩 직닉에 진학해서 Notion 요오을 줄임해요).
 async function loadCalPanelDotsViaMonth(url, month) {
   const res = await fetch(url + "?month=" + month, {
@@ -1082,7 +1085,7 @@ async function loadCalPanelDots() {
   if (DOMAIN === "report" || DOMAIN === "tuition") { CAL_PANEL_ITEMS = {}; renderCalPanel(); return }
   const month = CAL_PANEL_MONTH
   const cacheKey = DOMAIN + ":" + month
-  // 이번 달을 이번 도메인에서 이미 조회한 적 있으면 바로 캐시를 사용해요.
+  // 이번 �������을 이번 도메인에서 이미 조회한 적 있으면 바로 캐시를 사용해요.
   if (CAL_DOTS_CACHE[cacheKey]) {
     CAL_PANEL_ITEMS = CAL_DOTS_CACHE[cacheKey]
     renderCalPanel()
@@ -1246,7 +1249,7 @@ async function loadReportList(month) {
   }
 }
 
-// 보고서 탭 전용: 발송완료/미발송을 하나의 배지로 통합해요(수업 탭 classSendSummaryBadge와 동일한 패턴).
+// 보고서 탭 전용: 발송완료/미발송을 하나의 배지로 통합해요(수업 탭 classSendSummaryBadge��� 동일한 패턴).
 function reportSendBadge(items) {
   const total = items.length
   const sentCount = items.filter(function (r) { return r.sentBy }).length
@@ -1378,22 +1381,84 @@ function renderReportClassDetail() {
     '<div class="info-card"><h3>✅ 발송 현황</h3>' +
       '<div class="stat-row">' + list.length + '명 중 발송완료 <b>' + sentCount + '</b>명 · 미발송 <b>' + (list.length - sentCount) + '</b>명</div>' +
     '</div>'
-  const rowsHtml = list.map(function (r) {
-    const sentBadge = r.sentBy ? '<span class="badge tone-blue">발송완료</span>' : '<span class="badge tone-gray">미발송</span>'
-    const rate = parseAttendanceRate(r.attendanceSummary)
-    const rateBadge = rate ? ' <span class="rate-badge ' + attendanceRateTone(rate.pct) + '">' + rate.text + '</span>' : ""
-    const hwRate = parseAttendanceRate(r.homeworkSummary)
-    const hwBadge = hwRate ? ' <span class="rate-badge ' + attendanceRateTone(hwRate.pct) + '">과제 ' + hwRate.pct + '%</span>' : ""
-    const evalScoreNum = parseScoreText(r.evalScoreSummary)
-    const evalBadge = evalScoreNum !== null ? ' <span class="rate-badge ' + attendanceRateTone(evalScoreNum) + '">평가 ' + evalScoreNum + '점</span>' : ""
-    const reportLink = r.reportUrl
-      ? ' <a class="report-view-link" href="' + r.reportUrl + '" target="_blank" title="학부모 보고서 페이지 보기">📋</a>'
-      : ' <span class="report-view-link" style="opacity:0.35;cursor:default" title="이 학생의 등록에 토큰이 아직 없어요">📋</span>'
-    return '<div class="student-row"><span class="stu-name">' + esc(displayStudentName(r.studentName || r.title)) + ' ' + sentBadge + rateBadge + hwBadge + evalBadge + reportLink + '</span>'
-      + '<button class="send-btn" onclick="sendPeriodReport(' + attrSafe(r.reportId) + ')">📩 ' + sendFnName + ' 발송</button></div>'
-  }).join("")
-  el("report-tuition-detail").innerHTML = rowsHtml
+  const controlsHtml = reportTuitionListControlsHtml("report")
+  el("report-tuition-detail").innerHTML = controlsHtml + '<div id="report-rows-body">' + buildReportRowsHtml(list) + '</div>'
   openMobileDetail()
+}
+
+function reportSearchHaystack(r) {
+  return [displayStudentName(r.studentName || r.title), r.className].filter(Boolean).join(" ").toLowerCase()
+}
+
+function buildReportRowsHtml(list) {
+  const sendFnName = REPORT_TYPE === "monthly" ? "월간" : "주간"
+  const term = REPORT_SEARCH_TERM.trim().toLowerCase()
+  let rows = term ? list.filter(function (r) { return reportSearchHaystack(r).indexOf(term) >= 0 }) : list.slice()
+  if (REPORT_SORT_NAME_ASC) rows = rows.slice().sort(function (a, b) { return String(displayStudentName(a.studentName || a.title)).localeCompare(String(displayStudentName(b.studentName || b.title)), "ko") })
+  if (rows.length === 0) return '<div class="empty">검색 결과가 없어요</div>'
+  return rows.map(function (r) { return reportRowHtml(r, sendFnName) }).join("")
+}
+
+function reportRowHtml(r, sendFnName) {
+  const sentBadge = r.sentBy ? '<span class="badge tone-blue">발송완료</span>' : '<span class="badge tone-gray">미발송</span>'
+  const rate = parseAttendanceRate(r.attendanceSummary)
+  const rateBadge = rate ? ' <span class="rate-badge ' + attendanceRateTone(rate.pct) + '">' + rate.text + '</span>' : ""
+  const hwRate = parseAttendanceRate(r.homeworkSummary)
+  const hwBadge = hwRate ? ' <span class="rate-badge ' + attendanceRateTone(hwRate.pct) + '">과제 ' + hwRate.pct + '%</span>' : ""
+  const evalScoreNum = parseScoreText(r.evalScoreSummary)
+  const evalBadge = evalScoreNum !== null ? ' <span class="rate-badge ' + attendanceRateTone(evalScoreNum) + '">평가 ' + evalScoreNum + '점</span>' : ""
+  const reportLink = r.reportUrl
+    ? ' <a class="report-view-link" href="' + r.reportUrl + '" target="_blank" title="학부모 보고서 페이지 보기">📋</a>'
+    : ' <span class="report-view-link" style="opacity:0.35;cursor:default" title="이 학생의 등록에 토큰이 아직 없어요">📋</span>'
+  const checkboxHtml = '<input type="checkbox" class="stu-checkbox" ' + (SELECTED_REPORT_IDS[r.reportId] ? "checked" : "") + ' onchange="toggleReportSelected(' + attrSafe(r.reportId) + ', this.checked)">'
+  return '<div class="student-row"><span class="stu-name">' + checkboxHtml + ' ' + esc(displayStudentName(r.studentName || r.title)) + ' ' + sentBadge + rateBadge + hwBadge + evalBadge + reportLink + '</span>'
+    + '<button class="send-btn" onclick="sendPeriodReport(' + attrSafe(r.reportId) + ')">📩 ' + sendFnName + ' 발송</button></div>'
+}
+
+function currentReportGroupList() {
+  return SELECTED_REPORT_CLASS ? getFilteredReports().filter(function (r) { return (r.classId || "__unassigned__") === SELECTED_REPORT_CLASS }) : []
+}
+
+function onReportSearchInput(term) {
+  REPORT_SEARCH_TERM = term || ""
+  const rowsBody = el("report-rows-body")
+  if (rowsBody) rowsBody.innerHTML = buildReportRowsHtml(currentReportGroupList())
+}
+const onReportSearchInputDebounced = debounce(onReportSearchInput, 150)
+
+function toggleReportNameSort() {
+  REPORT_SORT_NAME_ASC = !REPORT_SORT_NAME_ASC
+  renderReportClassDetail()
+}
+
+function toggleReportSelected(reportId, checked) {
+  if (checked) SELECTED_REPORT_IDS[reportId] = true
+  else delete SELECTED_REPORT_IDS[reportId]
+  renderReportClassDetail()
+}
+
+function toggleSelectAllReports(checked) {
+  currentReportGroupList().forEach(function (r) { if (checked) SELECTED_REPORT_IDS[r.reportId] = true; else delete SELECTED_REPORT_IDS[r.reportId] })
+  renderReportClassDetail()
+}
+
+function reportTuitionListControlsHtml(kind) {
+  const isReport = kind === "report"
+  const list2 = isReport ? currentReportGroupList() : currentTuitionGroupList()
+  const searchTerm = isReport ? REPORT_SEARCH_TERM : TUITION_SEARCH_TERM
+  const sortNameAsc = isReport ? REPORT_SORT_NAME_ASC : TUITION_SORT_NAME_ASC
+  const selectedMap = isReport ? SELECTED_REPORT_IDS : SELECTED_TUITION_IDS
+  const idKey = isReport ? "reportId" : "tuitionId"
+  const selectedCount = list2.filter(function (item) { return selectedMap[item[idKey]] }).length
+  const allSelected = list2.length > 0 && selectedCount === list2.length
+  const selectAllFn = isReport ? "toggleSelectAllReports" : "toggleSelectAllTuitions"
+  const sortFn = isReport ? "toggleReportNameSort" : "toggleTuitionNameSort"
+  const searchFn = isReport ? "onReportSearchInputDebounced" : "onTuitionSearchInputDebounced"
+  return '<div class="student-list-controls">' +
+      '<label class="student-select-all"><input type="checkbox" ' + (allSelected ? "checked" : "") + ' onchange="' + selectAllFn + '(this.checked)" ' + (list2.length ? "" : "disabled") + '> 전체 선택</label>' +
+      '<button class="student-sort-btn' + (sortNameAsc ? " active" : "") + '" onclick="' + sortFn + '()">이름 ' + (sortNameAsc ? "▲" : "↕") + '</button>' +
+      '<input type="text" class="student-search-box" placeholder="🔍 이름 검색" value="' + esc(searchTerm) + '" oninput="' + searchFn + '(this.value)">' +
+    '</div>'
 }
 
 async function sendPeriodReport(reportId) {
@@ -1456,7 +1521,7 @@ function renderTuitionList() {
   const list = getFilteredTuitions()
   if (!list.length) {
     SELECTED_TUITION_CLASS = null
-    el("tuition-list-area").innerHTML = '<div class="empty">해당 월에 해당하는 청구 내역이 없어요</div>'
+    el("tuition-list-area").innerHTML = '<div class="empty">해당 월에 해당하는 청구 ���역이 없어요</div>'
     renderTuitionClassDetail()
     return
   }
@@ -1523,14 +1588,56 @@ function renderTuitionClassDetail() {
     '</div>' +
     '<div class="stat-row" style="margin-top:8px;font-weight:600">총 수강료액 <b>' + Number(totalAmount).toLocaleString("ko-KR") + '원</b></div>' +
   '</div>'
-  const rowsHtml = list.map(function (t) {
-    const statusBadge = t.paymentStatus ? '<span class="badge ' + paymentStatusTone(t.paymentStatus) + '">' + esc(t.paymentStatus) + '</span>' : ''
-    const amountBadge = ' <span class="badge tone-gray">' + (t.amount != null ? Number(t.amount).toLocaleString("ko-KR") + '원' : "-") + '</span>'
-    return '<div class="student-row"><span class="stu-name">' + esc(displayStudentName(t.studentInfo || t.title)) + ' ' + statusBadge + amountBadge + '</span>'
-      + '<button class="send-btn" onclick="sendTuitionNotice(' + attrSafe(t.tuitionId) + ')">📩 안내 발송</button></div>'
-  }).join("")
-  el("report-tuition-detail").innerHTML = rowsHtml
+  const controlsHtml = reportTuitionListControlsHtml("tuition")
+  el("report-tuition-detail").innerHTML = controlsHtml + '<div id="tuition-rows-body">' + buildTuitionRowsHtml(list) + '</div>'
   openMobileDetail()
+}
+
+function tuitionSearchHaystack(t) {
+  return [displayStudentName(t.studentInfo || t.title), t.className].filter(Boolean).join(" ").toLowerCase()
+}
+
+function buildTuitionRowsHtml(list) {
+  const term = TUITION_SEARCH_TERM.trim().toLowerCase()
+  let rows = term ? list.filter(function (t) { return tuitionSearchHaystack(t).indexOf(term) >= 0 }) : list.slice()
+  if (TUITION_SORT_NAME_ASC) rows = rows.slice().sort(function (a, b) { return String(displayStudentName(a.studentInfo || a.title)).localeCompare(String(displayStudentName(b.studentInfo || b.title)), "ko") })
+  if (rows.length === 0) return '<div class="empty">검색 결과가 없어요</div>'
+  return rows.map(tuitionRowHtml).join("")
+}
+
+function tuitionRowHtml(t) {
+  const statusBadge = t.paymentStatus ? '<span class="badge ' + paymentStatusTone(t.paymentStatus) + '">' + esc(t.paymentStatus) + '</span>' : ''
+  const amountBadge = ' <span class="badge tone-gray">' + (t.amount != null ? Number(t.amount).toLocaleString("ko-KR") + '원' : "-") + '</span>'
+  const checkboxHtml = '<input type="checkbox" class="stu-checkbox" ' + (SELECTED_TUITION_IDS[t.tuitionId] ? "checked" : "") + ' onchange="toggleTuitionSelected(' + attrSafe(t.tuitionId) + ', this.checked)">'
+  return '<div class="student-row"><span class="stu-name">' + checkboxHtml + ' ' + esc(displayStudentName(t.studentInfo || t.title)) + ' ' + statusBadge + amountBadge + '</span>'
+    + '<button class="send-btn" onclick="sendTuitionNotice(' + attrSafe(t.tuitionId) + ')">📩 안내 발송</button></div>'
+}
+
+function currentTuitionGroupList() {
+  return SELECTED_TUITION_CLASS ? getFilteredTuitions().filter(function (t) { return (t.classId || "__unassigned__") === SELECTED_TUITION_CLASS }) : []
+}
+
+function onTuitionSearchInput(term) {
+  TUITION_SEARCH_TERM = term || ""
+  const rowsBody = el("tuition-rows-body")
+  if (rowsBody) rowsBody.innerHTML = buildTuitionRowsHtml(currentTuitionGroupList())
+}
+const onTuitionSearchInputDebounced = debounce(onTuitionSearchInput, 150)
+
+function toggleTuitionNameSort() {
+  TUITION_SORT_NAME_ASC = !TUITION_SORT_NAME_ASC
+  renderTuitionClassDetail()
+}
+
+function toggleTuitionSelected(tuitionId, checked) {
+  if (checked) SELECTED_TUITION_IDS[tuitionId] = true
+  else delete SELECTED_TUITION_IDS[tuitionId]
+  renderTuitionClassDetail()
+}
+
+function toggleSelectAllTuitions(checked) {
+  currentTuitionGroupList().forEach(function (t) { if (checked) SELECTED_TUITION_IDS[t.tuitionId] = true; else delete SELECTED_TUITION_IDS[t.tuitionId] })
+  renderTuitionClassDetail()
 }
 
 async function sendTuitionNotice(tuitionId) {
@@ -1818,7 +1925,7 @@ function selectClass(id) {
   el("right-summary-body").innerHTML =
     '<div class="summary-two-col">' +
       '<div class="info-card half"><h3>✅ 출석 현황</h3>' +
-        '<div class="stat-row stat-text green">등원 <b>' + stat.attend + '</b>명</div>' +
+        '<div class="stat-row stat-text green">등�� <b>' + stat.attend + '</b>명</div>' +
         '<div class="stat-row stat-text blue">보강 <b>' + stat.makeup + '</b>명</div>' +
         '<div class="stat-row stat-text red">결석 <b>' + stat.absent + '</b>명</div>' +
       '</div>' +
@@ -2248,7 +2355,7 @@ function clearScheduleCategoryFilter() {
 
 function findSchedule(id) { return SCHEDULES.find(function (s) { return s.id === id }) }
 
-// 같은 일정이 여러 반/강사에 걸쳐 있으면 API가 행을 나눠서 줄 수 있어요.
+// 같은 일정이 여러 반/강사��� 걸쳐 ��으면 API가 행을 나눠서 줄 수 있어요.
 // 날짜+이름+구분+상태가 같으면 한 줄로 합치고 강사/반 이름만 모아줘요.
 function dedupeSchedules(list) {
   const map = new Map()
@@ -2268,8 +2375,8 @@ function dedupeSchedules(list) {
   return order.map(function (k) { return map.get(k) })
 }
 
-// 구분(선택 속성)은 노션이 지정한 색을 그대로 쓰고(s.categoryColor), 강사/반은 관계형이라 학원마다 값이 달라져서
-// 이름을 해시해서 고정 팔레트에서 색을 고르는 teacherColorClass를 재사용해요(수업 탭의 강사 배지와 동일한 방식).
+// 구분(선택 속성)은 노션이 ���정한 색을 그대로 쓰고(s.categoryColor), 강사/반은 관계형이라 학원마다 값이 달라져서
+// 이름을 해시해서 고정 ��레트에서 색을 고르는 teacherColorClass를 재사용해요(수업 탭의 강사 배지와 동일한 방식).
 // 강사는 색이 칠해진 teacher-badge, 반은 테두리만 있는 class-badge로 구분해서 한눈에 종류를 알 수 있게 해요.
 function renderScheduleTagBadges(s) {
   const teacherBadges = []
@@ -2337,7 +2444,7 @@ function selectSchedule(id) {
     const nextEl = listEl.querySelector('.schedule-item[data-id="' + id + '"]')
     if (nextEl) nextEl.classList.add("selected")
   }
-  // 다른 탭(보고서/수강료/수업)에서 남은 값이 섞여 보이지 않도록, 공유 헤더 요소를 이 함수에서 매번 전부 새로 지정해요.
+  // 다른 탭(보고서/수강료/수업)에�� 남은 ���이 섞여 보이지 않도록, 공유 헤더 요소를 이 함수에서 매번 전부 새로 지정해요.
   el("md-right-empty").style.display = "none"
   el("md-right-content").style.display = "block"
   el("right-title").textContent = s.name
@@ -2365,7 +2472,7 @@ function selectSchedule(id) {
   openMobileDetail()
 }
 
-// 강사/반 이름은 이미 정리된 배열(teacherNames/classNames)을 그대로 써서, 원본 관련항목 텍스트에 섞여있을 수 있는 중복을 피해요.
+// 강사/반 이름은 이미 정���된 배열(teacherNames/classNames)을 그대로 써서, 원본 관련항목 텍스트에 섞여있을 수 있는 중복을 피해요.
 function renderScheduleRelatedBadges(s) {
   const teacherBadges = []
   const seenTeachers = {}
@@ -2434,7 +2541,7 @@ const SCHEDULE_MSG_STATUS_ALL = ["🟡신규문의", "🔵수강중", "🟢수�
 
 // 이모지 없이 텍스트만 보여주되, 이모지와 같은 색으로 표기하기 위한 매핑이에요.
 const SCHEDULE_MSG_STATUS_META = {
-  "🟡신규문의": { label: "신규문의", tone: "tone-yellow" },
+  "🟡���규문의": { label: "신규문의", tone: "tone-yellow" },
   "🔵수강중": { label: "수강중", tone: "tone-blue" },
   "🟢수강전": { label: "수강전", tone: "tone-green" },
   "🔴종료": { label: "종료", tone: "tone-red" },
@@ -2479,14 +2586,16 @@ function renderScheduleMsgBody() {
     el("bulk-send-tab-btn").disabled = true
     return
   }
-  // 이미 검색창 쉬샘(input 포함)이 그려져 있으면 input은 건드리지 않고 목록만 갱신해요.
-  if (!bodyEl.querySelector(".sched-msg-search input")) {
+  // 이미 검색창 쉬샘(input 포함)이 그려져 있으면 input��� 건드리지 않고 목록만 갱신해요.
+  if (!bodyEl.querySelector(".student-list-controls")) {
     bodyEl.innerHTML =
-      '<div class="sched-msg-title">📩 안내 대상 학생</div>' +
-      '<div class="sched-msg-search"><input type="text" placeholder="이름·학년·학교·클래스 검색" value="' + esc(SCHEDULE_MSG_SEARCH) + '" oninput="setScheduleMsgSearch(this.value)">' +
-        '<select onchange="setScheduleMsgStatusFilter(this.value)">' + scheduleMsgStatusOptionsHtml() + '</select></div>' +
+      '<div class="student-list-controls">' +
+        '<label class="student-select-all"><input type="checkbox" onchange="toggleScheduleMsgSelectAll(this.checked)"> 전체 선택</label>' +
+        '<button class="student-sort-btn' + (SCHEDULE_MSG_SORT_NAME_ASC ? " active" : "") + '" onclick="toggleScheduleMsgNameSort()">이름 ' + (SCHEDULE_MSG_SORT_NAME_ASC ? "▲" : "↕") + '</button>' +
+        '<input type="text" class="student-search-box" placeholder="🔍 이로·학맄·학교·클땝스 검색" value="' + esc(SCHEDULE_MSG_SEARCH) + '" oninput="setScheduleMsgSearch(this.value)">' +
+        '<select class="student-status-filter" onchange="setScheduleMsgStatusFilter(this.value)">' + scheduleMsgStatusOptionsHtml() + '</select>' +
+      '</div>' +
       '<div class="sched-msg-count"></div>' +
-      '<label class="student-select-all"><input type="checkbox" onchange="toggleScheduleMsgSelectAll(this.checked)"> 이 목록 전체 선택</label>' +
       '<div id="sched-msg-student-rows"></div>'
   }
   renderScheduleMsgList()
@@ -2531,6 +2640,13 @@ function toggleScheduleMsgSelectAll(checked) {
   renderScheduleMsgBody()
 }
 
+function toggleScheduleMsgNameSort() {
+  SCHEDULE_MSG_SORT_NAME_ASC = !SCHEDULE_MSG_SORT_NAME_ASC
+  const bodyEl = el("right-tab-body")
+  if (bodyEl) bodyEl.innerHTML = ""
+  renderScheduleMsgBody()
+}
+
 function handleScheduleMessageSend() {
   const targets = (ALL_STUDENTS_CACHE || []).filter(function (s) { return SCHEDULE_MSG_SELECTED[s.id] })
   if (!targets.length) { showToast("발송할 학생이 없어요"); return }
@@ -2538,7 +2654,7 @@ function handleScheduleMessageSend() {
 }
 
 // 학생 한 명에게 개별로 안내문을 보내는 버튼이에요. 수업 탭의 개별 전송 버튼과 같은 자리·같은 이모지를 사용해요.
-// 백엔드 연동은 아직이라, 수업 탭과 같은 전송완료/미전송 배지를 보여주기 위해 클릭 즉시 sentByMe만 켜요.
+// 백엔드 연동은 ���직이라, 수업 탭과 같은 전송완료/미전송 배지를 보여주기 위해 클릭 즉시 sentByMe만 켜요.
 function sendScheduleMsgToStudent(id) {
   const s = (ALL_STUDENTS_CACHE || []).find(function (st) { return st.id === id })
   if (!s) return
@@ -2611,7 +2727,8 @@ function handleBulkSendClick() {
 
 function sendBulkReportsForClass() {
   const list = SELECTED_REPORT_CLASS ? getFilteredReports().filter(function (r) { return (r.classId || "__unassigned__") === SELECTED_REPORT_CLASS }) : []
-  const targets = list.filter(function (r) { return !r.sentBy })
+  const selectedInGroup = list.filter(function (r) { return SELECTED_REPORT_IDS[r.reportId] })
+  const targets = selectedInGroup.length ? selectedInGroup : list.filter(function (r) { return !r.sentBy })
   if (!targets.length) { showToast("발송할 학생이 없어요"); return }
   const sendFnName = REPORT_TYPE === "monthly" ? "월간" : "주간"
   openAlimtalkModal("bulk-report", { classId: SELECTED_REPORT_CLASS, count: targets.length, sendFnName: sendFnName })
@@ -2619,7 +2736,8 @@ function sendBulkReportsForClass() {
 
 async function doSendBulkReportsForClass(classId) {
   const list = classId ? getFilteredReports().filter(function (r) { return (r.classId || "__unassigned__") === classId }) : []
-  const targets = list.filter(function (r) { return !r.sentBy })
+  const selectedInGroup = list.filter(function (r) { return SELECTED_REPORT_IDS[r.reportId] })
+  const targets = selectedInGroup.length ? selectedInGroup : list.filter(function (r) { return !r.sentBy })
   if (!targets.length) { showToast("발송할 학생이 없어요"); return }
   let success = 0, fail = 0
   for (const r of targets) {
@@ -2647,14 +2765,16 @@ async function sendPeriodReportSilently(reportId) {
 
 function sendBulkTuitionsForClass() {
   const list = SELECTED_TUITION_CLASS ? getFilteredTuitions().filter(function (t) { return (t.classId || "__unassigned__") === SELECTED_TUITION_CLASS }) : []
-  const targets = list.filter(function (t) { return paymentStatusTone(t.paymentStatus) !== "tone-green" })
+  const selectedInGroup = list.filter(function (t) { return SELECTED_TUITION_IDS[t.tuitionId] })
+  const targets = selectedInGroup.length ? selectedInGroup : list.filter(function (t) { return paymentStatusTone(t.paymentStatus) !== "tone-green" })
   if (!targets.length) { showToast("발송할 학생이 없어요"); return }
   openAlimtalkModal("bulk-tuition", { classId: SELECTED_TUITION_CLASS, count: targets.length })
 }
 
 async function doSendBulkTuitionsForClass(classId) {
   const list = classId ? getFilteredTuitions().filter(function (t) { return (t.classId || "__unassigned__") === classId }) : []
-  const targets = list.filter(function (t) { return paymentStatusTone(t.paymentStatus) !== "tone-green" })
+  const selectedInGroup = list.filter(function (t) { return SELECTED_TUITION_IDS[t.tuitionId] })
+  const targets = selectedInGroup.length ? selectedInGroup : list.filter(function (t) { return paymentStatusTone(t.paymentStatus) !== "tone-green" })
   if (!targets.length) { showToast("발송할 학생이 없어요"); return }
   let success = 0, fail = 0
   for (const t of targets) {
