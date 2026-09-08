@@ -622,7 +622,7 @@
         <span class="cal-icon">📅</span><span class="date-nav-label" id="date-nav-label">-</span>
       </div>
       <div class="search-row">
-        <input type="text" id="search-input" class="search-box" placeholder="통합 검색 (수업명 · 강사 · 학생 등)" oninput="onSearchInputDebounced(this.value)">
+        <input type="text" id="search-input" class="search-box" placeholder="�����합 검색 (수업명 · 강사 · 학생 등)" oninput="onSearchInputDebounced(this.value)">
       </div>
       <div class="md-filter-options" id="schedule-category-filter-row" style="display:none"></div>
       <div id="class-list-area" class="class-list-area"></div>
@@ -1246,6 +1246,29 @@ async function loadReportList(month) {
   }
 }
 
+// 보고서 탭 전용: 발송완료/미발송을 하나의 배지로 통합해요(수업 탭 classSendSummaryBadge와 동일한 패턴).
+function reportSendBadge(items) {
+  const total = items.length
+  const sentCount = items.filter(function (r) { return r.sentBy }).length
+  const pct = total ? Math.round((sentCount / total) * 100) : 0
+  const tone = pct >= 100 ? "tone-blue" : pct <= 0 ? "tone-gray" : "tone-orange"
+  return '<span class="badge ' + tone + '">발송 ' + sentCount + '/' + total + '명</span>'
+}
+
+// "N% (n/m)" 형태의 텍스트 필드(attendanceSummary 등)에서 그룹 평균 퍼센트를 계산해요.
+function reportGroupAvgRate(items, key) {
+  const nums = items.map(function (r) { const p = parseAttendanceRate(r[key]); return p ? p.pct : null }).filter(function (v) { return v != null })
+  if (!nums.length) return null
+  return Math.round(nums.reduce(function (a, b) { return a + b }, 0) / nums.length)
+}
+
+// 숫자형 필드(평가 평균점수 등)의 그룹 평균을 계산해요. 백엔드가 아직 필드를 내려주지 않으면 null을 반환해요.
+function reportGroupAvgScore(items, key) {
+  const nums = items.map(function (r) { return typeof r[key] === "number" ? r[key] : null }).filter(function (v) { return v != null })
+  if (!nums.length) return null
+  return Math.round(nums.reduce(function (a, b) { return a + b }, 0) / nums.length)
+}
+
 // 여러 반이름/학생보고서 카드에서 공통으로 쓰는 반(클래스)별 그룹화 헬퍼니다.
 function groupByClass(list, idKey, nameKey) {
   const map = new Map()
@@ -1285,7 +1308,7 @@ function renderReportList() {
   const list = getFilteredReports()
   if (!list.length) {
     SELECTED_REPORT_CLASS = null
-    el("report-list-area").innerHTML = '<div class="empty">' + (REPORT_TYPE === "weekly" ? "해당 주에 해당하는 보고서가 없어요" : "해당 월에 해당하는 보고서가 없어요") + '</div>'
+    el("report-list-area").innerHTML = '<div class="empty">' + (REPORT_TYPE === "weekly" ? "해당 주에 해당하는 보고서가 없어요" : "해당 월에 해당하는 보고서가 없��요") + '</div>'
     renderReportClassDetail()
     return
   }
@@ -1328,11 +1351,16 @@ function renderReportClassDetail() {
   el("bulk-send-tab-btn").disabled = false
   el("bulk-send-tab-btn").textContent = "📩 " + sendFnName + " 보고서 일괄 전송"
   const sentCount = list.filter(function (r) { return r.sentBy }).length
-  el("right-time").textContent = list.length + "명 중 발송완료 " + sentCount + "명"
-  // 수업 탭 배지(출석률 등)와 같은 자리에, 발송현황을 컴팩트 배지로 요약해요.
+  const avgAttendance = reportGroupAvgRate(list, "attendanceSummary")
+  const avgHomework = reportGroupAvgRate(list, "homeworkSummary")
+  const avgEval = reportGroupAvgScore(list, "evalScoreAvg")
+  el("right-time").textContent = list.length + "명"
+  // 수업 탭 배지와 같은 자리에, 발송 여부는 배지 하나로 통합하고(수업 탭 classSendSummaryBadge 패턴), 그 옆에 출석률/과제이행률/평가 평균점수를 함께 보여줘요.
   el("right-sub").innerHTML =
-    '<span class="badge tone-blue">발송완료 ' + sentCount + '명</span>' +
-    '<span class="badge tone-gray">미발송 ' + (list.length - sentCount) + '명</span>'
+    (avgAttendance != null ? '<span class="rate-badge ' + attendanceRateTone(avgAttendance) + '">출석률 ' + avgAttendance + '%</span>' : "") +
+    (avgHomework != null ? ' <span class="rate-badge ' + attendanceRateTone(avgHomework) + '">과제이행 ' + avgHomework + '%</span>' : "") +
+    (avgEval != null ? ' <span class="rate-badge ' + attendanceRateTone(avgEval) + '">평가 ' + avgEval + '점</span>' : "") +
+    ' ' + reportSendBadge(list)
   el("right-summary-toggle").style.display = "inline-flex"
   el("right-summary-body").classList.remove("show")
   el("right-summary-toggle").classList.remove("open")
@@ -1340,19 +1368,27 @@ function renderReportClassDetail() {
   RIGHT_SUMMARY_ON_OPEN = null
   el("right-summary-toggle-label").textContent = RIGHT_SUMMARY_CLOSED_LABEL
   // 더보기를 펼치면 나오는 상세 요약카드는 수업 탭과 같은 info-card 패턴, 아래 목록은 수업 탭과 같은 .student-row 한줄 패턴으로 통일해요 (DESIGN 문서 "학생 목록 표준 디자인" 규칙 참고).
-  el("right-summary-body").innerHTML = '<div class="info-card"><h3>✅ 발송 현황</h3>' +
+  // 발송 현황은 보조 정보로 한 줄만 남기고, 학습 현황(출석률/과제이행률/평가 평균점수)을 요약카드의 주 내용으로 보여줘요.
+  el("right-summary-body").innerHTML = '<div class="info-card"><h3>📊 학습 현황 평균</h3>' +
     '<div style="display:flex;gap:18px;flex-wrap:wrap">' +
-      '<div class="stat-row stat-text blue">발송완료 <b>' + sentCount + '</b>명</div>' +
-      '<div class="stat-row stat-text gray">미발송 <b>' + (list.length - sentCount) + '</b>명</div>' +
-    '</div></div>'
+      (avgAttendance != null ? '<div class="stat-row stat-text green">출석률 <b>' + avgAttendance + '%</b></div>' : '<div class="stat-row stat-text gray">출석률 정보 없음</div>') +
+      (avgHomework != null ? '<div class="stat-row stat-text orange">과제이행률 <b>' + avgHomework + '%</b></div>' : '<div class="stat-row stat-text gray">과제이행률 정보 없음</div>') +
+      (avgEval != null ? '<div class="stat-row stat-text blue">평가 평균점수 <b>' + avgEval + '점</b></div>' : '<div class="stat-row stat-text gray">평가 평균점수 정보 없음</div>') +
+    '</div></div>' +
+    '<div class="info-card"><h3>✅ 발송 현황</h3>' +
+      '<div class="stat-row">' + list.length + '명 중 발송완료 <b>' + sentCount + '</b>명 · 미발송 <b>' + (list.length - sentCount) + '</b>명</div>' +
+    '</div>'
   const rowsHtml = list.map(function (r) {
     const sentBadge = r.sentBy ? '<span class="badge tone-blue">발송완료</span>' : '<span class="badge tone-gray">미발송</span>'
     const rate = parseAttendanceRate(r.attendanceSummary)
     const rateBadge = rate ? ' <span class="rate-badge ' + attendanceRateTone(rate.pct) + '">' + rate.text + '</span>' : ""
+    const hwRate = parseAttendanceRate(r.homeworkSummary)
+    const hwBadge = hwRate ? ' <span class="rate-badge ' + attendanceRateTone(hwRate.pct) + '">과제 ' + hwRate.pct + '%</span>' : ""
+    const evalBadge = typeof r.evalScoreAvg === "number" ? ' <span class="rate-badge ' + attendanceRateTone(r.evalScoreAvg) + '">평가 ' + r.evalScoreAvg + '점</span>' : ""
     const reportLink = r.reportUrl
       ? ' <a class="report-view-link" href="' + r.reportUrl + '" target="_blank" title="학부모 보고서 페이지 보기">📋</a>'
       : ' <span class="report-view-link" style="opacity:0.35;cursor:default" title="이 학생의 등록에 토큰이 아직 없어요">📋</span>'
-    return '<div class="student-row"><span class="stu-name">' + esc(displayStudentName(r.studentName || r.title)) + ' ' + sentBadge + rateBadge + reportLink + '</span>'
+    return '<div class="student-row"><span class="stu-name">' + esc(displayStudentName(r.studentName || r.title)) + ' ' + sentBadge + rateBadge + hwBadge + evalBadge + reportLink + '</span>'
       + '<button class="send-btn" onclick="sendPeriodReport(' + attrSafe(r.reportId) + ')">📩 ' + sendFnName + ' 발송</button></div>'
   }).join("")
   el("report-tuition-detail").innerHTML = rowsHtml
@@ -1716,7 +1752,7 @@ async function prioritizeSelectedClassStudents(id) {
 }
 
 // 선택된 수업이 없을 때, 뒤에서 조용히 그날 전체 수업의 학생 정보를 하나씩 미리 불러와요.
-// 사용자가 나중에 아무 수업이나 클릭해도 이미 캐시된 학생 정보가 바로 나오도록 하기 위함이에요.
+// 사용자가 나���에 아무 수업이나 클릭해도 이미 캐시된 학생 정보가 바로 나오도록 하기 위함이에요.
 // 도중에 사용자가 수업을 선택해도 fetchSessionStudentsOnce가 요청을 공유하므로 중복 요청 없이 그대로 이어받아요.
 async function backgroundPrefetchAllStudents(dateStr) {
   const token = ++BACKGROUND_PREFETCH_TOKEN
@@ -1859,7 +1895,7 @@ function studentRowHtml(c, s) {
   const evalBadge = s.evaluation ? ' <span class="badge ' + evalCls + '">' + s.evaluation.score + '점</span>' : ""
   const reportLink = s.reportUrl
     ? ' <a class="report-view-link" href="' + s.reportUrl + '" target="_blank" title="학습 보고서 페이지 보기">📋</a>'
-    : ' <span class="report-view-link" style="opacity:0.35;cursor:default" title="이 학생의 등록에 토큰이 아직 없어요">📋</span>'
+    : ' <span class="report-view-link" style="opacity:0.35;cursor:default" title="이 학생의 등���에 토큰이 아직 없어요">📋</span>'
   const checkboxHtml = canSend
     ? '<input type="checkbox" class="stu-checkbox" ' + (SELECTED_STUDENT_IDS[s.attendanceId] ? "checked" : "") + ' onchange="toggleStudentSelected(' + attrSafe(s.attendanceId) + ', this.checked)">'
     : '<input type="checkbox" class="stu-checkbox" disabled>'
@@ -1985,7 +2021,7 @@ function formatSummaryBlock(text) {
 }
 
 // 과제 안내/평가 결과 카드는 기존 과제·평가 탭에서 쓰던 구조화 레코드(제목 링크 + 교재·범위 + 마감/내용)를
-// 그대로 재사용해요. 탭이 없어진 대신 더보기 안에서 바로 이 정보를 보여줍니다.
+// 그대로 재사용해요. 탭�� 없어진 대신 더보기 안에서 바로 이 정보를 보여줍니다.
 async function loadSummaryRecordDetails(c) {
   const assignEl = el("summary-assignment-body")
   const evalEl = el("summary-evaluation-body")
@@ -2048,7 +2084,7 @@ async function renderTaskTab(c, body, kind) {
       if (records.length > 0) {
         body.innerHTML = records.map(function (r) {
           return '<div class="record-card"><div class="title"><a href="' + r.url + '" target="_blank">' + esc(r.title || "평가") + '</a></div>' +
-            '<div class="meta">교재: ' + esc(r.book || "-") + (r.range ? " · 범위: " + esc(r.range) : "") + '</div>' +
+            '<div class="meta">교���: ' + esc(r.book || "-") + (r.range ? " · 범위: " + esc(r.range) : "") + '</div>' +
             '</div>'
         }).join("")
         return
@@ -2289,7 +2325,7 @@ function selectSchedule(id) {
     const nextEl = listEl.querySelector('.schedule-item[data-id="' + id + '"]')
     if (nextEl) nextEl.classList.add("selected")
   }
-  // 다른 탭(보고서/수강료/수업)에서 남은 값이 섞여 보이지 않도록, 공유 헤더 요소를 이 함수에서 매번 전부 새로 지정해요.
+  // 다른 탭(보고서/수강료/수업)에서 남은 값이 섞여 보���지 않도록, 공유 헤더 요소를 이 함수에서 매번 전부 새로 지정해요.
   el("md-right-empty").style.display = "none"
   el("md-right-content").style.display = "block"
   el("right-title").textContent = s.name
@@ -2350,7 +2386,7 @@ let SCHEDULE_MSG_STATUS_FILTER = ""
 
 // 학생(학원) DB 전체 목록을 한번 불러와서 캐시해요. 기대 응답 형태:
 // { students: [{ id, name, grade, school, classNames: ["반 이름", ...], status: "🔵수강중", phone, parentPhone }, ...] }
-// (학생이름→name, 학년→grade, 학교→school, 등록 클래스→classNames, 상태→status 프로퍼티와 매핑되어야 해요)
+// (학생이름→name, 학년→grade, 학교→school, ��록 클래스→classNames, 상태→status 프로퍼티와 매핑되어야 해요)
 async function ensureAllStudentsLoaded() {
   if (STUDENTS_LOAD_STATE === "loaded" || STUDENTS_LOAD_STATE === "loading") return
   STUDENTS_LOAD_STATE = "loading"
