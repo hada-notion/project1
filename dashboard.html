@@ -1353,7 +1353,7 @@ function renderReportClassDetail() {
   const sentCount = list.filter(function (r) { return r.sentBy }).length
   const avgAttendance = reportGroupAvgRate(list, "attendanceSummary")
   const avgHomework = reportGroupAvgRate(list, "homeworkSummary")
-  const avgEval = reportGroupAvgScore(list, "evalScoreAvg")
+  const avgEval = reportGroupAvgScore(list, "evalScoreSummary")
   el("right-time").textContent = list.length + "명"
   // 수업 탭 배지와 같은 자리에, 발송 여부는 배지 하나로 통합하고(수업 탭 classSendSummaryBadge 패턴), 그 옆에 출석률/과제이행률/평가 평균점수를 함께 보여줘요.
   el("right-sub").innerHTML =
@@ -1384,7 +1384,8 @@ function renderReportClassDetail() {
     const rateBadge = rate ? ' <span class="rate-badge ' + attendanceRateTone(rate.pct) + '">' + rate.text + '</span>' : ""
     const hwRate = parseAttendanceRate(r.homeworkSummary)
     const hwBadge = hwRate ? ' <span class="rate-badge ' + attendanceRateTone(hwRate.pct) + '">과제 ' + hwRate.pct + '%</span>' : ""
-    const evalBadge = typeof r.evalScoreAvg === "number" ? ' <span class="rate-badge ' + attendanceRateTone(r.evalScoreAvg) + '">평가 ' + r.evalScoreAvg + '점</span>' : ""
+    const evalScoreNum = parseScoreText(r.evalScoreSummary)
+    const evalBadge = evalScoreNum !== null ? ' <span class="rate-badge ' + attendanceRateTone(evalScoreNum) + '">평가 ' + evalScoreNum + '점</span>' : ""
     const reportLink = r.reportUrl
       ? ' <a class="report-view-link" href="' + r.reportUrl + '" target="_blank" title="학부모 보고서 페이지 보기">📋</a>'
       : ' <span class="report-view-link" style="opacity:0.35;cursor:default" title="이 학생의 등록에 토큰이 아직 없어요">📋</span>'
@@ -1652,6 +1653,14 @@ function parseAttendanceRate(raw) {
   const m = String(raw).match(/(\d+)\s*%\s*(\([^)]*\))?/)
   if (!m) return null
   return { pct: Number(m[1]), text: "출석률 " + m[1] + "%" + (m[2] ? " " + m[2] : "") }
+}
+
+// parses "82점" text into 82. returns null for "평가 없음".
+function parseScoreText(raw) {
+  if (!raw) return null
+  const m = String(raw).match(/(\d+(?:\.\d+)?)\s*점/)
+  if (!m) return null
+  return Number(m[1])
 }
 
 function attendanceRateTone(pct) {
