@@ -2456,8 +2456,8 @@ function renderScheduleMsgList() {
     ? list.map(function (s) {
         const meta = [s.grade, s.school].filter(Boolean).join(" · ")
         const statusMeta = s.status ? scheduleMsgStatusMeta(s.status) : null
-        return '<div class="student-row"><span class="stu-name"><input type="checkbox" class="stu-checkbox" ' + (SCHEDULE_MSG_SELECTED[s.id] ? "checked" : "") + ' onchange="toggleScheduleMsgStudent(' + attrSafe(s.id) + ', this.checked)"> ' + esc(s.name) + (meta ? ' <span class="stu-meta">' + esc(meta) + '</span>' : "") + '</span>' +
-          (statusMeta ? '<span class="badge ' + statusMeta.tone + '">' + esc(statusMeta.label) + '</span>' : "") +
+        const statusBadge = statusMeta ? ' <span class="badge ' + statusMeta.tone + '">' + esc(statusMeta.label) + '</span>' : ""
+        return '<div class="student-row"><span class="stu-name"><input type="checkbox" class="stu-checkbox" ' + (SCHEDULE_MSG_SELECTED[s.id] ? "checked" : "") + ' onchange="toggleScheduleMsgStudent(' + attrSafe(s.id) + ', this.checked)"> ' + esc(s.name) + (meta ? ' <span class="stu-meta">' + esc(meta) + '</span>' : "") + statusBadge + '</span>' +
           '<button class="send-btn" onclick="sendScheduleMsgToStudent(' + attrSafe(s.id) + ')">📩 전송</button>' +
         '</div>'
       }).join("")
