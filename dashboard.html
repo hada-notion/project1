@@ -428,6 +428,8 @@
 .student-item { border-bottom:1px solid var(--border); }
 .student-row { display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-radius:0; background:transparent; border:none; border-bottom:none; margin-bottom:0; font-size:13px; cursor:pointer; }
 .student-row .stu-name { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+/* 발송 상태 태그와 전송 버튼을 한 묶음으로 묶어서, 중간의 다른 배지와 상관없이 태그가 버튼 바로 왼쪽에 붙어 있게 해요. */
+.student-row .stu-actions { display:flex; align-items:center; gap:6px; flex-shrink:0; }
 .student-detail { display:none; padding:0 0 10px 24px; font-size:12.5px; color:var(--text); }
 .student-detail.show { display:block; }
 .student-detail .row { margin:6px 0; }
@@ -1433,8 +1435,8 @@ function reportRowHtml(r, sendFnName) {
     : ""
   const checkboxHtml = '<input type="checkbox" class="stu-checkbox" ' + (SELECTED_REPORT_IDS[r.reportId] ? "checked" : "") + ' onchange="toggleReportSelected(' + attrSafe(r.reportId) + ', this.checked)">'
   // 전송 상태 태그(발송완료/미발송)는 전송 버튼 바로 왼쪽에 오도록 다른 배지들 뒤에 붙여요.
-  return '<div class="student-row"><span class="stu-name">' + checkboxHtml + ' ' + esc(displayStudentName(r.studentName || r.title)) + ' ' + rateBadge + hwBadge + evalBadge + notionLink + reportLink + ' ' + sentBadge + '</span>'
-    + '<button class="send-btn" onclick="sendPeriodReport(' + attrSafe(r.reportId) + ')">📩 ' + sendFnName + ' 발송</button></div>'
+  return '<div class="student-row"><span class="stu-name">' + checkboxHtml + ' ' + esc(displayStudentName(r.studentName || r.title)) + ' ' + rateBadge + hwBadge + evalBadge + notionLink + reportLink + '</span>'
+    + '<span class="stu-actions">' + sentBadge + '<button class="send-btn" onclick="sendPeriodReport(' + attrSafe(r.reportId) + ')">📩 ' + (r.sentBy ? "재전송" : "전송") + '</button></span></div>'
 }
 
 function currentReportGroupList() {
@@ -1636,8 +1638,8 @@ function tuitionRowHtml(t) {
     : ""
   const checkboxHtml = '<input type="checkbox" class="stu-checkbox" ' + (SELECTED_TUITION_IDS[t.tuitionId] ? "checked" : "") + ' onchange="toggleTuitionSelected(' + attrSafe(t.tuitionId) + ', this.checked)">'
   // 상태 태그(완납/부분납/미납)는 전송(안내 발송) 버튼 바로 왼쪽에 오도록 금액 배지 뒤에 붙여요.
-  return '<div class="student-row"><span class="stu-name">' + checkboxHtml + ' ' + esc(displayStudentName(t.studentInfo || t.title)) + amountBadge + notionLink + ' ' + statusBadge + '</span>'
-    + '<button class="send-btn" onclick="sendTuitionNotice(' + attrSafe(t.tuitionId) + ')">📩 안내 발송</button></div>'
+  return '<div class="student-row"><span class="stu-name">' + checkboxHtml + ' ' + esc(displayStudentName(t.studentInfo || t.title)) + amountBadge + notionLink + '</span>'
+    + '<span class="stu-actions">' + statusBadge + '<button class="send-btn" onclick="sendTuitionNotice(' + attrSafe(t.tuitionId) + ')">📩 전송</button></span></div>'
 }
 
 function currentTuitionGroupList() {
@@ -2049,8 +2051,8 @@ function studentRowHtml(c, s) {
   const metaHtml = metaLine ? ' <span class="stu-meta">' + esc(metaLine) + '</span>' : ""
   return '<div class="student-row"><span class="stu-name">' + checkboxHtml + ' ' + esc(s.name) + metaHtml +
     (s.url ? ' <a class="stu-view" href="' + s.url + '" target="_blank" title="노션에서 보기">' + NOTION_ICON_SVG + '</a>' : "") + reportLink + ' ' +
-    (s.status ? '<span class="badge ' + cls + '">' + s.status + '</span>' : "") + homeworkBadge + evalBadge + sentBadge + '</span>' +
-    '<button class="send-btn" id="stu-send-' + i + '" onclick="sendStudentReport(' + i + ')" ' + (canSend ? "" : "disabled") + '>📩 ' + (s.sentByMe ? "재전송" : "전송") + '</button></div>'
+    (s.status ? '<span class="badge ' + cls + '">' + s.status + '</span>' : "") + homeworkBadge + evalBadge + '</span>' +
+    '<span class="stu-actions">' + sentBadge + '<button class="send-btn" id="stu-send-' + i + '" onclick="sendStudentReport(' + i + ')" ' + (canSend ? "" : "disabled") + '>📩 ' + (s.sentByMe ? "재전송" : "전송") + '</button></span></div>'
 }
 
 // 검색/정렬된 학생 행 목록만 다시 그려요. 검색창을 다시 그리지 않아서, 검색어를 입력하는 도중에도
@@ -2471,7 +2473,7 @@ function selectSchedule(id) {
     const nextEl = listEl.querySelector('.schedule-item[data-id="' + id + '"]')
     if (nextEl) nextEl.classList.add("selected")
   }
-  // 다른 탭(보고서/수강료/수업)에서 남은 값이 섞여 보이지 않도록, 공유 헤더 요소를 이 함수에서 매번 전부 새로 지정해요.
+  // 다른 탭(보고서/수강료/수업)에서 남은 값이 섮여 보이지 않도록, 공유 헤더 요소를 이 함수에서 매번 전부 새로 지정해요.
   el("md-right-empty").style.display = "none"
   el("md-right-content").style.display = "block"
   el("right-title").textContent = s.name
@@ -2646,8 +2648,8 @@ function renderScheduleMsgList() {
         const notionLink = s.url
           ? ' <a class="report-view-link" href="' + s.url + '" target="_blank" title="노션에서 보기">' + NOTION_ICON_SVG + '</a>'
           : ""
-        return '<div class="student-row"><span class="stu-name"><input type="checkbox" class="stu-checkbox" ' + (SCHEDULE_MSG_SELECTED[s.id] ? "checked" : "") + ' onchange="toggleScheduleMsgStudent(' + attrSafe(s.id) + ', this.checked)"> ' + esc(s.name) + (meta ? ' <span class="stu-meta">' + esc(meta) + '</span>' : "") + statusBadge + notionLink + sentBadge + '</span>' +
-          '<button class="send-btn" onclick="sendScheduleMsgToStudent(' + attrSafe(s.id) + ')">📩 ' + (s.sentByMe ? "재전송" : "전송") + '</button>' +
+        return '<div class="student-row"><span class="stu-name"><input type="checkbox" class="stu-checkbox" ' + (SCHEDULE_MSG_SELECTED[s.id] ? "checked" : "") + ' onchange="toggleScheduleMsgStudent(' + attrSafe(s.id) + ', this.checked)"> ' + esc(s.name) + (meta ? ' <span class="stu-meta">' + esc(meta) + '</span>' : "") + statusBadge + notionLink + '</span>' +
+          '<span class="stu-actions">' + sentBadge + '<button class="send-btn" onclick="sendScheduleMsgToStudent(' + attrSafe(s.id) + ')">📩 ' + (s.sentByMe ? "재전송" : "전송") + '</button></span>' +
         '</div>'
       }).join("")
     : '<div class="empty" style="padding:8px 0">조건에 맞는 학생이 없어요</div>'
