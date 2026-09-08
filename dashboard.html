@@ -614,7 +614,7 @@
           <button class="report-type-btn active" data-report-type="weekly" onclick="setReportType('weekly')">주간 보고서</button>
           <button class="report-type-btn" data-report-type="monthly" onclick="setReportType('monthly')">월간 보고서</button>
         </div>
-        <div class="cal-panel-hint" id="cal-panel-hint">날짜를 탭하면 해당 날짜의 수업을 볼 수 있어요</div>
+        <div class="cal-panel-hint" id="cal-panel-hint">날짜를 탭하면 해당 날짜의 수업을 볼 ��� 있��요</div>
       </div>
     </div>
     <div class="md-left" id="md-left">
@@ -622,8 +622,9 @@
         <span class="cal-icon">📅</span><span class="date-nav-label" id="date-nav-label">-</span>
       </div>
       <div class="search-row">
-        <input type="text" id="search-input" class="search-box" placeholder="���� 검색 (수업명 · 강사 · 학생 등)" oninput="onSearchInputDebounced(this.value)">
+        <input type="text" id="search-input" class="search-box" placeholder="������ 검색 (수업명 · 강사 · 학생 등)" oninput="onSearchInputDebounced(this.value)">
       </div>
+      <div class="md-filter-options" id="schedule-category-filter-row" style="display:none"></div>
       <div id="class-list-area" class="class-list-area"></div>
       <div id="schedule-list-area" class="schedule-list-area" style="display:none"></div>
       <div id="report-list-area" class="class-list-area" style="display:none"></div>
@@ -664,7 +665,7 @@
 <script>
 // ============ 공��� 로그인 (admin.html과 같�� localStorage 키를 사용해 한 번만 로그인하면 됩니다) ============
 const ADMIN_KEY_STORAGE = "admin_key"
-const ADMIN_SESSION_TTL_MS = 24 * 60 * 60 * 1000 // 24다 난 후 자동 만료(admin.html과 공유되땄 마잦뭐려). 구형신 문자열 키 간이란띄 캐 럤뒜로 따랑을 적용해요.
+const ADMIN_SESSION_TTL_MS = 24 * 60 * 60 * 1000 // 24다 난 후 자동 만료(admin.html����� 공��되땄 마잦뭐려). 구형신 문자열 키 간이란띄 캐 럤뒜로 따랑을 적용해요.
 function getAdminKey() {
   const raw = localStorage.getItem(ADMIN_KEY_STORAGE) || ""
   if (!raw) return ""
@@ -861,6 +862,9 @@ function kstToday() {
 let DOMAIN = "class"
 let SEARCH_TERM = ""
 let CURRENT_DATE = kstToday()
+// 일정 탭 구분(선택 속성) 다중 선택 필터 칩. 아무 것도 선택 안 하면(빈 상태) 전체를 보여줘요.
+const SCHEDULE_CATEGORY_ALL = ["📆 학원 일정", "🏫 학사 일정", "💤 휴원", "✅ 할일"]
+let SCHEDULE_CATEGORY_FILTER = {}
 let CLASSES = []
 let SELECTED_CLASS_ID = null
 let STUDENT_SEARCH_TERM = ""
@@ -925,6 +929,8 @@ function setDomain(domain) {
   document.querySelectorAll(".domain-tab").forEach(function (b) { b.classList.toggle("active", b.dataset.domain === domain) })
   el("class-list-area").style.display = domain === "class" ? "flex" : "none"
   el("schedule-list-area").style.display = domain === "schedule" ? "flex" : "none"
+  el("schedule-category-filter-row").style.display = domain === "schedule" ? "flex" : "none"
+  if (domain === "schedule") { SCHEDULE_CATEGORY_FILTER = {}; renderScheduleCategoryFilterRow() }
   el("report-list-area").style.display = domain === "report" ? "flex" : "none"
   el("tuition-list-area").style.display = domain === "tuition" ? "flex" : "none"
   el("bulk-send-tab-btn").style.display = "inline-flex"
@@ -1076,7 +1082,7 @@ async function loadCalPanelDots() {
   if (DOMAIN === "report" || DOMAIN === "tuition") { CAL_PANEL_ITEMS = {}; renderCalPanel(); return }
   const month = CAL_PANEL_MONTH
   const cacheKey = DOMAIN + ":" + month
-  // 이번 달을 이번 도맨에서 이버 조회한 적 있으릴 바로 쿨섫 사용해요.
+  // ��번 달을 이번 도맨에서 이버 조회한 적 있으릴 바로 쿨섫 사용해요.
   if (CAL_DOTS_CACHE[cacheKey]) {
     CAL_PANEL_ITEMS = CAL_DOTS_CACHE[cacheKey]
     renderCalPanel()
@@ -1408,7 +1414,7 @@ function getFilteredTuitions() {
 }
 
 function renderTuitionList() {
-  // 수강료 목록을 불러오는 중이면 파란 로딩 박스를 그대로 유지하고, 결과 화면은 데이터가 실제로 도착한 후에만 보여줘요.
+  // 수강료 목록을 불러오는 중이면 파란 로딩 박스를 그대로 유지하고, 결과 화면은 데이터가 실제로 도착한 후에만 ���여줘요.
   if (TUITION_LOADING) return
   const list = getFilteredTuitions()
   if (!list.length) {
@@ -1698,14 +1704,14 @@ function fetchSessionStudentsOnce(id) {
 // 선택한 수업 하��의 학생 정보만 콜어 미리 불러와요(그날 전체 수업 목록을 기다릴 필요 없이 바로 학생 목록이 채움).
 async function prioritizeSelectedClassStudents(id) {
   const c = findClass(id)
-  if (!c || c.students != null) return // 이미 학생 정보가 있으면(개별 로딩 완료 또는 빈 배열) 따로 요청하지 않아요.
+  if (!c || c.students != null) return // 이미 학생 정보가 있으면(개별 ���딩 완료 또는 빈 배열) 따로 요청하지 않아요.
   try {
     const fresh = await fetchSessionStudentsOnce(id)
     if (!fresh) return
     if (SELECTED_CLASS_ID === id) selectClass(id)
   } catch (err) {
     console.error("선택 수업 개별 로딩 실패:", err)
-    if (SELECTED_CLASS_ID === id) showToast("학생 정보를 불러오지 못했어요. 다시 선택해 보세요.")
+    if (SELECTED_CLASS_ID === id) showToast("학생 정보를 불러오지 못했어요. 다시 선택해 보세��.")
   }
 }
 
@@ -1979,7 +1985,7 @@ function formatSummaryBlock(text) {
 }
 
 // 과제 ��내/평가 결과 카드는 기존 과제·평가 탭에서 쓰던 구조화 레코드(제목 링크 + 교재·범위 + 마감/내용)를
-// 그대로 ���사용������. 탭�� 없�����������진 대신 더보기 안에서 바로 이 정보를 보여줍니다.
+// 그대로 ���사용������. 탭�� 없�����������진 대신 ��보기 안에서 바로 이 정보를 보여줍니다.
 async function loadSummaryRecordDetails(c) {
   const assignEl = el("summary-assignment-body")
   const evalEl = el("summary-evaluation-body")
@@ -2147,19 +2153,49 @@ async function refreshScheduleWeek(dates, silent) {
     if (!SELECTED_SCHEDULE_ID) ensureAllStudentsLoaded()
   } catch (err) {
     if (!silent && anchor === CURRENT_DATE && DOMAIN === "schedule") {
-      el("schedule-list-area").innerHTML = '<div class="empty">불러오기 실패: ' + esc(err.message) + '<br><button class="retry-btn" onclick="refreshScheduleWeek(upcomingDateRange(CURRENT_DATE, SCHEDULE_WINDOW_DAYS), false)">다시 시도</button></div>'
+      el("schedule-list-area").innerHTML = '<div class="empty">불러��기 실패: ' + esc(err.message) + '<br><button class="retry-btn" onclick="refreshScheduleWeek(upcomingDateRange(CURRENT_DATE, SCHEDULE_WINDOW_DAYS), false)">다시 시도</button></div>'
     }
   }
 }
 
 function filteredSchedules() {
-  if (!SEARCH_TERM) return SCHEDULES
-  return SCHEDULES.filter(function (s) {
+  const activeCats = Object.keys(SCHEDULE_CATEGORY_FILTER).filter(function (c) { return SCHEDULE_CATEGORY_FILTER[c] })
+  let list = SCHEDULES
+  if (activeCats.length) list = list.filter(function (s) { return activeCats.indexOf(s.category) >= 0 })
+  if (!SEARCH_TERM) return list
+  return list.filter(function (s) {
     const hay = [s.name, s.category, s.status, s.memo, s.relatedText]
       .concat(s.teacherNames || [], s.classNames || [], s.tags || [])
       .filter(Boolean).join(" ").toLowerCase()
     return hay.indexOf(SEARCH_TERM) >= 0
   })
+}
+
+// 구분 필터 칩 목록을 그려요. 칩을 누르면 다중 선택되고(전체 클리어는 "전체" 칩), 목록만 다시 그려요(칩 자체는 활성 클래스만 토글).
+function renderScheduleCategoryFilterRow() {
+  const rowEl = el("schedule-category-filter-row")
+  if (!rowEl) return
+  const activeCats = Object.keys(SCHEDULE_CATEGORY_FILTER).filter(function (c) { return SCHEDULE_CATEGORY_FILTER[c] })
+  const allActive = activeCats.length === 0
+  rowEl.innerHTML =
+    '<button class="filter-option' + (allActive ? " active" : "") + '" onclick="clearScheduleCategoryFilter()">전체</button>' +
+    SCHEDULE_CATEGORY_ALL.map(function (cat) {
+      const active = !!SCHEDULE_CATEGORY_FILTER[cat]
+      return '<button class="filter-option' + (active ? " active" : "") + '" onclick="toggleScheduleCategoryFilter(' + attrSafe(cat) + ')">' + esc(cat) + '</button>'
+    }).join("")
+}
+
+function toggleScheduleCategoryFilter(cat) {
+  if (SCHEDULE_CATEGORY_FILTER[cat]) delete SCHEDULE_CATEGORY_FILTER[cat]
+  else SCHEDULE_CATEGORY_FILTER[cat] = true
+  renderScheduleCategoryFilterRow()
+  renderScheduleList()
+}
+
+function clearScheduleCategoryFilter() {
+  SCHEDULE_CATEGORY_FILTER = {}
+  renderScheduleCategoryFilterRow()
+  renderScheduleList()
 }
 
 function findSchedule(id) { return SCHEDULES.find(function (s) { return s.id === id }) }
@@ -2412,7 +2448,7 @@ function renderScheduleMsgList() {
       }).join("")
     : '<div class="empty" style="padding:8px 0">조건에 맞는 학생이 없어요</div>'
   const countEl = bodyEl.querySelector(".sched-msg-count")
-  if (countEl) countEl.textContent = list.length + "명 · 선택 " + selectedCount + "명"
+  if (countEl) countEl.textContent = list.length + "명 · ���택 " + selectedCount + "명"
   const selectAllEl = bodyEl.querySelector(".student-select-all input")
   if (selectAllEl) { selectAllEl.checked = allSelected; selectAllEl.disabled = !eligibleIds.length }
   const rowsEl = bodyEl.querySelector("#sched-msg-student-rows")
@@ -2449,7 +2485,7 @@ async function callSendDailyReport(payload) {
   return data
 }
 
-// 전송 버튼을 누르면 곰바로 발송하지 않고, HTML에 이미 있던 확인 모달(alimtalk-modal)을 먼저 보여줘요.
+// 전송 버튼을 누르면 곰바로 발송하지 ���고, HTML에 이미 있던 확인 모달(alimtalk-modal)을 먼저 보여줘요.
 // 사용자가 "발송"을 누르면 confirmAlimtalkSend()가 실제 발송 로직을 실행해요.
 let ALIMTALK_PENDING = null // { kind: "student", index } | { kind: "bulk", classId }
 
