@@ -622,7 +622,7 @@
         <span class="cal-icon">📅</span><span class="date-nav-label" id="date-nav-label">-</span>
       </div>
       <div class="search-row">
-        <input type="text" id="search-input" class="search-box" placeholder="�����합 검색 (수업명 · 강사 · 학생 등)" oninput="onSearchInputDebounced(this.value)">
+        <input type="text" id="search-input" class="search-box" placeholder="통합 검색 (수업명 · 강사 · 학생 등)" oninput="onSearchInputDebounced(this.value)">
       </div>
       <div class="md-filter-options" id="schedule-category-filter-row" style="display:none"></div>
       <div id="class-list-area" class="class-list-area"></div>
@@ -1308,7 +1308,7 @@ function renderReportList() {
   const list = getFilteredReports()
   if (!list.length) {
     SELECTED_REPORT_CLASS = null
-    el("report-list-area").innerHTML = '<div class="empty">' + (REPORT_TYPE === "weekly" ? "해당 주에 해당하는 보고서가 없어요" : "해당 월에 해당하는 보고서가 없��요") + '</div>'
+    el("report-list-area").innerHTML = '<div class="empty">' + (REPORT_TYPE === "weekly" ? "해당 주에 해당하는 보고서가 없어요" : "해당 월에 해당하는 보고서가 없어요") + '</div>'
     renderReportClassDetail()
     return
   }
@@ -1752,7 +1752,7 @@ async function prioritizeSelectedClassStudents(id) {
 }
 
 // 선택된 수업이 없을 때, 뒤에서 조용히 그날 전체 수업의 학생 정보를 하나씩 미리 불러와요.
-// 사용자가 나���에 아무 수업이나 클릭해도 이미 캐시된 학생 정보가 바로 나오도록 하기 위함이에요.
+// 사용자가 나중에 아무 수업이나 클릭해도 이미 캐시된 학생 정보가 바로 나오도록 하기 위함이에요.
 // 도중에 사용자가 수업을 선택해도 fetchSessionStudentsOnce가 요청을 공유하므로 중복 요청 없이 그대로 이어받아요.
 async function backgroundPrefetchAllStudents(dateStr) {
   const token = ++BACKGROUND_PREFETCH_TOKEN
@@ -1892,10 +1892,13 @@ function studentRowHtml(c, s) {
   const homeworkCls = s.homework ? (homeworkBadgeClass[s.homework.status] || "tone-gray") : ""
   const homeworkBadge = s.homework ? ' <span class="badge ' + homeworkCls + '">과제 ' + s.homework.status + '</span>' : ""
   const evalCls = s.evaluation ? attendanceRateTone(s.evaluation.score) : ""
-  const evalBadge = s.evaluation ? ' <span class="badge ' + evalCls + '">' + s.evaluation.score + '점</span>' : ""
+  const evalTotal = s.evaluation ? pickField(s.evaluation, ["totalCount", "totalQuestions", "total"]) : null
+  const evalCorrect = s.evaluation ? pickField(s.evaluation, ["correctCount", "correctQuestions", "correct"]) : null
+  const evalCountText = evalTotal ? " " + (evalCorrect !== null ? evalCorrect : "?") + "/" + evalTotal : ""
+  const evalBadge = s.evaluation ? ' <span class="badge ' + evalCls + '">' + s.evaluation.score + '점' + evalCountText + '</span>' : ""
   const reportLink = s.reportUrl
     ? ' <a class="report-view-link" href="' + s.reportUrl + '" target="_blank" title="학습 보고서 페이지 보기">📋</a>'
-    : ' <span class="report-view-link" style="opacity:0.35;cursor:default" title="이 학생의 등���에 토큰이 아직 없어요">📋</span>'
+    : ' <span class="report-view-link" style="opacity:0.35;cursor:default" title="이 학생의 등록에 토큰이 아직 없어요">📋</span>'
   const checkboxHtml = canSend
     ? '<input type="checkbox" class="stu-checkbox" ' + (SELECTED_STUDENT_IDS[s.attendanceId] ? "checked" : "") + ' onchange="toggleStudentSelected(' + attrSafe(s.attendanceId) + ', this.checked)">'
     : '<input type="checkbox" class="stu-checkbox" disabled>'
@@ -2021,7 +2024,7 @@ function formatSummaryBlock(text) {
 }
 
 // 과제 안내/평가 결과 카드는 기존 과제·평가 탭에서 쓰던 구조화 레코드(제목 링크 + 교재·범위 + 마감/내용)를
-// 그대로 재사용해요. 탭�� 없어진 대신 더보기 안에서 바로 이 정보를 보여줍니다.
+// 그대로 재사용해요. 탭이 없어진 대신 더보기 안에서 바로 이 정보를 보여줍니다.
 async function loadSummaryRecordDetails(c) {
   const assignEl = el("summary-assignment-body")
   const evalEl = el("summary-evaluation-body")
@@ -2084,7 +2087,7 @@ async function renderTaskTab(c, body, kind) {
       if (records.length > 0) {
         body.innerHTML = records.map(function (r) {
           return '<div class="record-card"><div class="title"><a href="' + r.url + '" target="_blank">' + esc(r.title || "평가") + '</a></div>' +
-            '<div class="meta">교���: ' + esc(r.book || "-") + (r.range ? " · 범위: " + esc(r.range) : "") + '</div>' +
+            '<div class="meta">교재: ' + esc(r.book || "-") + (r.range ? " · 범위: " + esc(r.range) : "") + '</div>' +
             '</div>'
         }).join("")
         return
@@ -2325,7 +2328,7 @@ function selectSchedule(id) {
     const nextEl = listEl.querySelector('.schedule-item[data-id="' + id + '"]')
     if (nextEl) nextEl.classList.add("selected")
   }
-  // 다른 탭(보고서/수강료/수업)에서 남은 값이 섞여 보���지 않도록, 공유 헤더 요소를 이 함수에서 매번 전부 새로 지정해요.
+  // 다른 탭(보고서/수강료/수업)에서 남은 값이 섞여 보이지 않도록, 공유 헤더 요소를 이 함수에서 매번 전부 새로 지정해요.
   el("md-right-empty").style.display = "none"
   el("md-right-content").style.display = "block"
   el("right-title").textContent = s.name
@@ -2386,7 +2389,7 @@ let SCHEDULE_MSG_STATUS_FILTER = ""
 
 // 학생(학원) DB 전체 목록을 한번 불러와서 캐시해요. 기대 응답 형태:
 // { students: [{ id, name, grade, school, classNames: ["반 이름", ...], status: "🔵수강중", phone, parentPhone }, ...] }
-// (학생이름→name, 학년→grade, 학교→school, ��록 클래스→classNames, 상태→status 프로퍼티와 매핑되어야 해요)
+// (학생이름→name, 학년→grade, 학교→school, 등록 클래스→classNames, 상태→status 프로퍼티와 매핑되어야 해요)
 async function ensureAllStudentsLoaded() {
   if (STUDENTS_LOAD_STATE === "loaded" || STUDENTS_LOAD_STATE === "loading") return
   STUDENTS_LOAD_STATE = "loading"
