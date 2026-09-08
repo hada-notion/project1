@@ -611,7 +611,7 @@
           <button class="report-type-btn active" data-report-type="weekly" onclick="setReportType('weekly')">주간 보고서</button>
           <button class="report-type-btn" data-report-type="monthly" onclick="setReportType('monthly')">월간 보고서</button>
         </div>
-        <div class="cal-panel-hint" id="cal-panel-hint">날짜를 탭하면 해당 날짜의 수업을 볼 ��� 있어요</div>
+        <div class="cal-panel-hint" id="cal-panel-hint">날짜를 탭하면 해당 날짜의 수업을 볼 수 있어요</div>
       </div>
     </div>
     <div class="md-left" id="md-left">
@@ -619,7 +619,7 @@
         <span class="cal-icon">📅</span><span class="date-nav-label" id="date-nav-label">-</span>
       </div>
       <div class="search-row">
-        <input type="text" id="search-input" class="search-box" placeholder="���합 검색 (수업명 · 강사 · 학생 등)" oninput="onSearchInputDebounced(this.value)">
+        <input type="text" id="search-input" class="search-box" placeholder="통합 검색 (수업명 · 강사 · 학생 등)" oninput="onSearchInputDebounced(this.value)">
       </div>
       <div class="md-filter-options" id="schedule-category-filter-row" style="display:none"></div>
       <div id="class-list-area" class="class-list-area"></div>
@@ -662,7 +662,7 @@
 <script>
 // ============ 공통 로그인 (admin.html과 같은 localStorage 키를 사용해 한 번만 로그인하면 됩니다) ============
 const ADMIN_KEY_STORAGE = "admin_key"
-const ADMIN_SESSION_TTL_MS = 24 * 60 * 60 * 1000 // 24시간 후 자동 만료(admin.html과 공유되는 만료 ��각입니다). 문자열 키 형식이라도 만료 시각 비교를 적용해요.
+const ADMIN_SESSION_TTL_MS = 24 * 60 * 60 * 1000 // 24시간 후 자동 만료(admin.html과 공유되는 만료 시각입니다). 문자열 키 형식이라도 만료 시각 비교를 적용해요.
 function getAdminKey() {
   const raw = localStorage.getItem(ADMIN_KEY_STORAGE) || ""
   if (!raw) return ""
@@ -886,6 +886,7 @@ let CAL_PANEL_ITEMS = {}
 let CAL_DOTS_CACHE = {} // 도맨인:월 키로 캐싱해서, 같은 월을 다시 볼 땐 31일을 다시 조회하지 않도록 해요.
 let REPORT_TYPE = "weekly" // "weekly" | "monthly"
 let REPORTS = []
+let REPORT_CACHE = {} // "type:month" 키로 캐시해서, 이번 방문에서 이미 본 월/유형이면 다시 조회하지 않고 바로 다시 보여줘요.
 let REPORT_LOADING = false // 보고서 목록 조회가 진행 중인 동안, 다른 곳(주 선택 등)에서 목록을 다시 그려도 파란 로딩 박스를 유지해요.
 let reportLoadGen = 0
 let SELECTED_REPORT_ID = null
@@ -914,7 +915,7 @@ function formatDateLabel(dateStr) {
 function clearRightPanel() {
   el("md-right-empty").style.display = "block"
   el("md-right-content").style.display = "none"
-  el("md-right-empty").textContent = DOMAIN === "class" ? "👈 왼쪽에서 수업�� 선택하면 상세정보가 표시돼요" : "👈 왼쪽에서 일정을 선택하면 상세정보가 표시돼요"
+  el("md-right-empty").textContent = DOMAIN === "class" ? "👈 왼쪽에서 수업을 선택하면 상세정보가 표시돼요" : "👈 왼쪽에서 일정을 선택하면 상세정보가 표시돼요"
   SELECTED_CLASS_ID = null
   SELECTED_SCHEDULE_ID = null
   el("bulk-send-tab-btn").disabled = true
@@ -1037,7 +1038,7 @@ function updateDateNavLabel() {
 
 // 캘린더에 표시된 달의 날짜별로 수업/일정이 있는지 조회해서 점을 표시해요.
 // 단 1번의 요정으로 해당 달의 범위(?month=YYYY-MM)를 조회해요. 이전에는 하맞다 31일을 개네로 조회해서
-// Notion API가 ��시에 429(rate limited)를 맞아 지연이 발생했었는데, 이제는 get-classes/get-schedules 각각이 지원하는 월 단위 범위 조회로 1번만 호출해요.
+// Notion API가 동시에 429(rate limited)를 맞아 지연이 발생했었는데, 이제는 get-classes/get-schedules 각각이 지원하는 월 단위 범위 조회로 1번만 호출해요.
 // 만약 월 범위 조회가 실패하면(구버전 백어덹 문제 따랑), 예전의 일자별 조회로 되돌감담 설정해요(동시에 네려 젔렸려가 아니려 5거씩 직닉에 진학해서 Notion 요오을 줄임해요).
 async function loadCalPanelDotsViaMonth(url, month) {
   const res = await fetch(url + "?month=" + month, {
@@ -1085,7 +1086,7 @@ async function loadCalPanelDots() {
   if (DOMAIN === "report" || DOMAIN === "tuition") { CAL_PANEL_ITEMS = {}; renderCalPanel(); return }
   const month = CAL_PANEL_MONTH
   const cacheKey = DOMAIN + ":" + month
-  // 이�� �������을 이번 도메인에서 이미 조회한 적 있으면 바로 캐시를 사용해요.
+  // 이번 달을 이번 도메인에서 이미 조회한 적 있으면 바로 캐시를 사용해요.
   if (CAL_DOTS_CACHE[cacheKey]) {
     CAL_PANEL_ITEMS = CAL_DOTS_CACHE[cacheKey]
     renderCalPanel()
@@ -1249,13 +1250,24 @@ async function loadReportList(month) {
   }
 }
 
-// 보고서 탭 전용: 발송완료/미발송을 하나의 배지로 통합해요(수업 탭 classSendSummaryBadge��� 동일한 패턴).
+// 보고서 탭 전용: 발송완료/미발송을 하나의 배지로 통합해요(수업 탭 classSendSummaryBadge와 동일한 패턴).
 function reportSendBadge(items) {
   const total = items.length
   const sentCount = items.filter(function (r) { return r.sentBy }).length
   const pct = total ? Math.round((sentCount / total) * 100) : 0
   const tone = pct >= 100 ? "tone-blue" : pct <= 0 ? "tone-gray" : "tone-orange"
   return '<span class="badge ' + tone + '">발송 ' + sentCount + '/' + total + '명</span>'
+}
+
+// 반/학생 목록 제목에서 인원수 대신 "8월 4주차 주간보고서" / "8월 월간 보고서" 형식을 보여줘요(인원수는 발송 배지에 이미 들어있으니 중복을 피해요).
+function reportPeriodLabel(items) {
+  const p = items && items[0] && items[0].period
+  if (!p || !p.start) return REPORT_TYPE === "monthly" ? "월간 보고서" : "주간 보고서"
+  const d = new Date(p.start + "T00:00:00+09:00")
+  const month = d.getMonth() + 1
+  if (REPORT_TYPE === "monthly") return month + "월 월간 보고서"
+  const week = Math.ceil(d.getDate() / 7)
+  return month + "월 " + week + "주차 주간보고서"
 }
 
 // "N% (n/m)" 형태의 텍스트 필드(attendanceSummary 등)에서 그룹 평균 퍼센트를 계산해요.
@@ -1319,11 +1331,18 @@ function renderReportList() {
   if (SELECTED_REPORT_CLASS && !groups.some(function (g) { return g.classId === SELECTED_REPORT_CLASS })) SELECTED_REPORT_CLASS = null
   el("report-list-area").innerHTML = groups.map(function (g) {
     const active = g.classId === SELECTED_REPORT_CLASS ? " selected" : ""
-    const sentCount = g.items.filter(function (r) { return r.sentBy }).length
+    const avgAttendance = reportGroupAvgRate(g.items, "attendanceSummary")
+    const avgHomework = reportGroupAvgRate(g.items, "homeworkSummary")
+    const avgEval = reportGroupAvgScore(g.items, "evalScoreSummary")
     return '<div class="class-item' + active + '">'
       + '<div class="class-item-head" onclick="selectReportClass(' + attrSafe(g.classId) + ')">'
-        + '<div class="class-item-title-row"><span class="class-item-title">' + resolveClassEmoji(g.classId, g.className, g.emoji) + ' ' + esc(g.className) + '</span><span class="class-item-time">' + g.items.length + '명</span></div>'
-        + '<div class="class-item-badges"><span class="badge tone-blue">발송 ' + sentCount + '</span><span class="badge tone-gray">미발송 ' + (g.items.length - sentCount) + '</span></div>'
+        + '<div class="class-item-title-row"><span class="class-item-title">' + resolveClassEmoji(g.classId, g.className, g.emoji) + ' ' + esc(g.className) + '</span><span class="class-item-time">' + reportPeriodLabel(g.items) + '</span></div>'
+        + '<div class="class-item-badges">'
+          + (avgAttendance != null ? '<span class="rate-badge ' + attendanceRateTone(avgAttendance) + '">출석륦 ' + avgAttendance + '%</span>' : '')
+          + (avgHomework != null ? ' <span class="rate-badge ' + attendanceRateTone(avgHomework) + '">과제이행 ' + avgHomework + '%</span>' : '')
+          + (avgEval != null ? ' <span class="rate-badge ' + attendanceRateTone(avgEval) + '">평가 ' + avgEval + '점</span>' : '')
+          + ' ' + reportSendBadge(g.items)
+        + '</div>'
       + '</div>'
       + '</div>'
   }).join("")
@@ -1357,7 +1376,7 @@ function renderReportClassDetail() {
   const avgAttendance = reportGroupAvgRate(list, "attendanceSummary")
   const avgHomework = reportGroupAvgRate(list, "homeworkSummary")
   const avgEval = reportGroupAvgScore(list, "evalScoreSummary")
-  el("right-time").textContent = list.length + "명"
+  el("right-time").textContent = reportPeriodLabel(list)
   // 수업 탭 배지와 같은 자리에, 발송 여부는 배지 하나로 통합하고(수업 탭 classSendSummaryBadge 패턴), 그 옆에 출석률/과제이행률/평가 평균점수를 함께 보여줘요.
   el("right-sub").innerHTML =
     (avgAttendance != null ? '<span class="rate-badge ' + attendanceRateTone(avgAttendance) + '">출석률 ' + avgAttendance + '%</span>' : "") +
@@ -1519,7 +1538,7 @@ function renderTuitionList() {
   const list = getFilteredTuitions()
   if (!list.length) {
     SELECTED_TUITION_CLASS = null
-    el("tuition-list-area").innerHTML = '<div class="empty">해당 월에 해당하는 청구 ���역이 없어요</div>'
+    el("tuition-list-area").innerHTML = '<div class="empty">해당 월에 해당하는 청구 내역이 없어요</div>'
     renderTuitionClassDetail()
     return
   }
@@ -1923,7 +1942,7 @@ function selectClass(id) {
   el("right-summary-body").innerHTML =
     '<div class="summary-two-col">' +
       '<div class="info-card half"><h3>✅ 출석 현황</h3>' +
-        '<div class="stat-row stat-text green">등�� <b>' + stat.attend + '</b>명</div>' +
+        '<div class="stat-row stat-text green">등원 <b>' + stat.attend + '</b>명</div>' +
         '<div class="stat-row stat-text blue">보강 <b>' + stat.makeup + '</b>명</div>' +
         '<div class="stat-row stat-text red">결석 <b>' + stat.absent + '</b>명</div>' +
       '</div>' +
@@ -1979,7 +1998,7 @@ function renderRightTabBody() {
 function summarizeStudents(students) {
   const stat = { attend: 0, makeup: 0, absent: 0, done: 0, partial: 0, none: 0 }
   ;(students || []).forEach(function (s) {
-    if (s.status === "출��") stat.attend++
+    if (s.status === "출석") stat.attend++
     else if (s.status === "보강") stat.makeup++
     else if (s.status === "결석") stat.absent++
     if (s.homework) {
@@ -2353,7 +2372,7 @@ function clearScheduleCategoryFilter() {
 
 function findSchedule(id) { return SCHEDULES.find(function (s) { return s.id === id }) }
 
-// 같은 일정이 여러 반/강사��� 걸쳐 ��으면 API가 행을 나눠서 줄 수 있어요.
+// 같은 일정이 여러 반/강사에 걸쳐 있으면 API가 행을 나눠서 줄 수 있어요.
 // 날짜+이름+구분+상태가 같으면 한 줄로 합치고 강사/반 이름만 모아줘요.
 function dedupeSchedules(list) {
   const map = new Map()
@@ -2373,8 +2392,8 @@ function dedupeSchedules(list) {
   return order.map(function (k) { return map.get(k) })
 }
 
-// 구분(선택 속성)은 노션이 ���정한 색을 그대로 쓰고(s.categoryColor), 강사/반은 관계형이라 학원마다 값이 달라져서
-// 이름을 해시해서 고정 ��레트에서 색을 고르는 teacherColorClass를 재사용해요(수업 탭의 강사 배지와 동일한 방식).
+// 구분(선택 속성)은 노션이 지정한 색을 그대로 쓰고(s.categoryColor), 강사/반은 관계형이라 학원마다 값이 달라져서
+// 이름을 해시해서 고정 팔레트에서 색을 고르는 teacherColorClass를 재사용해요(수업 탭의 강사 배지와 동일한 방식).
 // 강사는 색이 칠해진 teacher-badge, 반은 테두리만 있는 class-badge로 구분해서 한눈에 종류를 알 수 있게 해요.
 function renderScheduleTagBadges(s) {
   const teacherBadges = []
@@ -2442,7 +2461,7 @@ function selectSchedule(id) {
     const nextEl = listEl.querySelector('.schedule-item[data-id="' + id + '"]')
     if (nextEl) nextEl.classList.add("selected")
   }
-  // 다른 탭(보고서/수강료/수업)에�� 남은 ���이 섞여 보이지 않도록, 공유 헤더 요소를 이 함수에서 매번 전부 새로 지정해요.
+  // 다른 탭(보고서/수강료/수업)에서 남은 값이 섞여 보이지 않도록, 공유 헤더 요소를 이 함수에서 매번 전부 새로 지정해요.
   el("md-right-empty").style.display = "none"
   el("md-right-content").style.display = "block"
   el("right-title").textContent = s.name
@@ -2470,7 +2489,7 @@ function selectSchedule(id) {
   openMobileDetail()
 }
 
-// 강사/반 이름은 이미 정���된 배열(teacherNames/classNames)을 그대로 써서, 원본 관련항목 텍스트에 섞여있을 수 있는 중복을 피해요.
+// 강사/반 이름은 이미 정렬된 배열(teacherNames/classNames)을 그대로 써서, 원본 관련항목 텍스트에 섞여있을 수 있는 중복을 피해요.
 function renderScheduleRelatedBadges(s) {
   const teacherBadges = []
   const seenTeachers = {}
@@ -2539,7 +2558,7 @@ const SCHEDULE_MSG_STATUS_ALL = ["🟡신규문의", "🔵수강중", "🟢수�
 
 // 이모지 없이 텍스트만 보여주되, 이모지와 같은 색으로 표기하기 위한 매핑이에요.
 const SCHEDULE_MSG_STATUS_META = {
-  "🟡���규문의": { label: "신규문의", tone: "tone-yellow" },
+  "🟡신규문의": { label: "신규문의", tone: "tone-yellow" },
   "🔵수강중": { label: "수강중", tone: "tone-blue" },
   "🟢수강전": { label: "수강전", tone: "tone-green" },
   "🔴종료": { label: "종료", tone: "tone-red" },
@@ -2584,7 +2603,7 @@ function renderScheduleMsgBody() {
     el("bulk-send-tab-btn").disabled = true
     return
   }
-  // 이미 검색창 쉬샘(input 포함)이 그려져 있으면 input��� 건드리지 않고 목록만 갱신해요.
+  // 이미 검색창 쉬샘(input 포함)이 그려져 있으면 input을 건드리지 않고 목록만 갱신해요.
   if (!bodyEl.querySelector(".student-list-controls")) {
     bodyEl.innerHTML =
       '<div class="student-list-controls">' +
@@ -2652,7 +2671,7 @@ function handleScheduleMessageSend() {
 }
 
 // 학생 한 명에게 개별로 안내문을 보내는 버튼이에요. 수업 탭의 개별 전송 버튼과 같은 자리·같은 이모지를 사용해요.
-// 백엔드 연동은 ���직이라, 수업 탭과 같은 전송완료/미전송 배지를 보여주기 위해 클릭 즉시 sentByMe만 켜요.
+// 백엔드 연동은 아직이라, 수업 탭과 같은 전송완료/미전송 배지를 보여주기 위해 클릭 즉시 sentByMe만 켜요.
 function sendScheduleMsgToStudent(id) {
   const s = (ALL_STUDENTS_CACHE || []).find(function (st) { return st.id === id })
   if (!s) return
@@ -2747,7 +2766,7 @@ async function doSendBulkReportsForClass(classId) {
     }
   }
   showToast(success + "건 발송 완료" + (fail ? ", " + fail + "건 실패" : ""))
-  await loadReportList(CAL_PANEL_MONTH)
+  await loadReportList(CAL_PANEL_MONTH, true)
 }
 
 async function sendPeriodReportSilently(reportId) {
