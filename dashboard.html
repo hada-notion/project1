@@ -1958,7 +1958,7 @@ function pickField(obj, keys) {
   return null
 }
 
-// 평가 탭은 우선 get-class-detail의 학습기록(평가) 레코드를 조회해서 리포트 페이지처럼 "N점 (정답/전체)" 형태로 보여주고,
+// 평가 탭은 우선 get-class-detail의 학습기록(평가) 레코드를 조회해서 리포트 페이지처럼 "N점 (정답/전체)" 형식으로 보여주고,
 // 이 정보가 없으면 기존의 "평가 결과" 요약 텍스트로 대체해요(하위 호환).
 // 과제 탭은 마감일을 반영하기 위해 get-class-detail을 통해 학습기록(과제) 목록을 따로 조회합니다.
 // (조금 느리지만 마감일을 다시 보여줄 수 있습니다.) 결과는 CLASS_DETAIL_CACHE에 캐싱되어 재조회를 최소화합니다.
@@ -2304,7 +2304,7 @@ function selectSchedule(id) {
   RIGHT_SUMMARY_ON_OPEN = null
   el("right-summary-toggle-label").textContent = RIGHT_SUMMARY_CLOSED_LABEL
   el("bulk-send-tab-btn").style.display = "inline-flex"
-  el("bulk-send-tab-btn").textContent = "📩 선택한 학생에게 안내 발송"
+  el("bulk-send-tab-btn").textContent = "📩 안내문 일괄 전송"
   el("bulk-send-tab-btn").disabled = true
   SCHEDULE_MSG_SELECTED = {}
   SCHEDULE_MSG_SEARCH = ""
@@ -2384,6 +2384,19 @@ function filteredScheduleMsgStudents() {
 // Fixed list of the five statuses the student DB's status formula can produce.
 const SCHEDULE_MSG_STATUS_ALL = ["🟡신규문의", "🔵수강중", "🟢수강전", "🔴종료", "⚪등록보류"]
 
+// 이모지 없이 텍스트만 보여주되, 이모지와 같은 색으로 표기하기 위한 매핑이에요.
+const SCHEDULE_MSG_STATUS_META = {
+  "🟡신규문의": { label: "신규문의", tone: "tone-yellow" },
+  "🔵수강중": { label: "수강중", tone: "tone-blue" },
+  "🟢수강전": { label: "수강전", tone: "tone-green" },
+  "🔴종료": { label: "종료", tone: "tone-red" },
+  "⚪등록보류": { label: "등록보류", tone: "tone-gray" },
+}
+
+function scheduleMsgStatusMeta(status) {
+  return SCHEDULE_MSG_STATUS_META[status] || { label: status || "", tone: "tone-gray" }
+}
+
 function scheduleMsgStatusOptions() {
   return SCHEDULE_MSG_STATUS_ALL
 }
@@ -2395,7 +2408,7 @@ function setScheduleMsgStatusFilter(value) {
 
 function scheduleMsgStatusOptionsHtml() {
   return '<option value="">수강상태 전체</option>' +
-    scheduleMsgStatusOptions().map(function (o) { return '<option value="' + esc(o) + '"' + (SCHEDULE_MSG_STATUS_FILTER === o ? " selected" : "") + '>' + esc(o) + '</option>' }).join("")
+    scheduleMsgStatusOptions().map(function (o) { return '<option value="' + esc(o) + '"' + (SCHEDULE_MSG_STATUS_FILTER === o ? " selected" : "") + '>' + esc(scheduleMsgStatusMeta(o).label) + '</option>' }).join("")
 }
 
 function setScheduleMsgSearch(value) {
@@ -2442,8 +2455,10 @@ function renderScheduleMsgList() {
   const rowsHtml = list.length
     ? list.map(function (s) {
         const meta = [s.grade, s.school].filter(Boolean).join(" · ")
+        const statusMeta = s.status ? scheduleMsgStatusMeta(s.status) : null
         return '<div class="student-row"><span class="stu-name"><input type="checkbox" class="stu-checkbox" ' + (SCHEDULE_MSG_SELECTED[s.id] ? "checked" : "") + ' onchange="toggleScheduleMsgStudent(' + attrSafe(s.id) + ', this.checked)"> ' + esc(s.name) + (meta ? ' <span class="stu-meta">' + esc(meta) + '</span>' : "") + '</span>' +
-          (s.status ? '<span class="badge gray">' + esc(s.status) + '</span>' : "") +
+          (statusMeta ? '<span class="badge ' + statusMeta.tone + '">' + esc(statusMeta.label) + '</span>' : "") +
+          '<button class="send-btn" onclick="sendScheduleMsgToStudent(' + attrSafe(s.id) + ')">📩 전송</button>' +
         '</div>'
       }).join("")
     : '<div class="empty" style="padding:8px 0">조건에 맞는 학생이 없어요</div>'
@@ -2471,6 +2486,13 @@ function handleScheduleMessageSend() {
   const targets = (ALL_STUDENTS_CACHE || []).filter(function (s) { return SCHEDULE_MSG_SELECTED[s.id] })
   if (!targets.length) { showToast("발송할 학생이 없어요"); return }
   showToast(targets.length + "명에게 보낼 준비가 됐어요 (발송 기능은 아직 준비 중이에요)")
+}
+
+// 학생 한 명에게 개별로 안내문을 보내는 버튼이에요. 수업 탭의 개별 전송 버튼과 같은 자리·같은 이모지를 사용해요.
+function sendScheduleMsgToStudent(id) {
+  const s = (ALL_STUDENTS_CACHE || []).find(function (st) { return st.id === id })
+  if (!s) return
+  showToast(esc(s.name) + "에게 안내문을 보낼 준비가 됐어요 (발송 기능은 아직 준비 중이에요)")
 }
 
 // ---------------- 알림톡 발송 ----------------
