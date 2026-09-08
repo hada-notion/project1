@@ -361,8 +361,9 @@
 #right-tab-body .student-row { border-bottom:1px solid var(--border); padding:6px 0; }
 #right-tab-body .student-row:last-child { border-bottom:none; }
 .sched-msg-title { font-size:13px; font-weight:700; color:var(--text); margin-bottom:10px; }
-.sched-msg-search { margin-bottom:8px; }
-.sched-msg-search input { width:100%; font-size:12px; padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:#fff; color:var(--text); box-sizing:border-box; }
+.sched-msg-search { margin-bottom:8px; display:flex; gap:6px; }
+.sched-msg-search input { flex:1 1 auto; min-width:0; font-size:12px; padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:#fff; color:var(--text); box-sizing:border-box; }
+.sched-msg-search select { flex:0 0 auto; font-size:12px; padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:#fff; color:var(--text); }
 .sched-msg-count { font-size:12px; color:var(--muted); margin-bottom:6px; }
 .schedule-list-area { display:flex; flex-direction:column; gap:0; }
 .sched-date-group { display:flex; flex-direction:column; }
@@ -1027,7 +1028,7 @@ function updateDateNavLabel() {
 
 // 캘린더에 표시된 달의 날짜별로 수업/일정이 있는지 조회해서 점을 표시해요.
 // 단 1번의 요정으로 해당 달의 범위(?month=YYYY-MM)를 조회해요. 이전에는 하맞다 31일을 개네로 조회해서
-// Notion API가 같이 429(rate limited)를 맞렔니 다만 지연 숙쇈둌떈담니, 이제는 get-classes/get-schedules 각각이 지원하렘땄 월 다위 범위 조회로 1번만 호출해요.
+// Notion API가 같이 429(rate limited)를 맞렔니 다만 지연 숙쇈둌떈담니, 이제는 get-classes/get-schedules 각각이 지원�����렘땄 월 다위 범위 조회로 1번만 호출해요.
 // 만약 월 범위 조회가 실패하면(구버전 백어덹 문제 따랑), 예전의 일자별 조회로 되돌감담 설정해요(동시에 네려 젔렸려가 아니려 5거씩 직닉에 진학해서 Notion 요오을 줄임해요).
 async function loadCalPanelDotsViaMonth(url, month) {
   const res = await fetch(url + "?month=" + month, {
@@ -1709,7 +1710,7 @@ async function prioritizeSelectedClassStudents(id) {
 }
 
 // 선택된 수업이 없을 때, 뒤에서 조용히 그날 전체 수업의 학생 정보를 하나씩 미리 불러와요.
-// 사용자가 나중에 아무 수업이나 클릭해도 이미 캐시된 학생 정보가 바����� 나오도록 하기 위함이에요.
+// 사용자가 나중에 아무 수업이나 클릭해도 이미 캐시된 학생 ��보�� 바����� 나오도록 하기 위함이에요.
 // 도중에 사용자가 수업을 선택������ fetchSessionStudentsOnce가 요청을 공유하므로 중복 요청 없이 그�����로 이어받아요.
 async function backgroundPrefetchAllStudents(dateStr) {
   const token = ++BACKGROUND_PREFETCH_TOKEN
@@ -1978,7 +1979,7 @@ function formatSummaryBlock(text) {
 }
 
 // 과제 ��내/평가 결과 카드는 기존 과제·평가 탭에서 쓰던 구조화 레코드(제목 링크 + 교재·범위 + 마감/내용)를
-// 그대로 재사용해���. 탭�� 없�����������진 대신 더보기 안에서 바로 이 정보를 보여줍니다.
+// 그대로 ���사용������. 탭�� 없�����������진 대신 더보기 안에서 바로 이 정보를 보여줍니다.
 async function loadSummaryRecordDetails(c) {
   const assignEl = el("summary-assignment-body")
   const evalEl = el("summary-evaluation-body")
@@ -2163,7 +2164,7 @@ function filteredSchedules() {
 
 function findSchedule(id) { return SCHEDULES.find(function (s) { return s.id === id }) }
 
-// 같은 일정이 여러 반/강사에 걸쳐 있으면 API가 행을 나눠서 줄 수 있어요.
+// 같은 일정이 여러 반/강사에 ��쳐 있으면 API가 행을 나눠서 줄 수 있어요.
 // 날짜+이름+구분+상태가 같으면 한 줄로 합치고 강사/반 이름만 모아줘요.
 function dedupeSchedules(list) {
   const map = new Map()
@@ -2271,7 +2272,8 @@ function selectSchedule(id) {
   el("bulk-send-tab-btn").disabled = true
   SCHEDULE_MSG_SELECTED = {}
   SCHEDULE_MSG_SEARCH = ""
-  // 상세 정보(관련 대상·메모·태그)는 수업 탭처럼 "더보기" 접기 안에 담아요.
+  SCHEDULE_MSG_STATUS_FILTER = ""
+  // 상세 정보(관련 대상·메모·태그)는 수업 탭처럼 "���보기" 접기 안에 담아요.
   renderScheduleDetail(s)
   // 안내 대상 학��� 목록은 접기와 무관하게 항상 보이는 영역(right-tab-body)에 그려요(수업 탭의 수강생 명���과 동일한 위치).
   if (STUDENTS_LOAD_STATE === "loaded") renderScheduleMsgBody()
@@ -2305,6 +2307,7 @@ let ALL_STUDENTS_CACHE = null // 학생(학원) DB 전체 목록 캐시 (여러 
 let STUDENTS_LOAD_STATE = "idle" // idle | loading | loaded | error
 let STUDENTS_LOAD_ERROR = ""
 let SCHEDULE_MSG_SEARCH = ""
+let SCHEDULE_MSG_STATUS_FILTER = ""
 
 // 안내 메시지 UI는 수업 탭과 동일한 상단 ���통 "더보기" 토글(right-summary-toggle/right-summary-body)과
 // 일괄 전송 버튼(bulk-send-tab-btn)을 그대로 재사용해요(배선은 selectSchedule 참고).
@@ -2331,14 +2334,32 @@ async function ensureAllStudentsLoaded() {
   renderScheduleMsgBody()
 }
 
-// 이름·학년·학교·클래스·수강상태 중 하나라도 검색어를 포함하면 보여줘요.
+// Search across name/grade/school/class, and if a status is selected, only keep exact status matches too.
 function filteredScheduleMsgStudents() {
   const q = (SCHEDULE_MSG_SEARCH || "").trim().toLowerCase()
-  if (!q) return ALL_STUDENTS_CACHE || []
   return (ALL_STUDENTS_CACHE || []).filter(function (st) {
+    if (SCHEDULE_MSG_STATUS_FILTER && st.status !== SCHEDULE_MSG_STATUS_FILTER) return false
+    if (!q) return true
     const haystack = [st.name, st.grade, st.school, st.status].concat(st.classNames || []).filter(Boolean).join(" ").toLowerCase()
     return haystack.indexOf(q) !== -1
   })
+}
+
+// Fixed list of the five statuses the student DB's status formula can produce.
+const SCHEDULE_MSG_STATUS_ALL = ["🟡신규문의", "🔵수강중", "🟢수강전", "🔴종료", "⚪등록보류"]
+
+function scheduleMsgStatusOptions() {
+  return SCHEDULE_MSG_STATUS_ALL
+}
+
+function setScheduleMsgStatusFilter(value) {
+  SCHEDULE_MSG_STATUS_FILTER = value
+  renderScheduleMsgList()
+}
+
+function scheduleMsgStatusOptionsHtml() {
+  return '<option value="">수강상태 전체</option>' +
+    scheduleMsgStatusOptions().map(function (o) { return '<option value="' + esc(o) + '"' + (SCHEDULE_MSG_STATUS_FILTER === o ? " selected" : "") + '>' + esc(o) + '</option>' }).join("")
 }
 
 function setScheduleMsgSearch(value) {
@@ -2365,7 +2386,8 @@ function renderScheduleMsgBody() {
   if (!bodyEl.querySelector(".sched-msg-search input")) {
     bodyEl.innerHTML =
       '<div class="sched-msg-title">📩 안내 대상 학생</div>' +
-      '<div class="sched-msg-search"><input type="text" placeholder="이름·학년·학교·클래스·수강상태 검색" value="' + esc(SCHEDULE_MSG_SEARCH) + '" oninput="setScheduleMsgSearch(this.value)"></div>' +
+      '<div class="sched-msg-search"><input type="text" placeholder="이름·학년·학교·클래스 검색" value="' + esc(SCHEDULE_MSG_SEARCH) + '" oninput="setScheduleMsgSearch(this.value)">' +
+        '<select onchange="setScheduleMsgStatusFilter(this.value)">' + scheduleMsgStatusOptionsHtml() + '</select></div>' +
       '<div class="sched-msg-count"></div>' +
       '<label class="student-select-all"><input type="checkbox" onchange="toggleScheduleMsgSelectAll(this.checked)"> 이 목록 전체 선택</label>' +
       '<div id="sched-msg-student-rows"></div>'
