@@ -588,6 +588,14 @@
     </div>
   </div>
 </div>
+<!-- 전송이 진행되는 동안 떠 있는 안내 모달이에요. 닫기 버튼이 없어서(cancel/confirm 미포함) 전송이 끝날 때까지 백그라운드 조작을 막아요.
+-->
+<div class="modal-overlay" id="send-progress-modal">
+  <div class="modal-box">
+    <h3>📩 전송 중이에요</h3>
+    <p id="send-progress-text">전송 준비 중...</p>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <div class="layout" id="page-dashboard" style="flex-direction:column">
@@ -1058,7 +1066,7 @@ async function loadCalPanelDotsViaMonth(url, month) {
   return items
 }
 
-// 구버전 호보서: 동시에 5거씩만 뫖진떁해서 일자별로 조회해요(전에려 31건 다 쓰떄만 이제려 당시에 5건이하뚞도록 해서 Notion 요오을 줄임).
+// 구버전 호환: 한 번에 5개씩만 병렬처리해서 일자별로 조회해요(이전에는 31건을 한 번에 썼지만, 이제는 한 번에 5건 이하가 되도록 해서 Notion 요청을 줄여요).
 async function loadCalPanelDotsPerDay(url, month) {
   const parts = month.split("-").map(Number)
   const y = parts[0], m = parts[1]
@@ -1436,7 +1444,7 @@ function reportRowHtml(r, sendFnName) {
   const checkboxHtml = '<input type="checkbox" class="stu-checkbox" ' + (SELECTED_REPORT_IDS[r.reportId] ? "checked" : "") + ' onchange="toggleReportSelected(' + attrSafe(r.reportId) + ', this.checked)">'
   // 전송 상태 태그(발송완료/미발송)는 전송 버튼 바로 왼쪽에 오도록 다른 배지들 뒤에 붙여요.
   return '<div class="student-row"><span class="stu-name">' + checkboxHtml + ' ' + esc(displayStudentName(r.studentName || r.title)) + ' ' + rateBadge + hwBadge + evalBadge + notionLink + reportLink + '</span>'
-    + '<span class="stu-actions">' + sentBadge + '<button class="send-btn" onclick="sendPeriodReport(' + attrSafe(r.reportId) + ')">📩 ' + (r.sentBy ? "재전송" : "전송") + '</button></span></div>'
+    + '<span class="stu-actions">' + sentBadge + '<button class="send-btn" onclick="sendPeriodReport(' + attrSafe(r.reportId) + ', ' + attrSafe(displayStudentName(r.studentName || r.title)) + ')">📩 ' + (r.sentBy ? "재전송" : "전송") + '</button></span></div>'
 }
 
 function currentReportGroupList() {
@@ -1485,10 +1493,13 @@ function reportTuitionListControlsHtml(kind) {
     '</div>'
 }
 
-async function sendPeriodReport(reportId) {
+async function sendPeriodReport(reportId, studentName) {
+  if (SENDING_IN_PROGRESS) { showToast("이미 전송이 진행 중이에요. 잠시만 기다려주세요."); return }
+  SENDING_IN_PROGRESS = true
+  openSendProgressModal()
+  updateSendProgress(0, 1, studentName)
   const url = REPORT_TYPE === "monthly" ? SEND_MONTHLY_REPORT_URL : SEND_WEEKLY_REPORT_URL
   try {
-    showToast("발송 중...")
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
@@ -1499,6 +1510,9 @@ async function sendPeriodReport(reportId) {
     showToast("발송이 완료되었어요.")
   } catch (err) {
     showToast("발송 실패: " + err.message)
+  } finally {
+    SENDING_IN_PROGRESS = false
+    closeSendProgressModal()
   }
 }
 
@@ -1639,7 +1653,7 @@ function tuitionRowHtml(t) {
   const checkboxHtml = '<input type="checkbox" class="stu-checkbox" ' + (SELECTED_TUITION_IDS[t.tuitionId] ? "checked" : "") + ' onchange="toggleTuitionSelected(' + attrSafe(t.tuitionId) + ', this.checked)">'
   // 상태 태그(완납/부분납/미납)는 전송(안내 발송) 버튼 바로 왼쪽에 오도록 금액 배지 뒤에 붙여요.
   return '<div class="student-row"><span class="stu-name">' + checkboxHtml + ' ' + esc(displayStudentName(t.studentInfo || t.title)) + amountBadge + notionLink + '</span>'
-    + '<span class="stu-actions">' + statusBadge + '<button class="send-btn" onclick="sendTuitionNotice(' + attrSafe(t.tuitionId) + ')">📩 전송</button></span></div>'
+    + '<span class="stu-actions">' + statusBadge + '<button class="send-btn" onclick="sendTuitionNotice(' + attrSafe(t.tuitionId) + ', ' + attrSafe(displayStudentName(t.studentInfo || t.title)) + ')">📩 전송</button></span></div>'
 }
 
 function currentTuitionGroupList() {
@@ -1669,9 +1683,12 @@ function toggleSelectAllTuitions(checked) {
   renderTuitionClassDetail()
 }
 
-async function sendTuitionNotice(tuitionId) {
+async function sendTuitionNotice(tuitionId, studentName) {
+  if (SENDING_IN_PROGRESS) { showToast("이미 전송이 진행 중이에요. 잠시만 기다려주세요."); return }
+  SENDING_IN_PROGRESS = true
+  openSendProgressModal()
+  updateSendProgress(0, 1, studentName)
   try {
-    showToast("발송 중...")
     const res = await fetch(SEND_TUITION_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY, "x-admin-key": getAdminKey() || "" },
@@ -1682,6 +1699,9 @@ async function sendTuitionNotice(tuitionId) {
     showToast("발송이 완료되었어요.")
   } catch (err) {
     showToast("발송 실패: " + err.message)
+  } finally {
+    SENDING_IN_PROGRESS = false
+    closeSendProgressModal()
   }
 }
 
@@ -2601,7 +2621,7 @@ function setScheduleMsgSearch(value) {
 }
 
 // 검색창(input) 자체는 처음 한 번만 만들고, 검색어가 바뀜 때마다 아래 목록 부분만 갱신해요.
-// input 요소를 매 키입력마다 통째로 교체하면 한글 조합(IME) 상태가 깨져서 자음·모음이 따로따로 나눠지는 문제가 생기므로 이를 피해요.
+// input 요소를 매 키입력마다 통째로 교체하면 한글 조합(IME) 상태가 깨져서 자음·모음이 따로따로 나뉘어지는 문제가 생기므로 이를 피해요.
 function renderScheduleMsgBody() {
   const bodyEl = el("right-tab-body")
   if (!bodyEl) return
@@ -2689,6 +2709,7 @@ function handleScheduleMessageSend() {
 // 학생 한 명에게 개별로 안내문을 보내는 버튼이에요. 수업 탭의 개별 전송 버튼과 같은 자리·같은 이모지를 사용해요.
 // 백엔드 연동은 아직이라, 수업 탭과 같은 전송완료/미전송 배지를 보여주기 위해 클릭 즉시 sentByMe만 켜요.
 function sendScheduleMsgToStudent(id) {
+  if (SENDING_IN_PROGRESS) { showToast("이미 전송이 진행 중이에요. 잠시만 기다려주세요."); return }
   const s = (ALL_STUDENTS_CACHE || []).find(function (st) { return st.id === id })
   if (!s) return
   s.sentByMe = true
@@ -2730,6 +2751,24 @@ function closeAlimtalkModal() {
   ALIMTALK_PENDING = null
 }
 
+// 전송(개별/일괄)이 진행되는 동안에는 이 플래그를 켜서 같은 전송이 중복으로 실행되지 않도록 막고,
+// 안내 모달(send-progress-modal)을 띄워서 백그라운드 조작도 같이 막아요.
+let SENDING_IN_PROGRESS = false
+
+function openSendProgressModal() {
+  el("send-progress-text").textContent = "전송 준비 중..."
+  el("send-progress-modal").classList.add("show")
+}
+
+// current: 지금까지 전송이 끝난 건수, total: 전체 건수, name: 지금 전송 중인 대상의 이름
+function updateSendProgress(current, total, name) {
+  el("send-progress-text").innerHTML = total + "건 중 " + current + "건 전송 완료<br>" + esc(name || "") + " 전송중"
+}
+
+function closeSendProgressModal() {
+  el("send-progress-modal").classList.remove("show")
+}
+
 async function confirmAlimtalkSend() {
   const pending = ALIMTALK_PENDING
   closeAlimtalkModal()
@@ -2759,6 +2798,7 @@ function handleBulkSendClick() {
 }
 
 function sendBulkReportsForClass() {
+  if (SENDING_IN_PROGRESS) { showToast("이미 전송이 진행 중이에요. 잠시만 기다려주세요."); return }
   const list = SELECTED_REPORT_CLASS ? getFilteredReports().filter(function (r) { return (r.classId || "__unassigned__") === SELECTED_REPORT_CLASS }) : []
   const selectedInGroup = list.filter(function (r) { return SELECTED_REPORT_IDS[r.reportId] })
   const targets = selectedInGroup.length ? selectedInGroup : list.filter(function (r) { return !r.sentBy })
@@ -2772,8 +2812,12 @@ async function doSendBulkReportsForClass(classId) {
   const selectedInGroup = list.filter(function (r) { return SELECTED_REPORT_IDS[r.reportId] })
   const targets = selectedInGroup.length ? selectedInGroup : list.filter(function (r) { return !r.sentBy })
   if (!targets.length) { showToast("발송할 학생이 없어요"); return }
+  if (SENDING_IN_PROGRESS) { showToast("이미 전송이 진행 중이에요. 잠시만 기다려주세요."); return }
+  SENDING_IN_PROGRESS = true
+  openSendProgressModal()
   let success = 0, fail = 0
   for (const r of targets) {
+    updateSendProgress(success + fail, targets.length, displayStudentName(r.studentName || r.title))
     try {
       await sendPeriodReportSilently(r.reportId)
       success++
@@ -2781,6 +2825,8 @@ async function doSendBulkReportsForClass(classId) {
       fail++
     }
   }
+  SENDING_IN_PROGRESS = false
+  closeSendProgressModal()
   showToast(success + "건 발송 완료" + (fail ? ", " + fail + "건 실패" : ""))
   await loadReportList(CAL_PANEL_MONTH, true)
 }
@@ -2797,6 +2843,7 @@ async function sendPeriodReportSilently(reportId) {
 }
 
 function sendBulkTuitionsForClass() {
+  if (SENDING_IN_PROGRESS) { showToast("이미 전송이 진행 중이에요. 잠시만 기다려주세요."); return }
   const list = SELECTED_TUITION_CLASS ? getFilteredTuitions().filter(function (t) { return (t.classId || "__unassigned__") === SELECTED_TUITION_CLASS }) : []
   const selectedInGroup = list.filter(function (t) { return SELECTED_TUITION_IDS[t.tuitionId] })
   const targets = selectedInGroup.length ? selectedInGroup : list.filter(function (t) { return paymentStatusTone(t.paymentStatus) !== "tone-green" })
@@ -2809,8 +2856,12 @@ async function doSendBulkTuitionsForClass(classId) {
   const selectedInGroup = list.filter(function (t) { return SELECTED_TUITION_IDS[t.tuitionId] })
   const targets = selectedInGroup.length ? selectedInGroup : list.filter(function (t) { return paymentStatusTone(t.paymentStatus) !== "tone-green" })
   if (!targets.length) { showToast("발송할 학생이 없어요"); return }
+  if (SENDING_IN_PROGRESS) { showToast("이미 전송이 진행 중이에요. 잠시만 기다려주세요."); return }
+  SENDING_IN_PROGRESS = true
+  openSendProgressModal()
   let success = 0, fail = 0
   for (const t of targets) {
+    updateSendProgress(success + fail, targets.length, displayStudentName(t.studentInfo || t.title))
     try {
       await sendTuitionNoticeSilently(t.tuitionId)
       success++
@@ -2818,6 +2869,8 @@ async function doSendBulkTuitionsForClass(classId) {
       fail++
     }
   }
+  SENDING_IN_PROGRESS = false
+  closeSendProgressModal()
   showToast(success + "건 발송 완료" + (fail ? ", " + fail + "건 실패" : ""))
   await loadTuitionList(CAL_PANEL_MONTH)
 }
@@ -2833,6 +2886,7 @@ async function sendTuitionNoticeSilently(tuitionId) {
 }
 
 function sendStudentReport(i) {
+  if (SENDING_IN_PROGRESS) { showToast("이미 전송이 진행 중이에요. 잠시만 기다려주세요."); return }
   const c = findClass(SELECTED_CLASS_ID)
   if (!c) return
   const s = (c.students || [])[i]
@@ -2845,6 +2899,10 @@ async function doSendStudentReport(i) {
   if (!c) return
   const s = (c.students || [])[i]
   if (!s || !s.attendanceId) return
+  if (SENDING_IN_PROGRESS) { showToast("이미 전송이 진행 중이에요. 잠시만 기다려주세요."); return }
+  SENDING_IN_PROGRESS = true
+  openSendProgressModal()
+  updateSendProgress(0, 1, s.name)
   const btn = el("stu-send-" + i)
   if (btn) { btn.disabled = true; btn.textContent = "발송중..." }
   try {
@@ -2858,10 +2916,13 @@ async function doSendStudentReport(i) {
     showToast("발송 실패: " + err.message)
   } finally {
     if (btn) { btn.disabled = false }
+    SENDING_IN_PROGRESS = false
+    closeSendProgressModal()
   }
 }
 
 function sendBulkForClass(classId) {
+  if (SENDING_IN_PROGRESS) { showToast("이미 전송이 진행 중이에요. 잠시만 기다려주세요."); return }
   const c = findClass(classId)
   if (!c) return
   const targets = (c.students || []).filter(function (s) { return s.attendanceId && SELECTED_STUDENT_IDS[s.attendanceId] })
@@ -2874,8 +2935,12 @@ async function doSendBulkForClass(classId) {
   if (!c) return
   const targets = (c.students || []).filter(function (s) { return s.attendanceId && SELECTED_STUDENT_IDS[s.attendanceId] })
   if (targets.length === 0) { showToast("선택된 학생이 없어요"); return }
+  if (SENDING_IN_PROGRESS) { showToast("이미 전송이 진행 중이에요. 잠시만 기다려주세요."); return }
+  SENDING_IN_PROGRESS = true
+  openSendProgressModal()
   let success = 0, fail = 0
   for (const s of targets) {
+    updateSendProgress(success + fail, targets.length, s.name)
     try {
       await callSendDailyReport({ registrationId: s.registrationId, attendanceId: s.attendanceId })
       s.sentByMe = true
@@ -2885,6 +2950,8 @@ async function doSendBulkForClass(classId) {
       fail++
     }
   }
+  SENDING_IN_PROGRESS = false
+  closeSendProgressModal()
   showToast(success + "건 발송 완료" + (fail ? ", " + fail + "건 실패" : ""))
   renderClassRightSub(c)
   renderStudentsTab(c, el("right-tab-body"))
