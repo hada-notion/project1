@@ -101,3 +101,48 @@ export const ALL_SYNC_RUNNING_FLAGS = [
 	PROP_SYNC_END_RUNNING,
 	PROP_SYNC_ENROLL_RUNNING,
 ]
+
+// ---------- 성적관리(시험범위/성적/시험/학생) ----------
+// sync-exam-scope, sync-exam-score 두 함수가 공통으로 참조한다 (로드맵 4-5, 2026-09-16).
+// 노션 수식이던 "응시학생 현황"·"시험일"(시험범위 DB), "백분률"·"시험구분"(성적 DB)을 여기서
+// 계산해 plain 속성에 기록한다. 학생 DB의 레거시 "성적 생성" 체크박스·"시험범위(변수)" 관계형은
+// 함께 제거했다 (더 이상 어떤 자동화도 그 값을 읽지 않는다).
+export const DS_EXAM_SCOPE = "3bdba040-586b-807a-91bd-000b5b4f2d98" // 시험범위(학원) DB
+export const DS_GRADE = "3bdba040-586b-8006-9f62-000b39d855cc" // 성적(학원) DB
+export const DS_STUDENT = "bdeba040-586b-827d-8ef6-871aff52cce9" // 학생(학원) DB
+
+// 시험범위(학원) DB 속성
+export const PROP_SCOPE_TITLE = "이름"
+export const PROP_SCOPE_GRADE_LEVEL = "학년" // relation, limit 1
+export const PROP_SCOPE_SCHOOL = "학교" // relation, limit 1 (비어있으면 학년 전체가 대상)
+export const PROP_SCOPE_GRADES = "성적" // relation → 성적 DB
+export const PROP_SCOPE_EXAM_SCHEDULE = "시험일정" // relation → 학원일정 DB
+export const PROP_SCOPE_EXAM = "시험" // relation → 시험(학원) DB
+export const PROP_SCOPE_EXAM_DATE = "시험일" // date — 웹앱이 계산해 기록 (2026-09-16 수식→plain 전환)
+export const PROP_SCOPE_ATTENDANCE_STATUS = "응시학생 현황" // text — 웹앱이 계산해 기록 (2026-09-16 수식→plain 전환)
+export const PROP_SCOPE_RUNNING = "처리중"
+export const PROP_SCOPE_LAST_ERROR = "마지막 오류"
+export const PROP_SCOPE_SYNCED_AT = "마지막 동기화"
+export const PROP_EXAM_SCHEDULE_DATE = "날짜" // 학원일정(학원) DB의 날짜 속성
+
+// 성적(학원) DB 속성
+export const PROP_GRADE_TITLE = "이름"
+export const PROP_GRADE_STUDENT = "학생" // relation, limit 1
+export const PROP_GRADE_SCOPE = "시험범위" // relation, limit 1 → 시험범위 DB
+export const PROP_GRADE_GRADE_LEVEL = "학년" // relation
+export const PROP_GRADE_SCHOOL = "학교" // relation
+export const PROP_GRADE_RANK = "등수" // number
+export const PROP_GRADE_ATTENDEE_COUNT = "응시인원" // number
+export const PROP_GRADE_PERCENTILE = "백분률" // number — 웹앱이 계산해 기록 (2026-09-16 수식→plain 전환)
+export const PROP_GRADE_EXAM_TYPE = "시험구분" // text — 웹앱이 계산해 기록 (2026-09-16 수식→plain 전환)
+
+// 시험(학원) DB 속성
+export const PROP_EXAM_WRITTEN = "지필고사" // select
+export const PROP_EXAM_MOCK = "모의고사(수능)" // select
+
+// 학생(학원) DB 속성 (성적관리 조회 전용)
+export const PROP_STUDENT_TITLE = "학생이름"
+export const PROP_STUDENT_GRADE_LEVEL = "학년" // relation, limit 1
+export const PROP_STUDENT_SCHOOL = "학교" // relation, limit 1
+export const PROP_STUDENT_ENROLL_STATUS = "등록상태" // formula(text)
+export const STUDENT_STATUS_ENROLLED = "🟢 등록 중"
