@@ -26,7 +26,7 @@ import {
 } from "../_shared/notionClient.ts"
 import { getCurrentAdminKey } from "../_shared/adminShared.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
-import { DS_REPORT, DS_TUITION } from "../_shared/generateShared.ts"
+import { DS_REPORT, DS_TUITION, PROP_NOTIFICATION_BATCH_RELATION, PROP_BATCH_TYPE } from "../_shared/generateShared.ts"
 
 const FUNCTIONS_BASE = "https://twczhsxybkcvjkdfdxvs.supabase.co/functions/v1"
 
@@ -38,10 +38,11 @@ const corsHeaders = {
 
 const PROP_BATCH_RUNNING = "일괄전송중" // 알림톡 발송함(학원) DB
 const PROP_BATCH_LAST_ERROR = "마지막 오류" // 알림톡 발송함(학원) DB - "실시간 처리 상태" 수식이 이 값을 읽는다.
-const PROP_BATCH_TYPE = "구분" // 알림톡 발송함(학원) DB
 const PROP_BATCH_EXECUTOR = "실행자" // 알림톡 발송함(학원) DB
 const PROP_BULK_SELECT = "일괄전송 선택" // 보고서(학원) DB / 수강료(학원) DB
-const PROP_BATCH_RELATION = "알림톡 발송함" // 보고서(학원) DB / 수강료(학원) DB → 알림톡 발송함(학원) DB
+// "구분"/발송함 relation 속성명은 generate-report, generate-tuition과 공유하므로
+// _shared/generateShared.ts의 PROP_BATCH_TYPE / PROP_NOTIFICATION_BATCH_RELATION을 그대로
+// 쓴다 (2026-09-16, 속성명 중복 하드코딩 정리).
 
 async function callFn(path: string, body: Record<string, unknown>, adminKey: string): Promise<Response> {
 	return fetch(`${FUNCTIONS_BASE}/${path}`, {
@@ -180,7 +181,7 @@ async function processBatch(batchId: string, adminKey: string, log: string[]): P
 
 	const targets = await queryAllPages(dataSourceId, {
 		and: [
-			{ property: PROP_BATCH_RELATION, relation: { contains: batchId } },
+			{ property: PROP_NOTIFICATION_BATCH_RELATION, relation: { contains: batchId } },
 			{ property: PROP_BULK_SELECT, checkbox: { equals: true } },
 		],
 	})

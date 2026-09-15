@@ -39,6 +39,8 @@ import {
 	findTuitionForMonth,
 	monthRange,
 	makeClassStatusSetter,
+	PROP_NOTIFICATION_BATCH_RELATION,
+	PROP_BATCH_PERIOD,
 } from "../_shared/generateShared.ts"
 
 // 이 체크박스가 이미 true면(백그라운드 처리가 아직 안 끝남) 버튼이 다시 눌려도 새로 시작하지
@@ -48,9 +50,9 @@ const CLASS_TUITION_RUNNING = "수강료 생성중"
 const setClassStatus = makeClassStatusSetter(CLASS_TUITION_RUNNING)
 
 // "수강료 생성 대상" 관계(limit 1)로 연결된 "알림톡 발송함(학원) DB" 페이지의 "기간"을 기준으로 생성한다.
+// "기간"/발송함 relation 속성명은 generate-report, send-selected-notifications와 공유하므로
+// _shared/generateShared.ts의 상수를 그대로 쓴다 (2026-09-16, 속성명 중복 하드코딩 정리).
 const PROP_CLASS_TUITION_TARGET = "수강료 생성 대상" // 클래스(학원) DB → 알림톡 발송함(학원) DB
-const PROP_BATCH_PERIOD = "기간" // 알림톡 발송함(학원) DB
-const PROP_TUITION_BATCH_RELATION = "알림톡 발송함" // 수강료(학원) DB → 알림톡 발송함(학원) DB
 
 async function processClass(classId: string, log: string[]): Promise<void> {
 	const classPage = await getPage(classId)
@@ -70,7 +72,7 @@ async function processClass(classId: string, log: string[]): Promise<void> {
 	}
 	const periodStart = periodStartRaw.slice(0, 10)
 	// 실제 대상 기간: 발송함의 기간에 종료일(end)이 명시돼 있으면 그대로 쓰고, 없으면 시작일이
-	// 속한 달 전체를 대상으로 한다 (발송함 "기간"은 보통 그 달의 1일 하나�� 지정함).
+	// 속한 달 전체를 대상으로 한다 (발송함 "기간"은 보통 그 달의 1일 하나만 지정함).
 	const monthDefault = monthRange(periodStart)
 	const monthStart = monthDefault.start
 	const monthEnd = (periodProp?.end ?? null) ? String(periodProp.end).slice(0, 10) : monthDefault.end
@@ -108,7 +110,7 @@ async function processClass(classId: string, log: string[]): Promise<void> {
 			등록: { relation: [{ id: reg.id }] },
 			"수업 횟수": { number: sessionCount },
 			// 이 건이 속한 알림톡 발송함(배치)과 연결 -- "일괄 전송" 버튼이 이 관계로 대상을 찾는다.
-			[PROP_TUITION_BATCH_RELATION]: { relation: [{ id: batchId }] },
+			[PROP_NOTIFICATION_BATCH_RELATION]: { relation: [{ id: batchId }] },
 			// 생성 직후에는 기본으로 일괄전송 대상에 포함시킨다 (원치 않으면 사용자가 직접 체크 해제).
 			"일괄전송 선택": { checkbox: true },
 		})

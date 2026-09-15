@@ -29,6 +29,9 @@ import {
 	monthRange,
 	weekRange,
 	makeClassStatusSetter,
+	PROP_NOTIFICATION_BATCH_RELATION,
+	PROP_BATCH_PERIOD,
+	PROP_BATCH_TYPE,
 } from "../_shared/generateShared.ts"
 
 // 이미 처리 중이면 재클릭으로 중복 생성되는 문제(사용자 리포트, 2026-09-11)를 막기 위한
@@ -37,10 +40,9 @@ const CLASS_REPORT_RUNNING = "보고서 생성중"
 const setClassStatus = makeClassStatusSetter(CLASS_REPORT_RUNNING)
 
 // "보고서 생성 대상" 관계(limit 1)로 연결된 "알림톡 발송함(학원) DB" 페이지의 "기간"/"구분"을 기준으로 생성한다.
+// "기간"/"구분"/발송함 relation 속성명은 generate-tuition, send-selected-notifications와 공유하므로
+// _shared/generateShared.ts의 상수를 그대로 쓴다 (2026-09-16, 속성명 중복 하드코딩 정리).
 const PROP_CLASS_REPORT_TARGET = "보고서 생성 대상" // 클래스(학원) DB → 알림톡 발송함(학원) DB
-const PROP_BATCH_PERIOD = "기간" // 알림톡 발송함(학원) DB
-const PROP_BATCH_TYPE = "구분" // 알림톡 발송함(학원) DB
-const PROP_REPORT_BATCH_RELATION = "알림톡 발송함" // 보고서(학원) DB → 알림톡 발송함(학원) DB
 const REPORT_TYPE_WEEKLY = "주간 보고서"
 
 // dateProp이 일반 date 속성이면 "date", 롤업(rollup)/수식(formula)으로 계산되는 날짜 속성이면
@@ -145,7 +147,7 @@ async function processClass(classId: string, log: string[]): Promise<void> {
 			학습기록: { relation: recordIds.map((id) => ({ id })) },
 			학습활동: { relation: activityIds.map((id) => ({ id })) },
 			// 이 건이 속한 알림톡 발송함(배치)과 연결 -- "일괄 전송" 버튼이 이 관계로 대상을 찾는다.
-			[PROP_REPORT_BATCH_RELATION]: { relation: [{ id: batchId }] },
+			[PROP_NOTIFICATION_BATCH_RELATION]: { relation: [{ id: batchId }] },
 			"일괄전송 선택": { checkbox: true },
 		})
 		created++

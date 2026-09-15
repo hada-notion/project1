@@ -24,6 +24,16 @@ export const DS_STUDY_ACTIVITY = "ea2ba040-586b-8368-8bb6-070564a5a31c" // 학�
 
 export { DS_REGISTRATION, DS_CLASS, DS_ATTENDANCE, DS_LEARNING_RECORD, queryAllPages, getPage, updatePageProperties, relIds, dateStart, selectName, queryDataSource }
 
+// 알림톡 발송함(학원) DB 관련 공용 속성명.
+// (2026-09-16) generate-report/generate-tuition/send-selected-notifications 세 파일이 각각
+// PROP_REPORT_BATCH_RELATION / PROP_TUITION_BATCH_RELATION / PROP_BATCH_RELATION라는 별도
+// 상수로 같은 "알림톡 발송함" 문자열을 따로 들고 있었다. 관계 속성 이름이 바뀔 때 세 곳 중
+// 하나만 고치고 나머지를 빠뜨리면 배치 연결이 조용히 깨지는 버그가 실제로 있었다 (로드맵 5-26).
+// 이제 이 파일의 상수 하나로 통일해서 세 함수가 모두 여기서 가져다 쓴다.
+export const PROP_NOTIFICATION_BATCH_RELATION = "알림톡 발송함" // 보고서(학원) DB / 수강료(학원) DB → 알림톡 발송함(학원) DB
+export const PROP_BATCH_PERIOD = "기간" // 알림톡 발송함(학원) DB
+export const PROP_BATCH_TYPE = "구분" // 알림톡 발송함(학원) DB
+
 // 클래스(학원) DB: 자동화 실패 시 에러 메시지를 남기는 공유 텍스트 필드 (등록 DB의 "마지막 오류"와
 // 이름/역할 동일). "실시간 처리 상태" 수식이 이 값과 각 "...생성중" 체크박스를 조합해서 표시한다.
 export const PROP_CLASS_LAST_ERROR = "마지막 오류"
