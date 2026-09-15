@@ -1,5 +1,5 @@
 // 공용 Notion API 헬퍼. sync-registration-timetable에서 검증된 재시도/병렬처리 로직과
-// sync-registration-textbook에서 발견된 페이지ID 추출 버그 수정을 합쳤서 한 곳에 둔다.
+// sync-registration-textbook에서 발견된 페이지ID 추출 버그 수정을 합쳐서 한 곳에 둔다.
 // 이렇게 하면 한쪽에서 고친 버그나 개선사항이 다른 쪽에도 자동으로 적용된다 (로드맵 5-9).
 
 import { NOTION_API, NOTION_TOKEN, NOTION_VERSION } from "./constants.ts"
@@ -17,7 +17,7 @@ export function notionHeaders() {
 	}
 }
 
-// Notion API가 429(레이트리미트)나 일시적 5xx를 반환하면 Retry-After 헤더(있으면) 또는 지수 백오프만큼
+// Notion API가 429(레이트리밋)나 일시적 5xx를 반환하면 Retry-After 헤더(있으면) 또는 지수 백오프만큼
 // 대기 후 자동 재시도한다. cascade-delete/fix-attendance에서 검증된, 429 전용보다 더 안전한 버전 (로드맵 5-9).
 export async function fetchWithRetry(url: string, init: RequestInit, maxRetries = 5): Promise<Response> {
 	let lastRes: Response | undefined
@@ -35,7 +35,7 @@ export async function fetchWithRetry(url: string, init: RequestInit, maxRetries 
 }
 
 // 동시에 실행되는 작업 수를 concurrency로 제한하면서 배열을 병렬 처리한다
-// (Notion API 레이트리미트 대비, 순차 처리보다 훨씬 빠르다).
+// (Notion API 레이트리밋 대비, 순차 처리보다 훨씬 빠르다).
 export async function mapWithConcurrency<T, R>(
 	items: readonly T[],
 	concurrency: number,
@@ -123,7 +123,7 @@ export async function archivePage(pageId: string) {
 	if (!res.ok) {
 		const text = await res.text()
 		// 이미 archived된 페이지를 다시 archive하려고 하면 Notion이 400 validation_error를 준다.
-		// 짧은 시간 안에 여러 건을 삭제할 때, 서로 다른 캀스케이드 삭제가 같은 하위 페이지(예: 여러
+		// 짧은 시간 안에 여러 건을 삭제할 때, 서로 다른 캐스케이드 삭제가 같은 하위 페이지(예: 여러
 		// 학생이 공유하는 학습기록)를 함께 가리켜서 거의 동시에 둘 다 archive를 시도하는 경우 발생한다
 		// (2026-09-12 fix). 목표(페이지가 삭제된 상태)는 이미 달성되어 있으므로 오류로 취급하지 않고
 		// 조용히 성공 처리한다.
@@ -182,11 +182,11 @@ export function checkboxValue(page: any, propName: string): boolean {
 	return page?.properties?.[propName]?.checkbox === true
 }
 
-// 이미 연결된 relation에 addIds를 합쳌서(중복 제거) 다시 저장한다. 이미 전부 연결돼 있으면 아무것도 하지 않는다.
+// 이미 연결된 relation에 addIds를 합쳐서(중복 제거) 다시 저장한다. 이미 전부 연결돼 있으면 아무것도 하지 않는다.
 // 등록 페이지의 "동기화 상태"(사용자에게 보이는 select)를, 시간표/교재 두 Edge Function이 각각
 // 처리 중인지 표시하는 체크박스 두 개를 조합해서 계산한다. 서로 독립적인 두 함수가 동시에 실행돼도
-// (예: 같은 웹훅 자동화가 두 함수를 모두 호출하는 경우), 한쪽이 끝났다고 바로 "완료"로 표시하지 않고,
-// 다른 쪽이 아직 처리 중이면 "처리 중"을 유지한다. 상태 표시 실패는 본 로직에 영향 없도록 조용히 무시한다.
+// (예: 같은 웹훅 자동화가 두 함수를 모두 호출하는 경우) 한쪽이 끝났다고 바로 "완료"로 표시하지 않고,
+// 다른 쪽이 아직 처리 중이면 "처리 중"을 유지한다. 상태 표시 실패는 본 로직에 영향 없도록 ��용히 무시한다.
 export async function setCombinedSyncStatus(
 	pageId: string,
 	args: {
@@ -204,8 +204,8 @@ export async function setCombinedSyncStatus(
 ) {
 	try {
 		if (args.phase === "start") {
-			// 새 실행이 시작되는 순간(버튼 클릭 직후) 이전 오류를 바로 지워서, 끝날 때까지 오래된
-			// 오류 텍스트가 "실시간 처리 상태" 수식에 남아있지 않도록 합니다 (2026-09-11 fix).
+			// 새 실행이 시작되는 순간(버튼 클릭 직후) 이전 오류를 바로 지워서, 끝날 때까지 오래된 오류
+			// 텍스트가 "실시간 처리 상태" 수식에 남아있지 않도록 합니다 (2026-09-11 fix).
 			await updatePageProperties(pageId, {
 				[args.selfFlagProp]: { checkbox: true },
 				[args.errorProp]: { rich_text: [] },
@@ -246,7 +246,7 @@ export async function addRelation(pageId: string, propName: string, addIds: stri
 // ---------- 웹훅 body에서 페이지 ID 추출 ----------
 //
 // 문자열 "끝"에서만 UUID를 추출한다. Notion 페이지 URL은 항상 맨 끝에 페이지 ID가 붙기 때문에,
-// 문자열 중간 어디서든 찾는 방식은 한글 제목 슬러그(예: "고1A반-...")의 hex처럼 보이는 글자(1,A 등)가
+// 문자열 중간 어디서든 찾는 방식은 한글 제목 슬러그(예: "고1A반-...")의 hex처��� 보이는 글자(1,A 등)가
 // 실제 ID 바로 앞에 붙어 있을 때 ID가 밀려서 잘못 잘리는 버그가 있었다 (2026-09-09, sync-registration-textbook에서 실제 발생 확인).
 export function idFromString(v: string): string | null {
 	const cleaned = v.split("?")[0].replace(/\/$/, "")

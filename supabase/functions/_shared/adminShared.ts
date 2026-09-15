@@ -3,7 +3,7 @@
 
 const NOTION_TOKEN = Deno.env.get("NOTION_TOKEN")!
 const REGISTRATION_DB_ID = Deno.env.get("NOTION_REGISTRATION_DB_ID")!
-// 전송로그(학원) DB. Supabase 프로젝트 Secrets에 실제 데이텀베이스 ID를 등록해야 합니다.
+// 전송로그(학원) DB. Supabase 프로젝트 Secrets에 실제 데이터베이스 ID를 등록해야 합니다.
 const SEND_LOG_DB_ID = Deno.env.get("NOTION_SEND_LOG_DB_ID") ?? ""
 // [NEW] 알림톡 설정(학원) DB. 카카오 채널 ID(pfId)/템플릿 ID를 코드 수정 없이 Notion에서 바꿀 수 있게 해줍니다.
 // Supabase Secrets에 등록: supabase secrets set NOTION_ALIMTALK_CONFIG_DB_ID=<32자리 DB ID>

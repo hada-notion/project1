@@ -101,7 +101,7 @@ function anyTitleOf(page: any): string {
 // (2026-09-16) 예전에는 "수강상태(수식) == 수강 중" + "등록일 < 기준일(당일 미포함)"으로 걸렀는데,
 // 1) 수강상태 수식이 today() 기준이라 미래/과거 기간 생성 시 실제 대상 기간과 안 맞았고,
 // 2) 등록일이 기준일과 같은 날(당일 등록)인 학생이 통째로 누락되는 문제(사용자 리포트)가 있었다.
-// 위 두 수식이 이미 등록일<=기간종료일 / 종료일>=기간시작일 기준으로 정리됐으므로 코드도 맞추다.
+// 위 두 수식이 이미 등록일<=기간종료일 / 종료일>=기간시작일 기준으로 정리됐으므로 코드도 맞춘다.
 export async function getActiveRegistrationsForClass(
 	classId: string,
 	periodStart: string,

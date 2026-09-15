@@ -148,7 +148,6 @@ export async function attachSessionsAndAttendance(
 			filter: { and: sessionFilterAnd },
 			page_size: 100,
 		})
-
 		if (opts.retryOnEmpty && data.results.length === 0) {
 			await new Promise((resolve) => setTimeout(resolve, 1500))
 			data = await queryDataSource(DS_CLASS_SESSION, {
