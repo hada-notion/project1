@@ -12,7 +12,7 @@
 // 무관하게 계속 유효하다):
 // - "발송자"는 실제 클릭한 사람이 아니라 발송함의 "실행자"를 함께 전달해서 기록한다.
 // - 서로 다른 발송함을 거의 동시에 "일괄 전송"해도 실제 처리는 전역 잠금으로 한 번에 하나씩만
-//   순차 진행한다 (Notion API 레이트리밋 보호). Deno KV를 쓸 수 있으면 그걸, 아니면 메모리 기반
+//   순차 진행한다 (Notion API 레이트리미트 보호). Deno KV를 쓸 수 있으면 그걸, 아니면 메모리 기반
 //   잠금(같은 함수 인스턴스 내에서만 유효)으로 자동 대체한다.
 // - 처리 건수가 많아 Edge Function 실행시간 제한에 걸릴 것 같으면 스스로 먼저 멈추고 지금까지
 //   결과를 정확히 기록한다. 못 보낸 나머지는 체크가 그대로 켜져 있으므로 다음 "일괄 전송" 클릭에서
@@ -61,7 +61,7 @@ async function setBatchRunning(batchId: string, running: boolean): Promise<void>
 }
 
 // 실패 시(또는 인증 실패 등 즉시 발생한 오류) "마지막 오류"에 메시지를 남긴다. null을 넘기면 비운다
-// (정상 처리됨을 의미). 이 기록 자체가 실패해도 원래 응답에는 영향을 주지 않는다.
+// (정상 처리됨을 의미한다). 이 기록 자체가 실패해도 원래 응답에는 영향을 주지 않는다.
 async function setBatchError(batchId: string, message: string | null): Promise<void> {
 	try {
 		await updatePageProperties(batchId, {
@@ -80,7 +80,7 @@ const GLOBAL_LOCK_KEY = ["send_selected_notifications_lock"]
 const LOCK_TTL_MS = 5 * 60 * 1000 // 5분 - 처리 하나가 이보다 오래 걸리면 잠금이 자동 해제된다 (안전장치).
 const LOCK_WAIT_TIMEOUT_MS = 10 * 60 * 1000 // 10분 넘게 기다리면 포기하고 실패로 기록한다.
 const LOCK_POLL_INTERVAL_MS = 2000
-// 대상 건수가 많아 Edge Function 실행 시간 제한에 걸릴 것 같으면, 중간에 강제로 끊기는 대신
+// 대상 건수가 많아 Edge Function 실행 시간 제한에 걸릴 것 같으면, 중간에 강제로 끓기는 대신
 // 스스로 먼저 멈춰서 지금까지 결과를 정확히 기록하고 잠금을 정상적으로 반환한다.
 const PROCESSING_TIME_BUDGET_MS = 3 * 60 * 1000
 
