@@ -224,7 +224,7 @@ Deno.serve(async (req) => {
     }
 
     // [NEW] "실시간 처리상태": 실제로 이 건을 발송 처리하는 동안에만 "발송중"을 체크합니다.
-    // 체크/해제가 실패해도(예: 네트워크 오류) 실제 발송 자체는 막지 않도록 오류를 무시합니다.
+    // 체크/해제가 실패해도(예: 네트워크 오류) 실제 발송 자체는 막지 않도록 오류를 ���시합니다.
     const sendingStartedAt = Date.now()
     await notionPatchPageProperties(reportId, { "발송중": { checkbox: true } }).catch(() => {})
 

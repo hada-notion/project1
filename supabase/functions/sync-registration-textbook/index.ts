@@ -20,7 +20,7 @@
 //   진행상태가 "다음 교재"이고 학습기록이 하나도 없는 인스턴스만 정리 대상이다.
 //   (진행 중/완료 상태이거나 학습기록이 있으면 실제 학습 흔적이므로 절대 건드리지 않는다.)
 //     - 진도방식 = 그룹 진도: 등록의 "진도교재"에서 연결만 해제한다 (인스턴스 페이지 자체는
-//       보존 - 반에서 공유되는 템플릿에 딜린 자원이라 삭제하지 않음).
+//       보존 - 반에서 공유되는 템플릿에 딸린 자원이라 삭제하지 않음).
 //     - 진도방식 = 개별 진도: 인스턴스 페이지 자체를 아카이브(삭제)한다.
 //
 // 라우트:
@@ -83,7 +83,7 @@ const STATUS_NEXT = "다음 교재"
 // - 개별 진도: 학생(등록)마다 자기만의 인스턴스를 갖는다. 이미 (이 등록 + 이 템플릿)
 //   조합의 인스턴스가 있으면 건너뛰고, 없으면 새로 만든다.
 // 주의: 등록 페이지의 "진도교재" relation은 여기서 건드리지 않는다. 여러 템플릿을 동시에
-// 처리할 때 각자 등록 페이지를 read-modify-write 하면 서로 덮어써 일부가 유실되는
+// 처리할 때 각자 등록 페이지�� read-modify-write 하면 서로 덮어써서 일부가 유실되는
 // 문제가 있었기 때문에, 호출부(createIndividualBooksForRegistration)에서 결과를 모아
 // 마지막에 한 번만 반영한다.
 async function resolveInstanceForTemplate(registrationId: string, templatePage: any) {
@@ -134,8 +134,8 @@ async function resolveInstanceForTemplate(registrationId: string, templatePage: 
 }
 
 // 등록에 연결된 클래스의 반별교재(템플릿) 전체에 대해 개별교재 인스턴스를 만든다.
-// 클래스가 없거나 템플릿이 하나도 없으면 건너뛼다 (에러로 취급하지 않음 - 클래스 세팅 전에도
-// 버튼을 누러붌 수 있어야 하며, 그 경우 안내만 반환한다).
+// 클래스가 없거나 템플릿이 하나도 없으면 건너뛴다 (에러로 취급하지 않음 - 클래스 세팅 전에도
+// 버튼을 눌러볼 수 있어야 하며, 그 경우 안내만 반환한다).
 async function createIndividualBooksForRegistration(registrationId: string) {
 	const registration = await getPage(registrationId)
 	const classIds = relationIds(registration, PROP_CLASS)
@@ -149,7 +149,7 @@ async function createIndividualBooksForRegistration(registrationId: string) {
 	// "클래스"를 채우기만 해도 그 인스턴스가 이 목록에 자동으로 끼어든다. 그래서 이 목록에는
 	// 진짜 반별교재(템플릿) 외에 이미 생성된 개별교재 인스턴스도 섞여 있을 수 있다.
 	// 진짜 템플릿은 절대 PROP_TEMPLATE_RELATION("반별교재")이 채워지지 않으므로, 그것으로만
-	// 필터링해서 인스턴스가 실수로 "템플릿"으로 취급되어 또 다른 인스턴스를 낳는(무한 증식) 일을 막는다.
+	// 필터링해서 인��턴스가 실수로 "템플릿"으로 취급되어 또 다른 인스턴스를 낳는(무한 증식) 일을 막는다.
 	const candidates = await mapWithConcurrency(candidateIds, 4, (id) => getPage(id))
 	const templatePages = candidates.filter((p: any) => relationIds(p, PROP_TEMPLATE_RELATION).length === 0)
 	if (templatePages.length === 0) {
@@ -159,7 +159,7 @@ async function createIndividualBooksForRegistration(registrationId: string) {
 	const results = await mapWithConcurrency(templatePages, 4, (templatePage) => resolveInstanceForTemplate(registrationId, templatePage))
 
 	// 등록의 "진도교재" relation은 여기서 한 번만 최신 상태를 읽어서 반영한다 (동시 처리로 인한
-	// read-modify-write 유실 방지).
+	// read-modify-write 유실 방���).
 	const freshRegistration = await getPage(registrationId)
 	const existingBookIds = relationIds(freshRegistration, PROP_REGISTRATION_BOOKS)
 	const newIds = results.map((r) => r.instanceId).filter((id) => !existingBookIds.includes(id))
@@ -175,7 +175,7 @@ async function createIndividualBooksForRegistration(registrationId: string) {
 // 종료 처리 시 교재 정리: "다음 교재" 상태 + 학습기록 없음 인 인스턴스만 정리 대상.
 // 그룹 진도 -> 등록에서 연결만 해제 (인스턴스 페이지는 보존)
 // 개별 진도 -> 인스턴스 페이지 자체를 아카이브
-// 그 외(진행 중/완료 상태이거나 학습기록이 있음)은 절대 건드리지 않고 그대로 둔다.
+// 그 외(진행 중/완료 상태이거나 학습기록이 있음)는 절대 건드리지 않고 그대로 둔다.
 async function cleanupUnusedBooksOnEnd(registrationId: string) {
 	const registration = await getPage(registrationId)
 	const bookIds = relationIds(registration, PROP_REGISTRATION_BOOKS)
@@ -198,7 +198,7 @@ async function cleanupUnusedBooksOnEnd(registrationId: string) {
 		if (mode === "그룹 진도") {
 			remaining = remaining.filter((id) => id !== bookId)
 			unlinked.push(bookId)
-			// 그룹 진도 인스턴스는 반 전체가 공유하므로, 이 등록만 그 인스턴스의 "등록" relation에서 빼다
+			// 그룹 진도 인스턴스는 반 전체가 공유하므로, 이 등록만 그 인스턴스의 "등록" relation에서 뺀다
 			// (인스턴스 자체는 다른 학생들이 계속 쓰므로 보존).
 			const bookRegistrationIds = relationIds(book, PROP_REGISTRATION_ON_BOOK).filter((id) => id !== registrationId)
 			await updatePageProperties(bookId, {
@@ -249,7 +249,7 @@ Deno.serve(async (req: Request) => {
 			await setSyncStatus(pageId, "처리중")
 
 			// Notion의 "웹훅 보내기" 버튼 액션은 이 응답을 동기적으로 기다린다. 개별교재 생성이
-			// 많으면 시간이 길어져 "버튼 실행 실패: 웹훅 요청 시간이 초과되었습니다" 알림이 뜨 수 있으므로
+			// 많으면 시간이 길어져 "버튼 실행 실패: 웹훅 요청 시간이 초과되었습니다" 알림이 뜰 수 있으므로
 			// (실제로는 끝까지 정상 처리됨), 응답을 먼저 보내고 나머지는 백그라운드로 미룬다. 진행 상황은
 			// 등록의 "동기화 상태"(이미 처리중으로 설정됨)로 확인할 수 있다.
 			runInBackground(async () => {

@@ -6,7 +6,7 @@
 //   없으면 Secrets의 ADMIN_SECRET을 기본값으로 사용) — 다른 어드민 함수들과 동일한 방식입니다.
 // - [v2] pfId/템플릿ID/발신번호는 "알림톡 설정(학원) DB"의 "수강료 안내" 행에서 조회하고,
 //   값이 없거나 비활성화된 경우에만 Secrets 기본값(Fallback)으로 대체합니다.
-// - [v2] 변수 매핑을 최종 확정된 알림톡 템플릿c에 맞춰 갱신했습니다:
+// - [v2] 변수 매핑을 최종 확정된 알림톡 템플릿에 맞춰 갱신했습니다:
 //   #{청구기간} #{학생이름} #{클래스} #{청구금액} #{안내멘트}
 //   (청구기간(표시)/청구금액(표시)/클래스(수강료)/안내멘트는 2026-09 추가된 새 속성입니다.)
 
@@ -66,7 +66,7 @@ function getRichText(page: any, name: string): string {
   return (page.properties?.[name]?.rich_text ?? []).map((t: any) => t.plain_text).join("")
 }
 
-// rollup 배열의 항목 하나에서 텍스트를 뿑아낸다. 항목이 title/rich_text/formula(string)이면 그대로 쓰고,
+// rollup 배열의 항목 하나에서 텍스트를 뽑아낸다. 항목이 title/rich_text/formula(string)이면 그대로 쓰고,
 // 항목이 또 다른 rollup(중첩 rollup, 예: "클래스(수강료)" → 등록."클래스명(등록)" → 클래스."클래스명",
 // 또는 "학부모 연락처" → 등록."학부모 연락처" → 학생정보.전화번호 formula)이면 한 단계 더 파고든다.
 function extractRollupItemText(item: any): string {

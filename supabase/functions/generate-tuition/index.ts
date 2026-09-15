@@ -70,7 +70,7 @@ async function processClass(classId: string, log: string[]): Promise<void> {
 	}
 	const periodStart = periodStartRaw.slice(0, 10)
 	// 실제 대상 기간: 발송함의 기간에 종료일(end)이 명시돼 있으면 그대로 쓰고, 없으면 시작일이
-	// 속한 달 전체를 대상으로 한다 (발송함 "기간"은 보통 그 달의 1일 하나만 지정함).
+	// 속한 달 전체를 대상으로 한다 (발송함 "기간"은 보통 그 달의 1일 하나�� 지정함).
 	const monthDefault = monthRange(periodStart)
 	const monthStart = monthDefault.start
 	const monthEnd = (periodProp?.end ?? null) ? String(periodProp.end).slice(0, 10) : monthDefault.end
