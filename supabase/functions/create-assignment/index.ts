@@ -17,7 +17,7 @@
 // 흐름:
 // 0. 클릭된 학습기록 페이지 id를 웹훅 payload에서 추출한다.
 // 1. 학습기록의 "구분"이 과제/평가가 아니면(즉 "학습") 아무것도 하지 않고 종료한다.
-// 2. 학습기록에 연결된 등록/출석/수업/수업일을 읽는다.
+// 2. 학습기록에 연결된 등록/출석/수업/수업일을 읨는다.
 // 3. 출석들을 조회해 등록 → (이 수업의) 출석 매핑을 만든다.
 // 4. 등록마다 학습활동 1건을 생성한다. 과제인 경우 그 학생의 다음 수업 출석을 조회해 마감으로 연결한다.
 
@@ -78,7 +78,7 @@ const WEEKDAY_KO = ["일", "월", "화", "수", "목", "금", "토"]
 
 type JsonRecord = Record<string, unknown>
 
-// createPage 시그니처(parentId, properties)를 그대로 유지하는 약은 래퍼 (호출부를 안 건드리기 위함).
+// createPage 시그니처(parentId, properties)를 그대로 유지하는 얇은 래퍼 (호출부를 안 건드리기 위함).
 async function createPage(parentDataSourceId: string, properties: JsonRecord): Promise<JsonRecord> {
 	return (await sharedCreatePage(parentDataSourceId, properties)) as JsonRecord
 }
@@ -120,7 +120,7 @@ async function setAssignmentGenError(recordId: string, message: string): Promise
 	}
 }
 
-// 아래 세 함수는 (page, propName) 시그니처를 유지하는 약은 래퍼 — 실제 파싱은 _shared/notionClient.ts에 있다.
+// 아래 세 함수�� (page, propName) 시그니처를 유지하는 얇은 래퍼 — 실제 파싱은 _shared/notionClient.ts에 있다.
 function relIds(page: JsonRecord, propName: string): string[] {
 	return relIdsFromProp((page.properties as JsonRecord)?.[propName])
 }
@@ -252,7 +252,7 @@ async function handleRequest(req: Request): Promise<Response> {
 		const category = selectValue(recordPage, PROP_RECORD_CATEGORY)
 
 		if (category !== CATEGORY_ASSIGNMENT && category !== CATEGORY_EVALUATION) {
-			// "학습"이거나 구분이 비어있으면 출제 대상이 아니다.
+			// "학습"이거나 구분이 ���어있으면 출제 대상이 아니다.
 			return new Response(
 				JSON.stringify({ message: "category_not_assignable", recordId, category }),
 				{ status: 200 },
