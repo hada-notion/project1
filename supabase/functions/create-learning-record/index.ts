@@ -2,19 +2,19 @@
 // Trigger: 수업(세션) DB 또는 출석(학원) DB의 "학습기록 생성" 버튼 웹훅
 //
 // v3에서 바뀜: 이제 출석 페이지에서도 같은 버튼/같은 웹훅으로 호출할 수 있다.
-// 클릭된 페이지를 한 번 읽어서 parent.data_source_id로 수업 페이지인지 출석 페이지인지 구분하고,
+// 클릭된 페이지를 한 번 읨어서 parent.data_source_id로 수업 페이지인지 출석 페이지인지 구분하고,
 // 출석 페이지면 그 출석의 "수업" 관계(limit 1)를 따라가 실제 수업(세션) 페이지 id로 바꿔치기한다.
 // 그 다음부터는 항상 수업 페이지 기준으로 기존 로직(v2)을 그대로 수행하므로, 수업/출석 어느 쪽
 // 버튼을 눌러도 결과(그 수업의 모든 등록/출석에 대한 학습기록 생성)는 동일하다.
 //
 // 흐름:
 // 0. 클릭된 페이지 id를 추출하고, 그 페이지가 출석 페이지면 연결된 수업 페이지 id로 치환한다.
-// 1. (치환된) 수업(세션) 페이지를 로드하여 이 수업의 전체 등록/출석 목록을 가져온다.
-// 2. 각 등록의 진도교재 중 "오늘 학습" 체크박스가 켜진 것들을 묶는다(같은 책은 여러 등록이 공유하고 있을 수 있음).
+// 1. (치환된) 수업(세션) 페이지를 로맥하여 이 수업의 전역 등록/출석 목롭을 가져온다.
+// 2. 각 등록의 진도교재 중 "오늘 학습" 체크박스가 켜진 것들을 묶은다(같은 책은 여러 등록이 공유하여 주입되되 있을 수 있음).
 // 3. 진도교재마다 학습기록 1건씩 생성:
 //    - 개별 진도: 그 진도교재를 실제로 이용하는 등록(들)과 그 등록의 이 수업에 대한 출석만 연결
-//    - 그룹 진도: 수업 전체 등록 + 출석을 모두 연결 (수업 페이지에 이미 있는 리스트를 직접 사용)
-//    - 교재 = 진도교재의 정규교재, 과목 = 정규교재의 과목 을 유사 매핑
+//    - 그룹 진도: 수업 전역 등록 + 출석을 모두 연결 (수업 페이지에 이뭐 있는 리스트를 직접 사용)
+//    - 교재 = 진도교재의 정규교재, 가묽 = 정규교재의 과목 을 우샤 묍링
 //    - 수업 = 버튼이 눌린 그 수업(세션) 페이지 자신
 // 4. 처리한 진도교재의 "오늘 학습" 체크박스를 자동으로 해제한다.
 
@@ -279,7 +279,7 @@ async function handleRequest(req: Request): Promise<Response> {
 	}
 
 	// 클릭된 페이지가 출석 페이지면, 그 출석이 연결된 수업(세션) 페이지 id로 바꿔치기한다.
-	// 수업 페이지가 클릭된 경우(기존 동작)나 parent 조회가 실패한 경우는 그대로 sessionId로 사용한다.
+	// 수업 페이지가 클릭된 경우(기존 동���)나 parent 조회가 실패한 경우는 그대로 sessionId로 사용한다.
 	let sessionId = clickedId
 	try {
 		const clickedPage = await getPage(clickedId)
@@ -348,7 +348,7 @@ async function finishCreateLearningRecord(sessionId: string): Promise<unknown> {
 			return { message: "session_has_no_registrations", sessionId }
 		}
 
-		// 이 수업의 출석들을 모아서 각 출석이 어느 등록 소유인지 매핑한다 (개별 진도용 정밀 연결)
+		// 이 수업의 출석들을 묈어서 각 출석이 어느 등록 소유인지 매한다 (개별 진도용 정밀 연결)
 		const attendancePages = await mapWithConcurrency(sessionAttendanceIds, 6, (id) => getPage(id))
 		const registrationToAttendance = new Map<string, string[]>()
 		for (const attendancePage of attendancePages) {
@@ -361,7 +361,7 @@ async function finishCreateLearningRecord(sessionId: string): Promise<unknown> {
 			}
 		}
 
-		// 각 등록의 진도교재 목록을 모아서 책 소유자를 지닌다
+		// 각 등록의 진도교재 목롭을 묈어서 책 소유자 지닉다
 		const registrationPages = await mapWithConcurrency(sessionRegistrationIds, 6, (id) => getPage(id))
 		const bookOwnerMap = new Map<string, string[]>()
 		for (const registrationPage of registrationPages) {
@@ -386,7 +386,7 @@ async function finishCreateLearningRecord(sessionId: string): Promise<unknown> {
 			return { message: "no_books_marked_today", sessionId }
 		}
 
-		// 클래스명 하나만 미리 로드해둔다 (제목 생성에 사용)
+		// 클래스명 하나만 미리 로맥해둔다 (제목 생성에 사용)
 		const className = sessionClassIds[0]
 			? getTitle(await getPage(sessionClassIds[0]))
 			: ""
