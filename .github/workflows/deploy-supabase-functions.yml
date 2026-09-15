@@ -15,6 +15,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v1.x
+
+      - name: Type-check all functions (deno check)
+        run: |
+          set -e
+          for f in supabase/functions/*/index.ts; do
+            echo "== deno check $f =="
+            deno check "$f"
+          done
+
+      - name: Run regression guard checks
+        run: bash scripts/check-known-regressions.sh
+
       - name: Install Supabase CLI
         uses: supabase/setup-cli@v1
         with:
