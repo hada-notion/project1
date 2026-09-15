@@ -357,8 +357,8 @@ type ProcessMode =
 
 // 시간표 DB에 처리 상태 표시 (버튼 모드에서만 사용; 크론 모드는 DB 전체를 순회하므로 굳이
 // 개별 표시하지 않는다 — 매번 다 순회해서 만들거나 안 만들거나 끝나기 때문에 사용자가 지켜볼
-// 대상이 아님). 실패해도 캐스케이드 전체를 막지 않도록 조용히 무시한다.
-// (2026-09-11 마이그레이션: 공유 select "생성 상태"에서 체크박스 + "실시간 처리 상태" 수식으로 전환).
+// 대상이 아님). 실패해도 캐스케이드 전체를 막지 않도록 조��히 무시한다.
+// (2026-09-11 마이그레��션: 공유 select "생성 상태"에서 체크박스 + "실시간 처리 상태" 수식으로 전환).
 async function markGenRunning(timetableId: string, running: boolean): Promise<void> {
   try {
     const props: Record<string, unknown> = { [PROP_TIMETABLE_GEN_RUNNING]: { checkbox: running } }
@@ -656,7 +656,7 @@ Deno.serve(async (req: Request) => {
 
     // 이 버튼을 누른 메뉴(학원) DB 페이지의 id. Notion이 트리거 페이지 id를 넣는 위치는 시간표
     // 버튼과 동일하므로(위 candidates 탐색 결과), 여기서는 "시간표 id"가 아니라 "메뉴 페이지 id"로 재해석해서
-    // 메뉴 DB 쪽에 새로 추가한 "생성중"/"마지막 오류" 진행상태 속성에 반영한다 (시간표 DB와 동일한 로직).
+    // 메뉴 DB 쪼에 새로 추가한 "생성중"/"마지막 오류" 진행상태 속성에 반영한다 (시간표 DB와 동일한 로직).
     const menuPageId = timetableId
 
     if (menuPageId) {
