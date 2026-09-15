@@ -280,6 +280,9 @@ async function cascadeDelete(
   const indent = "  ".repeat(depth)
 
   if (depth === 0 && resumeNote) {
+    // 이전 실행이 응답 없이 멈춰서 이미 실행(대상 페이지)이 자동으로 재시도되는 거란을 "마지막
+    // 오류"에 간단하 적어둔다. 이본 재실함이 묵막히 성간하면 markDeletingDone에서 자동으로 지우지고,
+    // 다시 실패하말면 실제 오류 뒤계 뒤엮우로 됬이 쓰인다 (2026-09-12 fix).
     try {
       await updatePageProperties(pageId, {
         [PROP_DELETING_RUNNING]: { checkbox: true },
@@ -292,8 +295,18 @@ async function cascadeDelete(
     await markDeletingRunning(pageId)
   }
 
+  // 이 페이지(또는 그 하위 어디선가)에서 오류가 나면, 이 페이지 자신의 "삭제 처리중"도 반드시
+  // 꺼줘야 한다. 예전에는 최상위 호출(Deno.serve)의 catch에서만 markDeletingError를 불러서,
+  // 재귀 중간에 있던 페이지들은 오류가 나도 자기 자신의 플래그를 절대 못 끄고 영원히 "삭제
+  // 처리중"에 멈춰있었다 (버튼을 다시 눌러도 이미 처리중이라고 판단해 아무 것도 안 하는 원인이
+  // 됐음 - 2026-09-12 fix). 각 단계마다 자기 몫을 try/catch로 감싸서, 실패해도 즉시 상태를
+  // 오류로 표시하고 다시 던져서 상위 호출이 계속 알 수 있게 한다.
   try {
     if (config?.children) {
+      // 서로 다른 하위 DB(예: 출석 vs 학습�����록)는 물��, 같은 하위 DB 안의 여러 페이지도
+      // 동시에(병렬로) 처리한다. 예전에는 하나씩 순서대로 처리해서 학생이 많은 반일수록 전체
+      // 처리 시간이 늘어나 Edge Function 실행 시간 제한에 걸려 응답 없이 멈추는 경우가 있었다
+      // (2026-09-12 fix).
       await Promise.all(
         config.children.map(async (child) => {
           const kids = await queryAllPages(child.dataSourceId, {
@@ -306,6 +319,7 @@ async function cascadeDelete(
             if (child.dataSourceId === DS_STUDY_RECORD) {
               const progressType = await getStudyRecordProgressType(kid)
               if (progressType === GROUP_PROGRESS_TYPE) {
+                // 그룹 진도: 다른 학생들도 같은 학습기록을 쓰고 있으므로 삭제하지 않고 관��만 끊는다.
                 await disconnectRelation(kid.id, child.relationPropOnChild, pageId)
                 log.push(`${indent}🔗 [${name}] 그룹 진도 학습기록이라 관계만 해제함 (${child.relationPropOnChild}): ${kid.id}`)
                 return
@@ -349,17 +363,26 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({
         ok: false,
-        error: "페이지 id를 payload에서 찾지 못했습니다. Supabase 함수 로그의 raw body를 확인하세요.",
+        error: "페���지 id를 payload에서 찾지 못했습니다. Supabase 함수 로그의 raw body를 확인하세요.",
         receivedBodyPreview: rawText.slice(0, 500),
       }),
       { status: 400, headers: { "Content-Type": "application/json" } },
     )
   }
 
+  // 안전장치: 같은 페이지에 대해 캐스케이드가 이미 진행 중이면(버튼 더블클릭, 웹훅 재시도 등)
+  // 새 요청은 중복 실행하지 않고 바로 반환한다.
+  // 직전 실행이 응답 없이 멈춰서 이번 요청이 자동으로 재시작하는 경우, 그 사실을 담아 대상 페이지의
+  // "마지막 오류"에 남길 간단한 안내 문구 (2026-09-12 fix).
   let resumeNote: string | undefined
   try {
     const existingPage = await getPage(pageId)
     if (isDeletingFlagSet(existingPage)) {
+      // "삭제 처리중"이 켜진 지 얼마나 됐는지 페이지의 last_edited_time으로 확인한다. 정상적으로
+      // 진행 중인 짧은 시간(STALE_LOCK_MS 이내)이면 중복 실행을 막기 위해 여기서 반환하지만,
+      // 그보다 오래 갱신이 없으면 이전 실행이 서버 타임아웃/재시작 등으로 죽어서 응답 없이
+      // 멈춘 것으로 보고, 막지 않고 그대로 재시도를 진행한다. 사용자가 버튼을 다시 누르는 것만
+      // 으로 항상 복구되도록 하기 위한 안전장치 (2026-09-12 fix).
       const lastEditedMs = existingPage.last_edited_time ? new Date(existingPage.last_edited_time).getTime() : 0
       const ageMs = Date.now() - lastEditedMs
       if (ageMs < STALE_LOCK_MS) {
@@ -377,6 +400,8 @@ Deno.serve(async (req: Request) => {
     console.error("cascade-delete: failed to pre-check status:", (err as Error).message)
   }
 
+  // Notion 웹훅이 더 이상 기다리지 않도록 즉시 202 응답을 돌려주고, 실제 캐스케이드 삭제는
+  // 백그라운드에서 계속 진행한다. 진행 상황은 각 DB의 "동기화 상태" 속성으로 확인 가능하다.
   runInBackground(async () => {
     const log: string[] = []
     try {
