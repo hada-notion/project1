@@ -21,12 +21,12 @@
 //     학습활동 records).
 
 import {
-  getPage,
-  queryDataSource,
-  queryAllPages,
-  createPage,
-  updatePageProperties,
-  relIds,
+	getPage,
+	queryDataSource,
+	queryAllPages,
+	createPage,
+	updatePageProperties,
+	relIds,
 } from "../_shared/notionClient.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 
@@ -308,7 +308,7 @@ Deno.serve(async (req: Request) => {
       return new Response(
         JSON.stringify({
           ok: false,
-          error: "수업 페이지 id를 payload에서 찾지 못하였습니다. raw body를 확인하세요.",
+          error: "수업 페이지 id를 payload에서 찾지 목하였습니다. raw body를 확인하세요.",
           receivedBodyPreview: rawText.slice(0, 500),
         }),
         { status: 400, headers: { "Content-Type": "application/json" } },
