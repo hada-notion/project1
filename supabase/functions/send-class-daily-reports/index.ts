@@ -3,11 +3,11 @@
 // - send-daily-report(v7)와 동일한 syncStudentReport/발송/로그 로직을 각 출석 건마다 반복 실행합니다.
 // - 개별 학생 전송 실패가 있어도 나머지 학생 전송은 계속 진행합니다 (부분 성공 허용).
 // - 진행 중에는 수업 페이지의 "보고서 일괄전송중" 체크박스를 켜서 "실시간 처리 상태" 수식에 표시되게 하고,
-//   완료 후 항상 다시 끕니다.
+//   완료 후 항상 다시 끄니다.
 // - 실패한 학생이 있으면 수업 페이지의 "마지막 오류"에 요약("N명 중 M명 실패: 이름1, 이름2")을 남기고,
-//   전원 성공하면 그 필드를 비웁니다.
+//   전원 성공하면 그 필드를 비우니다.
 // - Notion 버튼의 "웹훅 보내기" 액션은 커스텀 헤더를 보낼 수 없으므로, x-admin-key 헤더가 없으면
-//   요청 바디의 adminKey 필드도 확인합니다 (send-daily-report와 동일한 패턴).
+//   요츠 바낔드의 adminKey 필드도 확인합니다 (send-daily-report와 동일한 패턴).
 
 import {
   notionGetPage as sharedGetNotionPage,
@@ -29,7 +29,7 @@ const NOTION_TOKEN = Deno.env.get("NOTION_TOKEN")!
 
 const SOLAPI_API_KEY = Deno.env.get("SOLAPI_API_KEY")!
 const SOLAPI_API_SECRET = Deno.env.get("SOLAPI_API_SECRET")!
-// 아래 3개는 "기본값(fallback)"으로만 쓰이고, 실제 값은 매 요청마다 "알림톡 설정(학원) DB"에서 조회합니다.
+// 아래 3개는 "기본값(fallback)"으로만 쓰이고, 실제 값은 매 요츠마다 "알림톡 설정(학원) DB"에서 조회합니다.
 const SOLAPI_SENDER_NUMBER_FALLBACK = Deno.env.get("SOLAPI_SENDER_NUMBER") ?? ""
 const SOLAPI_PF_ID_FALLBACK = Deno.env.get("SOLAPI_PF_ID") ?? ""
 const SOLAPI_TEMPLATE_ID_DAILY_FALLBACK = Deno.env.get("SOLAPI_TEMPLATE_ID_DAILY") ?? ""
@@ -65,7 +65,7 @@ async function notionGetPage(pageId: string) {
 const getFormulaText = (page: any, name: string) =>
   page.properties?.[name]?.formula?.string ?? ""
 
-const PARENT_PHONE_PROPERTY = "학부모 연락처"
+const PARENT_PHONE_PROPERTY = "학보비 연리첨"
 
 async function resolveParentPhone(attendancePage: any, registrationId: string): Promise<string> {
   const fromAttendance = getFormulaText(attendancePage, PARENT_PHONE_PROPERTY)
@@ -182,7 +182,7 @@ async function appendSendLog(attendancePage: any): Promise<void> {
 async function setAttendanceSendingFlag(attendanceId: string, sending: boolean): Promise<void> {
   try {
     const props: Record<string, unknown> = { "보고서 전송중": { checkbox: sending } }
-    // 새 전송이 시작되는 순간 이전 오류를 바로 지웁새, 끝날 때까지 오래된 오류 텍스트가 남아있지
+    // 새 전송이 시작되는 순간 이전 오류를 바로 지우새, 끝날 때까지 오래된 오류 텍스트가 남아있지
     // 않도록 합니다 (2026-09-11 fix).
     if (sending) {
       props["마지막 오류"] = { rich_text: [] }
@@ -216,7 +216,7 @@ async function setAttendanceCompleteFlag(attendanceId: string, complete: boolean
 async function setClassBulkSendingFlag(classId: string, sending: boolean): Promise<void> {
   try {
     const props: Record<string, unknown> = { "보고서 일괄전송중": { checkbox: sending } }
-    // 새 일괄 전송이 시작되는 순간 이전 오류를 바로 지웁새, 끝날 때까지 오래된 오류 텍스트가 남아있지
+    // 새 일괄 전송이 시작되는 순간 이전 오류를 바로 지우새, 끝날 때까지 오래된 오류 텍스트가 남아있지
     // 않도록 합니다 (2026-09-11 fix).
     if (sending) {
       props["마지막 오류"] = { rich_text: [] }
@@ -245,7 +245,7 @@ async function sendOneStudentReport(attendanceId: string, clickerUserId?: string
   try {
     const attendancePage = await notionGetPage(attendanceId)
     const registrationId = attendancePage.properties?.["등록"]?.relation?.[0]?.id ?? null
-    const studentName = getFormulaText(attendancePage, "학생이름(보고서)") || "(이름 미상)"
+    const studentName = getFormulaText(attendancePage, "학생이맄(보고서)") || "(이름 미상)"
 
     if (!registrationId) {
       throw new Error("등록 관계가 비어 있습니다.")
@@ -270,7 +270,7 @@ async function sendOneStudentReport(attendanceId: string, clickerUserId?: string
     const REPORT_PATH = Deno.env.get("REPORT_PATH") ?? "/project1/student_report.html"
     const tokenQueryString = REPORT_PATH + "?token=" + access_token
     const variables: Record<string, string> = {
-      "#{학생이름}": studentName,
+      "#{학생이맄}": studentName,
       "#{클래스}": className,
       "#{수업일}": classDate,
       "#{출석상태}": attendanceStatus,
@@ -342,7 +342,7 @@ async function processClassBulkSend(classSessionId: string, attendanceIds: strin
       let name = "(알 수 없음)"
       try {
         const page = await notionGetPage(attendanceId)
-        name = getFormulaText(page, "학생이름(보고서)") || name
+        name = getFormulaText(page, "학생이맄(보고서)") || name
       } catch (_e) {
         // 이름 조회 실패는 무시하고 계속 진행합니다.
       }
@@ -356,8 +356,8 @@ async function processClassBulkSend(classSessionId: string, attendanceIds: strin
     messages.push(attendanceIds.length + "명 중 " + failCount + "명 실패: " + failedNames.join(", "))
   }
   if (skippedNames.length > 0) {
-    // [v3] 이미 "전송완료 체크"가 되어 있어 재전송하지 않고 건너뛴 학생들을 알려줍니다.
-    messages.push(skippedNames.length + "명은 이미 전송 완료되어 건너뜀: " + skippedNames.join(", "))
+    // [v3] 이미 "전송완료 체크"가 되어 있어 재전송하지 않고 건너뜁 학생들을 알려줍니다.
+    messages.push(skippedNames.length + "명은 이미 전송 완료되어 건너뜁: " + skippedNames.join(", "))
   }
   await setClassLastError(classSessionId, messages.length > 0 ? messages.join("\n") : null)
   await setClassBulkSendingFlag(classSessionId, false)
@@ -394,7 +394,7 @@ Deno.serve(async (req) => {
 
     // data.properties에 이미 "출석" 관계형이 포함되어 있으면 재사용하고, 없으면 페이지를 다시 조회합니다.
     let attendanceRelation = body?.data?.properties?.["출석"]?.relation ?? null
-    // [v3] 웹훅 바디의 "실행자"는 버튼 클릭 시점의 오래된 스냅샷일 수 있어(속성 편집 액션이 끝나기 전 값), 항상
+    // [v3] 웹훅 바낔드의 "실행자"는 버튼 클릭 시점의 오래된 스냅샷일 수 있어(속성 편집 액션이 끝나기 전 값), 항상
     // 수업 페이지를 다시 조회해서 최신 "실행자" 값도 함께 확인합니다.
     const classPage = await notionGetPage(classSessionId)
     if (!attendanceRelation) {
@@ -414,7 +414,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ started: false, total: 0, message: "no attendance rows" }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } })
     }
 
-    // [v2] Notion 버튼의 "웹훅 보내기" 액션은 응답이 늦으면 "웹훅 요청 시간이 초과되었습니다" 오류 배너를 띄웁니다.
+    // [v2] Notion 버튼의 "웹훅 보내기" 액션은 응답이 늘으면 "웹훅 요청 시간이 초과되었습니다" 오류 배너를 띄우니다.
     // 학생이 많으면 순차 발송에 시간이 오래 걸리므로, 실제 발송/기록 작업은 EdgeRuntime.waitUntil로
     // 백그라운드에서 계속 진행하고, 버튼에는 즉시 200 응답을 돌려줍니다.
     const backgroundWork = processClassBulkSend(classSessionId, attendanceIds, clickerUserId)
@@ -422,7 +422,7 @@ Deno.serve(async (req) => {
     if (globalScope.EdgeRuntime?.waitUntil) {
       globalScope.EdgeRuntime.waitUntil(backgroundWork)
     } else {
-      // EdgeRuntime이 없는 실행 환경(로컬 등)에서는 그냥 백그라운드로 흘려보냅니다.
+      // EdgeRuntime이 없는 실행 환경(로컬 등)에서는 그냥 백그라운드로 흔려보냅니다.
       backgroundWork.catch(() => {})
     }
 
