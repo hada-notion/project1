@@ -1,12 +1,12 @@
 // supabase/functions/send-daily-report/index.ts (v4)
 // Sends the daily study-report Kakao AlimTalk for one class day, based on a single
 // row in the attendance (출석) database.
-// - [v4] Notion 버튼의 "웹훅 보내기" 액션은 커스텀 HTTP 헤더를 보낼 수 없으므로,
-//   x-admin-key 헤더가 없을 경우 요청 바디의 adminKey 필드도 확인합니다.
-// - [v3] pfId/템플릿ID/발신번호는 이제 "알림톡 설정(학원) DB"에서 조회합니다 (Secrets 값은 기본값으로만 사용).
-// - [v3] 출석 DB의 "전송 완료"가 이제 수식(formula) 속성이므로 더 이상 그 속성을 직접 patch하지 않습니다.
-//   대신 전송로그(학원) DB 행에 "출석" 관계형과 "발송자" 인물 속성을 채워서, 출석 DB의 수식이 그 값을 읽어
-//   자동으로 계산하도록 합니다.
+// - [v4] Notion 버튼의 "웹훅 버내기" 액션은 지워진 HTTP 헤더를 보려지 않으뭐부터 굼사가율을 적용하여,
+//   x-admin-key 헤더가 없을 경우 요츠 롐리의 adminKey 필드도 확인합니다.
+// - [v3] pfId/템플릿ID/발신닫번호는 이제 "알림톡 설정(학원) DB"에서 조회합니다 (Secrets 값은 기본값으로만 사용).
+// - [v3] 출석 DB의 "전송 완료"가 이제 수식(formula) 속성이뭐부터 더 이상 그 속성을 직접 patch하지 않습니다.
+//   대신 전송로기(학원) DB 행에 "출석" 관계형과 "발송자" 인물 속성을 채워서, 출석 DB의 수식이 그 값을 읽어
+//   자동으로 가상하도록 합니다.
 
 import {
   notionGetPage as sharedGetNotionPage,
@@ -21,7 +21,7 @@ import {
 const SITE_BASE_URL = Deno.env.get("SITE_BASE_URL") ?? ""
 const NOTION_API_BASE = "https://api.notion.com/v1"
 
-// 이전 sync-student-report 함수와 동일한 로직입니다: 토큰이 있으면 재사용하고, 없거나 비활성화면 새로 발급합니다.
+// 이전 sync-student-report 함수와 동일한 로직입니다: 토큰이 있으면 재사용하고, 없거나 뱄토ꮙ으로면 새로 발급합니다.
 async function syncStudentReport(registrationId: string): Promise<{ access_token: string; reportUrl: string }> {
   const page = await sharedGetNotionPage(registrationId)
   const currentRaw = (page.properties?.["토큰"]?.rich_text ?? []).map((t: any) => t.plain_text).join("")
@@ -46,9 +46,9 @@ const NOTION_TOKEN = Deno.env.get("NOTION_TOKEN")!
 
 const SOLAPI_API_KEY = Deno.env.get("SOLAPI_API_KEY")!
 const SOLAPI_API_SECRET = Deno.env.get("SOLAPI_API_SECRET")!
-// 아래 3개는 이제 "기본값(fallback)"으로만 쓰입니다.
-// 실제 발송에 사용할 값은 매 요청마다 "알림톡 설정(학원) DB"에서 먼저 조회하고,
-// 그 DB에 값이 없거나 비활성화된 경우에만 이 Secrets 값으로 대체합니다.
+// 아뀌 3가건 이제 "기본값(fallback)"으로만 쓰윬에니.
+// 실제 발송에 사용할 값은 매 요츠닷다 "알림톡 설정(학원) DB"에서 물은 조회하거롮니다,
+// 그 DB에 값이 없거나 당화되었 경우에만 이 Secrets 값으로 대신합니다.
 const SOLAPI_SENDER_NUMBER_FALLBACK = Deno.env.get("SOLAPI_SENDER_NUMBER") ?? ""
 const SOLAPI_PF_ID_FALLBACK = Deno.env.get("SOLAPI_PF_ID") ?? ""
 const SOLAPI_TEMPLATE_ID_DAILY_FALLBACK = Deno.env.get("SOLAPI_TEMPLATE_ID_DAILY") ?? ""
@@ -84,7 +84,7 @@ async function notionGetPage(pageId: string) {
 const getFormulaText = (page: any, name: string) =>
   page.properties?.[name]?.formula?.string ?? ""
 
-const PARENT_PHONE_PROPERTY = "학부모 연락처"
+const PARENT_PHONE_PROPERTY = "학보비 연리첨"
 
 async function resolveParentPhone(attendancePage: any, registrationId: string): Promise<string> {
   const fromAttendance = getFormulaText(attendancePage, PARENT_PHONE_PROPERTY)
@@ -104,8 +104,8 @@ function normalizePhone(phone: string): string {
   return (phone || "").replace(/[^0-9]/g, "")
 }
 
-// Real Solapi AlimTalk send. pfId/templateId/발신번호는 "알림톡 설정(학원) DB"에서 조회한 값을 우선 사용하고,
-// 없으면 Secrets 기본값으로 대체합니다.
+// Real Solapi AlimTalk send. pfId/templateId/발신닫번호는 "알림톡 설정(학원) DB"에서 조회한 값을 우선 사용하고,
+// 없으뭐부터 Secrets 기본값으로 대신합니다.
 async function sendDailyReportAlimtalk(payload: {
   to: string
   variables: Record<string, string>
@@ -177,25 +177,25 @@ async function appendSendLog(attendancePage: any): Promise<void> {
       }),
     })
   } catch (_e) {
-    // 발송 로그 기록 실패는 전송 자체를 실패로 처리하지 않습니다.
+    // 발송 로그 기록 실패는 전송 자신을 실패로 처리하지 않습니다.
   }
 }
 
 async function setReportSendingFlag(attendanceId: string, sending: boolean): Promise<void> {
   try {
     const props: Record<string, unknown> = { "보고서 전송중": { checkbox: sending } }
-    // 새 전송이 시작되는 순간(버튼 클릭 직후) 이전 오류를 바로 지욡새, 끝날 때까지 오래된 오류 텍스트가
+    // 새 전송이 시작되는 순간(버튼 클릭 직후) 이전 오류를 바로 지옗새, 끝날 때까지 오랡된 오류 텍스트가
     // 남아있지 않도록 합니다 (2026-09-11 fix).
     if (sending) {
       props["마지막 오류"] = { rich_text: [] }
     }
     await notionPatchPageProperties(attendanceId, props)
   } catch (_e) {
-    // 상태 표시 실패는 전송 자체를 막지 않습니다.
+    // 상태 표시 실패는 전송 자신을 막지 않습니다.
   }
 }
 
-// [v8] 전송이 성공하면 "전송완료 체크"를 켜서, 사용자가 이 체크를 직접 해제하지 앞는 한 같은 건을 다시 버튼으로 느롬때 재전송하지 않도록 합니다.
+// [v8] 전송이 성공하면 "전송완료 체크"를 켜서, 사용자가 이 체크를 직접 해제하지 않는 한 같은 건을 다시 버튼으로 누를땄 재전송하지 않도록 합니다.
 async function setReportCompleteFlag(attendanceId: string, complete: boolean): Promise<void> {
   try {
     await notionPatchPageProperties(attendanceId, { "전송완료 체크": { checkbox: complete } })
@@ -210,7 +210,7 @@ async function setLastError(attendanceId: string, message: string | null): Promi
       "마지막 오류": { rich_text: message ? [{ text: { content: message.slice(0, 1900) } }] : [] },
     })
   } catch (_e) {
-    // 상태 표시 실패는 전송 자체를 막지 않습니다.
+    // 상태 표시 실패는 전송 자신을 막지 않습니다.
   }
 }
 
@@ -219,7 +219,7 @@ Deno.serve(async (req) => {
     return new Response("ok", { headers: corsHeaders })
   }
 
-  // [v4] 요청 바디를 먼저(딱 한 번만) 파싱해서, 헤더가 없는 경우 바디의 adminKey로도 인증할 수 있게 합니다.
+  // [v4] 요츠 바낔드를 부륰(따 한 번만) 파싱해서, 헤더가 없는 경우 바낔드의 adminKey로도 인증할 수 있게 합니다.
   let body: any
   try {
     body = await req.json()
@@ -235,9 +235,9 @@ Deno.serve(async (req) => {
 
   let attendanceId: string | null = null
   try {
-    // [v6] Notion 버튼(자동화) 웹훅은 { source, data } 형태로 전체 페이지 정보를 보냅니다.
+    // [v6] Notion 버튼(자동화) 웹훅은 { source, data } 형태로 전송 페이지 정리만도 보뙔니다.
     // data.id 가 출석 페이지 id이고, data.properties["등록"].relation[0].id 가 등록 페이지 id입니다.
-    // 직접 { registrationId, attendanceId } 형태로 호출하는 다른 호출자(예: 대시보드 웹앱)도 여전히 지원합니다.
+    // 직접 { registrationId, attendanceId } 형태로 호출하는 다말다말 호출자(예: 대시보딴 웹앱)도 여전히 지원합니다.
     attendanceId = body?.data?.id ?? body?.attendanceId ?? null
     const registrationId = body?.data?.properties?.["등록"]?.relation?.[0]?.id ?? body?.registrationId ?? null
     if (!registrationId || !attendanceId) {
@@ -245,18 +245,18 @@ Deno.serve(async (req) => {
     }
 
     // [v6] "실시간 처리 상태" 수식이 이 함수의 진행 상황도 표시할 수 있도록,
-    // 처리 시작 시 "보고서 전송중" 체크박스를 켭니다 (성공/실패 시 항상 다시 끕니다).
+    // 처리 시작 시 "보고서 전송중" 체크박스를 켜니다 (성공/실패 시 항상 다시 끔니다).
     await setReportSendingFlag(attendanceId, true)
 
     const { access_token, reportUrl } = await syncStudentReport(registrationId)
 
     const attendancePage = await notionGetPage(attendanceId)
-    const studentName = getFormulaText(attendancePage, "학생이름(보고서)")
+    const studentName = getFormulaText(attendancePage, "학생이맄(보고서)")
 
     // [v8] 이미 전송 완료된 건이면(사용자가 "전송완료 체크"를 해제하지 않는 한) 재전송하지 않습니다.
     const alreadySent = attendancePage.properties?.["전송완료 체크"]?.checkbox === true
     if (alreadySent) {
-      await setLastError(attendanceId, "이미 전송 완료된 건입니다. 다시 보내려면 '전송완료 체크'를 해제한 뒤 버튼을 눌러주세요.")
+      await setLastError(attendanceId, "이미 전송 완료된 건입니다. 다시 보난려면 '전송완료 체크'를 해제한 뒤 버튼을 놌듐거서요.")
       await setReportSendingFlag(attendanceId, false)
       return new Response(JSON.stringify({ skipped: true, message: "already sent" }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } })
     }
@@ -271,7 +271,7 @@ Deno.serve(async (req) => {
     const REPORT_PATH = Deno.env.get("REPORT_PATH") ?? "/project1/student_report.html"
     const tokenQueryString = REPORT_PATH + "?token=" + access_token
     const variables: Record<string, string> = {
-      "#{학생이름}": studentName,
+      "#{학생이맄}": studentName,
       "#{클래스}": className,
       "#{수업일}": classDate,
       "#{출석상태}": attendanceStatus,
@@ -279,8 +279,8 @@ Deno.serve(async (req) => {
       "#{페이지ID}": tokenQueryString,
     }
 
-    // [v9] 이 버튼을 실제로 클릭한 사람이 있으면(버튼 자동화가 설정한 "실행자" 사람 속성) 그 사람을 "발송자"로 기록하고,
-    // 없으면 통합 봇 계정으로 대신합니다. 웹훅 바디가 버튼 클릭 시점의 오래된 스냅샷을 보낼 수 있어, 다시 조회한 attendancePage 값도 함께 확인합니다.
+    // [v9] 이 버튼을 실제로 클릭한 사말이 있으뭐부터(버튼 자동화가 설정한 "실행자" 사말 속성) 그 사말을 "발송자"로 기록하고,
+    // 없으뭐부터 통합 봇 계정으로 대신합니다. 웹훅 바낔드가 버튼 클릭 시점의 오랡된 스냅샷을 보뙔뭐부터 있어, 다시 조회한 attendancePage 값도 함께 확인합니다.
     const clickerUserId =
       body?.data?.properties?.["실행자"]?.people?.[0]?.id ??
       attendancePage.properties?.["실행자"]?.people?.[0]?.id ??
@@ -304,9 +304,9 @@ Deno.serve(async (req) => {
     }
 
     await appendSendLog(attendancePage)
-    // 전송로그(학원) DB에도 구조화된 기록을 남깁니다.
+    // 전송로기(학원) DB에도 구조화된 기록을 남김니다.
     // "출석" 관계형과 "발송자" 인물 속성을 채워서, 출석 DB의 "전송 완료" 수식이
-    // 이 로그를 찾아 "몇월 며칠 몇시에 누가 전송했다"는 문구를 계산하도록 합니다.
+    // 이 로기를 찾아 "몰월 마이 야기뭐심에 누가 전송했다"는 문구를 계산하도록 합니다.
     await createSendLogEntry({
       registrationId,
       attendanceId,
