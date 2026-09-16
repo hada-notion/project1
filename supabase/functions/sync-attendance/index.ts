@@ -96,6 +96,8 @@ Deno.serve(async (req: Request) => {
       headers: { ...ADMIN_CORS, "Content-Type": "application/json" },
     })
   } catch (err) {
+    // 원인 파악을 위해 Supabase Logs에도 그대로 남긴다 (응답 본문에는 이미 담고 있었지만 로그에는 안 보였음).
+    console.error("sync-attendance error:", err)
     return new Response(JSON.stringify({ error: String((err as any)?.message ?? err) }), {
       status: 500,
       headers: { ...ADMIN_CORS, "Content-Type": "application/json" },
