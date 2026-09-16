@@ -41,7 +41,10 @@ jobs:
         run: |
           set -e
           # 비밀번호에 특수문자(@, :, / 등)가 있으면 접속 URL이 깨지므로 percent-encode 해서 넣는다.
-          ENCODED_DB_PASSWORD=$(python3 -c "import urllib.parse, os; print(urllib.parse.quote(os.environ['SUPABASE_DB_PASSWORD'], safe=''))")
+          # 복사/붙여넣기 과정에서 섞여 들어갈 수 있는 앞뒤 공백/개행 문자도 제거한다.
+          echo "DEBUG: raw password length (with any stray whitespace) = ${#SUPABASE_DB_PASSWORD}"
+          ENCODED_DB_PASSWORD=$(python3 -c "import urllib.parse, os; print(urllib.parse.quote(os.environ['SUPABASE_DB_PASSWORD'].strip(), safe=''))")
+          echo "DEBUG: encoded password length = ${#ENCODED_DB_PASSWORD}"
           supabase db push --db-url "postgresql://postgres.${SUPABASE_PROJECT_ID}:${ENCODED_DB_PASSWORD}@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres"
         env:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
