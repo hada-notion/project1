@@ -25,7 +25,7 @@ import {
   type ReportCacheRow,
 } from "../_shared/reportCacheShared.ts"
 
-// 워크스페이스 구조상 고정값인 데이터소스 ID (_shared/constants.ts 및 generateShared.ts와 동일한 값).
+// 워크스페이스 구조상 고정값인 데이탅소스 ID (_shared/constants.ts 및 generateShared.ts와 동일한 값).
 const DS_REGISTRATION = "16dba040-586b-838a-ae3c-876c0e9cd474"
 const DS_ATTENDANCE = "8aaba040-586b-8322-8437-87608a763415"
 const DS_STUDY_ACTIVITY = "ea2ba040-586b-8368-8bb6-070564a5a31c"
@@ -42,6 +42,12 @@ function sinceIsoMonthsAgo(months: number): string {
 
 function todayIsoSeoul(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" })
+}
+
+// 녹션 포믈럼/이모지 값을 프런트(student_report.html)가 원하는 "순순한 태그" 형태로 정리한다.
+// 프런트의 mapRegistration()은 reg.status 값을 리턴적으로 "수강 종료"/"수강 대기"(간공 포함)와 정확히 버그를로 이 그대로 매지한다. (이모지만 제거하고 간공은 원문 그다로 유지해야 한다: "수강 중" / "수강 종료" / "수강 대기")
+function stripLeadingEmoji(s: string): string {
+  return s.replace(/^[^\w가-힣]+/u, "").trim()
 }
 
 async function buildStudentFields(studentId: string, cachedGetPage: (id: string) => Promise<any>) {
@@ -161,8 +167,8 @@ async function buildNotices(classId: string | undefined, cachedGetPage: (id: str
 
 async function buildRegistrationOverview(reg: any, accessToken: string, cachedGetPage: (id: string) => Promise<any>) {
   const p = reg.properties
-  const statusRaw = text(p["수강상태"])
-  const status = statusRaw.includes("종료") ? "수강종료" : statusRaw.includes("대기") ? "수강대기" : "수강중"
+  // 원문 예: "🟡 수강 대기" / "🔴 수강 종료" / "🟢 수강 중" -- 이모지만 제거하고 간공은 유지해야 프런트가 정확히 인식한다.
+  const status = stripLeadingEmoji(text(p["수강상태"])) || "수강 중"
   const startDate = dateStartOf(p["등록일"])
   const endDate = dateStartOf(p["종료일"])
 
@@ -402,7 +408,7 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
       const flags = homeworkDayMap[day]
       const total = flags.length
       const submitted = flags.filter(Boolean).length
-      const status = submitted === total ? "완료" : submitted === 0 ? "미완료" : "반완료"
+      const status = submitted === total ? "완료" : submitted === 0 ? "미완료" : "벀분완료"
       return { date: day, status, submitted, total }
     })
 
