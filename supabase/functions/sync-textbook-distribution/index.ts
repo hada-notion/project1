@@ -10,7 +10,7 @@
 //   추가로, 이미 이 등록의 기존 교재배부에 실려 있는 정규교재는(재클릭 등으로) 중복으로 다시 담기지 않도록 별도로 거른다.
 //
 // 교재배부 1건 = 정규교재 1개 (2026-09-16 수정). 새로 담을 정규교재가 여러 개이다면, 한 번의 버튼 호출에서도
-// 교재배부 페이지를 교재당 1건씨 여러 개 만든다 (교재배부의 "정규교재" 관계는 1건만 가리쾤맀다는 가정).
+// 교재배부 페이지를 교재당 1건씨 여러 개 만든다 (교재비의 "정규교재" 관계는 1건만 가리쾤맀다는 가정).
 //
 // 일괄처리 방식: 개별 버튼(교재비 페이지 "진도교재 담기")과 클래스 버튼(클래스 페이지 "교재 일괄 배부")
 // 두 트리거 모두 동일한 핵심 로직(distributeForRegistration)을 공유한다. 클래스 버튼은 그 클래스의
@@ -21,54 +21,45 @@
 // 실제 발송 동작에는 영향이 없다 -- Notion 화면에서 이 카트가 어떤 발송 설정과 연결되는지
 // 직관적으로 보이도록 하기 위한 것뿐이다 (조회 실패 시 조용히 건너뜀).
 //
-// (2026-09-17) from-class 락("교재배부 처리중")이 백그라운드 처리 중 Edge Function 런타임이
-// 죽거나 타임아웃되면 영원히 true로 남아, 재클릭해도 매번 already_processing만 리턴하고 절대
-// 재실행되지 않는 문제가 있었다. "교재배부 시작 시각"을 함께 기록해서, 락이 켜진 지 일정 시간이
-// 넘었으면 멈추 것으로 보고 재클릭 시 자동으로 새로 시작하도록 고쳤다 (from-cart/개별 버튼은
-// 이번엔 범위에서 제외 -- 필요하면 동일한 방식으로 확장 가능).
+// (2026-09-17, 1~4차 수정 이력) 반복적으로 "교재배부 처리중"이 90초+가 지나도 자동으로 안 풀리는
+// 문제가 반복 재현되었다. 이 과정에서: 등록 건당 중복 조회 제거(1차), 동시성 3->5 증가(2차), 재클릭
+// 즉시 락 해제(3차), 안전 타임아웃과 동시성 5->2 축소 + getScheduleConfig 캐시(4차)를 차례로 적용했는데도,
+// 여전히 학생 몇 명짜리(중등 과외, 6명)도 타임아웃을 거치는 사례가 나왔다.
 //
-// (2026-09-17, 2차 수정) 실제로 고1 A반/B반에서 첫 실행 때 "처리중" 체크박스가 완료 후에도
-// 자동으로 안 풀리는 문제가 발생했다. 코드상 성공/실패 양쪽 경로 모두 체크박스를 끄도록 되어
-// 있으므로, 가장 유력한 원인은 (a) 학생 수가 많을 때 등록마다 순차적으로 여러 번 Notion API를
-// 호출하느라 전체 처리 시간이 Edge Function 런타임의 최대 실행 시간을 넘겨서 함수 자체가
-// 완료/오류 처리 코드에 도달하기도 전에 강제 종료됐을 가능성이다. 이를 개선하기 위해:
-//   1) from-class에서 각 등록 페이지를 두 번(활성 여부 판정용 + distributeForRegistration 내부)
-//      중복 조회하던 것을 한 번만 조회하도록 고쳐서 API 호출 수를 줄이고,
-//   2) 등록 단위 동시 처리 수를 3 -> 5로 늘려서 전체 처리 시간을 단축하고,
-//   3) 배치 작업 전체에 내부 안전 타임아웃(BATCH_TIMEOUT_MS)을 둬서, 혹시라도 예상보다 오래
-//      걸리면 (10분씩 기다리지 않고) 곧바로 "처리 시간 초과" 오류로 표시하고 락을 풀어서 바로
-//      재클릭해서 다시 시도할 수 있게 했다. 원래 작업 자체는 취소할 수 없어 백그라운드에서 계속
-//      흐르지만(자바스크립트 특성상 완전한 취소 불가), 뒤늦게 정상적으로 끝나면 그 결과로 다시
-//      상태를 덮어써준다. 중복 생성은 distributeForRegistration의 기존 조회 로직이 막아준다.
-//   4) 위 안전장치들에도 불구하고 Edge Function 프로세스 자체가 완전히 죽어버리는 최악의 경우를
-//      대비해, "교재배부 시작 시각" 기반 락 자동 해제 기준을 10분 -> 3분으로 단축했다.
-//
-// (2026-09-17, 3차 수정) 2차 수정 배포 후에도 고1 A반/B반에서 재현됨 -- 재클릭 후 90초 넘게
-// 지나도 "처리중"이 자동으로 안 풀리는 사례가 있었다. Edge Function 런타임이 내부 안전 타임아웃
-// (setTimeout)조차 실행하지 못할 정도로 완전히 죽어버리는 경우로 추정된다. 자바스크립트 안에서는
-// 이런 경우를 감지/복구할 방법이 없으므로, 사용자가 재클릭하는 행동 자체를 "멈춘 것 같다"는 신호로
-// 받아들여 그 클릭에서 곧바로 락을 풀고 안내 메시지를 남기도록 바꿨다 (CLICK_UNLOCK_GRACE_MS 참고,
-// 같은 클릭에서 바로 재실행하지는 않고 다음 클릭에서 새로 시작한다). 근본적으로 Edge Function이
-// 왜 죽는지는 Supabase 함수 로그를 직접 확인해야 알 수 있다.
-//
-// (2026-09-17, 4차 수정) Supabase 함수 로그를 확인해보니 실제로는 런타임이 죽은 게 아니었다.
-// 학생 6명짜리 아주 작은 반(중등 과외)도 그대로 90초 타임아웃에 걸렸다 -- 즉 "처리중"이 실제로
-// 정상적으로 90초 넘게 걸리고 있었다는 뜻이다. 원인은 동시성 설정: from-class가 등록 여러 건을
-// 동시에(5개씩) 처리하는데, 등록 하나당 내부적으로도(진도교재 조회/정규교재 조회/교재배부 생성)
-// 3~4개씩 동시에 Notion API를 호출하고 있어서, 순간적으로 수십 건의 요청이 겹쳐 Notion API
-// 레이트리밋(429)에 자주 걸렸을 가능성이 높다. fetchWithRetry는 429를 만나면 지수 백오프(최대
-// 5회, 300ms~4.8초씩)로 재시도하는데, 이 대기 시간들이 누적되면 학생 몇 명짜리 반도 손쉽게 90초를
-// 넘길 수 있다. 이를 줄이기 위해 각 단계의 동시성 수치를 낮췄고(등록 5->2, 등록 내부 조회/생성
-// 3~4->2), 신규 교재비 카트 생성 시마다 매번 다시 조회하던 getScheduleConfig도 60초 캐시를
-// 추가해(adminShared.ts) 반복 조회를 줄였다. 동시성을 낮추면 개별 처리는 약간 느려지지만,
-// 레이트리밋 백오프가 줄어들어 총 처리 시간은 오히려 짧아질 것으로 기대한다. 그래도 못 미치면
-// BATCH_TIMEOUT_MS를 120초로 늘려 여유를 더 뒀다.
+// (2026-09-17, 5차 수정 -- 근본원인) 같은 "버튼+체크박스 처리중 표시" 패턴을 쓰는 클래스 단위 배치
+// 함수 generate-tuition(수강료 생성)/generate-report(보고서 생성)는 한 번도 이런 문제가 없었다.
+// 둘을 직접 비교해보니 이 함수만 가지고 있던 두 가지 구조적 차이가 진짜 원인이었다:
+//   1) 활성 등록 조회 방식 -- generate-tuition/report는 getActiveRegistrationsForClass로 등록(학원)
+//      DB를 "클래스 relation contains classId + 등록일/종료일 날짜 필터"로 단 한 번의 조회(POST
+//      /query, 커서 페이지네이션)만으로 필요한 페이지를 다 가져온다. 이 함수는 이전까지 클래스
+//      페이지의 "등록" relation 목록(수십 건)을 먼저 가져온 뒤, 활성 여부를 판단하기 위해 등록
+//      하나당 GET /pages/{id}를 개별적으로 호출했다 -- 즉 반 하나만 처리해도 이 필터링
+//      단계에서만 등록 수만큼 불필요한 API 호출이 생겼다 (고정적으로 거치는 다른 함수들에는
+//      아예 없던 단계).
+//   2) 동시성 -- generate-tuition/report는 등록 단위로도, 등록 내부에서도 단순 for루프로
+//      순차 처리한다 (중복정리용 archivePage만 예외적으로 가끔마 발생하는 드물 경로에서 mapWithConcurrency를
+//      쓄다). 이 함수는 등록 단위 동시성(1차에서 5, 4차에서 2)와 등록 내부 조회/생성(4차에서 2)을
+//      동시에 둘 다 쓰고 있어서, 순간적으로 다른 함수들보다 훨씬 많은 Notion API 요청이 동시에
+//      나갔다.
+// 즉 "왜 다른 버튼+체크박스 조합은 다 잘 되는데 이것만 안되느냐"에 대한 답은, 이 함수만 유일하게
+// (a) 불필요한 개별 조회를 대량으로 하고 (b) 여러 단계에서 동시에 여러 Notion API를 불러서이다.
+// 이번 5차 수정은 1~4차처럼 증상을 더 줄이는 대신, generate-tuition/report와 동일한 구조(단일 필터
+// 조회 + 완전 순차 처리)로 근본적으로 맞추는 것이다:
+//   - from-class가 이제 클래스 페이지를 따로 읽지 않고, 등록(학원) DB를 "클래스 relation contains
+//     pageId + 등록일/종료일 날짜 조건"으로 단 한 번에 조회해서 활성 등록 전체(이미 전체 속성을
+//     포함한 페이지)를 한번에 가져온다 -- 이전처럼 등록마다 따로 GET을 다시 보낼 필요가 없다.
+//   - 그 결과를 distributeForRegistration에 preFetchedRegistration으로 그대로 넘기며, 등록들을 단순
+//     for루프로 순차 처리한다 (mapWithConcurrency 제거).
+//   - 각 등록 내부의 진도교재 조회/정규교재 조회/교재배부 생성도 모두 단순 for루프로 바꿔서,
+//     이 함수가 만드는 순간 동시 Notion API 호출 수가 generate-tuition/report와 같은 수준이 되도록 했다.
+// BATCH_TIMEOUT_MS/CLICK_UNLOCK_GRACE_MS(3차 수정)는 만일의 대비책(defense-in-depth)으로 그대로 남겨둔다 --
+// 이제는 처리 자체가 획기적으로 가벼워졌으니 정상 상황에서는 거의 발동할 일이 없을 것으로 기대한다.
 //
 // 라우트:
 //   POST /sync-textbook-distribution/from-cart   <- 교재비(학원) DB "진도교재 담기" 버튼 (학생 1명)
 //   POST /sync-textbook-distribution/from-class  <- 클래스(학원) DB "교재 일괄 배부" 버튼 (반 전체 활성 등록)
 
-import { PROP_LAST_ERROR, PROP_SYNCED_AT, PROP_ENROLL_DATE, PROP_END_DATE } from "../_shared/constants.ts"
+import { PROP_LAST_ERROR, PROP_SYNCED_AT, PROP_ENROLL_DATE, PROP_END_DATE, PROP_CLASS, DS_REGISTRATION } from "../_shared/constants.ts"
 import {
 	getPage,
 	createPage,
@@ -76,12 +67,10 @@ import {
 	relIds,
 	relationIds,
 	statusName,
-	dateStart,
 	checkboxValue,
 	anyTitleText,
 	extractPageId,
 	todaySeoulDate,
-	mapWithConcurrency,
 } from "../_shared/notionClient.ts"
 import { makeSyncStatusSetter } from "../_shared/registrationSync.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
@@ -118,7 +107,6 @@ const PROP_REGISTRATION_BOOKS = "진도교재" // relation -> 진도교재(학�
 const PROP_REGISTRATION_CART = "교재비" // relation -> 교재비(학원) DB
 
 // 클래스(학원) DB 속성
-const PROP_CLASS_REGISTRATION = "등록" // relation -> 등록(학원) DB
 const PROP_CLASS_TEXTBOOK_BATCH_RUNNING = "교재배부 처리중"
 // [2026-09-17] "교재배부 처리중"이 언제 true로 켜졌는지 기록. from-class 재클릭 시 이 시각을 보고
 // 그레이스 기간(CLICK_UNLOCK_GRACE_MS)이 지났으면 이전 실행이 응답 없이 멈춘 것으로 보고 그 자리에서
@@ -134,10 +122,8 @@ const PROP_CLASS_TEXTBOOK_BATCH_STARTED_AT = "교재배부 시작 시각"
 const CLICK_UNLOCK_GRACE_MS = 15 * 1000
 // [2026-09-17, NEW] 배치 작업(from-class/from-cart) 전체가 이 시간 안에 못 끝나면, 무한정
 // 기다리게 하지 않고 곧바로 "처리 시간 초과" 오류로 표시하고 락을 풀어서 바로 재클릭해서 다시
-// 시도할 수 있게 한다. 학급 하나(수십 명)를 처리해도 보통 수십 초 내에 끝나므로 90초면 정상
-// 실행을 오탐지하지 않으면서도 충분히 여유 있는 기준이다.
-// [2026-09-17, 4차 수정] 아래 동시성을 낮춰서 레이트리밋 백오프가 줄어들 것으로 기대하지만,
-// 혹시 여유가 더 필요할 경우를 대비해 90초 -> 120초로 늘렸다.
+// 시도할 수 있게 한다. [2026-09-17, 5차 수정] 처리 자체가 단일 필터 조회 + 순차 처리로 바뀌면서
+// 이제는 거의 발동할 일이 없을 만큼 충분한 여유이지만, 만일의 경우를 대비해 120초로 그대로 둔다.
 const BATCH_TIMEOUT_MS = 120 * 1000
 
 // 교재비 DB는 이 함수 혼자만 처리 상태를 쓰므로 otherFlagProps가 필요 없다.
@@ -150,12 +136,11 @@ const setClassStatus = makeSyncStatusSetter(
 	PROP_CLASS_TEXTBOOK_BATCH_STARTED_AT,
 )
 
-// [2026-09-17, NEW] 백그라운드 배치 작업이 예상 밖으로 오래 걸리면(외부 API 응답 지연, 등록/학생
-// 수가 아주 많은 경우 등) 사용자가 "처리중" 표시만 보며 무한정 기다리지 않도록, 정해진 시간 안에
-// 못 끝나면 즉시 오류 상태로 바꿔서 알려주고 락도 풀어준다(재클릭하면 바로 다시 시도 가능).
-// 원본 작업 자체는 자바스크립트 특성상 취소할 수 없어 백그라운드에서 계속 흐르지만, 그 작업이
-// 뒤늦게 스스로 완료/오류 상태를 기록하므로(각 라우트의 기존 try/catch), 이 함수는 시간 초과
-// 시점에만 개입해서 사용자에게 먼저 알려주는 역할만 한다.
+// [2026-09-17, NEW] 백그라운드 배치 작업이 예상 밖으로 오래 걸리면 사용자가 "처리중" 표시만 보며 무한정
+// 기다리지 않도록, 정해진 시간 안에 못 끝나면 즉시 오류 상태로 바꿔서 알려주고 락도 풀어준다
+// (재클릭하면 바로 다시 시도 가능). 원본 작업 자체는 자바스크립트 특성상 취소할 수 없어
+// 백그라운드에서 계속 흐르지만, 그 작업이 뒤늦게 스스로 완료/오류 상태를 기록하므로(각 라우트의
+// 기존 try/catch), 이 함수는 시간 초과 시점에만 개입해서 사용자에게 먼저 알려주는 역할만 한다.
 async function runWithSafetyTimeout(
 	label: string,
 	task: () => Promise<void>,
@@ -179,9 +164,10 @@ async function runWithSafetyTimeout(
 
 // 등록 하나에 대해: 아직 담기지 않은 "진행 중" 진도교재를 모아, 교재(정규교재)당 교재배부를 개별로 생성한다.
 // 장바구니(교재비 페이지)가 없으면 이 시점에 자동으로 만든다 (하나만 존재, 사용자 설계대로).
-// [2026-09-17] preFetchedRegistration: from-class에서 활성 등록 판정을 위해 이미 조회해둔 등록
-// 페이지가 있으면 그대로 재사용해서, 등록마다 중복으로 getPage를 호출하지 않도록 한다 (전체 처리
-// 시간 단축 목적, 위 파일 상단 2차 수정 주석 참고).
+// [2026-09-17, 5차 수정] 이전에는 preFetchedRegistration이 있어도 이미 안에서마 여러 굴 mapWithConcurrency로
+// 진도교재/정규교재를 동시 조회하고 있었다. generate-tuition/report와 동일하게 단순 for루프로 순차
+// 처리하도록 바꿔서, 이 함수 하나가 만드는 순간 동시 Notion API 호출 수를 최소화했다 (파일 상단
+// 5차 수정 주석 참고).
 async function distributeForRegistration(
 	registrationId: string,
 	preFetchedRegistration?: any,
@@ -194,10 +180,11 @@ async function distributeForRegistration(
 	const progressBookIds = relationIds(registration, PROP_REGISTRATION_BOOKS)
 	if (progressBookIds.length === 0) return { status: "no_eligible_books" }
 
-	// [2026-09-17, 4차 수정] 4 -> 2: 등록 단위 동시 처리(from-class)와 겹쳐서 순간적으로 너무 많은
-	// Notion API 요청이 동시에 나가 레이트리밋(429) 백오프가 누적되는 원인이 됐다 (파일 상단 4차
-	// 수정 주석 참고).
-	const progressBooks = await mapWithConcurrency(progressBookIds, 2, (id) => getPage(id))
+	// [2026-09-17, 5차 수정] mapWithConcurrency 제거 -> 단순 for루프로 순차 조회 (파일 상단 5차 수정 주석 참고).
+	const progressBooks: any[] = []
+	for (const id of progressBookIds) {
+		progressBooks.push(await getPage(id))
+	}
 	const eligibleBookIds = new Set<string>()
 	for (const book of progressBooks) {
 		if (statusName(book, PROP_PROGRESS_STATUS) !== STATUS_ELIGIBLE) continue
@@ -241,21 +228,25 @@ async function distributeForRegistration(
 		cartCreated = true
 	}
 
-	// 교재배부 1건 = 정규교재 1개. 새로 담을 정규교재가 여러 개여맞이다면, 개별 교재배부 페이지를 거 수만큼 따로 만든다
-	// (이마트: 이마트 이마트 이마트) -
-	// 새로 담을 정규교재 건수만큼 모든 건 배부 1건씨 개별로 생성한다.
-	// [2026-09-17, 4차 수정] 아래 두 mapWithConcurrency도 4/3 -> 2로 낮췄다 (파일 상단 4차 수정 주석 참고).
-	const newBookPages = await mapWithConcurrency(newBookIds, 2, (id) => getPage(id))
-	const distributions = await mapWithConcurrency(newBookIds, 2, async (bookId, idx) => {
+	// 교재배부 1건 = 정규교재 1개. 새로 담을 정규교재가 여러 개여맞이다면, 개별 교재배부 페이지를 거 수만큼 따로 만든다.
+	// [2026-09-17, 5차 수정] mapWithConcurrency 제거 -> 단순 for루프로 순차 조회/생성 (파일 상단 5차 수정 주석 참고).
+	const newBookPages: any[] = []
+	for (const id of newBookIds) {
+		newBookPages.push(await getPage(id))
+	}
+	const distributions: any[] = []
+	for (let idx = 0; idx < newBookIds.length; idx++) {
+		const bookId = newBookIds[idx]
 		const bookTitle = anyTitleText(newBookPages[idx]) || `${todaySeoulDate()} 교재 배부`
-		return await createPage(DATA_SOURCE_TEXTBOOK_DISTRIBUTION, {
+		const dist = await createPage(DATA_SOURCE_TEXTBOOK_DISTRIBUTION, {
 			[PROP_DIST_TITLE]: { title: [{ text: { content: bookTitle } }] },
 			[PROP_DIST_REGISTRATION]: { relation: [{ id: registrationId }] },
 			[PROP_DIST_REGULAR_BOOK]: { relation: [{ id: bookId }] },
 			[PROP_DIST_DATE]: { date: { start: todaySeoulDate() } },
 			[PROP_DIST_CART]: { relation: [{ id: cartId }] },
 		})
-	})
+		distributions.push(dist)
+	}
 
 	return {
 		status: "distributed",
@@ -266,14 +257,25 @@ async function distributeForRegistration(
 	}
 }
 
-// 오늘 기준으로 활성 등록인지 판정 (등록일 <= 오늘 <= 종료일, 종료일 없으면 계속 활성).
-// 등록(학원) DB "수강상태" 수식과 동일한 정의를 그대로 따른다 (날짜 문자열 사전식 비교로 충분: YYYY-MM-DD).
-function isActiveRegistration(reg: any, todayStr: string): boolean {
-	const enrollDate = dateStart(reg, PROP_ENROLL_DATE)
-	const endDate = dateStart(reg, PROP_END_DATE)
-	if (enrollDate && enrollDate.slice(0, 10) > todayStr) return false
-	if (endDate && endDate.slice(0, 10) < todayStr) return false
-	return true
+// [2026-09-17, 5차 수정] 클래스 페이지의 "등록" relation 목록을 가져와 개별 getPage로 필터링하던 이전 방식 대신,
+// generate-tuition/report(getActiveRegistrationsForClass)와 동일한 방식으로 등록(학원) DB를 단 한 번의 필터 조회(POST
+// /query, 커서 페이지네이션 포함)로 놓아 활성 등록의 전체 페이지를 한번에 가져온다 (클래스 페이지 자체도
+// 따로 읽을 필요가 없어진다). 필터 조건은 이전 isActiveRegistration과 동일하다: 등록일 <= 오늘 <= 종료일
+// (종료일 없으면 계속 활성). queryAllPages가 반환하는 건 이미 전체 속성을 포함한 페이지이므로,
+// distributeForRegistration의 preFetchedRegistration으로 그대로 재사용한다 (등록당 별도 GET 없음).
+async function getActiveRegistrationsForClassToday(classId: string, todayStr: string): Promise<any[]> {
+	return await queryAllPages(DS_REGISTRATION, {
+		and: [
+			{ property: PROP_CLASS, relation: { contains: classId } },
+			{ property: PROP_ENROLL_DATE, date: { on_or_before: todayStr } },
+			{
+				or: [
+					{ property: PROP_END_DATE, date: { is_empty: true } },
+					{ property: PROP_END_DATE, date: { on_or_after: todayStr } },
+				],
+			},
+		],
+	})
 }
 
 Deno.serve(async (req: Request) => {
@@ -333,12 +335,10 @@ Deno.serve(async (req: Request) => {
 		} else if (route === "from-class") {
 			// 클래스 페이지 자신이 클릭 대상. 이미 처리 중이면 재클릭을 무시하되, 처리 시작 시각이
 			// CLICK_UNLOCK_GRACE_MS보다 오래됐다면 이전 실행이 응답 없이 멈춘 것으로 보고 그 클릭에서
-			// 곧바로 락을 풀고 "다시 시도해 주세요" 안내를 남긴다 (2026-09-17, 3차 수정: 같은 클릭에서
-			// 바로 재실행하지는 않는다 -- 혹시 원래 실행이 실제로는 아직 살아있는 경우, 두 실행이 동시에
-			// 같은 등록들을 만지면 상태 표시가 꼬일 수 있어서 다음 클릭에서 새로 시작하도록 한다).
+			// 곧바로 락을 풀고 "다시 시도해 주세요" 안내를 남긴다 (2026-09-17, 3차 수정).
 			const classForLock = await getPage(pageId)
 			const isBatchRunning = checkboxValue(classForLock, PROP_CLASS_TEXTBOOK_BATCH_RUNNING)
-			const batchStartedAt = dateStart(classForLock, PROP_CLASS_TEXTBOOK_BATCH_STARTED_AT)
+			const batchStartedAt = classForLock.properties?.[PROP_CLASS_TEXTBOOK_BATCH_STARTED_AT]?.date?.start ?? null
 			const lockAgeMs = batchStartedAt ? Date.now() - new Date(batchStartedAt).getTime() : Infinity
 			if (isBatchRunning) {
 				if (lockAgeMs < CLICK_UNLOCK_GRACE_MS) {
@@ -367,30 +367,26 @@ Deno.serve(async (req: Request) => {
 					"from-class",
 					async () => {
 						try {
-							const classPage = await getPage(pageId)
-							const registrationIds = relationIds(classPage, PROP_CLASS_REGISTRATION)
 							const today = todaySeoulDate()
-							// [2026-09-17] 이 시점에 이미 등록 페이지 전체를 조회하므로, 아래에서
-							// distributeForRegistration을 호출할 때 같은 페이지를 다시 조회하지 않고
-							// 그대로 재사용한다 (API 호출 수 절반으로 감소, 전체 처리 시간 단축).
-							// [2026-09-17, 4차 수정] 4 -> 3로 소폭 낮춤 (파일 상단 4차 수정 주석 참고).
-							const registrations = await mapWithConcurrency(registrationIds, 3, (id) => getPage(id))
-							const activeRegistrations = registrations.filter((r) => isActiveRegistration(r, today))
+							// [2026-09-17, 5차 수정] 단 한 번의 필터 조회로 활성 등록의 전체 페이지를 바로 가져온다
+							// (클래스 페이지 재조회/등록별 개별 getPage 모두 불필요 -- 파일 상단 5차 수정 주석 참고).
+							const activeRegistrations = await getActiveRegistrationsForClassToday(pageId, today)
 
-							// [2026-09-17, 4차 수정] 5 -> 2로 낮춤: 등록별로 내부에서도 여러 건의 Notion API
-							// 호출이 동시에 나가고 있어서, 기존 5는 순간적으로 너무 많은 동시 요청을 만들어
-							// 레이트리밋(429) 백오프가 누적되는 원인이 됐다 (파일 상단 4차 수정 주석 참고).
-							const results = await mapWithConcurrency(activeRegistrations, 2, async (reg: any) => {
+							// [2026-09-17, 5차 수정] mapWithConcurrency 제거 -> 단순 for루프로 순차 처리 (generate-tuition/report와
+							// 동일한 구조). 이제 반 하나를 처리하는 동안 순간 동시 Notion API 호출이 항상 1건만
+							// 나가게 되어 레이트리밋(429) 백오프 누적 자체가 구조적으로 불가능해진다.
+							const results: any[] = []
+							for (const reg of activeRegistrations) {
 								try {
-									return await distributeForRegistration(reg.id, reg)
+									results.push(await distributeForRegistration(reg.id, reg))
 								} catch (err) {
-									return {
+									results.push({
 										status: "error" as const,
 										message: (err as Error)?.message ?? String(err),
 										registrationId: reg.id,
-									}
+									})
 								}
-							})
+							}
 							const distributedCount = results.filter((r: any) => r.status === "distributed").length
 							const errorCount = results.filter((r: any) => r.status === "error").length
 							if (errorCount > 0) {
