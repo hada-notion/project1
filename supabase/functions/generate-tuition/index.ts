@@ -14,10 +14,11 @@
 // 그대로 사용한다 (다음달 수강료를 미리 생성해두는 흐름에서는 그 달의 수업/출석 레코드가 아직
 // 하나도 없어 실제 출석 건수가 항상 0이 되는 문제가 있었음).
 //
-// (2026-09-16) 수강료(학원) DB에서 "알림톡 설정" 관계 속성을 제거했다. 안내멘트 등 발송 설정은
-// send-tuition-notice가 발송 시점에 "발송 구분" 문자열로 알림톡 설정 DB를 조회해서 가져오므로,
-// 생성 시점에 설정 행을 관계로 미리 연결해둘 필요가 없다. (이 함수는 더 이상 getScheduleConfig를
-// 호출하지 않는다.)
+// (2026-09-16) 수강료(학원) DB에 "알림톡 설정" 관계 속성이 다시 있다. 이 관계는 표시 전용이다 --
+// send-tuition-notice는 여전히 발송 시점에 "발송 구분" 문자열로 알림톡 설정 DB를 조회해서 안내멘트
+// 등을 가져오므로, 실제 발송 동작은 이 관계값과 무관하다. 다만 Notion 화면에서 이 수강료 건이
+// 어떤 발송 설정과 연결되는지 직관적으로 보이도록, 생성 시점에 getScheduleConfig("수강료 안내")로
+// 조회한 설정 행을 이 관계에 채워둔다 (조회 실패 시에는 조용히 건너뛰고 생성 자체는 계속 진행함).
 //
 // generate-classes(시간표 기반 수업/출석 생성)와 같은 버튼-웹훅 패턴을 따른다:
 // Notion의 "웹훅 보내기" 액션은 응답을 동기적으로 기다리므로, 처리가 오래 걸리면 타임아웃
@@ -33,6 +34,7 @@ import {
 } from "../_shared/notionClient.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 import { extractPageId } from "../_shared/notionClient.ts"
+import { getScheduleConfig } from "../_shared/adminShared.ts"
 import {
 	DS_TUITION,
 	getActiveRegistrationsForClass,
@@ -85,6 +87,10 @@ async function processClass(classId: string, log: string[]): Promise<void> {
 		return
 	}
 
+	// [NEW] 표시용 "알림톡 설정" 관계에 채울 설정 행 -- 클래스 하나를 처리하는 동안은 항상
+	// 같은 카테고리("수강료 안내")이므로 루프 밖에서 한 번만 조회한다.
+	const tuitionConfig = await getScheduleConfig("수강료 안내")
+
 	let created = 0
 	let skipped = 0
 	let dedupCleaned = 0
@@ -111,6 +117,9 @@ async function processClass(classId: string, log: string[]): Promise<void> {
 			"수업 횟수": { number: sessionCount },
 			// 이 건이 속한 알림톡 발송함(배치)과 연결 -- "일괄 전송" 버튼이 이 관계로 대상을 찾는다.
 			[PROP_NOTIFICATION_BATCH_RELATION]: { relation: [{ id: batchId }] },
+			// [NEW] 표시용: 이 건의 발송 설정이 알림톡 설정(학원) DB의 어느 행인지 한눈에 보여준다
+			// (실제 발송 동작에는 영향 없음, 위 파일 상단 주석 참고).
+			...(tuitionConfig ? { "알림톡 설정": { relation: [{ id: tuitionConfig.rowId }] } } : {}),
 			// 생성 직후에는 기본으로 일괄전송 대상에 포함시킨다 (원치 않으면 사용자가 직접 체크 해제).
 			"일괄전송 선택": { checkbox: true },
 		})
