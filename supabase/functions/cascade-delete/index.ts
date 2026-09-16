@@ -40,6 +40,12 @@
 //   학습기록 삭제 → 학습활동 삭제 (관계: 학습활동."학습기록") ── 여러 학생의 학습활동 모두 삭제
 //   출석 삭제 → 학습활동 삭제 (관계: 학습활동."출석") ── 해당 학생것만 삭제
 // (하나의 학습활동이 출석과 학습기록 양쪽 경로 모두로 도달될 수 있지만, 이미 archived된 건 건너뛰기 때문에 중복 삭제는 안전함)
+//
+// v7 변경 사항 (2026-09-16, 사용자 요청):
+//   - 교재비(학원) → 교재배부(학원) → 교재결제(학원) 3단계 캐스케이드 삭제 추가.
+//     교재비는 장바구니 성격이라 평소엔 삭제할 일이 거의 없지만, 수강종료 등으로 정리가 필요할 때를
+//     대비해 수업/출석/학습기록/학습활동과 동일한 패턴을 그대로 적용한다. 그룹 진도 같은 특수 분기는
+//     필요 없어서 3단계 모두 단순하게 완전 삭제(휴지통 이동)한다.
 
 import {
 	getPage,
@@ -58,6 +64,13 @@ const DS_CLASS_SESSION = "3b1ba040-586b-80ec-af20-000b31bb69b7" // 수업(학원
 const DS_ATTENDANCE = "8aaba040-586b-8322-8437-87608a763415" // 출석(학원) DB
 const DS_STUDY_RECORD = "d97ba040-586b-8310-b710-8782e29b5c73" // 학습기록(학원) DB
 const DS_STUDY_ACTIVITY = "ea2ba040-586b-8368-8bb6-070564a5a31c" // 학습활동(학원) DB
+
+// 교재비(학원) DB → 교재배부(학원) DB → 교재결제(학원) DB (2026-09-16 추가, 로드맵).
+// 교재비는 장바구니 성격이라 평소엔 삭제할 일이 거의 없지만, 수강종료 등으로 정리가 필요할 때를
+// 대비해 위 4개 DB와 동일한 캐스케이드 삭제 패턴을 그대로 적용한다 (특수 분기 없이 3단계 모두 완전 삭제).
+const DS_TEXTBOOK_CART = "d1dba040-586b-8215-af75-8778a3ec57e9" // 교재비(학원) DB
+const DS_TEXTBOOK_DISTRIBUTION = "784ba040-586b-82e3-b5aa-87e11fb8d97a" // 교재배부(학원) DB
+const DS_TEXTBOOK_PAYMENT = "b86ba040-586b-83e3-8d2d-07c61bbece1a" // 교재결제(학원) DB
 
 // 학습기록(학원)은 "진도교재"의 "진도방식"에 따라 캐스케이드 삭제 방식이 다르다:
 //   개별 진도 → 학습기록도 함께 삭제(기존과 동일하게 재귀 캐스케이드)
@@ -120,6 +133,24 @@ const CONFIG: Record<string, CascadeConfig> = {
   },
   [DS_STUDY_ACTIVITY]: {
     titleProp: "학습활동",
+    // 말단(children 없음)
+  },
+  [DS_TEXTBOOK_CART]: {
+    titleProp: "이름",
+    children: [
+      // 교재비 → 교재배부 (교재배부 DB의 "교재비" 관계)
+      { dataSourceId: DS_TEXTBOOK_DISTRIBUTION, relationPropOnChild: "교재비" },
+    ],
+  },
+  [DS_TEXTBOOK_DISTRIBUTION]: {
+    titleProp: "이름",
+    children: [
+      // 교재배부 → 교재결제 (교재결제 DB의 "교재배부" 관계)
+      { dataSourceId: DS_TEXTBOOK_PAYMENT, relationPropOnChild: "교재배부" },
+    ],
+  },
+  [DS_TEXTBOOK_PAYMENT]: {
+    titleProp: "이름",
     // 말단(children 없음)
   },
 }
@@ -303,7 +334,7 @@ async function cascadeDelete(
   // 오류로 표시하고 다시 던져서 상위 호출이 계속 알 수 있게 한다.
   try {
     if (config?.children) {
-      // 서로 다른 하위 DB(예: 출석 vs 학습�����록)는 물��, 같은 하위 DB 안의 여러 페이지도
+      // 서로 다른 하위 DB(예: 출석 vs 학습기록)는 물론, 같은 하위 DB 안의 여러 페이지도
       // 동시에(병렬로) 처리한다. 예전에는 하나씩 순서대로 처리해서 학생이 많은 반일수록 전체
       // 처리 시간이 늘어나 Edge Function 실행 시간 제한에 걸려 응답 없이 멈추는 경우가 있었다
       // (2026-09-12 fix).
@@ -319,7 +350,7 @@ async function cascadeDelete(
             if (child.dataSourceId === DS_STUDY_RECORD) {
               const progressType = await getStudyRecordProgressType(kid)
               if (progressType === GROUP_PROGRESS_TYPE) {
-                // 그룹 진도: 다른 학생들도 같은 학습기록을 쓰고 있으므로 삭제하지 않고 관��만 끊는다.
+                // 그룹 진도: 다른 학생들도 같은 학습기록을 쓰고 있으므로 삭제하지 않고 관계만 끊는다.
                 await disconnectRelation(kid.id, child.relationPropOnChild, pageId)
                 log.push(`${indent}🔗 [${name}] 그룹 진도 학습기록이라 관계만 해제함 (${child.relationPropOnChild}): ${kid.id}`)
                 return
@@ -363,7 +394,7 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({
         ok: false,
-        error: "페���지 id를 payload에서 찾지 못했습니다. Supabase 함수 로그의 raw body를 확인하세요.",
+        error: "페이지 id를 payload에서 찾지 못했습니다. Supabase 함수 로그의 raw body를 확인하세요.",
         receivedBodyPreview: rawText.slice(0, 500),
       }),
       { status: 400, headers: { "Content-Type": "application/json" } },
