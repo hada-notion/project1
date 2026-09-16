@@ -182,11 +182,51 @@ export function checkboxValue(page: any, propName: string): boolean {
 	return page?.properties?.[propName]?.checkbox === true
 }
 
-// 이미 연결된 relation에 addIds를 합쳐서(중복 제거) 다시 저장한다. 이미 전부 연결돼 있으면 아무것도 하지 않는다.
+// [2026-09-17, 6차 수정] setCombinedSyncStatus의 각 단계(시작/완료/오류)를 실제로 Notion에 쓰는
+// 부분. updatePageProperties는 fetchWithRetry를 통해 429/5xx는 이미 재시도하지만, 그 외의 순간적인
+// 네트워크 예외(fetch 자체가 throw하는 경우 등)는 재시도 없이 곧바로 실패한다. 이 쓰기 하나가 바로
+// 체크박스를 다시 꺼주는 마지막 단계이므로, 여기서만이라도 별도로 몇 번 더 재시도하고, 그래도 안
+// 되면 반드시 로그를 남긴다 (예전에는 catch{}로 완전히 조용히 무시해서 실패 사실 자체를 알 수
+// 없었다 -- "교재 일괄 배부"가 실제 처리는 다 끝내고 로그에 finished까지 찍혔는데도 체크박스만
+// 영원히 켜져 있던 사례가 바로 이 경로였다).
+async function updateStatusWithRetry(
+	pageId: string,
+	properties: Record<string, unknown>,
+	phase: "start" | "success" | "error",
+): Promise<void> {
+	const maxAttempts = 3
+	let lastErr: unknown
+	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+		try {
+			await updatePageProperties(pageId, properties)
+			return
+		} catch (err) {
+			lastErr = err
+			if (attempt < maxAttempts) {
+				await new Promise((resolve) => setTimeout(resolve, 800 * attempt))
+			}
+		}
+	}
+	console.error(
+		`[setCombinedSyncStatus] 상태 표시 갱신 최종 실패 (phase=${phase}, pageId=${pageId}) -- 체크박스/오류 표시가 갱신되지 않았을 수 있음:`,
+		(lastErr as Error)?.message ?? String(lastErr),
+	)
+}
+
 // 등록 페이지의 "동기화 상태"(사용자에게 보이는 select)를, 시간표/교재 두 Edge Function이 각각
 // 처리 중인지 표시하는 체크박스 두 개를 조합해서 계산한다. 서로 독립적인 두 함수가 동시에 실행돼도
 // (예: 같은 웹훅 자동화가 두 함수를 모두 호출하는 경우) 한쪽이 끝났다고 바로 "완료"로 표시하지 않고,
-// 다른 쪽이 아직 처리 중이면 "처리 중"을 유지한다. 상태 표시 실패는 본 로직에 영향 없도록 조용히 무시한다.
+// 다른 쪽이 아직 처리 중이면 "처리 중"을 유지한다.
+//
+// [2026-09-17, 6차 수정 -- 진짜 마지막 원인] 예전에는 이 함수 전체가 try/catch{}로 감싸여 있어서,
+// "완료/오류로 바꾸는 이 마지막 쓰기 자체"가 실패해도 완전히 조용히 무시됐다. 즉 실제 처리(교재배부
+// 생성 등)는 다 끝나고 로그에도 "finished"가 정상적으로 찍히는데, 정작 체크박스를 다시 끄는 이
+// 마지막 PATCH 한 번만 실패하면 그 사실을 아무도 알 수 없고, 체크박스는 영원히 켜진 채로 남는다 --
+// 재클릭 자동 복구(3차 수정)가 있어야만 풀린다. generate-tuition/report도 이 함수를 그대로 쓰지만,
+// 한 번 실행에 필요한 Notion API 호출 수가 이 함수(학생 1명당 진도교재 조회+기존 교재배부 조회+생성
+// 등 여러 건)보다 훨씬 적어서 이 마지막 쓰기가 불운하게 실패할 확률 자체가 낮았을 뿐, 구조적으로는
+// 똑같이 취약했다. 이제 실제 쓰기는 위 updateStatusWithRetry로 옮겨서 (a) 재시도하고 (b) 다 실패해도
+// 반드시 로그를 남기도록 바꿨다.
 export async function setCombinedSyncStatus(
 	pageId: string,
 	args: {
@@ -205,38 +245,42 @@ export async function setCombinedSyncStatus(
 		errorMessage?: string
 	},
 ) {
-	try {
-		if (args.phase === "start") {
-			// 새 실행이 시작되는 순간(버튼 클릭 직후) 이전 오류를 바로 지워서, 끝날 때까지 오래된 오류
-			// 텍스트가 "실시간 처리 상태" 수식에 남아있지 않도록 합니다 (2026-09-11 fix).
-			await updatePageProperties(pageId, {
+	if (args.phase === "start") {
+		// 새 실행이 시작되는 순간(버튼 클릭 직후) 이전 오류를 바로 지워서, 끝날 때까지 오래된 오류
+		// 텍스트가 "실시간 처리 상태" 수식에 남아있지 않도록 합니다 (2026-09-11 fix).
+		await updateStatusWithRetry(
+			pageId,
+			{
 				[args.selfFlagProp]: { checkbox: true },
 				[args.errorProp]: { rich_text: [] },
 				...(args.startedAtProp ? { [args.startedAtProp]: { date: { start: new Date().toISOString() } } } : {}),
-			})
-			return
-		}
-		if (args.phase === "error") {
-			const message = (args.errorMessage ?? "알 수 없는 오류").slice(0, 1900)
-			await updatePageProperties(pageId, {
+			},
+			"start",
+		)
+		return
+	}
+	if (args.phase === "error") {
+		const message = (args.errorMessage ?? "알 수 없는 오류").slice(0, 1900)
+		await updateStatusWithRetry(
+			pageId,
+			{
 				[args.selfFlagProp]: { checkbox: false },
 				[args.errorProp]: { rich_text: [{ text: { content: message } }] },
-			})
-			return
-		}
-		// success: 내 플래그를 끄고 "마지막 오류"를 비운다. "실시간 처리 상태" 수식이 체크박스들을
-		// 실시간으로 조합해서 보여주므로, 더 이상 select 조합(다른 플래그 재조회) 로직이 필요 없다.
-		const properties: Record<string, unknown> = {
-			[args.selfFlagProp]: { checkbox: false },
-			[args.errorProp]: { rich_text: [] },
-		}
-		if (args.syncedAtProp) {
-			properties[args.syncedAtProp] = { date: { start: new Date().toISOString() } }
-		}
-		await updatePageProperties(pageId, properties)
-	} catch {
-		// 상태 표시 실패는 무시
+			},
+			"error",
+		)
+		return
 	}
+	// success: 내 플래그를 끄고 "마지막 오류"를 비운다. "실시간 처리 상태" 수식이 체크박스들을
+	// 실시간으로 조합해서 보여주므로, 더 이상 select 조합(다른 플래그 재조회) 로직이 필요 없다.
+	const properties: Record<string, unknown> = {
+		[args.selfFlagProp]: { checkbox: false },
+		[args.errorProp]: { rich_text: [] },
+	}
+	if (args.syncedAtProp) {
+		properties[args.syncedAtProp] = { date: { start: new Date().toISOString() } }
+	}
+	await updateStatusWithRetry(pageId, properties, "success")
 }
 
 export async function addRelation(pageId: string, propName: string, addIds: string[]) {
