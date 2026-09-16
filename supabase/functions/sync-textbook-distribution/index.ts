@@ -16,6 +16,11 @@
 // 두 트리거 모두 동일한 핵심 로직(distributeForRegistration)을 공유한다. 클래스 버튼은 그 클래스의
 // 활성 등록 전체에 대해 개별 로직을 반복 호출하는 것뿐이다 (구현 중복 없이 두 방식을 함께 지원).
 //
+// (2026-09-16) 교재비(카트) 페이지를 새로 만들 때 "알림톡 설정" 관계(표시 전용)도 함께 채운다.
+// send-textbook-notice는 여전히 발송 시점에 "발송 구분" 문자열로 알림톡 설정 DB를 조회하므로,
+// 실제 발송 동작에는 영향이 없다 -- Notion 화면에서 이 카트가 어떤 발송 설정과 연결되는지
+// 직관적으로 보이도록 하기 위한 것뿐이다 (조회 실패 시 조용히 건너뜀).
+//
 // 라우트:
 //   POST /sync-textbook-distribution/from-cart   <- 교재비(학원) DB "진도교재 담기" 버튼 (학생 1명)
 //   POST /sync-textbook-distribution/from-class  <- 클래스(학원) DB "교재 일괄 배부" 버튼 (반 전체 활성 등록)
@@ -37,6 +42,7 @@ import {
 } from "../_shared/notionClient.ts"
 import { makeSyncStatusSetter } from "../_shared/registrationSync.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
+import { getScheduleConfig } from "../_shared/adminShared.ts"
 
 // 이 함수 하나에서만 쓰는 데이터소스 ID/속성명이라 _shared/constants.ts로 옮기지 않고 여기 둔다
 // (constants.ts 상단 원칙 참고).
@@ -123,9 +129,13 @@ async function distributeForRegistration(registrationId: string): Promise<
 		cartId = existingCartIds[0]
 	} else {
 		const studentName = anyTitleText(registration) || "학생"
+		// [NEW] 표시용: 이 카트의 발송 설정이 알림톡 설정(학원) DB의 어느 행인지 한눈에 보여준다
+		// (실제 발송 동작에는 영향 없음, 위 파일 상단 주석 참고).
+		const textbookConfig = await getScheduleConfig("교재비 안내")
 		const cart = await createPage(DATA_SOURCE_TEXTBOOK_CART, {
 			[PROP_CART_TITLE]: { title: [{ text: { content: `${studentName} 교재비` } }] },
 			[PROP_CART_REGISTRATION]: { relation: [{ id: registrationId }] },
+			...(textbookConfig ? { "알림톡 설정": { relation: [{ id: textbookConfig.rowId }] } } : {}),
 		})
 		cartId = cart.id
 		cartCreated = true
