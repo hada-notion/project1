@@ -554,6 +554,9 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
               수업: { relation: [{ id: classPage.id }] },
               클래스: { relation: [{ id: classId }] },
               수업일시: { date: { start: startIso, end: endIso } },
+              // 2026-09-16 버그 수정: 시간표 -> 수업까지만 복사되던 담당강사가 출석에는
+              // 전달되지 않고 있었음. 기존 미연결 출석을 새로 연결할 때도 담당강사를 채운다.
+              ...(teacherIds.length ? { 담당강사: { relation: teacherIds.map((id) => ({ id })) } } : {}),
             })
             log.push(`[linked] ${timetableName}: existing unlinked attendance ${candidate.id} -> reg ${regId} (${nextDate})`)
           } else {
@@ -563,6 +566,8 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
               수업: { relation: [{ id: classPage.id }] },
               클래스: { relation: [{ id: classId }] },
               등록: { relation: [{ id: regId }] },
+              // 2026-09-16 버그 수정: 시간표의 담당강사를 출석 생성 시에도 함께 복사한다.
+              ...(teacherIds.length ? { 담당강사: { relation: teacherIds.map((id) => ({ id })) } } : {}),
             })
           }
 

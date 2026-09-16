@@ -39,11 +39,18 @@ export const PROP_ATTENDANCE_CLASS_DATETIME = "수업일시"
 export const PROP_ATTENDANCE_SESSION = "수업"
 export const PROP_ATTENDANCE_ACTIVITY = "학습활동"
 export const PROP_ATTENDANCE_LEARNING_RECORD = "학습기록"
+// 시간표 -> 수업(학원) DB 생성 시 이미 복사돼 있는 담당강사를, 출석 생성/연결 시에도 함께
+// 복사하기 위한 속성명 (2026-09-16 버그 수정: 이전엔 수업까지만 복사되고 출석에는 전달되지
+// 않고 있었음 — registrationSync.ts의 attachSessionsAndAttendance에서 사용).
+export const PROP_ATTENDANCE_TEACHER = "담당강사"
 
 // 수업(학원) DB 속성
 export const PROP_SESSION_REGISTRATION = "등록" // roster (여러 학생)
 export const PROP_SESSION_DATETIME = "수업일시"
 export const PROP_SESSION_TIMETABLE = "시간표"
+// 시간표에서 generate-classes가 수업 생성 시 복사해두는 담당강사 (2026-09-16 추가 —
+// registrationSync.ts가 이 값을 읽어 출석에도 다시 복사하는 데 사용).
+export const PROP_SESSION_TEACHER = "담당강사"
 // generate-classes가 이 수업 행에 딸린 출석들을 만드는 동안 true로 표시 (2026-09-11 추가).
 // 수업 행 자체는 이미 완성된 상태로 한 번에 생성되며, 출석 생성이 끝나면 자동으로 해제된다.
 // "실시간 처리 상태" 수식이 이 값과 PROP_LAST_ERROR(마지막 오류)를 조합해서 화면에 표시한다.

@@ -20,9 +20,11 @@ import {
 	PROP_ATTENDANCE_SESSION,
 	PROP_ATTENDANCE_ACTIVITY,
 	PROP_ATTENDANCE_LEARNING_RECORD,
+	PROP_ATTENDANCE_TEACHER,
 	PROP_SESSION_REGISTRATION,
 	PROP_SESSION_DATETIME,
 	PROP_SESSION_TIMETABLE,
+	PROP_SESSION_TEACHER,
 	PROP_RECORD_SESSION,
 	PROP_RECORD_REGISTRATION,
 	PROP_CLASS,
@@ -181,6 +183,11 @@ export async function attachSessionsAndAttendance(
 			if (!sessionDate?.start) return { touched: true, attendance: false, linkedRecord: false }
 			const dateOnly = String(sessionDate.start).slice(0, 10)
 
+			// 시간표 -> 수업 생성 시(generate-classes) 이미 복사돼 있는 담당강사를, 출석 생성
+			// 시에도 함께 복사한다 (2026-09-16 버그 수정: 이전엔 수업까지만 복사되고 출석에는
+			// 전달되지 않고 있었음).
+			const teacherIds = relIds(session.properties[PROP_SESSION_TEACHER])
+
 			// 이 수업(session)에 대해 이미 만들어져 있는 학습기록이 있다면, 새로 만드는 출석에 바로 연결한다.
 			const recordMatch = await queryDataSource(DS_LEARNING_RECORD, {
 				filter: {
@@ -201,6 +208,9 @@ export async function attachSessionsAndAttendance(
 				[PROP_ATTENDANCE_REGISTRATION]: { relation: [{ id: reg.id }] },
 				...(recordIds.length
 					? { [PROP_ATTENDANCE_LEARNING_RECORD]: { relation: recordIds.map((id: string) => ({ id })) } }
+					: {}),
+				...(teacherIds.length
+					? { [PROP_ATTENDANCE_TEACHER]: { relation: teacherIds.map((id: string) => ({ id })) } }
 					: {}),
 			})
 			return { touched: true, attendance: true, linkedRecord: recordIds.length > 0 }
