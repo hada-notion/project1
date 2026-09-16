@@ -9,6 +9,9 @@
 //   - "완료"/"미사용"은 이미 지난 교재라 제외 (이미 예전에 배부(청구)됐을 가능성이 높음).
 //   추가로, 이미 이 등록의 기존 교재배부에 실려 있는 정규교재는(재클릭 등으로) 중복으로 다시 담기지 않도록 별도로 거른다.
 //
+// 교재배부 1건 = 정규교재 1개 (2026-09-16 수정). 새로 담을 정규교재가 여러 개이다면, 한 번의 버튼 호출에서도
+// 교재배부 페이지를 교재당 1건씨 여러 개 만든다 (교재배부의 "정규교재" 관계는 1건만 가리쾤맀다는 가정).
+//
 // 일괄처리 방식: 개별 버튼(교재비 페이지 "진도교재 담기")과 클래스 버튼(클래스 페이지 "교재 일괄 배부")
 // 두 트리거 모두 동일한 핵심 로직(distributeForRegistration)을 공유한다. 클래스 버튼은 그 클래스의
 // 활성 등록 전체에 대해 개별 로직을 반복 호출하는 것뿐이다 (구현 중복 없이 두 방식을 함께 지원).
@@ -50,11 +53,10 @@ const PROP_CART_RUNNING = "담기 처리중"
 // 교재배부(학원) DB 속성
 const PROP_DIST_TITLE = "이름"
 const PROP_DIST_REGISTRATION = "등록" // relation -> 등록(학원) DB
-const PROP_DIST_REGULAR_BOOK = "정규교재" // relation -> 정규교재(학원) DB (단방향)
+const PROP_DIST_REGULAR_BOOK = "정규교재" // relation -> 정규교재(학원) DB (단방향, 한 교재배부당 1건만)
 const PROP_DIST_DATE = "배부일"
 // 교재비(카트) <-> 교재배부는 양방향 관계. 이 속성을 명시적으로 채워야 카트 쪽 "교재배부"에도
-// 새 배부건이 나타나고 "총 금액" 등 롤업/수식이 정상적으로 갱신된다. (버그: 이전 버전은 이 relation을
-// 설정하지 않아 배부는 생성되지만 카트에는 아무 것도 보이지 않는 문제가 있었음.)
+// 새 배부건이 나타나고 "총 금액" 등 롤업/수식이 정상적으로 갱신된다.
 const PROP_DIST_CART = "교재비" // relation -> 교재비(학원) DB
 
 // 진도교재(학원) DB 속성
@@ -80,12 +82,12 @@ const setClassStatus = makeSyncStatusSetter(PROP_CLASS_TEXTBOOK_BATCH_RUNNING, [
 	"교재 생성중",
 ])
 
-// 등록 하나에 대해: 아직 담기지 않은 "진행 중" 진도교재를 모아 교재배부 1건을 생성한다.
+// 등록 하나에 대해: 아직 담기지 않은 "진행 중" 진도교재를 모아, 교재(정규교재)당 교재배부를 개별로 생성한다.
 // 장바구니(교재비 페이지)가 없으면 이 시점에 자동으로 만든다 (하나만 존재, 사용자 설계대로).
 async function distributeForRegistration(registrationId: string): Promise<
 	| { status: "no_eligible_books" }
 	| { status: "already_billed" }
-	| { status: "distributed"; distributionPageId: string; bookCount: number; cartId: string; cartCreated: boolean }
+	| { status: "distributed"; distributionPageIds: string[]; bookCount: number; cartId: string; cartCreated: boolean }
 > {
 	const registration = await getPage(registrationId)
 	const progressBookIds = relationIds(registration, PROP_REGISTRATION_BOOKS)
@@ -129,15 +131,28 @@ async function distributeForRegistration(registrationId: string): Promise<
 		cartCreated = true
 	}
 
-	const distribution = await createPage(DATA_SOURCE_TEXTBOOK_DISTRIBUTION, {
-		[PROP_DIST_TITLE]: { title: [{ text: { content: `${todaySeoulDate()} 교재 배부` } }] },
-		[PROP_DIST_REGISTRATION]: { relation: [{ id: registrationId }] },
-		[PROP_DIST_REGULAR_BOOK]: { relation: newBookIds.map((id) => ({ id })) },
-		[PROP_DIST_DATE]: { date: { start: todaySeoulDate() } },
-		[PROP_DIST_CART]: { relation: [{ id: cartId }] },
+	// 교재배부 1건 = 정규교재 1개. 새로 담을 정규교재가 여러 개여맞이다면, 개별 교재배부 페이지를 거 수만큼 따로 만든다
+	// (이마트: 이마트 이마트 이마트) -
+	// 새로 담을 정규교재 건수만큼 모든 건 배부 1건씨 개별로 생성한다.
+	const newBookPages = await mapWithConcurrency(newBookIds, 4, (id) => getPage(id))
+	const distributions = await mapWithConcurrency(newBookIds, 3, async (bookId, idx) => {
+		const bookTitle = anyTitleText(newBookPages[idx]) || `${todaySeoulDate()} 교재 배부`
+		return await createPage(DATA_SOURCE_TEXTBOOK_DISTRIBUTION, {
+			[PROP_DIST_TITLE]: { title: [{ text: { content: bookTitle } }] },
+			[PROP_DIST_REGISTRATION]: { relation: [{ id: registrationId }] },
+			[PROP_DIST_REGULAR_BOOK]: { relation: [{ id: bookId }] },
+			[PROP_DIST_DATE]: { date: { start: todaySeoulDate() } },
+			[PROP_DIST_CART]: { relation: [{ id: cartId }] },
+		})
 	})
 
-	return { status: "distributed", distributionPageId: distribution.id, bookCount: newBookIds.length, cartId, cartCreated }
+	return {
+		status: "distributed",
+		distributionPageIds: distributions.map((d: any) => d.id),
+		bookCount: newBookIds.length,
+		cartId,
+		cartCreated,
+	}
 }
 
 // 오늘 기준으로 활성 등록인지 판정 (등록일 <= 오늘 <= 종료일, 종료일 없으면 계속 활성).
