@@ -3,10 +3,10 @@
 // 교재비 기능(로드맵 5-37) 1차 구현: 장바구니(교재비) 자동 생성 + 진도교재 일괄 담기(교재배부 생성).
 // 결제(교재배부 "결재" 버튼 → 미납/결제완료 전환)는 기존 노션 자동화를 그대로 사용하며 이 함수는 건드리지 않는다.
 //
-// 담기 대상 판정 규칙 (사용자 제안 중 "완료+진행중 제외" 방향을 채택):
-//   진도교재(학원) DB의 "진행상태"가 정확히 "다음 교재"(아직 시작 전)인 것만 담는다.
-//   - "진행 중"/"완료"는 이미 그 교재를 쓰고 있거나 다 썼다는 뜻이라, 이미 예전에 배부(구매)됐을 가능성이 높아 제외.
-//   - "미사용"도 이 학생에게 필요 없다고 확정된 상태라 제외.
+// 담기 대상 판정 규칙:
+//   진도교재(학원) DB의 "진행상태"가 정확히 "진행 중"(실제로 지금 쓰고 있는 교재)인 것만 담는다.
+//   - "다음 교재"는 아직 시작 전이며, 다음 학기에나 쓰게 될 수도 있는 "진짜 다음" 교재라 아직 청구하지 않는다.
+//   - "완료"/"미사용"은 이미 지난 교재라 제외 (이미 예전에 배부(청구)됐을 가능성이 높음).
 //   추가로, 이미 이 등록의 기존 교재배부에 실려 있는 정규교재는(재클릭 등으로) 중복으로 다시 담기지 않도록 별도로 거른다.
 //
 // 일괄처리 방식: 개별 버튼(교재비 페이지 "진도교재 담기")과 클래스 버튼(클래스 페이지 "교재 일괄 배부")
@@ -52,11 +52,15 @@ const PROP_DIST_TITLE = "이름"
 const PROP_DIST_REGISTRATION = "등록" // relation -> 등록(학원) DB
 const PROP_DIST_REGULAR_BOOK = "정규교재" // relation -> 정규교재(학원) DB (단방향)
 const PROP_DIST_DATE = "배부일"
+// 교재비(카트) <-> 교재배부는 양방향 관계. 이 속성을 명시적으로 채워야 카트 쪽 "교재배부"에도
+// 새 배부건이 나타나고 "총 금액" 등 롤업/수식이 정상적으로 갱신된다. (버그: 이전 버전은 이 relation을
+// 설정하지 않아 배부는 생성되지만 카트에는 아무 것도 보이지 않는 문제가 있었음.)
+const PROP_DIST_CART = "교재비" // relation -> 교재비(학원) DB
 
 // 진도교재(학원) DB 속성
 const PROP_PROGRESS_STATUS = "진행상태"
 const PROP_REGULAR_BOOK_ON_PROGRESS = "정규교재" // relation, limit 1
-const STATUS_NEXT = "다음 교재" // 이 상태만 "아직 담기 전"으로 간주
+const STATUS_ELIGIBLE = "진행 중" // 이 상태인 진도교재만 청구 대상으로 담는다 ("다음 교재"는 아직 청구 X)
 
 // 등록(학원) DB 속성
 const PROP_REGISTRATION_BOOKS = "진도교재" // relation -> 진도교재(학원) DB
@@ -76,7 +80,7 @@ const setClassStatus = makeSyncStatusSetter(PROP_CLASS_TEXTBOOK_BATCH_RUNNING, [
 	"교재 생성중",
 ])
 
-// 등록 하나에 대해: 아직 담기지 않은 "다음 교재" 진도교재를 모아 교재배부 1건을 생성한다.
+// 등록 하나에 대해: 아직 담기지 않은 "진행 중" 진도교재를 모아 교재배부 1건을 생성한다.
 // 장바구니(교재비 페이지)가 없으면 이 시점에 자동으로 만든다 (하나만 존재, 사용자 설계대로).
 async function distributeForRegistration(registrationId: string): Promise<
 	| { status: "no_eligible_books" }
@@ -90,7 +94,7 @@ async function distributeForRegistration(registrationId: string): Promise<
 	const progressBooks = await mapWithConcurrency(progressBookIds, 4, (id) => getPage(id))
 	const eligibleBookIds = new Set<string>()
 	for (const book of progressBooks) {
-		if (statusName(book, PROP_PROGRESS_STATUS) !== STATUS_NEXT) continue
+		if (statusName(book, PROP_PROGRESS_STATUS) !== STATUS_ELIGIBLE) continue
 		const regularBookIds = relationIds(book, PROP_REGULAR_BOOK_ON_PROGRESS)
 		if (regularBookIds.length > 0) eligibleBookIds.add(regularBookIds[0])
 	}
@@ -130,6 +134,7 @@ async function distributeForRegistration(registrationId: string): Promise<
 		[PROP_DIST_REGISTRATION]: { relation: [{ id: registrationId }] },
 		[PROP_DIST_REGULAR_BOOK]: { relation: newBookIds.map((id) => ({ id })) },
 		[PROP_DIST_DATE]: { date: { start: todaySeoulDate() } },
+		[PROP_DIST_CART]: { relation: [{ id: cartId }] },
 	})
 
 	return { status: "distributed", distributionPageId: distribution.id, bookCount: newBookIds.length, cartId, cartCreated }
