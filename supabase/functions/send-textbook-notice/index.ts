@@ -1,4 +1,4 @@
-// supabase/functions/send-textbook-notice/index.ts (v1)
+// supabase/functions/send-textbook-notice/index.ts (v2)
 // 교재비 안내 카카오 알림톡 발송. 교재비(학원) DB의 "안내문 전송" 버튼이 호출합니다.
 // send-tuition-notice와 동일한 패턴을 따른다:
 // - Notion 버튼의 "웹훅 보내기" 액션은 커스텀 HTTP 헤더를 보낼 수 없으므로,
@@ -7,14 +7,17 @@
 // - 관리자 키는 adminShared의 getCurrentAdminKey()로 확인한다.
 // - pfId/템플릿ID/발신번호는 "알림톡 설정(학원) DB"의 "교재비 안내" 행에서 조회하고,
 //   값이 없거나 비활성화된 경우에만 Secrets 기본값(Fallback)으로 대체한다.
-// - 교재비(학원) DB의 "안내문" 수식이 이미 완성된 안내 문구(미납 교재 목록 + 합계 + 계좌번호)를
-//   만들어주므로, 카카오 알림톡 템플릿은 그 전체 문구를 하나의 변수(#{안내문})로 받는 형태를 권장한다.
-//   (템플릿 승인 시 정확한 변수명은 "알림톡 설정(학원) DB"의 "교재비 안내" 행에 등록된 템플릿 ID를 따른다.)
+// - [v2, 2026-09-16] 교재비(학원) DB의 "안내문" 수식은 이제 계좌번호를 포함하지 않는다
+//   (미납 교재 목록 + 합계 + 입금 안내 문구까지만 생성). 계좌번호 등 공통 안내 문구는
+//   "알림톡 설정(학원) DB"의 "교재비 안내" 행 "안내멘트"에서 가져와 안내문 뒤에 이어붙인다
+//   (getScheduleConfig, send-tuition-notice가 수강료 안내에 쓰는 것과 동일한 헬퍼).
+//   카카오 알림톡 템플릿은 여전히 이 합쳐진 전체 문구를 하나의 변수(#{안내문})로 받는 형태를 권장한다.
 
 import {
   notionGetPage,
   createSendLogEntry,
   getAlimtalkConfig,
+  getScheduleConfig,
   getCurrentAdminKey,
   getBotUserId,
   assertValidPhone,
@@ -139,6 +142,11 @@ Deno.serve(async (req) => {
     }
 
     const notice = getFormulaText(cartPage, "안내문")
+    // [v2] 계좌번호 등 공통 안내 문구는 "알림톡 설정(학원) DB"의 "교재비 안내" 행 "안내멘트"에서 가져와
+    // 안내문 뒤에 이어붙인다 (안내멘트가 비어있으면 안내문만 사용).
+    const scheduleConfig = await getScheduleConfig("교재비 안내")
+    const accountNotice = scheduleConfig?.notice ?? ""
+    const fullNotice = accountNotice ? `${notice}\n\n${accountNotice}` : notice
     const registrationId = getRelationFirstId(cartPage, "등록")
     if (!registrationId) {
       throw new Error("교재비 페이지에 연결된 등록이 없습니다.")
@@ -162,7 +170,7 @@ Deno.serve(async (req) => {
 
     const variables: Record<string, string> = {
       "#{학생이름}": studentName,
-      "#{안내문}": notice,
+      "#{안내문}": fullNotice,
     }
 
     const sendResult = await withSendingLock(cartId, "안내문 발송중", async () => {
