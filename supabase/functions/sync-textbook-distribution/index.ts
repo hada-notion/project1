@@ -21,14 +21,21 @@
 // 처리하는 일괄 생성 경로(from-class)도 함께 제공했었다. 하지만 여러 차례(1~7차) 동시성/조회
 // 구조를 수정해도 "교재배부 처리중" 체크박스가 간헐적으로 자동 해제되지 않는 문제가 반복 재현됐고,
 // 근본 원인이 "학생 수만큼 학생별 Notion API 호출을 한 배치 실행 안에서 처리해야 하는" 구조적
-// 한계로 파악되어, 반 전체 일괄 생성/배포 기능 자체를 포기하기로 했다. 개별 학생 단위 처리
-// (교재비 페이지 "진도교재 담기" 버튼, 아래 from-cart 경로)는 이 구조적 한계에 해당하지 않아
-// 그대로 유지한다. 원장님이 학급 전체 교재비를 만들 때는 교재비에서 학생별로 하나씩 처리한다.
+// 한계로 파악되어, 반 전체 일괄 생성/배포 기능 자체를 포기했었다.
+//
+// (2026-09-17, 같은 날 재도입) 다만 반 전체 "교재비" 일괄 생성만 다시 필요해졌다. 위에서 포기한
+// from-class는 학생 1명당 진도교재 조회 + 기존 교재배부 조회 + 교재배부 페이지 생성(여러 건)까지
+// 묶어서 처리했기 때문에 학생 수에 비례해 호출 부담이 커졌던 것이 문제였다. 아래 from-class-carts는
+// 그 무거운 배부(청구) 단계를 전혀 하지 않고, 학생별로 "교재비 페이지가 없으면 1건만 생성"하는
+// 단순 작업만 반복한다 -- 학생 수만큼 늘어나는 건 맞지만 각 건이 가벼운 단일 페이지 생성 정도라 같은
+// 구조적 한계에 해당하지 않는다고 판단했다. 실제 교재 배부(청구)는 여전히 교재비 페이지의
+// "진도교재 담기" 버튼(from-cart)으로 학생별로 개별 진행한다.
 //
 // 라우트:
-//   POST /sync-textbook-distribution/from-cart   <- 교재비(학원) DB "진도교재 담기" 버튼 (학생 1명)
+//   POST /sync-textbook-distribution/from-cart         <- 교재비(학원) DB "진도교재 담기" 버튼 (학생 1명, 담기까지 수행)
+//   POST /sync-textbook-distribution/from-class-carts   <- 클래스(학원) DB "교재비 생성" 버튼 (반 전체, 교재비 페이지만 일괄 생성 - 교재 배부는 하지 않음)
 
-import { PROP_LAST_ERROR, PROP_SYNCED_AT } from "../_shared/constants.ts"
+import { PROP_LAST_ERROR, PROP_SYNCED_AT, DS_REGISTRATION, PROP_CLASS, PROP_STATUS } from "../_shared/constants.ts"
 import {
 	getPage,
 	createPage,
@@ -36,10 +43,12 @@ import {
 	relIds,
 	relationIds,
 	statusName,
+	formulaString,
 	checkboxValue,
 	anyTitleText,
 	extractPageId,
 	todaySeoulDate,
+	mapWithConcurrency,
 } from "../_shared/notionClient.ts"
 import { makeSyncStatusSetter } from "../_shared/registrationSync.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
@@ -74,13 +83,21 @@ const STATUS_ELIGIBLE = "진행 중" // 이 상태인 진도교재만 청구 대
 // 등록(학원) DB 속성
 const PROP_REGISTRATION_BOOKS = "진도교재" // relation -> 진도교재(학원) DB
 const PROP_REGISTRATION_CART = "교재비" // relation -> 교재비(학원) DB
+// 등록(학원) DB "수강상태" 수식 값 - from-class-carts가 반 전체 등록 중 이 값인 것만 대상으로 삼는다.
+const STATUS_ACTIVE = "🟢 수강 중"
 
-// 배치 작업(from-cart) 전체가 이 시간 안에 못 끝나면, 무한정 기다리게 하지 않고 곧바로
+// 클래스(학원) DB 속성
+const PROP_CLASS_CART_RUNNING = "교재비 생성중" // 이 클래스의 교재비 일괄 생성(from-class-carts)이 처리 중인지 표시 (내부용)
+
+// 배치 작업 전체가 이 시간 안에 못 끝나면, 무한정 기다리게 하지 않고 곧바로
 // "처리 시간 초과" 오류로 표시하고 락을 풀어서 바로 재클릭해서 다시 시도할 수 있게 한다.
 const BATCH_TIMEOUT_MS = 120 * 1000
 
 // 교재비 DB는 이 함수 혼자만 처리 상태를 쓰므로 otherFlagProps가 필요 없다.
 const setCartStatus = makeSyncStatusSetter(PROP_CART_RUNNING, [])
+// 클래스 DB는 수강료 생성중/보고서 생성중/교재 생성중과 "실시간 처리 상태" 수식을 공유하지만,
+// 그 수식은 체크박스들을 실시간으로 조합해서 보여주므로 여기 setter는 자기 자신만 갱신하면 된다.
+const setClassCartStatus = makeSyncStatusSetter(PROP_CLASS_CART_RUNNING, [])
 
 // 백그라운드 배치 작업이 예상 밖으로 오래 걸리면 사용자가 "처리중" 표시만 보며 무한정
 // 기다리지 않도록, 정해진 시간 안에 못 끝나면 즉시 오류 상태로 바꿔서 알려주고 락도 풀어준다
@@ -108,8 +125,34 @@ async function runWithSafetyTimeout(
 	}
 }
 
+// 등록 하나에 대해 교재비(장바구니) 페이지를 확보한다: 이미 있으면 재사용(항상 학생당 1개만 존재해야
+// 함), 없으면 이 시점에 생성한다. from-cart(진도교재 담기)와 from-class-carts(교재비 페이지만
+// 반 전체 일괄 생성 - 교재 배부는 하지 않음) 두 경로가 공통으로 쓴다.
+async function ensureCartForRegistration(
+	registrationId: string,
+	preFetchedRegistration?: any,
+): Promise<{ cartId: string; cartCreated: boolean }> {
+	const registration = preFetchedRegistration ?? (await getPage(registrationId))
+	const existingCartIds = relationIds(registration, PROP_REGISTRATION_CART)
+	if (existingCartIds.length > 0) {
+		return { cartId: existingCartIds[0], cartCreated: false }
+	}
+	const studentName = anyTitleText(registration) || "학생"
+	// [NEW] 표시용: 이 카트의 발송 설정이 알림톡 설정(학원) DB의 어느 행인지 한눈에 보여준다
+	// (실제 발송 동작에는 영향 없음, 위 파일 상단 주석 참고).
+	// getScheduleConfig에 60초 캐시가 있어서, 같은 배치 안에서 여러 학생의 신규 카트를 만들 때도
+	// 실제 Notion 조회는 한 번만 일어난다.
+	const textbookConfig = await getScheduleConfig("교재비 안내")
+	const cart = await createPage(DATA_SOURCE_TEXTBOOK_CART, {
+		[PROP_CART_TITLE]: { title: [{ text: { content: `${studentName} 교재비` } }] },
+		[PROP_CART_REGISTRATION]: { relation: [{ id: registrationId }] },
+		...(textbookConfig ? { "알림톡 설정": { relation: [{ id: textbookConfig.rowId }] } } : {}),
+	})
+	return { cartId: cart.id, cartCreated: true }
+}
+
 // 등록 하나에 대해: 아직 담기지 않은 "진행 중" 진도교재를 모아, 교재(정규교재)당 교재배부를 개별로 생성한다.
-// 장바구니(교재비 페이지)가 없으면 이 시점에 자동으로 만든다 (하나만 존재, 사용자 설계대로).
+// 장바구니(교재비 페이지)가 없으면 ensureCartForRegistration이 이 시점에 자동으로 만든다.
 // Notion API 호출은 단순 for루프로 순차 처리한다 (동시 호출을 늘리지 않는다).
 async function distributeForRegistration(
 	registrationId: string,
@@ -149,26 +192,7 @@ async function distributeForRegistration(
 	if (newBookIds.length === 0) return { status: "already_billed" }
 
 	// 장바구니(교재비 페이지) 확보: 이미 있으면 재사용(항상 학생당 1개만 존재해야 함), 없으면 이 시점에 생성.
-	const existingCartIds = relationIds(registration, PROP_REGISTRATION_CART)
-	let cartId: string
-	let cartCreated = false
-	if (existingCartIds.length > 0) {
-		cartId = existingCartIds[0]
-	} else {
-		const studentName = anyTitleText(registration) || "학생"
-		// [NEW] 표시용: 이 카트의 발송 설정이 알림톡 설정(학원) DB의 어느 행인지 한눈에 보여준다
-		// (실제 발송 동작에는 영향 없음, 위 파일 상단 주석 참고).
-		// getScheduleConfig에 60초 캐시가 있어서, 같은 배치 안에서 여러 학생의 신규 카트를 만들 때도
-		// 실제 Notion 조회는 한 번만 일어난다.
-		const textbookConfig = await getScheduleConfig("교재비 안내")
-		const cart = await createPage(DATA_SOURCE_TEXTBOOK_CART, {
-			[PROP_CART_TITLE]: { title: [{ text: { content: `${studentName} 교재비` } }] },
-			[PROP_CART_REGISTRATION]: { relation: [{ id: registrationId }] },
-			...(textbookConfig ? { "알림톡 설정": { relation: [{ id: textbookConfig.rowId }] } } : {}),
-		})
-		cartId = cart.id
-		cartCreated = true
-	}
+	const { cartId, cartCreated } = await ensureCartForRegistration(registrationId, registration)
 
 	// 교재배부 1건 = 정규교재 1개. 새로 담을 정규교재가 여러 개라면, 개별 교재배부 페이지를 그 수만큼 따로 만든다.
 	const newBookPages: any[] = []
@@ -244,6 +268,58 @@ Deno.serve(async (req: Request) => {
 					},
 					() =>
 						setCartStatus(
+							pageId,
+							"오류",
+							`처리 시간 초과 (${BATCH_TIMEOUT_MS / 1000}초 내 완료되지 않음) - 다시 시도해 주세요`,
+						),
+				),
+			)
+
+			return respondAccepted({ pageId, route })
+		} else if (route === "from-class-carts") {
+			// 클래스 페이지 자신이 클릭 대상. 이미 처리 중이면 재클릭을 무시한다.
+			const classForLock = await getPage(pageId)
+			if (checkboxValue(classForLock, PROP_CLASS_CART_RUNNING)) {
+				return new Response(JSON.stringify({ ok: true, message: "already_processing", pageId, route }), {
+					status: 200,
+					headers: { "Content-Type": "application/json" },
+				})
+			}
+			await setClassCartStatus(pageId, "처리중")
+
+			runInBackground(() =>
+				runWithSafetyTimeout(
+					"from-class-carts",
+					async () => {
+						try {
+							// 이 클래스에 연결된 등록을 전부 조회한 뒤(쿼리 응답에 수식 계산값도 포함됨),
+							// "수강상태"가 활성(🟢 수강 중)인 등록만 대상으로 삼는다. 등록 1명당 추가 조회 없이
+							// 이 한 번의 쿼리 결과로 필터링할 수 있다.
+							const registrations = await queryAllPages(DS_REGISTRATION, {
+								property: PROP_CLASS,
+								relation: { contains: pageId },
+							})
+							const activeRegistrations = registrations.filter(
+								(reg: any) => formulaString(reg, PROP_STATUS) === STATUS_ACTIVE,
+							)
+							// 교재배부(청구)는 전혀 하지 않고, 학생별로 교재비 페이지가 없으면 1건만 생성한다.
+							// 각 건이 가벼운 단일 페이지 생성이라 동시성 4 정도로 병렬 처리해도 안전하다.
+							const results = await mapWithConcurrency(activeRegistrations, 4, (reg: any) =>
+								ensureCartForRegistration(reg.id, reg),
+							)
+							const createdCount = results.filter((r) => r.cartCreated).length
+							await setClassCartStatus(pageId, "완료")
+							console.log("[sync-textbook-distribution] (background) from-class-carts finished:", pageId, {
+								activeCount: activeRegistrations.length,
+								createdCount,
+							})
+						} catch (err) {
+							console.error("[sync-textbook-distribution] (background) from-class-carts ERROR:", err)
+							await setClassCartStatus(pageId, "오류", (err as Error)?.message ?? String(err))
+						}
+					},
+					() =>
+						setClassCartStatus(
 							pageId,
 							"오류",
 							`처리 시간 초과 (${BATCH_TIMEOUT_MS / 1000}초 내 완료되지 않음) - 다시 시도해 주세요`,
