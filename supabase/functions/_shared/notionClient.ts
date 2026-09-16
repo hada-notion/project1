@@ -187,14 +187,19 @@ export function checkboxValue(page: any, propName: string): boolean {
 // 네트워크 예외(fetch 자체가 throw하는 경우 등)는 재시도 없이 곧바로 실패한다. 이 쓰기 하나가 바로
 // 체크박스를 다시 꺼주는 마지막 단계이므로, 여기서만이라도 별도로 몇 번 더 재시도하고, 그래도 안
 // 되면 반드시 로그를 남긴다 (예전에는 catch{}로 완전히 조용히 무시해서 실패 사실 자체를 알 수
-// 없었다 -- "교재 일괄 배부"가 실제 처리는 다 끝내고 로그에 finished까지 찍혔는데도 체크박스만
+// 없었다 -- "교재 일괄 배부"가 실제 처리는 다 끝내고 로그에도 finished까지 찍혔는데도 체크박스만
 // 영원히 켜져 있던 사례가 바로 이 경로였다).
+// [2026-09-17, 7차 수정] 6차 수정(재시도 3회, 최대 1.6초 대기) 이후에도 이 마지막 쓰기 3번이 모두
+// 실패해서 체크박스가 계속 켜진 채로 남는 사례가 다시 나왔다. 재시도 횟수를 5회로 늘리고 대기
+// 시간도 1초 단위로 늘려서, 일시적인 네트워크 문제가 조금 더 오래 가도 견딜 수 있게 한다 (그래도
+// 다 실패하는 극단적인 경우를 위해, sync-textbook-distribution의 from-class 핸들러에도 재클릭 시
+// 실제 데이터로 완료 여부를 다시 계산하는 별도의 자가 복구를 추가했다).
 async function updateStatusWithRetry(
 	pageId: string,
 	properties: Record<string, unknown>,
 	phase: "start" | "success" | "error",
 ): Promise<void> {
-	const maxAttempts = 3
+	const maxAttempts = 5
 	let lastErr: unknown
 	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 		try {
@@ -203,7 +208,7 @@ async function updateStatusWithRetry(
 		} catch (err) {
 			lastErr = err
 			if (attempt < maxAttempts) {
-				await new Promise((resolve) => setTimeout(resolve, 800 * attempt))
+				await new Promise((resolve) => setTimeout(resolve, 1000 * attempt))
 			}
 		}
 	}
