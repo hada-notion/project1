@@ -109,9 +109,11 @@ export const ALL_SYNC_RUNNING_FLAGS = [
 
 // ---------- 성적관리(시험범위/성적/시험/학생) ----------
 // sync-exam-scope, sync-exam-score 두 함수가 공통으로 참조한다 (로드맵 4-5, 2026-09-16).
-// 노션 수식이던 "응시학생 현황"·"시험일"(시험범위 DB), "백분률"(성적 DB)을 여기서
-// 계산해 plain 속성에 기록한다. 학생 DB의 레거시 "성적 생성" 체크박스·"시험범위(변수)" 관계형은
-// 함께 제거했다 (더 이상 어떤 자동화도 그 값을 읽지 않는다).
+// 노션 수식이던 "응시학생 현황"·"시험일"(시험범위 DB), "백분률"(성적 DB)을 웹앱에서 계산해
+// plain 속성에 기록하는 것으로 한때 바꿨었지만, "응시학생 현황"은 정확한 속성명을 쓰는 노션
+// 수식으로 같은 날 다시 전환했다 — 이제 이 함수들은 "시험일"·"백분률"만 계산해 기록한다.
+// 학생 DB의 레거시 "성적 생성" 체크박스·"시험범위(변수)" 관계형은 함께 제거했다
+// (더 이상 어떤 자동화도 그 값을 읽지 않는다).
 // "시험구분"(성적 DB)은 실사용 판단 결과 불필요해 제거함 (2026-09-16).
 export const DS_EXAM_SCOPE = "3bdba040-586b-807a-91bd-000b5b4f2d98" // 시험범위(학원) DB
 export const DS_GRADE = "3bdba040-586b-8006-9f62-000b39d855cc" // 성적(학원) DB
@@ -121,10 +123,8 @@ export const DS_STUDENT = "bdeba040-586b-827d-8ef6-871aff52cce9" // 학생(학�
 export const PROP_SCOPE_TITLE = "이름"
 export const PROP_SCOPE_GRADE_LEVEL = "학년" // relation, limit 1
 export const PROP_SCOPE_SCHOOL = "학교" // relation, limit 1 (비어있으면 학년 전체가 대상)
-export const PROP_SCOPE_GRADES = "성적" // relation → 성적 DB
 export const PROP_SCOPE_EXAM_SCHEDULE = "시험일정" // relation → 학원일정 DB
 export const PROP_SCOPE_EXAM_DATE = "시험일" // date — 웹앱이 계산해 기록 (2026-09-16 수식→plain 전환)
-export const PROP_SCOPE_ATTENDANCE_STATUS = "응시학생 현황" // text — 웹앱이 계산해 기록 (2026-09-16 수식→plain 전환)
 export const PROP_SCOPE_RUNNING = "처리중"
 export const PROP_SCOPE_LAST_ERROR = "마지막 오류"
 export const PROP_SCOPE_SYNCED_AT = "마지막 동기화"

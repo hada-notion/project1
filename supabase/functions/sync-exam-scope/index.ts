@@ -2,13 +2,14 @@
 //
 // 시험범위(학원) DB의 "응시학생 등록"·"시험일정 추가" 두 버튼이 공통으로 호출한다.
 // 노션 수식이던 "응시학생 현황"이 학생 DB에 없는 "상태"/"수강중" 값을 참조하고 있던 버그를
-// 계기로, 응시학생 현황과 시험일 계산을 모두 이 함수로 옮겼다 (로드맵 4-5, 2026-09-16).
+// 계기로, 응시학생 현황과 시험일 계산을 모두 이 함수로 옮겼었다 (로드맵 4-5, 2026-09-16).
+// 같은 날, "응시학생 현황"은 정확한 속성명("등록상태" == "🟢 등록 중")을 쓰는 노션 수식으로
+// 다시 전환했다 — 이제 이 함수는 시험일만 계산해 기록한다.
 //
 //   1. (응시 대상 학생 찾기) 시험범위와 같은 학년이면서, 학교가 지정돼 있으면 같은 학교인
 //      "등록상태 = 🟢 등록 중" 학생 중 아직 이 시험범위에 성적 행이 없는 학생을 찾아 성적 행을
 //      만든다. 이미 성적 행이 있는 학생은 건드리지 않는다 (점수 등 기존 입력값 보존).
-//   2. (응시학생 현황 재계산) "N명 응시 (총 M명 중 …)" 형태의 텍스트를 다시 계산해 기록한다.
-//   3. (시험일 재계산) 연결된 시험일정들의 날짜 중 가장 이른 날짜를 시험일로 기록한다.
+//   2. (시험일 재계산) 연결된 시험일정들의 날짜 중 가장 이른 날짜를 시험일로 기록한다.
 //
 // 호출 방식: body에 { pageId: "시험범위 페이지 id" } 를 담아 호출 ("응시학생 등록"/"시험일정 추가" 버튼용).
 
@@ -18,10 +19,8 @@ import {
 	PROP_SCOPE_TITLE,
 	PROP_SCOPE_GRADE_LEVEL,
 	PROP_SCOPE_SCHOOL,
-	PROP_SCOPE_GRADES,
 	PROP_SCOPE_EXAM_SCHEDULE,
 	PROP_SCOPE_EXAM_DATE,
-	PROP_SCOPE_ATTENDANCE_STATUS,
 	PROP_SCOPE_RUNNING,
 	PROP_SCOPE_LAST_ERROR,
 	PROP_SCOPE_SYNCED_AT,
@@ -98,10 +97,8 @@ async function processExamScope(pageId: string, log: string[]) {
 	const schoolId = schoolIds[0] ?? null
 
 	// 1) 응시 대상 학생을 찾아 아직 없는 성적 행을 만든다.
-	let candidateCount = 0
 	if (gradeId) {
 		const candidates = await findEligibleStudents(gradeId, schoolId)
-		candidateCount = candidates.length
 
 		const existingGrades = await queryAllPages(DS_GRADE, {
 			property: PROP_GRADE_SCOPE,
@@ -136,19 +133,9 @@ async function processExamScope(pageId: string, log: string[]) {
 		log.push(`⏭️ [${scopeName}] 학년이 비어있어 응시학생 등록을 건너뜀`)
 	}
 
-	// 2) 응시학생 현황 재계산 (방금 만든 행 포함, 최신 상태 다시 조회)
+	// 2) 시험일 재계산 (연결된 시험일정 중 가장 이른 날짜)
+	// "응시학생 현황"은 다시 노션 수식으로 전환되어(2026-09-16) 이 함수가 계산하지 않는다.
 	const refreshedScope = await getPage(pageId)
-	const attendedCount = relIds(refreshedScope.properties[PROP_SCOPE_GRADES]).length
-	let status: string
-	if (attendedCount === 0) status = "응시자 없음"
-	else if (candidateCount === 0) status = `${attendedCount}명 응시`
-	else if (attendedCount < candidateCount)
-		status = `${attendedCount}명 응시 (총 ${candidateCount}명 중 ${candidateCount - attendedCount}명 누락 ⚠️)`
-	else if (attendedCount > candidateCount)
-		status = `${attendedCount}명 응시 (재원생 ${candidateCount}명보다 많음 ⚠️)`
-	else status = `${attendedCount}명 응시 (전원 응시 완료 ✅)`
-
-	// 3) 시험일 재계산 (연결된 시험일정 중 가장 이른 날짜)
 	const scheduleIds = relIds(refreshedScope.properties[PROP_SCOPE_EXAM_SCHEDULE])
 	let earliestDate: string | null = null
 	for (const id of scheduleIds) {
@@ -158,10 +145,9 @@ async function processExamScope(pageId: string, log: string[]) {
 	}
 
 	await updatePageProperties(pageId, {
-		[PROP_SCOPE_ATTENDANCE_STATUS]: { rich_text: [{ text: { content: status } }] },
 		[PROP_SCOPE_EXAM_DATE]: earliestDate ? { date: { start: earliestDate } } : { date: null },
 	})
-	log.push(`📊 [${scopeName}] 응시학생 현황="${status}", 시험일=${earliestDate ?? "(없음)"}`)
+	log.push(`📊 [${scopeName}] 시험일=${earliestDate ?? "(없음)"}`)
 }
 
 Deno.serve(async (req: Request) => {
