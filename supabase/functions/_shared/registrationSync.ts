@@ -46,13 +46,19 @@ import {
 // 함수를 만들어주는 헬퍼로 대신한다. (각 호출부는 기존 otherFlagProps 목록과 동일하게 그대로
 // 넘겨서 기존 동작을 100% 보존한다 — sync-registration-textbook의 PROP_SYNC_ENROLL_RUNNING
 // 누락도 그대로 포함.)
-export function makeSyncStatusSetter(selfFlagProp: string, otherFlagProps: string[]) {
+//
+// [NEW, 2026-09-17] startedAtProp: 선택적으로 넘기면 "처리중"이 시작된 시각을 함께 기록한다.
+// 호출부가 나중에 이 시각을 확인해서, 락이 너무 오래(예: 10분 이상) 켜져 있으면 "이전 실행이
+// 응답 없이 멈춘 것"으로 보고 무시할 수 있게 하기 위함이다 (교재 일괄 배부 재클릭 시 무한 멈춤
+// 자동 복구 목적). 넘기지 않으면 기존과 100% 동일하게 동작한다.
+export function makeSyncStatusSetter(selfFlagProp: string, otherFlagProps: string[], startedAtProp?: string) {
 	return async function setSyncStatus(pageId: string, status: "처리중" | "완료" | "오류", errorMessage?: string) {
 		await setCombinedSyncStatus(pageId, {
 			selfFlagProp,
 			otherFlagProps,
 			errorProp: PROP_LAST_ERROR,
 			syncedAtProp: PROP_SYNCED_AT,
+			startedAtProp,
 			phase: status === "처리중" ? "start" : status === "완료" ? "success" : "error",
 			errorMessage,
 		})

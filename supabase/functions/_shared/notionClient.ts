@@ -186,7 +186,7 @@ export function checkboxValue(page: any, propName: string): boolean {
 // 등록 페이지의 "동기화 상태"(사용자에게 보이는 select)를, 시간표/교재 두 Edge Function이 각각
 // 처리 중인지 표시하는 체크박스 두 개를 조합해서 계산한다. 서로 독립적인 두 함수가 동시에 실행돼도
 // (예: 같은 웹훅 자동화가 두 함수를 모두 호출하는 경우) 한쪽이 끝났다고 바로 "완료"로 표시하지 않고,
-// 다른 쪽이 아직 처리 중이면 "처리 중"을 유지한다. 상태 표시 실패는 본 로직에 영향 없도록 ��용히 무시한다.
+// 다른 쪽이 아직 처리 중이면 "처리 중"을 유지한다. 상태 표시 실패는 본 로직에 영향 없도록 조용히 무시한다.
 export async function setCombinedSyncStatus(
 	pageId: string,
 	args: {
@@ -198,6 +198,9 @@ export async function setCombinedSyncStatus(
 		// "마지막 오류" 텍스트 속성 이름. 실패 시 에러 메시지를 쓰고, 성공 시 비운다.
 		errorProp: string
 		syncedAtProp?: string
+		// [NEW, 2026-09-17] 넘기면 "처리중" 시작 시각을 이 날짜 속성에 기록한다 (무한 멈춤 자동
+		// 복구용, makeSyncStatusSetter 주석 참고).
+		startedAtProp?: string
 		phase: "start" | "success" | "error"
 		errorMessage?: string
 	},
@@ -209,6 +212,7 @@ export async function setCombinedSyncStatus(
 			await updatePageProperties(pageId, {
 				[args.selfFlagProp]: { checkbox: true },
 				[args.errorProp]: { rich_text: [] },
+				...(args.startedAtProp ? { [args.startedAtProp]: { date: { start: new Date().toISOString() } } } : {}),
 			})
 			return
 		}
@@ -246,7 +250,7 @@ export async function addRelation(pageId: string, propName: string, addIds: stri
 // ---------- 웹훅 body에서 페이지 ID 추출 ----------
 //
 // 문자열 "끝"에서만 UUID를 추출한다. Notion 페이지 URL은 항상 맨 끝에 페이지 ID가 붙기 때문에,
-// 문자열 중간 어디서든 찾는 방식은 한글 제목 슬러그(예: "고1A반-...")의 hex처��� 보이는 글자(1,A 등)가
+// 문자열 중간 어디서든 찾는 방식은 한글 제목 슬러그(예: "고1A반-...")의 hex처럼 보이는 글자(1,A 등)가
 // 실제 ID 바로 앞에 붙어 있을 때 ID가 밀려서 잘못 잘리는 버그가 있었다 (2026-09-09, sync-registration-textbook에서 실제 발생 확인).
 export function idFromString(v: string): string | null {
 	const cleaned = v.split("?")[0].replace(/\/$/, "")

@@ -12,6 +12,9 @@
 // - [v3, 2026-09-16] send-report와 100% 중복이던 헬퍼(getFormulaText/getDateRange/getRelationFirstId/
 //   normalizePhone/발송중 락 처리)를 _shared/alimtalkShared.ts로 옮기고 이 파일에서는 가져다 씁니다
 //   (로드맵 5-9 공용 모듈화 후속). 동작은 이전과 동일합니다.
+// - [v4, 2026-09-17] "안내멘트"는 수강료(학원) DB에 존재하지도 않는 롤업(getRollupText(tuitionPage,
+//   "안내멘트"))을 읽으려고 해서 항상 빈 값이 나가던 버그를 수정. 이제 getAlimtalkConfig()가 돌려주는
+//   "알림톡 설정(학원) DB"의 "수강료 안내" 행 안내멘트를 그대로 사용한다 (adminShared.ts 참고).
 
 import {
   notionGetPage,
@@ -139,7 +142,6 @@ Deno.serve(async (req) => {
     const periodDisplay = getFormulaText(tuitionPage, "청구기간(표시)")
     const amountDisplay = getFormulaText(tuitionPage, "청구금액(표시)")
     const billingMonth = getFormulaText(tuitionPage, "청구년월(보고서)")
-    const notice = getRollupText(tuitionPage, "안내멘트")
     const registrationId = getRelationFirstId(tuitionPage, "등록")
 
     const clickerUserId =
@@ -153,6 +155,9 @@ Deno.serve(async (req) => {
       templateId: SOLAPI_TEMPLATE_ID_TUITION_FALLBACK,
       senderNumber: SOLAPI_SENDER_NUMBER_FALLBACK,
     })
+    // [FIX, 2026-09-17] "안내멘트"는 수강료(학원) DB에 없는 롤업이 아니라, "알림톡 설정(학원) DB"의
+    // "수강료 안내" 행 안내멘트를 그대로 쓴다 (예전 getRollupText(tuitionPage, "안내멘트")는 항상 빈 값이었음).
+    const notice = config.notice
 
     const variables: Record<string, string> = {
       "#{청구년월}": billingMonth,

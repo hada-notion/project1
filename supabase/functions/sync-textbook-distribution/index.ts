@@ -21,6 +21,12 @@
 // 실제 발송 동작에는 영향이 없다 -- Notion 화면에서 이 카트가 어떤 발송 설정과 연결되는지
 // 직관적으로 보이도록 하기 위한 것뿐이다 (조회 실패 시 조용히 건너뜀).
 //
+// (2026-09-17) from-class 락("교재배부 처리중")이 백그라운드 처리 중 Edge Function 런타임이
+// 죽거나 타임아웃되면 영원히 true로 남아, 재클릭해도 매번 already_processing만 리턴하고 절대
+// 재실행되지 않는 문제가 있었다. "교재배부 시작 시각"을 함께 기록해서, 락이 켜진 지 10분이 넘었으면
+// 멈춘 것으로 보고 재클릭 시 자동으로 새로 시작하도록 고쳤다 (from-cart/개별 버튼은 이번엔 범위에서
+// 제외 -- 필요하면 동일한 방식으로 확장 가능).
+//
 // 라우트:
 //   POST /sync-textbook-distribution/from-cart   <- 교재비(학원) DB "진도교재 담기" 버튼 (학생 1명)
 //   POST /sync-textbook-distribution/from-class  <- 클래스(학원) DB "교재 일괄 배부" 버튼 (반 전체 활성 등록)
@@ -77,16 +83,23 @@ const PROP_REGISTRATION_CART = "교재비" // relation -> 교재비(학원) DB
 // 클래스(학원) DB 속성
 const PROP_CLASS_REGISTRATION = "등록" // relation -> 등록(학원) DB
 const PROP_CLASS_TEXTBOOK_BATCH_RUNNING = "교재배부 처리중"
+// [NEW, 2026-09-17] "교재배부 처리중"이 언제 true로 켜졌는지 기록. from-class 재클릭 시 이 시각을
+// 보고 너무 오래(STALE_TEXTBOOK_BATCH_LOCK_MS 이상) 지났으면 이전 실행이 응답 없이 멈춘 것으로 보고
+// 락을 무시하고 새로 시작한다.
+const PROP_CLASS_TEXTBOOK_BATCH_STARTED_AT = "교재배부 시작 시각"
+// 이 시간보다 오래 "처리중"이 켜져 있으면 멈춘 것으로 간주한다. 반 하나(15명 내외) 배부는 보통 수십
+// 초 내에 끝나므로 10분이면 정상 실행을 오탐지하지 않으면서도 충분히 여유 있는 기준이다.
+const STALE_TEXTBOOK_BATCH_LOCK_MS = 10 * 60 * 1000
 
 // 교재비 DB는 이 함수 혼자만 처리 상태를 쓰므로 otherFlagProps가 필요 없다.
 const setCartStatus = makeSyncStatusSetter(PROP_CART_RUNNING, [])
 // 클래스 DB는 수강료/보고서/교재 생성과 "실시간 처리 상태"를 공유하므로, 다른 3개 플래그를 함께 넘겨서
 // "하나라도 처리중이면 전체를 처리중으로" 판단하는 기존 조합 방식을 그대로 따른다.
-const setClassStatus = makeSyncStatusSetter(PROP_CLASS_TEXTBOOK_BATCH_RUNNING, [
-	"수강료 생성중",
-	"보고서 생성중",
-	"교재 생성중",
-])
+const setClassStatus = makeSyncStatusSetter(
+	PROP_CLASS_TEXTBOOK_BATCH_RUNNING,
+	["수강료 생성중", "보고서 생성중", "교재 생성중"],
+	PROP_CLASS_TEXTBOOK_BATCH_STARTED_AT,
+)
 
 // 등록 하나에 대해: 아직 담기지 않은 "진행 중" 진도교재를 모아, 교재(정규교재)당 교재배부를 개별로 생성한다.
 // 장바구니(교재비 페이지)가 없으면 이 시점에 자동으로 만든다 (하나만 존재, 사용자 설계대로).
@@ -219,9 +232,14 @@ Deno.serve(async (req: Request) => {
 
 			return respondAccepted({ pageId, route })
 		} else if (route === "from-class") {
-			// 클래스 페이지 자신이 클릭 대상. 이미 처리 중이면 재클릭을 무시한다.
+			// 클래스 페이지 자신이 클릭 대상. 이미 처리 중이면 재클릭을 무시하되, 처리 시작 시각이
+			// STALE_TEXTBOOK_BATCH_LOCK_MS보다 오래됐다면 이전 실행이 응답 없이 멈춘 것으로 보고
+			// 락을 무시하고 새로 시작한다 (2026-09-17 fix: 재클릭해도 안 풀리던 무한 멈춤 자동 복구).
 			const classForLock = await getPage(pageId)
-			if (checkboxValue(classForLock, PROP_CLASS_TEXTBOOK_BATCH_RUNNING)) {
+			const isBatchRunning = checkboxValue(classForLock, PROP_CLASS_TEXTBOOK_BATCH_RUNNING)
+			const batchStartedAt = dateStart(classForLock, PROP_CLASS_TEXTBOOK_BATCH_STARTED_AT)
+			const lockAgeMs = batchStartedAt ? Date.now() - new Date(batchStartedAt).getTime() : Infinity
+			if (isBatchRunning && lockAgeMs < STALE_TEXTBOOK_BATCH_LOCK_MS) {
 				return new Response(JSON.stringify({ ok: true, message: "already_processing", pageId, route }), {
 					status: 200,
 					headers: { "Content-Type": "application/json" },
