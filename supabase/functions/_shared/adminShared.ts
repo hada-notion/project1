@@ -25,9 +25,18 @@ export async function getAlimtalkConfig(
   fallback: { pfId: string; templateId: string; senderNumber: string },
 ): Promise<AlimtalkConfig> {
   const cached = alimtalkConfigCache.get(category)
-  if (cached && cached.expiresAt > Date.now()) return cached.value
+  if (cached && cached.expiresAt > Date.now()) {
+    // [DEBUG, 2026-09-17] 안내멘트 누락 원인 추적용 임시 로그. 원인 파악 후 제거 예정.
+    console.log(
+      `[getAlimtalkConfig][${category}] cache hit, noticeLength=${cached.value.notice.length}, noticePreview=${JSON.stringify(cached.value.notice.slice(0, 15))}`,
+    )
+    return cached.value
+  }
 
-  if (!ALIMTALK_CONFIG_DB_ID) return { ...fallback, notice: "" }
+  if (!ALIMTALK_CONFIG_DB_ID) {
+    console.warn(`[getAlimtalkConfig][${category}] ALIMTALK_CONFIG_DB_ID env var가 비어있어 fallback 사용`)
+    return { ...fallback, notice: "" }
+  }
 
   try {
     const json = await notionQueryDatabase(ALIMTALK_CONFIG_DB_ID, {
@@ -38,10 +47,18 @@ export async function getAlimtalkConfig(
       page_size: 1,
     })
     const page = json.results?.[0]
-    if (!page) return { ...fallback, notice: "" }
+    if (!page) {
+      console.warn(
+        `[getAlimtalkConfig][${category}] ALIMTALK_CONFIG_DB_ID=${ALIMTALK_CONFIG_DB_ID}에서 일치하는 행을 못 찾음`,
+      )
+      return { ...fallback, notice: "" }
+    }
 
     const active = page.properties?.["활성 여부"]?.checkbox
-    if (active === false) return { ...fallback, notice: "" }
+    if (active === false) {
+      console.warn(`[getAlimtalkConfig][${category}] 해당 행의 활성 여부가 꺼져있어 fallback 사용 (pageId=${page.id})`)
+      return { ...fallback, notice: "" }
+    }
 
     const getText = (name: string) =>
       (page.properties?.[name]?.rich_text ?? []).map((t: any) => t.plain_text).join("").trim()
@@ -54,10 +71,15 @@ export async function getAlimtalkConfig(
       notice: getText("안내멘트"),
     }
 
+    // [DEBUG, 2026-09-17] 안내멘트 누락 원인 추적용 임시 로그. 원인 파악 후 제거 예정.
+    console.log(
+      `[getAlimtalkConfig][${category}] Notion 조회 성공, pageId=${page.id}, noticeLength=${config.notice.length}, noticePreview=${JSON.stringify(config.notice.slice(0, 15))}`,
+    )
+
     alimtalkConfigCache.set(category, { value: config, expiresAt: Date.now() + ALIMTALK_CONFIG_CACHE_MS })
     return config
   } catch (e) {
-    console.error("getAlimtalkConfig 실패, Secrets 기본값 사용:", e)
+    console.error(`[getAlimtalkConfig][${category}] 조회 실패, Secrets 기본값 사용:`, e)
     return { ...fallback, notice: "" }
   }
 }

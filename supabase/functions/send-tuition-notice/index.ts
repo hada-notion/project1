@@ -15,6 +15,8 @@
 // - [v4, 2026-09-17] "안내멘트"는 수강료(학원) DB에 존재하지도 않는 롤업(getRollupText(tuitionPage,
 //   "안내멘트"))을 읽으려고 해서 항상 빈 값이 나가던 버그를 수정. 이제 getAlimtalkConfig()가 돌려주는
 //   "알림톡 설정(학원) DB"의 "수강료 안내" 행 안내멘트를 그대로 사용한다 (adminShared.ts 참고).
+// - [v5, 2026-09-17] 안내멘트가 여전히 발송 메시지에 안 보인다는 리포트로 원인 추적용 임시 디버그
+//   로그 추가 (실제로 solapi에 보내는 variables 전체와 notice 길이를 로그로 남김). 기능 변경 없음.
 
 import {
   notionGetPage,
@@ -167,6 +169,11 @@ Deno.serve(async (req) => {
       "#{청구금액}": amountDisplay,
       "#{안내멘트}": notice,
     }
+
+    // [DEBUG, 2026-09-17] 안내멘트 누락 원인 추적용 임시 로그. 원인 파악 후 제거 예정.
+    console.log(
+      `[send-tuition-notice][debug] tuitionId=${tuitionId}, noticeLength=${notice.length}, templateId=${config.templateId}, pfId=${config.pfId}, variables=${JSON.stringify(variables)}`,
+    )
 
     const sendResult = await withSendingLock(tuitionId, "발송중", async () => {
       try {
