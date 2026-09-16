@@ -174,7 +174,8 @@ export function generateToken(): string {
 
 // "전송로그(학원) DB"에 알림톡 발송 결과 한 건을 기록합니다.
 // [NEW] "출석"(relation) / "발송자"(person)를 채워서, 출석 DB의 "전송 완료" 수식이 자동 계산하도록 합니다.
-export type SendLogCategory = "일일 보고서" | "주간 보고서" | "월간 보고서" | "수강료 안내"
+// [NEW, 2026-09-16] "교재비 안내"(send-textbook-notice) 카테고리 추가.
+export type SendLogCategory = "일일 보고서" | "주간 보고서" | "월간 보고서" | "수강료 안내" | "교재비 안내"
 export type SendLogStatus = "성공" | "실패"
 
 function formatSendLogDate(periodStart?: string): string {
@@ -268,7 +269,7 @@ const alimtalkConfigCache = new Map<string, { value: AlimtalkConfig; expiresAt: 
 const ALIMTALK_CONFIG_CACHE_MS = 5 * 60 * 1000
 
 // [NEW] 주간/월간 보고서는 카카오 템플릿이 하나로 통합되어 있어서, "알림톡 설정(학원) DB"에서는 "보고서" 하나의 행으로 조회합니다.
-// 전송로그의 "발송 구분"(일일/주간/월간/수강료)은 이와 별개로 그대로 유지됩니다.
+// 전송로그의 "발송 구분"(일일/주간/월간/수강료/교재비)은 이와 별개로 그대로 유지됩니다.
 export type AlimtalkConfigCategory = SendLogCategory | "보고서"
 
 // [NEW] 자동 스케줄(run-auto-schedule)이 읽는 생성/발송 스케줄 설정.
