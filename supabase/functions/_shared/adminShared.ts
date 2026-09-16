@@ -13,6 +13,10 @@
 // 삭제해버렸다. 그 결과 generate-tuition 등에서 deno check가 실패해서, 그 이후의 모든 배포가
 // type-check 단계에서 막혀 실제로는 한 번도 배포되지 않았다 (안내멘트 수정 자체도 포함).
 // 이번 수정은 027a8ce 이전 버전 전체를 복원하고, notice 필드/디버그 로그만 그대로 유지한다.
+// [FIX, 2026-09-17 #2] 복원 기준이었던 eee8078 버전에는 027a8ce 이전의 또 다른 커밋(cb036ee,
+// "전송로그 발송 구분에 교재비 안내 카테고리 추가")이 반영되어 있지 않아서 SendLogCategory에
+// "교재비 안내"가 빠져 있었다. send-textbook-notice가 이 카테고리로 로그를 남기려다 타입체크가
+// 또 실패했음 -- 아래에 다시 추가한다.
 
 import { fetchWithRetry } from "./notionClient.ts"
 
@@ -187,7 +191,7 @@ export function generateToken(): string {
 
 // "전송로그(학원) DB"에 알림톡 발송 결과 한 건을 기록합니다.
 // [NEW] "출석"(relation) / "발송자"(person)를 채워서, 출석 DB의 "전송 완료" 수식이 자동 계산하도록 합니다.
-export type SendLogCategory = "일일 보고서" | "주간 보고서" | "월간 보고서" | "수강료 안내"
+export type SendLogCategory = "일일 보고서" | "주간 보고서" | "월간 보고서" | "수강료 안내" | "교재비 안내"
 export type SendLogStatus = "성공" | "실패"
 
 function formatSendLogDate(periodStart?: string): string {
