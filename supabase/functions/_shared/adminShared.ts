@@ -1,5 +1,13 @@
 // 이 파일은 새로 작성하는 5개 어드민 함수가 공통으로 쓰는 헬퍼입니다.
 // reportShared.ts(학부모용 리포트 읽기 전용)와 별도로 분리해서 관리 입닥점을 명확하게 합니다.
+//
+// (2026-09-16, 로드맵 5-9) 노션 API 호출은 이제 notionClient.ts의 fetchWithRetry를 그대로 가져다
+// 쓴다. 예전에는 이 파일이 순수 fetch만 써서 429(레이트리밋)/5xx를 만나면 바로 실패했는데,
+// notionClient.ts 계열 함수들(cascade-delete/generate-classes/sync-registration-* 등)은 이미
+// 자동 재시도가 되고 있어 두 계보의 안정성이 달랐다. 함수 시그니처/동작은 그대로 유지하고
+// (정상 응답 시 차이 없음) 재시도 로직만 공유하도록 바꾼다 (기능 변경 없음).
+
+import { fetchWithRetry } from "./notionClient.ts"
 
 const NOTION_TOKEN = Deno.env.get("NOTION_TOKEN")!
 const REGISTRATION_DB_ID = Deno.env.get("NOTION_REGISTRATION_DB_ID")!
@@ -74,7 +82,7 @@ let cachedBotUserId: string | null = null
 export async function getBotUserId(): Promise<string | null> {
   if (cachedBotUserId) return cachedBotUserId
   try {
-    const res = await fetch(NOTION_API_BASE + "/users/me", { headers: notionHeaders() })
+    const res = await fetchWithRetry(NOTION_API_BASE + "/users/me", { headers: notionHeaders() })
     if (!res.ok) {
       console.error("getBotUserId 실패:", res.status, await res.text())
       return null
@@ -92,7 +100,7 @@ export async function getBotUserId(): Promise<string | null> {
 }
 
 export async function notionQueryDatabase(databaseId: string, body: Record<string, unknown>): Promise<any> {
-  const res = await fetch(NOTION_API_BASE + "/databases/" + databaseId + "/query", {
+  const res = await fetchWithRetry(NOTION_API_BASE + "/databases/" + databaseId + "/query", {
     method: "POST",
     headers: notionHeaders(),
     body: JSON.stringify(body),
@@ -116,13 +124,13 @@ export async function notionQueryDatabaseAll(databaseId: string, body: Record<st
 }
 
 export async function notionGetPage(pageId: string): Promise<any> {
-  const res = await fetch(NOTION_API_BASE + "/pages/" + pageId, { headers: notionHeaders() })
+  const res = await fetchWithRetry(NOTION_API_BASE + "/pages/" + pageId, { headers: notionHeaders() })
   if (!res.ok) throw new Error("Notion page fetch failed: " + res.status + " " + (await res.text()))
   return res.json()
 }
 
 export async function notionPatchPageProperties(pageId: string, properties: Record<string, unknown>): Promise<any> {
-  const res = await fetch(NOTION_API_BASE + "/pages/" + pageId, {
+  const res = await fetchWithRetry(NOTION_API_BASE + "/pages/" + pageId, {
     method: "PATCH",
     headers: notionHeaders(),
     body: JSON.stringify({ properties }),
@@ -132,7 +140,7 @@ export async function notionPatchPageProperties(pageId: string, properties: Reco
 }
 
 export async function notionGetDatabase(databaseId: string): Promise<any> {
-  const res = await fetch(NOTION_API_BASE + "/databases/" + databaseId, { headers: notionHeaders() })
+  const res = await fetchWithRetry(NOTION_API_BASE + "/databases/" + databaseId, { headers: notionHeaders() })
   if (!res.ok) throw new Error("Notion database fetch failed: " + res.status + " " + (await res.text()))
   return res.json()
 }
@@ -231,7 +239,7 @@ export async function createSendLogEntry(args: {
       properties["실패 사유"] = { rich_text: [{ text: { content: String(args.failReason).slice(0, 1900) } }] }
     }
 
-    const res = await fetch(NOTION_API_BASE + "/pages", {
+    const res = await fetchWithRetry(NOTION_API_BASE + "/pages", {
       method: "POST",
       headers: notionHeaders(),
       body: JSON.stringify({
