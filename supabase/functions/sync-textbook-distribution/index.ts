@@ -110,8 +110,6 @@ async function distributeForRegistration(registrationId: string): Promise<
 	if (newBookIds.length === 0) return { status: "already_billed" }
 
 	// 장바구니(교재비 페이지) 확보: 이미 있으면 재사용(항상 학생당 1개만 존재해야 함), 없으면 이 시점에 생성.
-	const cartIds = relationIds(registration, PROP_CART... 
-	// (placeholder replaced below)
 	const existingCartIds = relationIds(registration, PROP_REGISTRATION_CART)
 	let cartId: string
 	let cartCreated = false
