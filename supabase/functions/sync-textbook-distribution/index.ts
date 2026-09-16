@@ -55,6 +55,23 @@
 // BATCH_TIMEOUT_MS/CLICK_UNLOCK_GRACE_MS(3차 수정)는 만일의 대비책(defense-in-depth)으로 그대로 남겨둔다 --
 // 이제는 처리 자체가 획기적으로 가벼워졌으니 정상 상황에서는 거의 발동할 일이 없을 것으로 기대한다.
 //
+// (2026-09-17, 6차 수정) _shared/notionClient.ts의 setCombinedSyncStatus가 마지막에 체크박스를 다시
+// 꺼주는 쓰기 한 번을 재시도(3회)하고, 그래도 실패하면 최소한 로그를 남기도록 고쳤다 (이전에는
+// try/catch{}로 완전히 조용히 무시해서 실패 사실 자체를 알 수 없었다).
+//
+// (2026-09-17, 7차 수정) 6차 수정 이후에도, 실제 처리(교재비/교재배부 생성)는 다 끝났는데 마지막
+// 체크박스 끄기 쓰기가 재시도를 전부 실패해서 "교재배부 처리중"이 계속 켜진 채로 남는 사례가 다시
+// 재현됐다 (반 하나 배부가 금방 끝났는데도 체크박스만 그대로). 두 가지로 보강한다:
+//   1) notionClient.ts의 updateStatusWithRetry 재시도 횟수를 3->5회로, 대기 시간도 늘려서 일시적인
+//      네트워크 문제가 조금 더 오래 가도 견딜 수 있게 한다.
+//   2) from-class에서 "처리중"이 CLICK_UNLOCK_GRACE_MS보다 오래 켜져 있는 걸 재클릭으로 감지했을 때,
+//      곧바로 "오류"로 풀기 전에 먼저 실제 데이터를 다시 조회해서 -- 그 반의 활성 등록 전체에 아직
+//      새로 담을 정규교재가 남아있는지 -- 계산으로 확인한다(isClassDistributionComplete). 이미 다
+//      끝나 있었다면(체크박스 끄기 쓰기만 실패한 경우) 그 자리에서 곧바로 "완료"로 정확하게 표시하고,
+//      아직 남은 게 있을 때만 "오류"로 풀고 재시도를 안내한다. 체크박스라는 단일 신호에만 의존하지
+//      않고 실제 데이터로 완료 여부를 다시 계산해서, 몇 번을 다시 눌러야 하는지와 무관하게 정확한
+//      상태를 보여준다.
+//
 // 라우트:
 //   POST /sync-textbook-distribution/from-cart   <- 교재비(학원) DB "진도교재 담기" 버튼 (학생 1명)
 //   POST /sync-textbook-distribution/from-class  <- 클래스(학원) DB "교재 일괄 배부" 버튼 (반 전체 활성 등록)
@@ -278,6 +295,49 @@ async function getActiveRegistrationsForClassToday(classId: string, todayStr: st
 	})
 }
 
+// [2026-09-17, 7차 수정] distributeForRegistration과 판정 로직(진행 중인 진도교재 -> 정규교재 추출 ->
+// 기존 교재배부와 비교)은 동일하게 맞추되, 아무 것도 만들지 않고 "아직 새로 담을 정규교재가
+// 남아있는지"만 계산해서 반환한다 (읽기 전용). 재클릭으로 멈춘 락을 감지했을 때, 실제로 이미 다
+// 끝나 있는지 재계산하기 위해 사용한다.
+async function hasPendingDistribution(registrationId: string, preFetchedRegistration?: any): Promise<boolean> {
+	const registration = preFetchedRegistration ?? (await getPage(registrationId))
+	const progressBookIds = relationIds(registration, PROP_REGISTRATION_BOOKS)
+	if (progressBookIds.length === 0) return false
+
+	const progressBooks: any[] = []
+	for (const id of progressBookIds) {
+		progressBooks.push(await getPage(id))
+	}
+	const eligibleBookIds = new Set<string>()
+	for (const book of progressBooks) {
+		if (statusName(book, PROP_PROGRESS_STATUS) !== STATUS_ELIGIBLE) continue
+		const regularBookIds = relationIds(book, PROP_REGULAR_BOOK_ON_PROGRESS)
+		if (regularBookIds.length > 0) eligibleBookIds.add(regularBookIds[0])
+	}
+	if (eligibleBookIds.size === 0) return false
+
+	const existingDistributions = await queryAllPages(DATA_SOURCE_TEXTBOOK_DISTRIBUTION, {
+		property: PROP_DIST_REGISTRATION,
+		relation: { contains: registrationId },
+	})
+	const billedBookIds = new Set<string>()
+	for (const dist of existingDistributions) {
+		for (const id of relIds(dist.properties[PROP_DIST_REGULAR_BOOK])) billedBookIds.add(id)
+	}
+	return [...eligibleBookIds].some((id) => !billedBookIds.has(id))
+}
+
+// [2026-09-17, 7차 수정] 그 반의 활성 등록 전체를 순회하며, 아직 새로 담을 정규교재가 남은 등록이
+// 하나도 없으면 "이미 완료"로 판정한다. 재클릭 시 멈춘 락을 그냥 "오류"로 풀기 전에, 실제로는 이미
+// 다 끝나 있었던 것인지 먼저 계산으로 확인하기 위해 사용한다.
+async function isClassDistributionComplete(classId: string, todayStr: string): Promise<boolean> {
+	const activeRegistrations = await getActiveRegistrationsForClassToday(classId, todayStr)
+	for (const reg of activeRegistrations) {
+		if (await hasPendingDistribution(reg.id, reg)) return false
+	}
+	return true
+}
+
 Deno.serve(async (req: Request) => {
 	const url = new URL(req.url)
 	const route = url.pathname.split("/").pop()
@@ -348,8 +408,26 @@ Deno.serve(async (req: Request) => {
 						headers: { "Content-Type": "application/json" },
 					})
 				}
-				// 그레이스 기간이 지난 뒤에도 "처리중"이면, 재클릭 자체를 "멈춘 것 같다"는 신호로 보고
-				// 곧바로 락을 풀고 안내를 남긴다. 다음 클릭에서 정상적으로 새로 시작된다.
+				// [2026-09-17, 7차 수정] 그레이스 기간이 지난 뒤에도 "처리중"이면, 예전처럼 곧바로 "오류"로
+				// 풀지 않고 먼저 실제 데이터로 이미 다 끝나 있는지 다시 계산한다. 실제 처리는 다 끝났는데
+				// 마지막 체크박스 끄기 쓰기만 실패해서 멈춘 것처럼 보이는 경우, 재클릭 한 번으로 곧바로
+				// "완료"까지 정확하게 표시한다.
+				const today = todaySeoulDate()
+				let alreadyComplete = false
+				try {
+					alreadyComplete = await isClassDistributionComplete(pageId, today)
+				} catch (err) {
+					console.error("[sync-textbook-distribution] stale-lock completeness check failed:", err)
+				}
+				if (alreadyComplete) {
+					await setClassStatus(pageId, "완료")
+					return new Response(JSON.stringify({ ok: true, message: "recovered_as_completed", pageId, route }), {
+						status: 200,
+						headers: { "Content-Type": "application/json" },
+					})
+				}
+				// 아직 남은 게 있으면, 재클릭 자체를 "멈춘 것 같다"는 신호로 보고 곧바로 락을 풀고
+				// 안내를 남긴다. 다음 클릭에서 정상적으로 새로 시작된다.
 				await setClassStatus(
 					pageId,
 					"오류",
