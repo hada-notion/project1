@@ -51,6 +51,19 @@
 // 같은 클릭에서 바로 재실행하지는 않고 다음 클릭에서 새로 시작한다). 근본적으로 Edge Function이
 // 왜 죽는지는 Supabase 함수 로그를 직접 확인해야 알 수 있다.
 //
+// (2026-09-17, 4차 수정) Supabase 함수 로그를 확인해보니 실제로는 런타임이 죽은 게 아니었다.
+// 학생 6명짜리 아주 작은 반(중등 과외)도 그대로 90초 타임아웃에 걸렸다 -- 즉 "처리중"이 실제로
+// 정상적으로 90초 넘게 걸리고 있었다는 뜻이다. 원인은 동시성 설정: from-class가 등록 여러 건을
+// 동시에(5개씩) 처리하는데, 등록 하나당 내부적으로도(진도교재 조회/정규교재 조회/교재배부 생성)
+// 3~4개씩 동시에 Notion API를 호출하고 있어서, 순간적으로 수십 건의 요청이 겹쳐 Notion API
+// 레이트리밋(429)에 자주 걸렸을 가능성이 높다. fetchWithRetry는 429를 만나면 지수 백오프(최대
+// 5회, 300ms~4.8초씩)로 재시도하는데, 이 대기 시간들이 누적되면 학생 몇 명짜리 반도 손쉽게 90초를
+// 넘길 수 있다. 이를 줄이기 위해 각 단계의 동시성 수치를 낮췄고(등록 5->2, 등록 내부 조회/생성
+// 3~4->2), 신규 교재비 카트 생성 시마다 매번 다시 조회하던 getScheduleConfig도 60초 캐시를
+// 추가해(adminShared.ts) 반복 조회를 줄였다. 동시성을 낮추면 개별 처리는 약간 느려지지만,
+// 레이트리밋 백오프가 줄어들어 총 처리 시간은 오히려 짧아질 것으로 기대한다. 그래도 못 미치면
+// BATCH_TIMEOUT_MS를 120초로 늘려 여유를 더 뒀다.
+//
 // 라우트:
 //   POST /sync-textbook-distribution/from-cart   <- 교재비(학원) DB "진도교재 담기" 버튼 (학생 1명)
 //   POST /sync-textbook-distribution/from-class  <- 클래스(학원) DB "교재 일괄 배부" 버튼 (반 전체 활성 등록)
@@ -123,7 +136,9 @@ const CLICK_UNLOCK_GRACE_MS = 15 * 1000
 // 기다리게 하지 않고 곧바로 "처리 시간 초과" 오류로 표시하고 락을 풀어서 바로 재클릭해서 다시
 // 시도할 수 있게 한다. 학급 하나(수십 명)를 처리해도 보통 수십 초 내에 끝나므로 90초면 정상
 // 실행을 오탐지하지 않으면서도 충분히 여유 있는 기준이다.
-const BATCH_TIMEOUT_MS = 90 * 1000
+// [2026-09-17, 4차 수정] 아래 동시성을 낮춰서 레이트리밋 백오프가 줄어들 것으로 기대하지만,
+// 혹시 여유가 더 필요할 경우를 대비해 90초 -> 120초로 늘렸다.
+const BATCH_TIMEOUT_MS = 120 * 1000
 
 // 교재비 DB는 이 함수 혼자만 처리 상태를 쓰므로 otherFlagProps가 필요 없다.
 const setCartStatus = makeSyncStatusSetter(PROP_CART_RUNNING, [])
@@ -179,7 +194,10 @@ async function distributeForRegistration(
 	const progressBookIds = relationIds(registration, PROP_REGISTRATION_BOOKS)
 	if (progressBookIds.length === 0) return { status: "no_eligible_books" }
 
-	const progressBooks = await mapWithConcurrency(progressBookIds, 4, (id) => getPage(id))
+	// [2026-09-17, 4차 수정] 4 -> 2: 등록 단위 동시 처리(from-class)와 겹쳐서 순간적으로 너무 많은
+	// Notion API 요청이 동시에 나가 레이트리밋(429) 백오프가 누적되는 원인이 됐다 (파일 상단 4차
+	// 수정 주석 참고).
+	const progressBooks = await mapWithConcurrency(progressBookIds, 2, (id) => getPage(id))
 	const eligibleBookIds = new Set<string>()
 	for (const book of progressBooks) {
 		if (statusName(book, PROP_PROGRESS_STATUS) !== STATUS_ELIGIBLE) continue
@@ -211,6 +229,8 @@ async function distributeForRegistration(
 		const studentName = anyTitleText(registration) || "학생"
 		// [NEW] 표시용: 이 카트의 발송 설정이 알림톡 설정(학원) DB의 어느 행인지 한눈에 보여준다
 		// (실제 발송 동작에는 영향 없음, 위 파일 상단 주석 참고).
+		// [2026-09-17, 4차 수정] getScheduleConfig에 60초 캐시가 추가돼서(adminShared.ts), 같은
+		// 배치 안에서 여러 학생의 신규 카트를 만들 때도 실제 Notion 조회는 한 번만 일어난다.
 		const textbookConfig = await getScheduleConfig("교재비 안내")
 		const cart = await createPage(DATA_SOURCE_TEXTBOOK_CART, {
 			[PROP_CART_TITLE]: { title: [{ text: { content: `${studentName} 교재비` } }] },
@@ -224,8 +244,9 @@ async function distributeForRegistration(
 	// 교재배부 1건 = 정규교재 1개. 새로 담을 정규교재가 여러 개여맞이다면, 개별 교재배부 페이지를 거 수만큼 따로 만든다
 	// (이마트: 이마트 이마트 이마트) -
 	// 새로 담을 정규교재 건수만큼 모든 건 배부 1건씨 개별로 생성한다.
-	const newBookPages = await mapWithConcurrency(newBookIds, 4, (id) => getPage(id))
-	const distributions = await mapWithConcurrency(newBookIds, 3, async (bookId, idx) => {
+	// [2026-09-17, 4차 수정] 아래 두 mapWithConcurrency도 4/3 -> 2로 낮췄다 (파일 상단 4차 수정 주석 참고).
+	const newBookPages = await mapWithConcurrency(newBookIds, 2, (id) => getPage(id))
+	const distributions = await mapWithConcurrency(newBookIds, 2, async (bookId, idx) => {
 		const bookTitle = anyTitleText(newBookPages[idx]) || `${todaySeoulDate()} 교재 배부`
 		return await createPage(DATA_SOURCE_TEXTBOOK_DISTRIBUTION, {
 			[PROP_DIST_TITLE]: { title: [{ text: { content: bookTitle } }] },
@@ -352,10 +373,14 @@ Deno.serve(async (req: Request) => {
 							// [2026-09-17] 이 시점에 이미 등록 페이지 전체를 조회하므로, 아래에서
 							// distributeForRegistration을 호출할 때 같은 페이지를 다시 조회하지 않고
 							// 그대로 재사용한다 (API 호출 수 절반으로 감소, 전체 처리 시간 단축).
-							const registrations = await mapWithConcurrency(registrationIds, 4, (id) => getPage(id))
+							// [2026-09-17, 4차 수정] 4 -> 3로 소폭 낮춤 (파일 상단 4차 수정 주석 참고).
+							const registrations = await mapWithConcurrency(registrationIds, 3, (id) => getPage(id))
 							const activeRegistrations = registrations.filter((r) => isActiveRegistration(r, today))
 
-							const results = await mapWithConcurrency(activeRegistrations, 5, async (reg: any) => {
+							// [2026-09-17, 4차 수정] 5 -> 2로 낮춤: 등록별로 내부에서도 여러 건의 Notion API
+							// 호출이 동시에 나가고 있어서, 기존 5는 순간적으로 너무 많은 동시 요청을 만들어
+							// 레이트리밋(429) 백오프가 누적되는 원인이 됐다 (파일 상단 4차 수정 주석 참고).
+							const results = await mapWithConcurrency(activeRegistrations, 2, async (reg: any) => {
 								try {
 									return await distributeForRegistration(reg.id, reg)
 								} catch (err) {
