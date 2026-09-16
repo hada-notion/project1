@@ -24,7 +24,7 @@
 // (2026-09-17) from-class 락("교재배부 처리중")이 백그라운드 처리 중 Edge Function 런타임이
 // 죽거나 타임아웃되면 영원히 true로 남아, 재클릭해도 매번 already_processing만 리턴하고 절대
 // 재실행되지 않는 문제가 있었다. "교재배부 시작 시각"을 함께 기록해서, 락이 켜진 지 일정 시간이
-// 넘었으면 멈춘 것으로 보고 재클릭 시 자동으로 새로 시작하도록 고쳤다 (from-cart/개별 버튼은
+// 넘었으면 멈추 것으로 보고 재클릭 시 자동으로 새로 시작하도록 고쳤다 (from-cart/개별 버튼은
 // 이번엔 범위에서 제외 -- 필요하면 동일한 방식으로 확장 가능).
 //
 // (2026-09-17, 2차 수정) 실제로 고1 A반/B반에서 첫 실행 때 "처리중" 체크박스가 완료 후에도
@@ -42,6 +42,14 @@
 //      상태를 덮어써준다. 중복 생성은 distributeForRegistration의 기존 조회 로직이 막아준다.
 //   4) 위 안전장치들에도 불구하고 Edge Function 프로세스 자체가 완전히 죽어버리는 최악의 경우를
 //      대비해, "교재배부 시작 시각" 기반 락 자동 해제 기준을 10분 -> 3분으로 단축했다.
+//
+// (2026-09-17, 3차 수정) 2차 수정 배포 후에도 고1 A반/B반에서 재현됨 -- 재클릭 후 90초 넘게
+// 지나도 "처리중"이 자동으로 안 풀리는 사례가 있었다. Edge Function 런타임이 내부 안전 타임아웃
+// (setTimeout)조차 실행하지 못할 정도로 완전히 죽어버리는 경우로 추정된다. 자바스크립트 안에서는
+// 이런 경우를 감지/복구할 방법이 없으므로, 사용자가 재클릭하는 행동 자체를 "멈춘 것 같다"는 신호로
+// 받아들여 그 클릭에서 곧바로 락을 풀고 안내 메시지를 남기도록 바꿨다 (CLICK_UNLOCK_GRACE_MS 참고,
+// 같은 클릭에서 바로 재실행하지는 않고 다음 클릭에서 새로 시작한다). 근본적으로 Edge Function이
+// 왜 죽는지는 Supabase 함수 로그를 직접 확인해야 알 수 있다.
 //
 // 라우트:
 //   POST /sync-textbook-distribution/from-cart   <- 교재비(학원) DB "진도교재 담기" 버튼 (학생 1명)
@@ -99,18 +107,19 @@ const PROP_REGISTRATION_CART = "교재비" // relation -> 교재비(학원) DB
 // 클래스(학원) DB 속성
 const PROP_CLASS_REGISTRATION = "등록" // relation -> 등록(학원) DB
 const PROP_CLASS_TEXTBOOK_BATCH_RUNNING = "교재배부 처리중"
-// [2026-09-17] "교재배부 처리중"이 언제 true로 켜졌는지 기록. from-class 재클릭 시 이 시각을
-// 보고 너무 오래(STALE_TEXTBOOK_BATCH_LOCK_MS 이상) 지났으면 이전 실행이 응답 없이 멈춘 것으로 보고
-// 락을 무시하고 새로 시작한다. 아래 BATCH_TIMEOUT_MS 안전장치가 대부분의 경우 이 락이 켜진 지
-// 오래되기 전에 먼저 오류로 정리해주므로, 이 락은 "Edge Function 프로세스 자체가 완전히 죽는"
-// 최악의 경우에만 발동하는 최후의 안전망이다.
+// [2026-09-17] "교재배부 처리중"이 언제 true로 켜졌는지 기록. from-class 재클릭 시 이 시각을 보고
+// 그레이스 기간(CLICK_UNLOCK_GRACE_MS)이 지났으면 이전 실행이 응답 없이 멈춘 것으로 보고 그 자리에서
+// 즉시 락을 풀어준다 (2026-09-17, 3차 수정: 아래 CLICK_UNLOCK_GRACE_MS 설명 참고).
 const PROP_CLASS_TEXTBOOK_BATCH_STARTED_AT = "교재배부 시작 시각"
-// 이 시간보다 오래 "처리중"이 켜져 있으면 멈춘 것으로 간주한다. 반 하나(15명 내외) 배부는 보통 수십
-// 초 내에 끝나므로, 아래 BATCH_TIMEOUT_MS(내부 안전 타임아웃)로 대부분의 지연 상황을 먼저 잡아낸다.
-// 이 값은 그마저도 실패했을 때(런타임이 완전히 죽는 등)를 위한 최후의 안전망이라 짧게 잡는다
-// (2026-09-17: 10분 -> 3분으로 단축, 재클릭 시 너무 오래 기다리지 않도록).
-const STALE_TEXTBOOK_BATCH_LOCK_MS = 3 * 60 * 1000
-// [2026-09-17, NEW] 배치 작업(from-class/from-cart) 전체가 이 시간 안에 못 끝나면, 10분/3분씩
+// [2026-09-17, 3차 수정] BATCH_TIMEOUT_MS(내부 안전 타임아웃)조차 못 미더울 만큼 Edge Function
+// 런타임이 응답 없이 죽는 사례가 재현되어(반 하나 배부에 90초+ 지나도 "처리중"이 안 풀림), 자동
+// 복구만 마냥 기다리게 하지 않기로 했다. "처리중"이 이 시간보다 오래 켜져 있는 상태에서 사용자가
+// 버튼을 다시 누르면 -- 그 자체가 "멈춘 것 같다"는 신호이므로 -- 그 클릭에서 곧바로 락을 풀고
+// "다시 시도해 주세요" 안내를 남긴다(같은 클릭에서 바로 재실행하지는 않는다; 아래 from-class 핸들러
+// 참고). 정상 실행은 보통 수십 초 내에 끝나므로 15초면 "방금 시작된 정상 실행"과 "재클릭 필요"
+// 상황을 무리 없이 구분한다.
+const CLICK_UNLOCK_GRACE_MS = 15 * 1000
+// [2026-09-17, NEW] 배치 작업(from-class/from-cart) 전체가 이 시간 안에 못 끝나면, 무한정
 // 기다리게 하지 않고 곧바로 "처리 시간 초과" 오류로 표시하고 락을 풀어서 바로 재클릭해서 다시
 // 시도할 수 있게 한다. 학급 하나(수십 명)를 처리해도 보통 수십 초 내에 끝나므로 90초면 정상
 // 실행을 오탐지하지 않으면서도 충분히 여유 있는 기준이다.
@@ -302,16 +311,30 @@ Deno.serve(async (req: Request) => {
 			return respondAccepted({ pageId, route })
 		} else if (route === "from-class") {
 			// 클래스 페이지 자신이 클릭 대상. 이미 처리 중이면 재클릭을 무시하되, 처리 시작 시각이
-			// STALE_TEXTBOOK_BATCH_LOCK_MS보다 오래됐다면 이전 실행이 응답 없이 멈춘 것으로 보고
-			// 락을 무시하고 새로 시작한다 (2026-09-17 fix: 재클릭해도 안 풀리던 무한 멈춤 자동 복구).
-			// 대부분의 경우 아래 BATCH_TIMEOUT_MS 안전장치가 이 락이 오래 켜지기 전에 먼저 오류로
-			// 정리해주므로, 실제로 3분씩 기다려야 하는 경우는 매우 드물다.
+			// CLICK_UNLOCK_GRACE_MS보다 오래됐다면 이전 실행이 응답 없이 멈춘 것으로 보고 그 클릭에서
+			// 곧바로 락을 풀고 "다시 시도해 주세요" 안내를 남긴다 (2026-09-17, 3차 수정: 같은 클릭에서
+			// 바로 재실행하지는 않는다 -- 혹시 원래 실행이 실제로는 아직 살아있는 경우, 두 실행이 동시에
+			// 같은 등록들을 만지면 상태 표시가 꼬일 수 있어서 다음 클릭에서 새로 시작하도록 한다).
 			const classForLock = await getPage(pageId)
 			const isBatchRunning = checkboxValue(classForLock, PROP_CLASS_TEXTBOOK_BATCH_RUNNING)
 			const batchStartedAt = dateStart(classForLock, PROP_CLASS_TEXTBOOK_BATCH_STARTED_AT)
 			const lockAgeMs = batchStartedAt ? Date.now() - new Date(batchStartedAt).getTime() : Infinity
-			if (isBatchRunning && lockAgeMs < STALE_TEXTBOOK_BATCH_LOCK_MS) {
-				return new Response(JSON.stringify({ ok: true, message: "already_processing", pageId, route }), {
+			if (isBatchRunning) {
+				if (lockAgeMs < CLICK_UNLOCK_GRACE_MS) {
+					// 방금(그레이스 기간 이내) 시작된 정상 실행 중일 가능성이 높으므로 그대로 둔다 (연타 보호).
+					return new Response(JSON.stringify({ ok: true, message: "already_processing", pageId, route }), {
+						status: 200,
+						headers: { "Content-Type": "application/json" },
+					})
+				}
+				// 그레이스 기간이 지난 뒤에도 "처리중"이면, 재클릭 자체를 "멈춘 것 같다"는 신호로 보고
+				// 곧바로 락을 풀고 안내를 남긴다. 다음 클릭에서 정상적으로 새로 시작된다.
+				await setClassStatus(
+					pageId,
+					"오류",
+					"이전 실행이 응답 없이 멈췄을 수 있습니다. 처리 중 표시를 해제했습니다 - 다시 눌러서 재시도해 주세요.",
+				)
+				return new Response(JSON.stringify({ ok: true, message: "unlocked_please_retry", pageId, route }), {
 					status: 200,
 					headers: { "Content-Type": "application/json" },
 				})
