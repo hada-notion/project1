@@ -1,0 +1,22 @@
+name: Sync Attendance (daily reconcile)
+
+on:
+  schedule:
+    # 매일 16:00 UTC = 한국시간(KST, UTC+9) 새벽 1시. 증분 동기화가 놓칠 수 있는 변경분(특히 Notion에서
+    # 삭제된 출석 레코드)까지 전체를 다시 훑어서 정합성을 맞춥니다.
+    - cron: '0 16 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call sync-attendance (mode=reconcile)
+        run: |
+          set -e
+          curl -sS -X POST "https://twczhsxybkcvjkdfdxvs.supabase.co/functions/v1/sync-attendance" \
+            -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR3Y3poc3h5YmtjdmprZGZkeHZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyOTcwMDQsImV4cCI6MjEwMzg3MzAwNH0.t7Ltb_iSYqE4gHSoGSm-OlpiLjGqIcgrhzGJ-t56EDc" \
+            -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR3Y3poc3h5YmtjdmprZGZkeHZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyOTcwMDQsImV4cCI6MjEwMzg3MzAwNH0.t7Ltb_iSYqE4gHSoGSm-OlpiLjGqIcgrhzGJ-t56EDc" \
+            -H "x-admin-key: ${{ secrets.ADMIN_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -d '{"mode":"reconcile"}'

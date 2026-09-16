@@ -4,6 +4,11 @@
 //
 // 등록(학원)/학생(학원)/성적(학원)/일정(학원)/진도교재(학원)/출석(학원)/학습기록(학원)/
 // 학습활동(학원)/보고서(학원) DB를 읽어서 report_cache에 upsert한다.
+//
+// (2026-09-16, 원자료 아키텍처 1단계) 출석 데이터는 더 이상 이 함수가 Notion을 직접 조회하지 않는다.
+// sync-attendance Edge Function이 미리 attendance_records(Supabase)에 증분으로 채워둔 원자료를
+// attendanceSyncShared.ts로 읽어서 조립만 한다. 나머지 도메인(학습기록/과제·시험/성적/공지)은
+// 다음 단계에서 같은 패턴으로 옮길 계획이며, 그전까지는 기존처럼 Notion을 직접 조회한다.
 import { requireAdminKey, CORS_HEADERS as ADMIN_CORS } from "../_shared/adminShared.ts"
 import { getPage, queryAllPages, mapWithConcurrency, extractPageId } from "../_shared/notionClient.ts"
 import { parseTokenValue } from "../_shared/adminShared.ts"
@@ -24,10 +29,10 @@ import {
   upsertReportCacheRows,
   type ReportCacheRow,
 } from "../_shared/reportCacheShared.ts"
+import { selectAttendanceByRegistrationId } from "../_shared/attendanceSyncShared.ts"
 
 // 워크스페이스 구조상 고정값인 데이탅소스 ID (_shared/constants.ts 및 generateShared.ts와 동일한 값).
 const DS_REGISTRATION = "16dba040-586b-838a-ae3c-876c0e9cd474"
-const DS_ATTENDANCE = "8aaba040-586b-8322-8437-87608a763415"
 const DS_STUDY_ACTIVITY = "ea2ba040-586b-8368-8bb6-070564a5a31c"
 const DS_REPORT = "610ba040-586b-83ff-9384-07ae85f58df1"
 
@@ -260,27 +265,24 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
     }
   }
 
-  const attendancePages = await queryAllPages(DS_ATTENDANCE, {
-    and: [
-      { property: "등록", relation: { contains: registrationId } },
-      { property: "수업일시", date: { on_or_after: `${sinceIso}T00:00:00+09:00` } },
-    ],
-  })
+  // (2026-09-16, 원자료 아키텍처 1단계) 더 이상 Notion 출석 DB를 직접 조회하지 않는다.
+  // sync-attendance Edge Function이 미리 attendance_records(Supabase)에 증분으로 채워둔
+  // 원자료를 읽어서 조립만 한다.
+  const attendanceRows = await selectAttendanceByRegistrationId(registrationId, `${sinceIso}T00:00:00+09:00`)
 
-  const attendanceEntries = attendancePages
-    .map((ap: any) => {
-      const props = ap.properties
-      const iso = dateStartOf(props["수업일시"])
+  const attendanceEntries = attendanceRows
+    .map((r) => {
+      const iso = r.class_iso
       const { dm, wd } = dmWeekday(iso)
       return {
-        id: ap.id,
+        id: r.notion_page_id,
         iso,
         date: dm,
         weekday: wd,
-        status: normalizeStatus(text(props["출석 상태"])),
-        in: text(props["등원시간"]),
-        out: text(props["하원시간"]),
-        comment: text(props["선생님 한마디"]),
+        status: r.status,
+        in: r.check_in,
+        out: r.check_out,
+        comment: r.teacher_comment,
       }
     })
     .filter((e) => e.iso)
@@ -323,9 +325,10 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
     })
     .filter((rc) => rc.comment && rc.start && rc.start >= sinceIso)
 
-  // 학습기록: 이 등록의 출석들에 연결된 것들을 모아서 중복 제거
+  // 학습기록: 이 등록의 출석들에 연결된 것들을 모아서 중복 제거 (attendance_records에 이미
+  // study_log_ids로 저장해둔 값을 사용 -- 출석 페이지를 다시 조회할 필요가 없다)
   const logIdSet = new Set<string>()
-  attendancePages.forEach((ap: any) => relationIds(ap.properties["학습기록"]).forEach((id: string) => logIdSet.add(id)))
+  attendanceRows.forEach((r) => r.study_log_ids.forEach((id: string) => logIdSet.add(id)))
   const logIds = Array.from(logIdSet)
   const logPages = await Promise.all(logIds.map((id) => cachedGetPage(id)))
   const logDetails = await Promise.all(
@@ -408,7 +411,7 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
       const flags = homeworkDayMap[day]
       const total = flags.length
       const submitted = flags.filter(Boolean).length
-      const status = submitted === total ? "완료" : submitted === 0 ? "미완료" : "벀분완료"
+      const status = submitted === total ? "완료" : submitted === 0 ? "미완료" : "부분완료"
       return { date: day, status, submitted, total }
     })
 
