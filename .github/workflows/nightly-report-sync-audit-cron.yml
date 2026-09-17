@@ -1,0 +1,22 @@
+name: Nightly Report Sync Audit
+
+on:
+  schedule:
+    # 매일 16:30 UTC = 한국시간(KST, UTC+9) 새벽 1시 30분. 출석 정합성 점검(새벽 1시)이 끝난 직후,
+    # 오늘 발송된 보고서들의 등록만 골라 재동기화 상태를 한번 더 확인합니다.
+    - cron: '30 16 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call nightly-report-sync-audit
+        run: |
+          set -e
+          curl -sS -X POST "https://twczhsxybkcvjkdfdxvs.supabase.co/functions/v1/nightly-report-sync-audit" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "x-admin-key: ${{ secrets.ADMIN_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -d '{}'
