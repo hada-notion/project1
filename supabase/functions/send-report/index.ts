@@ -2,7 +2,7 @@
 // 주간/월간 보고서 카카오 알림톡 발송을 하나로 통합한 함수입니다.
 // send-weekly-report / send-monthly-report를 대체합니다 (이 둘은 이제 사용하지 않아도 됩니다).
 //
-// 이전에는 주간/월간이 카카오 템플릿 ID(pfId/템플릿ID/발신번호)가 서로 달라서 함수를 둘로 나눠야 했지만,
+// 이전에는 주간/월간이 카카오 템플릿 ID(pfId/템플릿ID/발신번호)가 서로 달라서 함수를 둘로 나눈야 했지만,
 // 보고서(학원) DB에 이미 "보고서 구분"(주간 보고서 / 월간 보고서) 속성이 있으므로, 이 값을 읽어서
 // "알림톡 설정(학원) DB"에서 알맞은 카테고리 행을 자동으로 고르도록 합쳤습니다.
 // 덕분에 Notion "보고서 전송" 버튼 자동화 1개(조건 분기 없이) → 웹훅 1개로만 연결하면 됩니다.
@@ -15,8 +15,13 @@
 //   모두에서 동일하게 실시간 상태가 반영됩니다. 일괄전송은 동시에 최대 3건만 처리하므로 실제로 지금
 //   처리 중인 건만 "발송중"으로 표시됩니다.
 // - [v2, 2026-09-16] send-tuition-notice와 100% 중복이던 헬퍼(getFormulaText/getDateRange/
-//   getRelationFirstId/normalizePhone/발송중 락 처리)를 _shared/alimtalkShared.ts로 옮기고
+//   getRelationFirstId/normalizePhone/발송중 락 처리)를 _shared/alimtalkShared.ts로 옥기고
 //   이 파일에서는 가져다 씁니다 (로드맵 5-9 공용 모듈화 후속). 동작은 이전과 동일합니다.
+// - [v3, 2026-09-17] 리포트 동기화 안정화 3단계 중 2단계("전송 직전 검증"): 보고서를 보내기 직전에
+//   해당 등록의 출석/학습기록/학습활동이 Supabase(attendance_records/report_cache)에 제대로
+//   올라가있는지 보장할 수 없어서(즉시 웹훅이 실패했거나 늦게 도착했을 수 있음), ensureFreshReportCache()를
+//   추가해 발송하기 전에 한 번 더 강제로 다시 계산한다. 이 단계가 실패해도(예: 일시적인 Supabase
+//   장애) 보고서 발송 자체를 막지는 않고 로그만 남긴다 (동기화 지연이 보고서 미발송보다 더 나쁘).
 
 import {
   notionGetPage,
@@ -39,6 +44,9 @@ import {
   isSendingLockActive,
   withSendingLock,
 } from "../_shared/alimtalkShared.ts"
+import { syncAttendanceForRegistration } from "../_shared/attendanceSyncShared.ts"
+import { makePageCache } from "../_shared/reportCacheShared.ts"
+import { syncReportCacheForRegistration } from "../_shared/reportCacheBuilder.ts"
 
 const ALIMTALK_CONFIG_CATEGORY = "보고서" as const
 
@@ -77,6 +85,21 @@ async function syncStudentReport(registrationId: string): Promise<{ access_token
 
   const tokenQueryString = REPORT_PATH + "?token=" + accessToken
   return { access_token: accessToken, tokenQueryString }
+}
+
+// 보고서 발송 직전에 해당 등록의 출석/학습기록/학습활동이 Supabase에 최신으로 반영되어있는지
+// 한 번 더 보장한다. 편집 시점의 즉시 웹훅(각 DB의 "생성 또는 편집 시")이 이미 대부분 처리하지만,
+// 웹훅은 백그라운드로 동작해서 완료 시점을 보장하지 않으므로, 실제 발송 직전에 다시 한번
+// 강제로 동기화해 "발송 순간에는 반드시 최신"임을 보장한다. 여기서 오류가 나도 보고서 발송
+// 자체는 계속진행한다 (약간 오래된 데이터로 보내는 것이, 정상적인 보고서가 아예 안 가는 것보다 낫다).
+async function ensureFreshReportCache(registrationId: string): Promise<void> {
+  try {
+    await syncAttendanceForRegistration(registrationId)
+    const cachedGetPage = makePageCache()
+    await syncReportCacheForRegistration(registrationId, cachedGetPage)
+  } catch (err) {
+    console.error(`ensureFreshReportCache(${registrationId}) 실패(발송은 계속진행):`, (err as Error).message)
+  }
 }
 
 async function sendAlimtalk(
@@ -162,6 +185,8 @@ Deno.serve(async (req) => {
     if (!registrationId) {
       throw new Error("이 보고서에 연결된 '등록'이 없습니다.")
     }
+
+    await ensureFreshReportCache(registrationId)
 
     const { tokenQueryString } = await syncStudentReport(registrationId)
 

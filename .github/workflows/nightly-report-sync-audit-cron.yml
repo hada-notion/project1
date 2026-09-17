@@ -1,21 +1,22 @@
-name: Sync Report Cache (all registrations)
+name: Nightly Report Sync Audit
 
 on:
   schedule:
-    # 매시간 5분에 실행 (UTC 기준). 학부모 리포트 데이탅가 너무 오래 묵지 않도록 수시로 갱신합니다.
-    - cron: '5 * * * *'
+    # 매일 16:30 UTC = 한국시간(KST, UTC+9) 새벽 1시 30분. 출석 정합성 점검(새벽 1시)이 끝난 직후,
+    # 오늘 발송된 보고서들의 등록만 골라 재동기화 상태를 한번 더 확인합니다.
+    - cron: '30 16 * * *'
   workflow_dispatch: {}
 
 jobs:
-  sync:
+  audit:
     runs-on: ubuntu-latest
     steps:
-      - name: Call sync-report-cache (mode=all)
+      - name: Call nightly-report-sync-audit
         run: |
           set -e
-          curl -sS -X POST "https://twczhsxybkcvjkdfdxvs.supabase.co/functions/v1/sync-report-cache" \
+          curl -sS -X POST "https://twczhsxybkcvjkdfdxvs.supabase.co/functions/v1/nightly-report-sync-audit" \
             -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR3Y3poc3h5YmtjdmprZGZkeHZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyOTcwMDQsImV4cCI6MjEwMzg3MzAwNH0.t7Ltb_iSYqE4gHSoGSm-OlpiLjGqIcgrhzGJ-t56EDc" \
             -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR3Y3poc3h5YmtjdmprZGZkeHZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyOTcwMDQsImV4cCI6MjEwMzg3MzAwNH0.t7Ltb_iSYqE4gHSoGSm-OlpiLjGqIcgrhzGJ-t56EDc" \
             -H "x-admin-key: ${{ secrets.ADMIN_SECRET }}" \
             -H "Content-Type: application/json" \
-            -d '{"mode":"all"}'
+            -d '{}'
