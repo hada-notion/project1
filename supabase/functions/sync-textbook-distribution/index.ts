@@ -31,6 +31,13 @@
 // 구조적 한계에 해당하지 않는다고 판단했다. 실제 교재 배부(청구)는 여전히 교재비 페이지의
 // "진도교재 담기" 버튼(from-cart)으로 학생별로 개별 진행한다.
 //
+// (2026-09-17, 디버깅) from-class-carts 버튼을 누르면 노션 쪽에 "버튼 실행에 실패했습니다" 토스트만
+// 뜨고, 클래스 페이지의 "교재비 생성중"/"마지막 오류" 등 어디에도 기록이 남지 않는 문제가 발생.
+// 이는 pageId 추출 또는 최초 getPage(잠금 확인) 단계 이전/도중에 실패하고 있다는 뜻인데, Supabase
+// 함수 로그를 직접 볼 수 있는 수단이 없어 원인을 좁히기 어려웠다. 그래서 아래 DATA_SOURCE_DEBUG_LOG /
+// logDebugWebhookCall로 실제 들어온 요청(라우트/메소드/원본 바디/pageId 추출 결과)을 노션의 별도
+// 임시 DB에 남겨서 확인한다. 원인 파악 후 이 블록과 임시 DB는 제거할 예정.
+//
 // 라우트:
 //   POST /sync-textbook-distribution/from-cart         <- 교재비(학원) DB "진도교재 담기" 버튼 (학생 1명, 담기까지 수행)
 //   POST /sync-textbook-distribution/from-class-carts   <- 클래스(학원) DB "교재비 생성" 버튼 (반 전체, 교재비 페이지만 일괄 생성 - 교재 배부는 하지 않음)
@@ -60,6 +67,10 @@ const DATA_SOURCE_TEXTBOOK_CART = Deno.env.get("DATA_SOURCE_TEXTBOOK_CART_ID")! 
 const DATA_SOURCE_TEXTBOOK_DISTRIBUTION = Deno.env.get("DATA_SOURCE_TEXTBOOK_DISTRIBUTION_ID")! // 교재배부(학원) DB
 // sync-registration-textbook이 이미 쓰고 있는 것과 동일한 환경변수 이름을 재사용한다 (진도교재 DB).
 const DATA_SOURCE_PROGRESS_BOOK = Deno.env.get("DATA_SOURCE_PROGRESS_BOOK_ID")!
+
+// [TEMP DEBUG] from-class-carts 실패 원인 진단용 임시 로그 DB ("🔧 웹훅 디버그 로그 (임시)", 교재비 관리
+// 페이지 하위). 민감 정보가 아니라 데이터소스 ID를 그대로 하드코딩한다. 원인 파악 후 제거할 예정.
+const DATA_SOURCE_DEBUG_LOG = "65bd92de36864b57be320cb4b8b5a3c8"
 
 // 교재비(학원) DB 속성
 const PROP_CART_TITLE = "이름"
@@ -98,6 +109,29 @@ const setCartStatus = makeSyncStatusSetter(PROP_CART_RUNNING, [])
 // 클래스 DB는 수강료 생성중/보고서 생성중/교재 생성중과 "실시간 처리 상태" 수식을 공유하지만,
 // 그 수식은 체크박스들을 실시간으로 조합해서 보여주므로 여기 setter는 자기 자신만 갱신하면 된다.
 const setClassCartStatus = makeSyncStatusSetter(PROP_CLASS_CART_RUNNING, [])
+
+// [TEMP DEBUG] 실제로 들어온 요청을 노션의 임시 로그 DB에 기록한다 (fire-and-forget, 절대 메인 응답을
+// 막거나 실패시키지 않음). 원인 파악 후 제거할 예정.
+async function logDebugWebhookCall(
+	route: string | undefined,
+	method: string,
+	rawBody: string,
+	pageId: string | null,
+): Promise<void> {
+	try {
+		const nowIso = new Date().toISOString()
+		await createPage(DATA_SOURCE_DEBUG_LOG, {
+			["이름"]: { title: [{ text: { content: `${nowIso} ${route ?? "(no route)"}` } }] },
+			["라우트"]: { rich_text: [{ text: { content: route ?? "" } }] },
+			["메소드"]: { rich_text: [{ text: { content: method } }] },
+			["pageId 추출 결과"]: { rich_text: [{ text: { content: pageId ?? "(추출 실패 - null)" } }] },
+			["원본 바디"]: { rich_text: [{ text: { content: rawBody.slice(0, 1900) } }] },
+			["수신시각(KST)"]: { rich_text: [{ text: { content: nowIso } }] },
+		})
+	} catch (err) {
+		console.error("[sync-textbook-distribution] (debug) logDebugWebhookCall 실패:", err)
+	}
+}
 
 // 백그라운드 배치 작업이 예상 밖으로 오래 걸리면 사용자가 "처리중" 표시만 보며 무한정
 // 기다리지 않도록, 정해진 시간 안에 못 끝나면 즉시 오류 상태로 바꿔서 알려주고 락도 풀어준다
@@ -225,15 +259,24 @@ async function distributeForRegistration(
 Deno.serve(async (req: Request) => {
 	const url = new URL(req.url)
 	const route = url.pathname.split("/").pop()
+	const rawBodyText = await req.text()
 	let body: unknown = {}
 	try {
-		body = await req.json()
+		body = rawBodyText ? JSON.parse(rawBodyText) : {}
 	} catch {
 		// 빈 바디 허용하지 않음 - 아래에서 pageId 누락으로 에러 처리
 	}
 	console.log("sync-textbook-distribution payload:", route, JSON.stringify(body))
 
 	const pageId = extractPageId(body)
+
+	// [TEMP DEBUG] from-class-carts 버튼 클릭 시 "버튼 실행에 실패했습니다" 토스트만 뜨고 클래스 DB에는
+	// 어떤 상태(처리중/오류)도 기록되지 않는 문제를 진단하기 위해, 실제로 들어온 요청을 임시 로그 DB에
+	// 남긴다 (fire-and-forget, 메인 응답에는 영향 없음). 원인 파악 후 제거할 예정.
+	if (route === "from-class-carts") {
+		logDebugWebhookCall(route, req.method, rawBodyText, pageId).catch(() => {})
+	}
+
 	if (!pageId) {
 		return new Response(JSON.stringify({ error: "pageId를 찾을 수 없음" }), { status: 400 })
 	}
