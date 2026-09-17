@@ -14,6 +14,17 @@
 // 복원한다 (호출 시그니처는 지금의 buildCacheRowForRegistration(reg, cachedGetPage) /
 // syncReportCacheForRegistration(registrationId, cachedGetPage)를 그대로 유지해서
 // sync-report-cache/index.ts, send-report, nightly-report-sync-audit을 수정할 필요가 없다).
+//
+// [FIX, 2026-09-18] notices(공지/일정) 필드가 백엔드-프론트엔드 간 모양이 어긋나 있었다.
+// - 이전: buildNotices(classId, ...)가 "클래스"에 걸린 일정만 모아서 registration_overview.notices에
+//   담았는데, student_report.html의 mapRegistration()은 그 필드를 전혀 읽지 않았다 (죽은 데이터).
+// - student_report.html의 mapReportToStudent(r)는 r.notices(최상위)를 읽는데, get-report-fast는
+//   student_fields를 스프레드해서 최상위 응답을 만들기 때문에 notices는 student_fields 쪽에
+//   있어야 한다.
+// - 또한 "일정(학원) DB"는 학생/클래스/학교/학년 4개의 독립된 관계축을 갖고 있는데(학교·학년은
+//   비어있으면 전체, 채워지면 그 값만 필터하는 와일드카드 규칙), 기존 코드는 클래스 축만 봤다.
+// 이번 수정은 buildStudentFields()가 학생 1명 기준으로 4개 축을 모두 합쳐 상위 notices를
+// 계산해서 반환하도록 바꾼다. registration_overview.notices(사용되지 않던 필드)는 제거한다.
 
 import { queryAllPages } from "./notionClient.ts"
 import { parseTokenValue } from "./adminShared.ts"
@@ -55,6 +66,81 @@ function todayIsoSeoul(): string {
 // 노션 포뮬러/이모지 값을 프런트(student_report.html)가 원하는 "순수한 태그" 형태로 정리한다.
 function stripLeadingEmoji(s: string): string {
   return s.replace(/^[^\w가-힣]+/u, "").trim()
+}
+
+// 학생에게 노출할 일정/공지를 4개 관계축(학생 직접·클래스·학교·학년)에서 모두 모아 병합한다.
+// - 학생에게 직접 걸린 일정, 그리고 학생이 "수강 중"인 클래스에 걸린 일정은 무조건 노출한다.
+// - 학교/학년에 걸린 일정은 "비어있으면 전체, 채워지면 그 값만" 와일드카드 규칙으로 교차 검증한다
+//   (학교만 채워져 있으면 그 학교 전체 학년, 학년만 채워져 있으면 전체 학교의 그 학년,
+//   둘 다 채워져 있으면 그 학교의 그 학년만 노출된다).
+async function buildStudentNotices(
+  studentId: string,
+  studentProps: any,
+  cachedGetPage: (id: string) => Promise<any>,
+) {
+  const studentNoticeIds = relationIds(studentProps["학원일정"])
+
+  const schoolId = firstRelationId(studentProps["학교"])
+  const gradeId = firstRelationId(studentProps["학년"])
+  const [schoolPage, gradePage] = await Promise.all([
+    schoolId ? cachedGetPage(schoolId) : Promise.resolve(null),
+    gradeId ? cachedGetPage(gradeId) : Promise.resolve(null),
+  ])
+  const schoolNoticeIds = schoolPage ? relationIds(schoolPage.properties["일정"]) : []
+  const gradeNoticeIds = gradePage ? relationIds(gradePage.properties["일정"]) : []
+
+  const registrationIds = relationIds(studentProps["등록"])
+  const registrations = await Promise.all(registrationIds.map((id: string) => cachedGetPage(id)))
+  const activeClassIds = Array.from(
+    new Set(
+      registrations
+        .filter((r: any) => text(r.properties["수강상태"]).includes("수강 중"))
+        .map((r: any) => firstRelationId(r.properties["클래스"]))
+        .filter((id): id is string => Boolean(id)),
+    ),
+  )
+  const classPages = await Promise.all(activeClassIds.map((id: string) => cachedGetPage(id)))
+  const classNoticeIds = classPages.flatMap((c: any) => relationIds(c.properties["일정"]))
+
+  const directIds = new Set<string>([...studentNoticeIds, ...classNoticeIds])
+  const candidateIds = Array.from(new Set<string>([...directIds, ...schoolNoticeIds, ...gradeNoticeIds]))
+  if (!candidateIds.length) return []
+
+  const sinceIso = sinceIsoMonthsAgo(DETAIL_LOOKBACK_MONTHS)
+  const noticePages = await Promise.all(candidateIds.map((id: string) => cachedGetPage(id)))
+
+  return noticePages
+    .filter((n: any) => {
+      const category = text(n.properties["구분"])
+      if (category.includes("할일")) return false
+      const startIso = dateStartOf(n.properties["날짜"])
+      if (!startIso || startIso < sinceIso) return false
+      // 학생/클래스에 직접 걸린 항목은 학교·학년 조건과 무관하게 그대로 노출한다.
+      if (directIds.has(n.id)) return true
+      // 학교/학년 백링크로만 걸린 항목은 "비어있으면 전체, 채워지면 그 값만" 규칙으로 교차 검증한다.
+      const noticeSchoolIds = relationIds(n.properties["학교"])
+      const noticeGradeIds = relationIds(n.properties["학년"])
+      const schoolMatch = noticeSchoolIds.length === 0 || (!!schoolId && noticeSchoolIds.includes(schoolId))
+      const gradeMatch = noticeGradeIds.length === 0 || (!!gradeId && noticeGradeIds.includes(gradeId))
+      return schoolMatch && gradeMatch
+    })
+    .map((n: any) => {
+      const np = n.properties
+      const category = text(np["구분"])
+      const icon = category.split(" ")[0] || "📌"
+      const start = dateStartOf(np["날짜"])
+      const end = dateEndOf(np["날짜"])
+      const range = start ? (end && end !== start ? `${fmtDateKr(start)} ~ ${fmtDateKr(end)}` : fmtDateKr(start)) : ""
+      const memo = text(np["메모"])
+      return {
+        icon,
+        category,
+        date: start,
+        title: text(np["이름"]) || category,
+        body: [range, memo].filter(Boolean).join(" · "),
+      }
+    })
+    .sort((a, b) => String(a.date ?? "").localeCompare(String(b.date ?? "")))
 }
 
 async function buildStudentFields(studentId: string, cachedGetPage: (id: string) => Promise<any>) {
@@ -127,6 +213,8 @@ async function buildStudentFields(studentId: string, cachedGetPage: (id: string)
   )
   grades = grades.sort((a, b) => ((a.iso ?? "") < (b.iso ?? "") ? 1 : -1)).slice(0, 10)
 
+  const notices = await buildStudentNotices(studentId, sp, cachedGetPage)
+
   return {
     student_name: studentName,
     school_grade: `${schoolText} ${gradeText}`.trim(),
@@ -136,40 +224,9 @@ async function buildStudentFields(studentId: string, cachedGetPage: (id: string)
     primary_contact: primaryContact,
     siblings,
     grades,
+    notices,
     issued_at: new Date().toISOString(),
   }
-}
-
-async function buildNotices(classId: string | undefined, cachedGetPage: (id: string) => Promise<any>) {
-  if (!classId) return []
-  const cls = await cachedGetPage(classId)
-  const noticeIds = relationIds(cls.properties["일정"])
-  const sinceIso = sinceIsoMonthsAgo(DETAIL_LOOKBACK_MONTHS)
-  const noticePages = await Promise.all(noticeIds.map((id: string) => cachedGetPage(id)))
-  return noticePages
-    .filter((n: any) => {
-      const category = text(n.properties["구분"])
-      if (category.includes("할일")) return false
-      const startIso = dateStartOf(n.properties["날짜"])
-      return !!startIso && startIso >= sinceIso
-    })
-    .map((n: any) => {
-      const np = n.properties
-      const category = text(np["구분"])
-      const icon = category.split(" ")[0] || "📌"
-      const start = dateStartOf(np["날짜"])
-      const end = dateEndOf(np["날짜"])
-      const range = start ? (end && end !== start ? `${fmtDateKr(start)} ~ ${fmtDateKr(end)}` : fmtDateKr(start)) : ""
-      const memo = text(np["메모"])
-      return {
-        icon,
-        category,
-        date: start,
-        title: text(np["이름"]) || category,
-        body: [range, memo].filter(Boolean).join(" · "),
-      }
-    })
-    .sort((a, b) => String(a.date ?? "").localeCompare(String(b.date ?? "")))
 }
 
 async function buildRegistrationOverview(reg: any, accessToken: string, cachedGetPage: (id: string) => Promise<any>) {
@@ -234,8 +291,6 @@ async function buildRegistrationOverview(reg: any, accessToken: string, cachedGe
       }),
   )
 
-  const notices = await buildNotices(classId, cachedGetPage)
-
   return {
     access_token: accessToken,
     class_name: className,
@@ -246,7 +301,6 @@ async function buildRegistrationOverview(reg: any, accessToken: string, cachedGe
     end_date: endDate,
     schedule,
     books,
-    notices,
   }
 }
 
