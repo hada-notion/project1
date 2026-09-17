@@ -164,6 +164,23 @@ function requireSupabaseEnv() {
   }
 }
 
+// Supabase REST(PostgREST) 호출이 순간적인 401(예: "JWT issued in future" PGRST303처럼 서버 쪽
+// 시계가 아주 잠깐 어긋나서 생기는 오류)이나 일시적인 5xx로 실패하는 경우를 짧게 재시도한다
+// (2026-09-18, 정규교재 웹훅 추가 후 실제로 겪은 1회성 오류 대응). 키 자체가 잘못된 진짜 인증
+// 실패라면 재시도해도 계속 401이 나오므로, maxRetries를 다 쓰면 그대로 실패한 응답을 반환해서
+// 원래 동작(에러 throw)이 그대로 유지된다.
+export async function fetchSupabaseWithRetry(url: string, init: RequestInit, maxRetries = 3): Promise<Response> {
+  let lastRes: Response | undefined
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await fetch(url, init)
+    if (res.ok || (res.status !== 401 && res.status < 500)) return res
+    lastRes = res
+    if (attempt === maxRetries) return res
+    await new Promise((resolve) => setTimeout(resolve, 300 * Math.pow(2, attempt)))
+  }
+  return lastRes!
+}
+
 export type ReportCacheRow = {
   access_token: string
   registration_id: string
@@ -179,7 +196,7 @@ export async function upsertReportCacheRows(rows: ReportCacheRow[]): Promise<voi
   if (rows.length === 0) return
   requireSupabaseEnv()
   const payload = rows.map((r) => ({ ...r, updated_at: new Date().toISOString() }))
-  const res = await fetch(`${SB_URL}/rest/v1/report_cache?on_conflict=access_token`, {
+  const res = await fetchSupabaseWithRetry(`${SB_URL}/rest/v1/report_cache?on_conflict=access_token`, {
     method: "POST",
     headers: {
       apikey: SB_SERVICE_ROLE_KEY,
@@ -196,7 +213,7 @@ export async function upsertReportCacheRows(rows: ReportCacheRow[]): Promise<voi
 
 export async function selectReportCacheByToken(token: string): Promise<ReportCacheRow | null> {
   requireSupabaseEnv()
-  const res = await fetch(
+  const res = await fetchSupabaseWithRetry(
     `${SB_URL}/rest/v1/report_cache?access_token=eq.${encodeURIComponent(token)}&link_disabled=eq.false&select=*`,
     { headers: { apikey: SB_SERVICE_ROLE_KEY, Authorization: `Bearer ${SB_SERVICE_ROLE_KEY}` } },
   )
@@ -207,7 +224,7 @@ export async function selectReportCacheByToken(token: string): Promise<ReportCac
 
 export async function selectReportCacheOverviewsByStudentKey(studentKey: string): Promise<Record<string, unknown>[]> {
   requireSupabaseEnv()
-  const res = await fetch(
+  const res = await fetchSupabaseWithRetry(
     `${SB_URL}/rest/v1/report_cache?student_key=eq.${encodeURIComponent(studentKey)}&link_disabled=eq.false&select=registration_overview`,
     { headers: { apikey: SB_SERVICE_ROLE_KEY, Authorization: `Bearer ${SB_SERVICE_ROLE_KEY}` } },
   )
