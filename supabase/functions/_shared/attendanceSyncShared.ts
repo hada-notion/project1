@@ -5,7 +5,7 @@
 // sync-attendance Edge Function이 이 헬퍼로 Notion → attendance_records를 채우고,
 // sync-report-cache는 이 헬퍼로 attendance_records만 읽어서 리포트를 조립한다(Notion 미조회).
 
-import { text, dateStartOf, relationIds, firstRelationId, normalizeStatus } from "./reportCacheShared.ts"
+import { text, dateStartOf, dateEndOf, relationIds, firstRelationId, normalizeStatus } from "./reportCacheShared.ts"
 
 const SB_URL = Deno.env.get("SB_URL") ?? ""
 const SB_SERVICE_ROLE_KEY = Deno.env.get("SB_SERVICE_ROLE_KEY") ?? ""
@@ -14,6 +14,18 @@ function requireSupabaseEnv() {
   if (!SB_URL || !SB_SERVICE_ROLE_KEY) {
     throw new Error("SB_URL / SB_SERVICE_ROLE_KEY Secrets가 설정되어 있지 않습니다. Supabase 대시보드 Edge Functions Secrets에 추가하세요.")
   }
+}
+
+// "등원시간"/"하원시간" Notion 수식 속성(prop("수업일시").dateStart()/dateEnd().formatDate("HH:mm"))을
+// 그대로 읽으면, 해당 날짜 속성의 time_zone이 비어있는 경우 Notion이 수식 안에서 이 값을 UTC 기준으로
+// 포맷해버려서 실제 수업 시각(예: 17:00 KST)이 9시간 밀린 "08:00"으로 나오는 버그가 있었다
+// (2026-09-17 실측 확인: attendance_records의 check_in/check_out이 다수 비어있거나 어긋나 보이던
+// 문제의 실제 원인). "수업일시" 원본 date 속성의 ISO 문자열에는 이미 올바른 오프셋(+09:00)이 그대로
+// 들어있으므로, 수식을 거치지 않고 이 문자열에서 시:분만 직접 잘라내 타임존 버그를 우회한다.
+function formatTimeFromIso(iso: string | null): string {
+  if (!iso) return ""
+  const match = iso.match(/T(\d{2}):(\d{2})/)
+  return match ? `${match[1]}:${match[2]}` : ""
 }
 
 export type AttendanceRow = {
@@ -33,13 +45,15 @@ export type AttendanceRow = {
 export function buildAttendanceRow(page: any): AttendanceRow | null {
   const registrationId = firstRelationId(page.properties?.["등록"])
   if (!registrationId) return null
+  const classIso = dateStartOf(page.properties?.["수업일시"])
+  const classEndIso = dateEndOf(page.properties?.["수업일시"])
   return {
     notion_page_id: page.id,
     registration_id: registrationId,
-    class_iso: dateStartOf(page.properties?.["수업일시"]),
+    class_iso: classIso,
     status: normalizeStatus(text(page.properties?.["출석 상태"])),
-    check_in: text(page.properties?.["등원시간"]),
-    check_out: text(page.properties?.["하원시간"]),
+    check_in: formatTimeFromIso(classIso),
+    check_out: formatTimeFromIso(classEndIso),
     teacher_comment: text(page.properties?.["선생님 한마디"]),
     study_log_ids: relationIds(page.properties?.["학습기록"]),
     notion_last_edited_time: page.last_edited_time,
