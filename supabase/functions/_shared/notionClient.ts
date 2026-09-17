@@ -174,8 +174,13 @@ export function anyTitleText(page: any): string {
 	return ""
 }
 
+// [2026-09-17] 일부 날짜 속성(예: 학습기록의 "수업일")이 사용자가 직접 입력하는 date 타입에서
+// 관계를 통해 자동 계산되는 formula 타입으로 바뀌면서, Notion API 응답 모양이 date.start가 아니라
+// formula.date.start로 바뀌었다. 두 모양을 모두 지원해서, 속성 타입이 나중에 다시 바뀌어도 기존
+// 호출부가 계속 동작하게 한다.
 export function dateStart(page: any, propName: string): string | null {
-	return page?.properties?.[propName]?.date?.start ?? null
+	const prop = page?.properties?.[propName]
+	return prop?.date?.start ?? prop?.formula?.date?.start ?? null
 }
 
 export function checkboxValue(page: any, propName: string): boolean {
