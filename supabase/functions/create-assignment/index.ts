@@ -20,6 +20,13 @@
 // 2. 학습기록에 연결된 등록/출석/수업/수업일을 읨는다.
 // 3. 출석들을 조회해 등록 → (이 수업의) 출석 매핑을 만든다.
 // 4. 등록마다 학습활동 1건을 생성한다. 과제인 경우 그 학생의 다음 수업 출석을 조회해 마감으로 연결한다.
+//
+// [2026-09-17] 학습활동(학원) DB의 "구분"이 select에서, "학습기록" 관계로부터 자동 계산되는
+// 롤업으로 바뀌었다. 계산되는(읡기 전용) 속성에 직접 쓰면 Notion API가 createPage 요청 전체를
+// 거부하므로, 아래에서 학습활동 생성 시 "구분"에 쓰던 코드를 제거했다 (더 이상 필요 없음 -- 이미
+// 함께 설정하는 "학습기록" 관계로부터 저절로 계산된다). 학습기록의 "수업일"도 같은 날 date에서
+// formula로 바뀌었는데, 이건 여기서는 쓰지 않고 읡기만 하므로 _shared/notionClient.ts의 dateStart()
+// 헬퍼가 formula 모양도 읡도록 고쳐서 대응했다.
 
 import {
 	fetchWithRetry,
@@ -58,7 +65,6 @@ const PROP_REGISTRATION_TITLE_FALLBACK = "이름" // getTitle()이 title 타입�
 
 // ---- 학습활동 DS 속성 ----
 const PROP_ACTIVITY_TITLE = "학습활동"
-const PROP_ACTIVITY_CATEGORY = "구분"
 const PROP_ACTIVITY_RECORD = "학습기록"
 const PROP_ACTIVITY_REGISTRATION = "등록"
 const PROP_ACTIVITY_ATTENDANCE = "출석"
@@ -351,7 +357,6 @@ async function finishCreateAssignment(
 
 			const createProps: JsonRecord = {
 				[PROP_ACTIVITY_TITLE]: { title: [{ text: { content: title } }] },
-				[PROP_ACTIVITY_CATEGORY]: { select: { name: category } },
 				[PROP_ACTIVITY_RECORD]: { relation: [{ id: recordId }] },
 				[PROP_ACTIVITY_REGISTRATION]: { relation: [{ id: registrationId }] },
 			}

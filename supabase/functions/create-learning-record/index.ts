@@ -17,6 +17,11 @@
 //    - 교재 = 진도교재의 정규교재, 가묽 = 정규교재의 과목 을 우샤 묍링
 //    - 수업 = 버튼이 눌린 그 수업(세션) 페이지 자신
 // 4. 처리한 진도교재의 "오늘 학습" 체크박스를 자동으로 해제한다.
+//
+// [2026-09-17] 학습기록(학원) DB의 "수업일"이 직접 입력하는 date 속성에서, "출석"/"수업" 관계로부터
+// 자동 계산되는 formula 속성으로 바뀌었다. 계산되는(읡기 전용) 속성에 직접 쓰면 Notion API가
+// createPage 요청 전체를 거부하므로, 아래에서 "수업일"에 쓰던 코드를 제거했다 (더 이상 필요 없음 --
+// 이미 함께 설정하는 "출석"/"수업" 관계로부터 저절로 계산된다).
 
 import {
 	mapWithConcurrency,
@@ -69,7 +74,6 @@ const PROP_RECORD_SUBJECT = "과목"
 const PROP_RECORD_ATTENDANCE = "출석"
 const PROP_RECORD_REGISTRATION = "등록"
 const PROP_RECORD_SESSION = "수업"
-const PROP_RECORD_DATE = "수업일"
 const PROP_RECORD_CATEGORY = "구분"
 
 // ---- 수업(세션)/출석 DS 진행 상태 속성 (2026-09-11: 공유 select "동기화 상태"에서 체크박스로 마이그레이션) ----
@@ -436,9 +440,6 @@ async function finishCreateLearningRecord(sessionId: string): Promise<unknown> {
 				}
 				if (subjectIds.length > 0) {
 					createProps[PROP_RECORD_SUBJECT] = { relation: subjectIds.map((id) => ({ id })) }
-				}
-				if (sessionDate) {
-					createProps[PROP_RECORD_DATE] = { date: { start: sessionDate.slice(0, 10) } }
 				}
 
 				const createdPage = await createPage(DS_STUDY_RECORD, createProps)
