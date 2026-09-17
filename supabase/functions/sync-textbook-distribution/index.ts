@@ -35,14 +35,29 @@
 // 이 함수를 가리키는 웹훅 URL에 잘못된 Supabase 프로젝트 참조가 쓰여 있었던 것이었다 (DNS 자체가
 // 실패). 웹훅 URL을 올바른 프로젝트 주소로 수정한 뒤에는 요청이 정상적으로 이 함수까지 도달한다.
 //
-// (2026-09-17, 체크박스 고착 수정) 웹훅 주소를 고친 뒤에도, 실제로는 카트 생성이 전부 성공했는데
+// (2026-09-17, 체크박스 고착 수정 1차) 웹훅 주소를 고친 뒤에도, 실제로는 카트 생성이 전부 성공했는데
 // ("교재비 생성 여부" 수식이 "완료"로 표시됨) 마지막에 "교재비 생성중" 체크박스를 다시 꺼주는
 // 쓰기 한 번만 조용히 실패해서 체크박스가 영원히 켜진 채로 남는 사례가 실제로 발생했다 (고2 A반).
 // 이 체크박스가 켜져 있으면 재클릭도 막혀 있어서(아래 already_processing 분기) 사용자가 스스로
 // 풀 방법이 없었다. 아래에서 이 잠금 분기를 무조건 거부가 아니라 "실제 데이터로 다시 계산해서
 // 판단"하도록 바꿔서, 이미 다 끝나 있었으면 고착된 체크박스만 정리하고, 아직 누락이 있으면(진짜
-// 처리 중이든 멈춘 것이든) 안전하게 새로 이어서 진행하게 한다 (ensureCartForRegistration은 이미
-// 카트가 있는 학생은 건드리지 않는 멱등 작업이라 중복 생성 위험이 없다).
+// 처리 중이든 멈춘 것이든) 안전하게 새로 이어서 진행하게 했다.
+//
+// (2026-09-17, 체크박스 고착 수정 2차 -- 진짜 구조적 원인) 1차 수정 이후에도 다른 반(고1 A반,
+// 고2 B반)에서 같은 현상이 새로 발생했다. generate-tuition/generate-report(사용자가 "체크박스가
+// 금방금방 잘 꺼진다"고 지목한, 클래스 단위로 반 전체 등록을 처리하는 다른 두 함수)와 이 함수를
+// 나란히 비교해보니 결정적인 차이를 찾았다: 그 두 함수는 등록 하나하나를 항상 순차(for 루프)로
+// 처리하는데, 여기 from-class-carts만 mapWithConcurrency(..., 4, ...)로 등록 4명을 동시에 처리하고
+// 있었다. 동시에 여러 Notion API 호출을 날리면 레이트리밋(429)에 걸릴 확률이 커지고, 그 지연이
+// 누적되면 백그라운드 작업 전체 실행 시간이 길어져 플랫폼이 격리 인스턴스를 회수해버릴 가능성이
+// 커진다 -- 실제로 마지막 "완료" 쓰기까지 도달하지 못하면 로그도 전혀 남기지 못하고 그대로 죽는데,
+// 이는 관찰된 증상(오류 텍스트도 없이 체크박스만 영원히 켜진 채로 남음)과 정확히 일치한다.
+// 아래에서 동시성을 없애고 다른 두 함수와 동일하게 순차 처리로 통일했다.
+// 추가로, 이미 전부 생성되어 있는 클래스에서 버튼을 실수로 다시 눌러도 예전에는 매번 "처리중" ->
+// 백그라운드 작업 -> "완료"라는 위험한 경로를 다시 거쳐야 했다. 이제는 만들 게 하나도 남아있지
+// 않으면 백그라운드로 넘기지 않고 요청을 받은 그 자리에서 바로 판단해서 응답한다 (켜져 있던
+// 체크박스는 그 자리에서 바로 꺼주고, 이미 꺼져 있었으면 아무 쓰기도 없이 즉시 "이미 완료됨"으로
+// 응답한다) -- 그만큼 고착될 여지 자체가 줄어든다.
 //
 // 라우트:
 //   POST /sync-textbook-distribution/from-cart         <- 교재비(학원) DB "진도교재 담기" 버튼 (학생 1명, 담기까지 수행)
@@ -61,7 +76,6 @@ import {
 	anyTitleText,
 	extractPageId,
 	todaySeoulDate,
-	mapWithConcurrency,
 } from "../_shared/notionClient.ts"
 import { makeSyncStatusSetter } from "../_shared/registrationSync.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
@@ -263,6 +277,17 @@ async function distributeForRegistration(
 	}
 }
 
+// from-class-carts가 대상으로 삼는, 이 클래스의 "활성" 등록만 골라서 반환한다 (수강상태 수식 ==
+// STATUS_ACTIVE). 등록 페이지 자체(수식 계산값 포함)를 그대로 반환하므로, 호출부가 추가 조회 없이
+// relationIds(reg, PROP_REGISTRATION_CART)로 카트 보유 여부를 바로 판단할 수 있다.
+async function getActiveRegistrationsForCarts(classId: string): Promise<any[]> {
+	const registrations = await queryAllPages(DS_REGISTRATION, {
+		property: PROP_CLASS,
+		relation: { contains: classId },
+	})
+	return registrations.filter((reg: any) => formulaString(reg, PROP_STATUS) === STATUS_ACTIVE)
+}
+
 Deno.serve(async (req: Request) => {
 	const url = new URL(req.url)
 	// [TEMP DEBUG 수정] 쉐랑시(trailing slash)가 붙어오면 기존 split("/").pop()은 빈 문자열을 맞럈 -
@@ -328,36 +353,35 @@ Deno.serve(async (req: Request) => {
 			return respondAccepted({ pageId, route })
 		} else if (route === "from-class-carts") {
 			// 클래스 페이지 자신이 클릭 대상.
-			// (2026-09-17, 체크박스 고착 수정) 이전에는 "교재비 생성중"이 true면 무조건 재클릭을
-			// 거부했다. 그런데 실제 처리는 다 끝났는데(카트 생성 전부 성공) 마지막에 체크박스를
-			// 다시 끄는 쓰기만 조용히 실패해서 영원히 "처리 중"으로 고착되는 사례가 실제로 발생했다
-			// (2026-09-17, 고2 A반). 이제는 무조건 거부하지 않고, 실제 데이터(활성 등록 중 교재비
-			// 누락 여부)를 다시 계산해서 판단한다: 이미 전부 생성돼 있으면 고착된 체크박스만 정리하고
-			// 바로 끝내고, 아직 누락이 있으면(진짜 처리 중이든 멈춘 것이든) 안전하게 새로 이어서
-			// 진행한다 -- ensureCartForRegistration은 이미 카트가 있는 학생은 건드리지 않는 멱등
-			// 작업이라 중복 생성 위험이 없다.
+			// 먼저 실제 데이터(활성 등록 중 교재비 누락 여부)부터 계산한다. 체크박스 값만 보고 바로
+			// 처리중/거부를 판단하지 않고, 항상 실제 상태를 기준으로 판단한다 (2차 수정).
 			const classForLock = await getPage(pageId)
-			if (checkboxValue(classForLock, PROP_CLASS_CART_RUNNING)) {
-				const lockedRegistrations = await queryAllPages(DS_REGISTRATION, {
-					property: PROP_CLASS,
-					relation: { contains: pageId },
-				})
-				const lockedActiveRegistrations = lockedRegistrations.filter(
-					(reg: any) => formulaString(reg, PROP_STATUS) === STATUS_ACTIVE,
-				)
-				const stillMissingCarts = lockedActiveRegistrations.some(
-					(reg: any) => relationIds(reg, PROP_REGISTRATION_CART).length === 0,
-				)
-				if (!stillMissingCarts) {
-					// 실제로는 이미 다 끝나 있었음 - 고착된 체크박스만 정리하고 응답한다.
+			const activeRegistrations = await getActiveRegistrationsForCarts(pageId)
+			const missingRegistrations = activeRegistrations.filter(
+				(reg: any) => relationIds(reg, PROP_REGISTRATION_CART).length === 0,
+			)
+
+			if (missingRegistrations.length === 0) {
+				// (2026-09-17, 즉시 완료 단축 경로) 만들 게 하나도 없다 -- 이미 실수로 두 번 눌렀거나,
+				// 이전 실행이 실제로는 다 끝났는데 체크박스만 고착된 경우다. 백그라운드로 전혀 넘기지
+				// 않고 이 요청 자체에서 바로 응답한다: 켜져 있었으면 그 자리에서 꺼주고, 이미 꺼져
+				// 있었으면 아무 쓰기도 하지 않고 즉시 반환한다 (고착될 여지 자체가 없다).
+				if (checkboxValue(classForLock, PROP_CLASS_CART_RUNNING)) {
 					await setClassCartStatus(pageId, "완료")
 					return new Response(
 						JSON.stringify({ ok: true, message: "recovered_already_completed", pageId, route }),
 						{ status: 200, headers: { "Content-Type": "application/json" } },
 					)
 				}
-				// 아직 누락이 있으면 진짜 처리 중이든 멈춘 것이든 안전하게 새로 이어서 진행한다 (거부하지 않음).
+				return new Response(JSON.stringify({ ok: true, message: "already_completed", pageId, route }), {
+					status: 200,
+					headers: { "Content-Type": "application/json" },
+				})
 			}
+
+			// 아직 누락이 있다: 체크박스가 켜져 있어도(진짜 처리 중이든 멈춘 것이든) 거부하지 않고
+			// 안전하게 새로 이어서 진행한다 -- ensureCartForRegistration은 이미 카트가 있는 학생은
+			// 건드리지 않는 멱등 작업이라 중복 생성 위험이 없다.
 			await setClassCartStatus(pageId, "처리중")
 
 			runInBackground(() =>
@@ -365,22 +389,16 @@ Deno.serve(async (req: Request) => {
 					"from-class-carts",
 					async () => {
 						try {
-							// 이 클래스에 연결된 등록을 전부 조회한 뒤(쿼리 응답에 수식 계산값도 포함됨),
-							// "수강상태"가 활성(🟢 수강 중)인 등록만 대상으로 삼는다. 등록 1명당 추가 조회 없이
-							// 이 한 번의 쿼리 결과로 필터링할 수 있다.
-							const registrations = await queryAllPages(DS_REGISTRATION, {
-								property: PROP_CLASS,
-								relation: { contains: pageId },
-							})
-							const activeRegistrations = registrations.filter(
-								(reg: any) => formulaString(reg, PROP_STATUS) === STATUS_ACTIVE,
-							)
-							// 교재배부(청구)는 전혀 하지 않고, 학생별로 교재비 페이지가 없으면 1건만 생성한다.
-							// 각 건이 가벼운 단일 페이지 생성이라 동시성 4 정도로 병렬 처리해도 안전하다.
-							const results = await mapWithConcurrency(activeRegistrations, 4, (reg: any) =>
-								ensureCartForRegistration(reg.id, reg),
-							)
-							const createdCount = results.filter((r) => r.cartCreated).length
+							// (2026-09-17, 2차 수정) generate-tuition/generate-report와 동일하게 순차(for
+							// 루프) 처리로 통일한다. 동시성(mapWithConcurrency)을 쓰면 Notion API
+							// 레이트리밋에 더 잘 걸리고, 그 지연이 누적되면 마지막 "완료" 쓰기 전에 백그라운드
+							// 실행 시간이 플랫폼 한도를 넘어 격리 인스턴스가 회수될 위험이 커진다 -- 이게 이
+							// 함수만 유독 체크박스가 잘 안 꺼지던 진짜 원인으로 보인다.
+							let createdCount = 0
+							for (const reg of activeRegistrations) {
+								const result = await ensureCartForRegistration(reg.id, reg)
+								if (result.cartCreated) createdCount++
+							}
 							await setClassCartStatus(pageId, "완료")
 							console.log("[sync-textbook-distribution] (background) from-class-carts finished:", pageId, {
 								activeCount: activeRegistrations.length,
