@@ -31,14 +31,18 @@
 // 구조적 한계에 해당하지 않는다고 판단했다. 실제 교재 배부(청구)는 여전히 교재비 페이지의
 // "진도교재 담기" 버튼(from-cart)으로 학생별로 개별 진행한다.
 //
-// (2026-09-17, 디버깅 1차) from-class-carts 버튼을 누르보대 노션 쪽에 "버튼 실행에 실패했습니다" 토스트만
-// 뜨고 어렘에도 기록이 안 남았다. route === "from-class-carts"입려에만 임시 디버깅 로깅을 둘늘다.
-// 배포 후 버튼을 다시 누르둔 이 임시 로깅 DB(🔧 웹훅 디버그 로그 (임시))에 결과가 0건 -
-// 증, 요샕이 이 함수에 전혀 도달하지 않고 있다는 뜻. 가장 의심되는 원인은 URL 끔의 쉐랑시(trailing
-// slash) 따위 route 파싱이 깜끔하게 다른 것(예: ".../from-class-carts/" → pop()이 빈 문자열을 맞럈)
-// 이다. 아래 둘을 수정: (1) route 파싱을 filter(Boolean)을 뎊션 쉐랑시에 안전하게, (2) 디버깅
-// 로깅을 route에 상관없이 버튼마다 무조건 남기도록 확대로 범위를 늘릴. 원인 파악 후 이 벼생적 DATA_SOURCE_DEBUG_LOG
-// / logDebugWebhookCall / 이 주석 바땔은 모드 제거할 예정.
+// (2026-09-17, 웹훅 주소 오류 수정) from-class-carts가 계속 실패했던 진짜 원인은 코드가 아니라
+// 이 함수를 가리키는 웹훅 URL에 잘못된 Supabase 프로젝트 참조가 쓰여 있었던 것이었다 (DNS 자체가
+// 실패). 웹훅 URL을 올바른 프로젝트 주소로 수정한 뒤에는 요청이 정상적으로 이 함수까지 도달한다.
+//
+// (2026-09-17, 체크박스 고착 수정) 웹훅 주소를 고친 뒤에도, 실제로는 카트 생성이 전부 성공했는데
+// ("교재비 생성 여부" 수식이 "완료"로 표시됨) 마지막에 "교재비 생성중" 체크박스를 다시 꺼주는
+// 쓰기 한 번만 조용히 실패해서 체크박스가 영원히 켜진 채로 남는 사례가 실제로 발생했다 (고2 A반).
+// 이 체크박스가 켜져 있으면 재클릭도 막혀 있어서(아래 already_processing 분기) 사용자가 스스로
+// 풀 방법이 없었다. 아래에서 이 잠금 분기를 무조건 거부가 아니라 "실제 데이터로 다시 계산해서
+// 판단"하도록 바꿔서, 이미 다 끝나 있었으면 고착된 체크박스만 정리하고, 아직 누락이 있으면(진짜
+// 처리 중이든 멈춘 것이든) 안전하게 새로 이어서 진행하게 한다 (ensureCartForRegistration은 이미
+// 카트가 있는 학생은 건드리지 않는 멱등 작업이라 중복 생성 위험이 없다).
 //
 // 라우트:
 //   POST /sync-textbook-distribution/from-cart         <- 교재비(학원) DB "진도교재 담기" 버튼 (학생 1명, 담기까지 수행)
@@ -71,7 +75,8 @@ const DATA_SOURCE_TEXTBOOK_DISTRIBUTION = Deno.env.get("DATA_SOURCE_TEXTBOOK_DIS
 const DATA_SOURCE_PROGRESS_BOOK = Deno.env.get("DATA_SOURCE_PROGRESS_BOOK_ID")!
 
 // [TEMP DEBUG] from-class-carts 실패 원인 진단용 임시 로그 DB ("🔧 웹훅 디버그 로그 (임시)", 교재비 관리
-// 페이지 하위). 민감 정보가 아니라 데이타소스 ID를 그대로 하드코딩한다. 원인 파악 후 제거할 예정.
+// 페이지 하위). 민감 정보가 아니라 데이타소스 ID를 그대로 하드코딩한다. 원인 파악(웹훅 주소 오류로 확인됨) 후
+// 정리 예정 -- 당장 동작에는 영향 없으므로 이번 수정에서는 그대로 둔다.
 const DATA_SOURCE_DEBUG_LOG = "65bd92de36864b57be320cb4b8b5a3c8"
 
 // 교재비(학원) DB 속성
@@ -113,7 +118,7 @@ const setCartStatus = makeSyncStatusSetter(PROP_CART_RUNNING, [])
 const setClassCartStatus = makeSyncStatusSetter(PROP_CLASS_CART_RUNNING, [])
 
 // [TEMP DEBUG] 실제로 들어온 요샕을 노션의 임시 로그 DB에 기록한다 (fire-and-forget, 절대 메인 응답을
-// 막거나 실패시키지 않음). 원인 파악 후 제거할 예정.
+// 막거나 실패시키지 않음). 원인 파악(웹훅 주소 오류로 확인됨) 후 정리 예정.
 async function logDebugWebhookCall(
 	route: string | undefined,
 	method: string,
@@ -322,13 +327,36 @@ Deno.serve(async (req: Request) => {
 
 			return respondAccepted({ pageId, route })
 		} else if (route === "from-class-carts") {
-			// 클래스 페이지 자신이 클릭 대상. 이미 처리 중이면 재클릭을 무시한다.
+			// 클래스 페이지 자신이 클릭 대상.
+			// (2026-09-17, 체크박스 고착 수정) 이전에는 "교재비 생성중"이 true면 무조건 재클릭을
+			// 거부했다. 그런데 실제 처리는 다 끝났는데(카트 생성 전부 성공) 마지막에 체크박스를
+			// 다시 끄는 쓰기만 조용히 실패해서 영원히 "처리 중"으로 고착되는 사례가 실제로 발생했다
+			// (2026-09-17, 고2 A반). 이제는 무조건 거부하지 않고, 실제 데이터(활성 등록 중 교재비
+			// 누락 여부)를 다시 계산해서 판단한다: 이미 전부 생성돼 있으면 고착된 체크박스만 정리하고
+			// 바로 끝내고, 아직 누락이 있으면(진짜 처리 중이든 멈춘 것이든) 안전하게 새로 이어서
+			// 진행한다 -- ensureCartForRegistration은 이미 카트가 있는 학생은 건드리지 않는 멱등
+			// 작업이라 중복 생성 위험이 없다.
 			const classForLock = await getPage(pageId)
 			if (checkboxValue(classForLock, PROP_CLASS_CART_RUNNING)) {
-				return new Response(JSON.stringify({ ok: true, message: "already_processing", pageId, route }), {
-					status: 200,
-					headers: { "Content-Type": "application/json" },
+				const lockedRegistrations = await queryAllPages(DS_REGISTRATION, {
+					property: PROP_CLASS,
+					relation: { contains: pageId },
 				})
+				const lockedActiveRegistrations = lockedRegistrations.filter(
+					(reg: any) => formulaString(reg, PROP_STATUS) === STATUS_ACTIVE,
+				)
+				const stillMissingCarts = lockedActiveRegistrations.some(
+					(reg: any) => relationIds(reg, PROP_REGISTRATION_CART).length === 0,
+				)
+				if (!stillMissingCarts) {
+					// 실제로는 이미 다 끝나 있었음 - 고착된 체크박스만 정리하고 응답한다.
+					await setClassCartStatus(pageId, "완료")
+					return new Response(
+						JSON.stringify({ ok: true, message: "recovered_already_completed", pageId, route }),
+						{ status: 200, headers: { "Content-Type": "application/json" } },
+					)
+				}
+				// 아직 누락이 있으면 진짜 처리 중이든 멈춘 것이든 안전하게 새로 이어서 진행한다 (거부하지 않음).
 			}
 			await setClassCartStatus(pageId, "처리중")
 
