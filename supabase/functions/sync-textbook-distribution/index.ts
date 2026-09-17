@@ -43,21 +43,25 @@
 // 판단"하도록 바꿔서, 이미 다 끝나 있었으면 고착된 체크박스만 정리하고, 아직 누락이 있으면(진짜
 // 처리 중이든 멈춘 것이든) 안전하게 새로 이어서 진행하게 했다.
 //
-// (2026-09-17, 체크박스 고착 수정 2차 -- 진짜 구조적 원인) 1차 수정 이후에도 다른 반(고1 A반,
-// 고2 B반)에서 같은 현상이 새로 발생했다. generate-tuition/generate-report(사용자가 "체크박스가
-// 금방금방 잘 꺼진다"고 지목한, 클래스 단위로 반 전체 등록을 처리하는 다른 두 함수)와 이 함수를
-// 나란히 비교해보니 결정적인 차이를 찾았다: 그 두 함수는 등록 하나하나를 항상 순차(for 루프)로
-// 처리하는데, 여기 from-class-carts만 mapWithConcurrency(..., 4, ...)로 등록 4명을 동시에 처리하고
-// 있었다. 동시에 여러 Notion API 호출을 날리면 레이트리밋(429)에 걸릴 확률이 커지고, 그 지연이
-// 누적되면 백그라운드 작업 전체 실행 시간이 길어져 플랫폼이 격리 인스턴스를 회수해버릴 가능성이
-// 커진다 -- 실제로 마지막 "완료" 쓰기까지 도달하지 못하면 로그도 전혀 남기지 못하고 그대로 죽는데,
-// 이는 관찰된 증상(오류 텍스트도 없이 체크박스만 영원히 켜진 채로 남음)과 정확히 일치한다.
-// 아래에서 동시성을 없애고 다른 두 함수와 동일하게 순차 처리로 통일했다.
-// 추가로, 이미 전부 생성되어 있는 클래스에서 버튼을 실수로 다시 눌러도 예전에는 매번 "처리중" ->
-// 백그라운드 작업 -> "완료"라는 위험한 경로를 다시 거쳐야 했다. 이제는 만들 게 하나도 남아있지
-// 않으면 백그라운드로 넘기지 않고 요청을 받은 그 자리에서 바로 판단해서 응답한다 (켜져 있던
-// 체크박스는 그 자리에서 바로 꺼주고, 이미 꺼져 있었으면 아무 쓰기도 없이 즉시 "이미 완료됨"으로
-// 응답한다) -- 그만큼 고착될 여지 자체가 줄어든다.
+// (2026-09-17, 체크박스 고착 수정 2차) 1차 수정 이후에도 다른 반(고1 A반, 고2 B반)에서 같은 현상이
+// 새로 발생했다. generate-tuition/generate-report(사용자가 "체크박스가 금방금방 잘 꺼진다"고 지목한
+// 다른 두 함수)와 나란히 비교해서, 등록 처리 동시성(mapWithConcurrency)을 없애고 순차(for 루프)로
+// 통일했다 -- Notion API 레이트리밋 위험을 줄이는 유효한 개선이라 그대로 유지하지만, 아래 3차에서
+// 확인했듯 체크박스 고착의 진짜 원인은 아니었다.
+//
+// (2026-09-17, 체크박스 고착 수정 3차 -- 진짜 근본 원인) 실제 Supabase 함수 로그를 확인해서 마지막
+// 원인을 찾았다: 매번 아래와 같은 오류로 마지막 쓰기가 조용히 실패하고 있었다.
+//   "마지막 동기화 is not a property that exists."
+// setClassCartStatus가 (등록 DB 전용으로 설계된) makeSyncStatusSetter를 그대로 썼는데, 그 헬퍼는
+// 항상 "마지막 동기화" 속성도 함께 쓰려고 시도한다. 그런데 클래스(학원) DB에는 그 속성 자체가 없다.
+// Notion API는 요청에 포함된 속성 중 하나라도 존재하지 않으면 PATCH 요청 전체를 400으로 거부하므로,
+// 같은 요청에 함께 실려 있던 체크박스 끄기(checkbox: false)까지 통째로 실패해버린 것이다 -- 동시성이나
+// 타임아웃과는 무관하게, 성공/실패 여부와 상관없이 100% 매번 이 마지막 쓰기가 실패하고 있었다.
+// generate-tuition/generate-report가 쓰는 makeClassStatusSetter(_shared/generateShared.ts)는 애초에
+// "마지막 동기화"를 쓰지 않도록 만들어져 있어서 이 문제가 전혀 없었다 -- 그래서 그 두 함수만 체크박스가
+// 금방금방 잘 꺼졌던 것. 아래에서 setClassCartStatus도 같은 헬퍼(makeClassStatusSetter)로 바꿔서
+// 근본 원인을 제거한다. (교재비 DB 쪽 setCartStatus는 그대로 둔다 -- 교재비(학원) DB에는 "마지막
+// 동기화" 속성이 실제로 존재하므로 makeSyncStatusSetter를 쓰는 것이 맞다.)
 //
 // 라우트:
 //   POST /sync-textbook-distribution/from-cart         <- 교재비(학원) DB "진도교재 담기" 버튼 (학생 1명, 담기까지 수행)
@@ -78,6 +82,7 @@ import {
 	todaySeoulDate,
 } from "../_shared/notionClient.ts"
 import { makeSyncStatusSetter } from "../_shared/registrationSync.ts"
+import { makeClassStatusSetter } from "../_shared/generateShared.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 import { getScheduleConfig } from "../_shared/adminShared.ts"
 
@@ -125,11 +130,16 @@ const PROP_CLASS_CART_RUNNING = "교재비 생성중" // 이 클래스의 교재
 // "처리 시간 초과" 오류로 표시하고 락을 풀어서 바로 재클릭해서 다시 시도할 수 있게 한다.
 const BATCH_TIMEOUT_MS = 120 * 1000
 
-// 교재비 DB는 이 함수 혼자만 처리 상태를 쓰므로 otherFlagProps가 필요 없다.
+// 교재비 DB는 이 함수 혼자만 처리 상태를 쓰므로 otherFlagProps가 필요 없다. 교재비(학원) DB에는
+// "마지막 동기화" 속성이 실제로 존재하므로(마지막으로 "진도교재 담기"가 완료된 시각), 그 속성도
+// 함께 쓰는 makeSyncStatusSetter를 그대로 쓴다.
 const setCartStatus = makeSyncStatusSetter(PROP_CART_RUNNING, [])
-// 클래스 DB는 수강료 생성중/보고서 생성중/교재 생성중과 "실시간 처리 상태" 수식을 공유하지만,
-// 그 수식은 체크박스들을 실시간으로 조합해서 보여주므로 여기 setter는 자기 자신만 갱신하면 된다.
-const setClassCartStatus = makeSyncStatusSetter(PROP_CLASS_CART_RUNNING, [])
+// (2026-09-17, 체크박스 고착 수정 3차) 클래스(학원) DB에는 "마지막 동기화" 속성이 없어서, 그 속성도
+// 함께 쓰려는 makeSyncStatusSetter를 쓰면 마지막 쓰기가 항상 400으로 실패했다 (위 파일 상단 주석
+// 참고). generate-tuition/generate-report와 동일한 makeClassStatusSetter("마지막 동기화"를 쓰지
+// 않음)로 바꿔서 근본 원인을 제거한다. "실시간 처리 상태" 수식은 체크박스들을 실시간으로 조합해서
+// 보여주므로 여기 setter는 자기 자신(교재비 생성중)만 갱신하면 된다.
+const setClassCartStatus = makeClassStatusSetter(PROP_CLASS_CART_RUNNING)
 
 // [TEMP DEBUG] 실제로 들어온 요샕을 노션의 임시 로그 DB에 기록한다 (fire-and-forget, 절대 메인 응답을
 // 막거나 실패시키지 않음). 원인 파악(웹훅 주소 오류로 확인됨) 후 정리 예정.
@@ -391,9 +401,8 @@ Deno.serve(async (req: Request) => {
 						try {
 							// (2026-09-17, 2차 수정) generate-tuition/generate-report와 동일하게 순차(for
 							// 루프) 처리로 통일한다. 동시성(mapWithConcurrency)을 쓰면 Notion API
-							// 레이트리밋에 더 잘 걸리고, 그 지연이 누적되면 마지막 "완료" 쓰기 전에 백그라운드
-							// 실행 시간이 플랫폼 한도를 넘어 격리 인스턴스가 회수될 위험이 커진다 -- 이게 이
-							// 함수만 유독 체크박스가 잘 안 꺼지던 진짜 원인으로 보인다.
+							// 레이트리밋에 더 잘 걸릴 위험이 있어 예방적으로 없앤다 (체크박스 고착의 진짜
+							// 원인은 아래 setClassCartStatus 쪽이었음 - 위 파일 상단 3차 수정 주석 참고).
 							let createdCount = 0
 							for (const reg of activeRegistrations) {
 								const result = await ensureCartForRegistration(reg.id, reg)
