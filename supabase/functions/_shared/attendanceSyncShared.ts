@@ -6,9 +6,13 @@
 // sync-report-cache는 이 헬퍼로 attendance_records만 읽어서 리포트를 조립한다(Notion 미조회).
 
 import { text, dateStartOf, dateEndOf, relationIds, firstRelationId, normalizeStatus } from "./reportCacheShared.ts"
+import { queryAllPages } from "./notionClient.ts"
 
 const SB_URL = Deno.env.get("SB_URL") ?? ""
 const SB_SERVICE_ROLE_KEY = Deno.env.get("SB_SERVICE_ROLE_KEY") ?? ""
+
+// 워크스페이스 구조상 고정값인 데이터소스 ID (sync-attendance/index.ts, cascade-delete/index.ts와 동일한 값).
+const DS_ATTENDANCE = "8aaba040-586b-8322-8437-87608a763415"
 
 function requireSupabaseEnv() {
   if (!SB_URL || !SB_SERVICE_ROLE_KEY) {
@@ -77,6 +81,23 @@ export async function upsertAttendanceRows(rows: AttendanceRow[]): Promise<void>
   if (!res.ok) {
     throw new Error(`attendance_records upsert 실패: ${res.status} ${await res.text()}`)
   }
+}
+
+// 등록 1건의 출석만 Notion에서 다시 조회해서 attendance_records에 반영한다. 보고서 발송 직전
+// 재동기화(send-report)와 야간 점검(nightly-report-sync-audit)에서 사용한다. 대상이 등록 1건으로
+// 한정되어 있어, 등록 수가 계속 늘어나도 이 함수 자체의 비용은 커지지 않는다(전체 스캔과의 차이점).
+export async function syncAttendanceForRegistration(registrationId: string): Promise<number> {
+  const pages = await queryAllPages(DS_ATTENDANCE, {
+    property: "등록",
+    relation: { contains: registrationId },
+  })
+  const rows: AttendanceRow[] = []
+  for (const page of pages) {
+    const row = buildAttendanceRow(page)
+    if (row) rows.push(row)
+  }
+  await upsertAttendanceRows(rows)
+  return rows.length
 }
 
 // sync-report-cache가 등록 1건의 리포트를 조립할 때 사용. sinceIso 이후(수업일시 기준) 출석만 가져온다.
