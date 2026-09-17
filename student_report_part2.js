@@ -635,21 +635,6 @@ function renderApp() {
   }
 }
 
-function updateDebugClock() {
-  const el = document.getElementById("debug-clock")
-  if (!el) return
-  const now = new Date()
-  const parts = new Intl.DateTimeFormat("ko-KR", {
-    timeZone: "Asia/Seoul",
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-    weekday: "short", hour12: false,
-  }).format(now)
-  el.textContent = `현재 인식 시각(Asia/Seoul): ${parts}`
-}
-updateDebugClock()
-setInterval(updateDebugClock, 1000)
-
 async function initApp() {
   app.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:80vh;color:#8a8a8a;font-size:15px;">불러오는 중...</div>'
   await loadReportFromServer()
