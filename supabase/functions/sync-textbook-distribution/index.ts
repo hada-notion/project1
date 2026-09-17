@@ -1,9 +1,9 @@
 // sync-textbook-distribution
 //
-// 교재비 기능(로드맵 5-37): 진도교재 담기(교재배부 생성) + 필요 시 교재비(카트) 자동 생성.
-// 결제(교재배부 "결재" 버튼 → 미납/결제완료 전환)는 기존 노션 자동화를 그대로 사용하며 이 함수는 건드리지 않는다.
+// 교재뱄 기능(로드맵 5-37): 진도교재 담기(교재배부 생성) + 필요 시 교재비(카트) 자동 생성.
+// 결제(교재배부 "결재" 버튼 → 미납/결제완료 전환)는 기존 노션 자동화를 그대로 사용하야 이 함수는 건드리지 않는다.
 //
-// 담기 대상 판정 규칙:
+// 담기 대상 판정 규식:
 //   진도교재(학원) DB의 "진행상태"가 정확히 "진행 중"(실제로 지금 쓰고 있는 교재)인 것만 담는다.
 //   - "다음 교재"는 아직 시작 전이며, 다음 학기에나 쓰게 될 수도 있는 "진짜 다음" 교재라 아직 청구하지 않는다.
 //   - "완료"/"미사용"은 이미 지난 교재라 제외 (이미 예전에 배부(청구)됐을 가능성이 높음).
@@ -31,12 +31,14 @@
 // 구조적 한계에 해당하지 않는다고 판단했다. 실제 교재 배부(청구)는 여전히 교재비 페이지의
 // "진도교재 담기" 버튼(from-cart)으로 학생별로 개별 진행한다.
 //
-// (2026-09-17, 디버깅) from-class-carts 버튼을 누르면 노션 쪽에 "버튼 실행에 실패했습니다" 토스트만
-// 뜨고, 클래스 페이지의 "교재비 생성중"/"마지막 오류" 등 어디에도 기록이 남지 않는 문제가 발생.
-// 이는 pageId 추출 또는 최초 getPage(잠금 확인) 단계 이전/도중에 실패하고 있다는 뜻인데, Supabase
-// 함수 로그를 직접 볼 수 있는 수단이 없어 원인을 좁히기 어려웠다. 그래서 아래 DATA_SOURCE_DEBUG_LOG /
-// logDebugWebhookCall로 실제 들어온 요청(라우트/메소드/원본 바디/pageId 추출 결과)을 노션의 별도
-// 임시 DB에 남겨서 확인한다. 원인 파악 후 이 블록과 임시 DB는 제거할 예정.
+// (2026-09-17, 디버깅 1차) from-class-carts 버튼을 누르보대 노션 쪽에 "버튼 실행에 실패했습니다" 토스트만
+// 뜨고 어렘에도 기록이 안 남았다. route === "from-class-carts"입려에만 임시 디버깅 로깅을 둘늘다.
+// 배포 후 버튼을 다시 누르둔 이 임시 로깅 DB(🔧 웹훅 디버그 로그 (임시))에 결과가 0건 -
+// 증, 요샕이 이 함수에 전혀 도달하지 않고 있다는 뜻. 가장 의심되는 원인은 URL 끔의 쉐랑시(trailing
+// slash) 따위 route 파싱이 깜끔하게 다른 것(예: ".../from-class-carts/" → pop()이 빈 문자열을 맞럈)
+// 이다. 아래 둘을 수정: (1) route 파싱을 filter(Boolean)을 뎊션 쉐랑시에 안전하게, (2) 디버깅
+// 로깅을 route에 상관없이 버튼마다 무조건 남기도록 확대로 범위를 늘릴. 원인 파악 후 이 벼생적 DATA_SOURCE_DEBUG_LOG
+// / logDebugWebhookCall / 이 주석 바땔은 모드 제거할 예정.
 //
 // 라우트:
 //   POST /sync-textbook-distribution/from-cart         <- 교재비(학원) DB "진도교재 담기" 버튼 (학생 1명, 담기까지 수행)
@@ -69,7 +71,7 @@ const DATA_SOURCE_TEXTBOOK_DISTRIBUTION = Deno.env.get("DATA_SOURCE_TEXTBOOK_DIS
 const DATA_SOURCE_PROGRESS_BOOK = Deno.env.get("DATA_SOURCE_PROGRESS_BOOK_ID")!
 
 // [TEMP DEBUG] from-class-carts 실패 원인 진단용 임시 로그 DB ("🔧 웹훅 디버그 로그 (임시)", 교재비 관리
-// 페이지 하위). 민감 정보가 아니라 데이터소스 ID를 그대로 하드코딩한다. 원인 파악 후 제거할 예정.
+// 페이지 하위). 민감 정보가 아니라 데이타소스 ID를 그대로 하드코딩한다. 원인 파악 후 제거할 예정.
 const DATA_SOURCE_DEBUG_LOG = "65bd92de36864b57be320cb4b8b5a3c8"
 
 // 교재비(학원) DB 속성
@@ -100,7 +102,7 @@ const STATUS_ACTIVE = "🟢 수강 중"
 // 클래스(학원) DB 속성
 const PROP_CLASS_CART_RUNNING = "교재비 생성중" // 이 클래스의 교재비 일괄 생성(from-class-carts)이 처리 중인지 표시 (내부용)
 
-// 배치 작업 전체가 이 시간 안에 못 끝나면, 무한정 기다리게 하지 않고 곧바로
+// 배지 작업 전체가 이 시간 안에 못 끝나면, 무한정 기다리게 하지 않고 곧바로
 // "처리 시간 초과" 오류로 표시하고 락을 풀어서 바로 재클릭해서 다시 시도할 수 있게 한다.
 const BATCH_TIMEOUT_MS = 120 * 1000
 
@@ -110,7 +112,7 @@ const setCartStatus = makeSyncStatusSetter(PROP_CART_RUNNING, [])
 // 그 수식은 체크박스들을 실시간으로 조합해서 보여주므로 여기 setter는 자기 자신만 갱신하면 된다.
 const setClassCartStatus = makeSyncStatusSetter(PROP_CLASS_CART_RUNNING, [])
 
-// [TEMP DEBUG] 실제로 들어온 요청을 노션의 임시 로그 DB에 기록한다 (fire-and-forget, 절대 메인 응답을
+// [TEMP DEBUG] 실제로 들어온 요샕을 노션의 임시 로그 DB에 기록한다 (fire-and-forget, 절대 메인 응답을
 // 막거나 실패시키지 않음). 원인 파악 후 제거할 예정.
 async function logDebugWebhookCall(
 	route: string | undefined,
@@ -133,9 +135,9 @@ async function logDebugWebhookCall(
 	}
 }
 
-// 백그라운드 배치 작업이 예상 밖으로 오래 걸리면 사용자가 "처리중" 표시만 보며 무한정
+// 백그라운드 배지 작업이 예상 밖으로 오래 걸리면 사용자가 "처리중" 표시만 보며 무한정
 // 기다리지 않도록, 정해진 시간 안에 못 끝나면 즉시 오류 상태로 바꿔서 알려주고 락도 풀어준다
-// (재클릭하면 바로 다시 시도 가능). 원본 작업 자체는 자바스크립트 특성상 취소할 수 없어
+// (재클릭하면 바로 다시 시도 가능). 원본 작업 자신은 자바스크립트 특성상 취소할 수 없어
 // 백그라운드에서 계속 흐르지만, 그 작업이 뒤늦게 스스로 완료/오류 상태를 기록하므로(각 라우트의
 // 기존 try/catch), 이 함수는 시간 초과 시점에만 개입해서 사용자에게 먼저 알려주는 역할만 한다.
 async function runWithSafetyTimeout(
@@ -161,7 +163,7 @@ async function runWithSafetyTimeout(
 
 // 등록 하나에 대해 교재비(장바구니) 페이지를 확보한다: 이미 있으면 재사용(항상 학생당 1개만 존재해야
 // 함), 없으면 이 시점에 생성한다. from-cart(진도교재 담기)와 from-class-carts(교재비 페이지만
-// 반 전체 일괄 생성 - 교재 배부는 하지 않음) 두 경로가 공통으로 쓴다.
+// 반 전체 일괄 생성 - 교재 배부는 하지 않음) 두 경로가 공통으로 쓰게.
 async function ensureCartForRegistration(
 	registrationId: string,
 	preFetchedRegistration?: any,
@@ -174,7 +176,7 @@ async function ensureCartForRegistration(
 	const studentName = anyTitleText(registration) || "학생"
 	// [NEW] 표시용: 이 카트의 발송 설정이 알림톡 설정(학원) DB의 어느 행인지 한눈에 보여준다
 	// (실제 발송 동작에는 영향 없음, 위 파일 상단 주석 참고).
-	// getScheduleConfig에 60초 캐시가 있어서, 같은 배치 안에서 여러 학생의 신규 카트를 만들 때도
+	// getScheduleConfig에 60초 캐시가 있어서, 같은 배지 안에서 여러 학생의 신규 카트를 만들 때도
 	// 실제 Notion 조회는 한 번만 일어난다.
 	const textbookConfig = await getScheduleConfig("교재비 안내")
 	const cart = await createPage(DATA_SOURCE_TEXTBOOK_CART, {
@@ -258,7 +260,9 @@ async function distributeForRegistration(
 
 Deno.serve(async (req: Request) => {
 	const url = new URL(req.url)
-	const route = url.pathname.split("/").pop()
+	// [TEMP DEBUG 수정] 쉐랑시(trailing slash)가 붙어오면 기존 split("/").pop()은 빈 문자열을 맞럈 -
+	// filter(Boolean)으로 빈 조각을 거륩내서 언제도 뜻바릑이 담기가 정확히 잡히도록 한다.
+	const route = url.pathname.split("/").filter(Boolean).pop()
 	const rawBodyText = await req.text()
 	let body: unknown = {}
 	try {
@@ -270,12 +274,10 @@ Deno.serve(async (req: Request) => {
 
 	const pageId = extractPageId(body)
 
-	// [TEMP DEBUG] from-class-carts 버튼 클릭 시 "버튼 실행에 실패했습니다" 토스트만 뜨고 클래스 DB에는
-	// 어떤 상태(처리중/오류)도 기록되지 않는 문제를 진단하기 위해, 실제로 들어온 요청을 임시 로그 DB에
-	// 남긴다 (fire-and-forget, 메인 응답에는 영향 없음). 원인 파악 후 제거할 예정.
-	if (route === "from-class-carts") {
-		logDebugWebhookCall(route, req.method, rawBodyText, pageId).catch(() => {})
-	}
+	// [TEMP DEBUG 수정] 이전에는 route === "from-class-carts"일 떄만 로그를 둘얈다. 그런데 실제로는
+	// 로그가 0건이었다 - route가 기대한 것과 다르게 들어온 것일 수도 있다도 보기 위해, route가 뭐땜대
+	// 상관없이 모든 요샕을 대상으로 무조거 남겨 범위를 늘마다 (fire-and-forget, 응답에는 영향 없음).
+	logDebugWebhookCall(route, req.method, rawBodyText, pageId).catch(() => {})
 
 	if (!pageId) {
 		return new Response(JSON.stringify({ error: "pageId를 찾을 수 없음" }), { status: 400 })
