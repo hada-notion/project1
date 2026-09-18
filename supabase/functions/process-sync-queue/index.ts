@@ -18,6 +18,13 @@
 // sync-textbook-distribution(from-cart, from-class-carts) / sync-class-report-cache 를 HANDLERS에
 // 추가했다. 이 다섯 함수 모두 여러 Notion DB에서 동시에 웹훅이 몰릴 수 있는 함수라, 이제 sync-report-cache와
 // 동일하게 요청을 받으면 즉시 큐에 적재만 하고, 실제 무거운 처리는 이 워커가 순서대로 하나씩 담당한다.
+//
+// (2026-09-18, Phase 3) fix-attendance / sync-exam-scope / sync-registration-enroll /
+// sync-registration-end / sync-registration-timetable(웹훅 단건 경로만) /
+// sync-registration-textbook(create-individual 라우트만) 를 HANDLERS에 추가했다. 등록(학원) DB의
+// "남은 버튼"들도 같은 이유로 큐로 옮긴 것. sync-registration-timetable의 매일 cron 전체 스캔과
+// sync-registration-textbook의 cleanup-on-end 라우트(다른 함수가 내부적으로 동기 호출)는 의도적으로
+// 큐를 거치지 않고 계속 동기 처리된다.
 
 import {
   tryAcquireWorkerLock,
@@ -39,6 +46,12 @@ import {
   processFromClassCartsQueueItem,
 } from "../_shared/textbookDistributionTarget.ts"
 import { processSyncClassReportCacheQueueItem } from "../_shared/classReportCacheTarget.ts"
+import { processFixAttendanceQueueItem } from "../_shared/fixAttendanceTarget.ts"
+import { processSyncExamScopeQueueItem } from "../_shared/examScopeTarget.ts"
+import { processSyncRegistrationEnrollQueueItem } from "../_shared/registrationEnrollTarget.ts"
+import { processSyncRegistrationEndQueueItem } from "../_shared/registrationEndTarget.ts"
+import { processSyncRegistrationTimetableQueueItem } from "../_shared/registrationTimetableTarget.ts"
+import { processCreateIndividualBooksQueueItem } from "../_shared/registrationTextbookTarget.ts"
 
 // target별 실제 처리 함수. 앞으로 다른 웹훅 함수들도 같은 큐 패턴으로 옮기면 여기에 추가한다.
 const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Promise<any>) => Promise<void>> = {
@@ -49,6 +62,12 @@ const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Pro
   "sync-textbook-distribution:from-cart": processFromCartQueueItem,
   "sync-textbook-distribution:from-class-carts": processFromClassCartsQueueItem,
   "sync-class-report-cache": processSyncClassReportCacheQueueItem,
+  "fix-attendance": processFixAttendanceQueueItem,
+  "sync-exam-scope": processSyncExamScopeQueueItem,
+  "sync-registration-enroll": processSyncRegistrationEnrollQueueItem,
+  "sync-registration-end": processSyncRegistrationEndQueueItem,
+  "sync-registration-timetable": processSyncRegistrationTimetableQueueItem,
+  "sync-registration-textbook:create-individual": processCreateIndividualBooksQueueItem,
 }
 
 // Edge Function 자체의 실행 시간 한도보다 여유 있게 짧은 시간 예산 안에서만 계속 처리하고, 남으면
