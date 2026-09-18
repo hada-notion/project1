@@ -245,7 +245,7 @@ export async function createSendLogEntry(args: {
       properties["발송자"] = { people: [{ id: args.senderUserId }] }
     }
     if (args.periodStart) {
-      properties["보고서 기간"] = {
+      properties["해당 기간"] = {
         date: {
           start: args.periodStart,
           end: args.periodEnd && args.periodEnd !== args.periodStart ? args.periodEnd : null,
