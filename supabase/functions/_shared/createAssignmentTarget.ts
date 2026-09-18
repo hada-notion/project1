@@ -3,6 +3,13 @@
 // create-assignment가 처리하는 실제 학습활동 생성 로직을 별도 파일로 분리했다 (2026-09-18, 큐 기반
 // 순차 처리 도입, Phase 2). 원래 supabase/functions/create-assignment/index.ts 안에 있던 코드를
 // 그대로 옮긴 것이다. webhook payload 파싱(extractPageId 등)은 index.ts에 그대로 둔다.
+//
+// (2026-09-18 밤) 사용자 확인: 학습기록(recordId) 하나당 학습활동(과제/평가)은 한 번만 만들어지고
+// 끝나야 한다. 새로운 학습활동이 필요하면 학습기록을 새로 만들어서 다시 출제하는 방식이 맞는 흐름이고,
+// 같은 학습기록으로 또 출제하는 것은 의도된 동작이 아니다. 그래서 생성 전에 이미 이 학습기록+등록
+// 조합으로 만들어진 학습활동이 있는지 확인해서, 있으면 새로 만들지 않고 그 페이지를 그대로 재사용한다.
+// 이 확인은 process-sync-queue의 재시도(최대 3회)가 이 함수를 다시 호출해도 중복 생성되지 않도록
+// 만드는 안전장치이기도 하다.
 
 import {
 	mapWithConcurrency,
@@ -129,6 +136,22 @@ async function findNextAttendance(registrationId: string, afterIso: string): Pro
 	return (results[0]?.id as string) ?? null
 }
 
+// 이 학습기록(recordId)+등록(registrationId) 조합으로 이미 만들어진 학습활동이 있는지 확인한다.
+// 있으면 그 페이지 id를 반환하고, 없으면 null을 반환한다.
+async function findExistingActivity(recordId: string, registrationId: string): Promise<string | null> {
+	const result = await queryDataSource(DS_STUDY_ACTIVITY, {
+		filter: {
+			and: [
+				{ property: PROP_ACTIVITY_RECORD, relation: { contains: recordId } },
+				{ property: PROP_ACTIVITY_REGISTRATION, relation: { contains: registrationId } },
+			],
+		},
+		page_size: 1,
+	})
+	const results = (result.results as JsonRecord[]) ?? []
+	return (results[0]?.id as string) ?? null
+}
+
 // 등록/학습활동 생성 등 시간이 걸리는 실제 작업. process-sync-queue 워커가 호출한다.
 export async function finishCreateAssignment(
 	recordId: string,
@@ -151,6 +174,19 @@ export async function finishCreateAssignment(
 		}
 
 		const created = await mapWithConcurrency(registrationIds, 3, async (registrationId) => {
+			// 학습기록당 학습활동은 한 번만 생성되어야 한다 (재시도로 이 함수가 다시 호출돼도 중복
+			// 생성되지 않도록, 이미 만들어진 게 있으면 새로 만들지 않고 그대로 재사용한다).
+			const existingActivityId = await findExistingActivity(recordId, registrationId)
+			if (existingActivityId) {
+				return {
+					registrationId,
+					activityId: existingActivityId,
+					attendanceId: registrationToAttendance.get(registrationId) ?? null,
+					deadlineAttendanceId: null,
+					reused: true,
+				}
+			}
+
 			const currentAttendanceId = registrationToAttendance.get(registrationId) ?? null
 
 			let deadlineAttendanceId: string | null = null
