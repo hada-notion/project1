@@ -291,6 +291,12 @@ const ALIMTALK_CONFIG_CACHE_MS = 60_000
 
 // [NEW] 주간/월간 보고서는 카카오 템플릿이 하나로 통합되어 있어서, "알림톡 설정(학원) DB"에서는 "보고서" 하나의 행으로 조회합니다.
 // 전송로그의 "발송 구분"(일일/주간/월간/수강료)은 이와 별개로 그대로 유지됩니다.
+//
+// [FIX, 2026-09-18] getScheduleConfig/getAlimtalkConfig는 원래 "알림톡 설정(학원) DB"의 제목
+// 속성("발송 구분")이 정확히 이 문자열과 같은 행을 찾았다. 그런데 그 제목을 사람이 "보고서" →
+// "주간/월간 보고서"로 바꾸자 조회가 조용히 실패해 fallback(Secrets 기본값)으로 넘어가는 사고가
+// 있었다. 지금은 화면용 제목과 무관한 별도 텍스트 속성 "코드"를 두고 이 값으로만 조회한다.
+// "발송 구분"(제목)은 자유롭게 바꿔도 되지만, "코드" 값은 여기 나열된 문자열과 정확히 같아야 한다.
 export type AlimtalkConfigCategory = SendLogCategory | "보고서"
 
 // [NEW, 복원 2026-09-18] "알림톡 설정(학원) DB"에서 발송 구분별 행 ID와 안내멘트만 가져온다.
@@ -309,7 +315,7 @@ export async function getScheduleConfig(category: AlimtalkConfigCategory): Promi
   if (!ALIMTALK_CONFIG_DB_ID) return null
   try {
     const json = await notionQueryDatabase(ALIMTALK_CONFIG_DB_ID, {
-      filter: { property: "발송 구분", title: { equals: category } },
+      filter: { property: "코드", rich_text: { equals: category } },
       page_size: 1,
     })
     const page = json.results?.[0]
@@ -376,8 +382,8 @@ export async function getAlimtalkConfig(
   try {
     const json = await notionQueryDatabase(ALIMTALK_CONFIG_DB_ID, {
       filter: {
-        property: "발송 구분",
-        title: { equals: category },
+        property: "코드",
+        rich_text: { equals: category },
       },
       page_size: 1,
     })
