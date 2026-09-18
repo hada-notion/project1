@@ -156,6 +156,11 @@
     color: var(--red);
     font-weight: 600;
   }
+  .result.info {
+    background: var(--blue-soft);
+    color: var(--blue);
+    font-weight: 600;
+  }
   .key:focus-visible, .confirm:focus-visible, .settings-btn:focus-visible, .settings-input:focus-visible {
     outline: 2px solid var(--blue);
     outline-offset: 2px;
@@ -184,6 +189,34 @@
     color: var(--text-secondary);
     font-size: 0.8125rem;
     cursor: pointer;
+  }
+  .candidates-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    max-height: 42vh;
+    overflow-y: auto;
+  }
+  .candidate-btn {
+    width: 100%;
+    padding: 0.75rem 0.875rem;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    background: var(--surface);
+    color: var(--text-primary);
+    font-size: 0.9375rem;
+    font-weight: 700;
+    text-align: left;
+    cursor: pointer;
+  }
+  .candidate-btn:active { background: var(--surface-2); }
+  .candidate-btn .sub {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: var(--text-secondary);
+    margin-top: 0.125rem;
   }
   [hidden] { display: none !important; }
   @media (prefers-color-scheme: dark) {
@@ -257,7 +290,7 @@
   </div>
   <div class="kiosk" id="app-screen" style="display:none">
     <div class="header">
-      <button class="settings-btn" id="settingsBtn" aria-label="설정" title="설정">⚙️</button>
+      <button class="settings-btn" id="logoutBtn" aria-label="로그아웃" title="로그아웃">🔒</button>
       <div class="icon">✅</div>
       <h1>출결 체크</h1>
       <p>보호자 또는 학생 전화번호를 입력해주세요</p>
@@ -286,59 +319,66 @@
       <div class="result" id="result"></div>
     </div>
 
-    <div id="settingsView" class="settings-view" hidden>
-      <div class="settings-icon">⚙️</div>
-      <h2>웹훅 주소 설정</h2>
-      <p class="settings-desc">등원 체크 데이터를 전달할 웹훅(Webhook) 주소를 입력해주세요.<br />이 기기에 저장되어 다음부터는 바로 사용할 수 있어요.</p>
-      <input type="url" id="webhookInput" class="settings-input" placeholder="https://hook.make.com/..." autocapitalize="off" autocomplete="off" spellcheck="false" />
-      <button class="confirm" id="saveWebhookBtn">저장하고 시작하기</button>
-      <button class="cancel-btn" id="cancelSettingsBtn" hidden>취소</button>
-      <div class="result" id="settingsResult"></div>
+    <div id="candidatesView" class="settings-view" hidden>
+      <div class="settings-icon">👨‍👩‍👧‍👦</div>
+      <h2>학생을 선택해주세요</h2>
+      <p class="settings-desc">같은 번호로 등록된 학생이 여러 명이에요.<br />해당하는 학생을 선택해주세요.</p>
+      <div class="candidates-list" id="candidatesList"></div>
+      <button class="cancel-btn" id="cancelCandidatesBtn">취소</button>
     </div>
   </div>
 
 <script>
-  // 웹훅 URL은 더 이상 코드에 고정하지 않습니다.
-  // 우측 상단 설정(⚙️) 버튼에서 입력한 주소가 이 기기의 브라우저(localStorage)에 저장되어 재사용됩니다.
-  // 웹훅은 { phone, type, timestamp } JSON을 POST로 받습니다. type은 "checkin"(등원) 또는 "checkout"(하원)입니다.
-  // 이후 학생 DB에서 해당 연락처를 검색해 등원/하원 처리 및 카카오 알림톡을 발송한 뒤,
-  // { matched: true, studentName: "홍길동" } 형태의 JSON을 응답해야 합니다.
-  const STORAGE_KEY = "attendanceKioskWebhookUrl";
-
-  function getWebhookUrl() {
-    return (localStorage.getItem(STORAGE_KEY) || "").trim();
-  }
-  function saveWebhookUrl(url) {
-    localStorage.setItem(STORAGE_KEY, url);
-  }
+  // 등원/하원 데이터는 더 이상 외부 웹훅(Make.com)으로 보내지 않습니다.
+  // 로그인 때 저장해둔 관리자 키(x-admin-key)로 Supabase Edge Function "kiosk-checkin"을
+  // 바로 호출해서, 학생 매칭·출석 기록·카카오 알림톡 발송까지 한 번에 처리합니다.
+  // 응답 형태:
+  //  - { matched: false } : 일치하는 연락처 없음
+  //  - { needsSelection: true, candidates: [{ registrationId, studentName, className }] }
+  //      : 같은 번호를 쓰는 학생이 여러 명 -> 화면에서 고르면 registrationId를 담아 다시 호출
+  //  - { matched: true, alreadyDone: true, alreadyAt: "14:05" } : 이미 처리된 건(중복 방지)
+  //  - { matched: true, studentName: "홍길동" } : 정상 처리
 
   let digits = "";
+  let pendingType = null;
   const display = document.getElementById("display");
   const resultEl = document.getElementById("result");
   const checkinBtn = document.getElementById("checkinBtn");
   const checkoutBtn = document.getElementById("checkoutBtn");
   const mainView = document.getElementById("mainView");
-  const settingsView = document.getElementById("settingsView");
-  const settingsBtn = document.getElementById("settingsBtn");
-  const webhookInput = document.getElementById("webhookInput");
-  const saveWebhookBtn = document.getElementById("saveWebhookBtn");
-  const cancelSettingsBtn = document.getElementById("cancelSettingsBtn");
-  const settingsResult = document.getElementById("settingsResult");
-
-  function showSettings() {
-    webhookInput.value = getWebhookUrl();
-    settingsResult.className = "result";
-    settingsResult.textContent = "";
-    cancelSettingsBtn.hidden = !getWebhookUrl();
-    mainView.hidden = true;
-    settingsView.hidden = false;
-    webhookInput.focus();
-  }
+  const candidatesView = document.getElementById("candidatesView");
+  const candidatesList = document.getElementById("candidatesList");
+  const logoutBtn = document.getElementById("logoutBtn");
+  const cancelCandidatesBtn = document.getElementById("cancelCandidatesBtn");
 
   function showMain() {
-    settingsView.hidden = true;
+    candidatesView.hidden = true;
     mainView.hidden = false;
   }
+
+  function showCandidates(candidates, type) {
+    pendingType = type;
+    candidatesList.innerHTML = "";
+    (candidates || []).forEach((c) => {
+      const btn = document.createElement("button");
+      btn.className = "candidate-btn";
+      btn.innerHTML = (c.studentName || "이름 미상") + (c.className ? '<span class="sub">' + c.className + "</span>" : "");
+      btn.addEventListener("click", () => {
+        showMain();
+        runCheckin(pendingType, c.registrationId);
+      });
+      candidatesList.appendChild(btn);
+    });
+    mainView.hidden = true;
+    candidatesView.hidden = false;
+  }
+
+  cancelCandidatesBtn.addEventListener("click", () => {
+    pendingType = null;
+    digits = "";
+    updateDisplay();
+    showMain();
+  });
 
   function formatPhone(d) {
     if (!d) return "";
@@ -382,33 +422,7 @@
     clearResult();
   });
 
-  settingsBtn.addEventListener("click", showSettings);
-
-  cancelSettingsBtn.addEventListener("click", () => {
-    showMain();
-  });
-
-  saveWebhookBtn.addEventListener("click", () => {
-    const url = webhookInput.value.trim();
-    if (!/^https?:\/\/.+/i.test(url)) {
-      settingsResult.className = "result error";
-      settingsResult.textContent = "올바른 웹훅 주소(http:// 또는 https://로 시작)를 입력해주세요.";
-      return;
-    }
-    saveWebhookUrl(url);
-    showMain();
-  });
-
-  async function submitAttendance(type) {
-    const webhookUrl = getWebhookUrl();
-    if (!webhookUrl) {
-      showSettings();
-      return;
-    }
-    if (digits.length < 9) {
-      showResult("error", "전화번호를 정확히 입력해주세요.");
-      return;
-    }
+  async function runCheckin(type, registrationId) {
     const label = type === "checkin" ? "등원" : "하원";
     const activeBtn = type === "checkin" ? checkinBtn : checkoutBtn;
     const originalText = activeBtn.textContent;
@@ -416,22 +430,45 @@
     checkoutBtn.disabled = true;
     activeBtn.textContent = "확인 중...";
     try {
-      const res = await fetch(webhookUrl, {
+      const body = { phone: digits, type };
+      if (registrationId) body.registrationId = registrationId;
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/kiosk-checkin`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: digits, type, timestamp: new Date().toISOString() }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-key": getAdminKey(),
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+          "apikey": SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify(body),
       });
       let data = {};
       try {
         data = await res.json();
       } catch (e) {}
-      if (res.ok && data.matched) {
+      if (res.status === 401) {
+        showResult("error", "로그인이 만료되었습니다. 다시 로그인해주세요.");
+        setTimeout(() => {
+          localStorage.removeItem(ADMIN_KEY_STORAGE);
+          showLoginScreen();
+        }, 1200);
+      } else if (res.ok && data.needsSelection) {
+        checkinBtn.disabled = false;
+        checkoutBtn.disabled = false;
+        activeBtn.textContent = originalText;
+        showCandidates(data.candidates, type);
+        return;
+      } else if (res.ok && data.matched && data.alreadyDone) {
+        showResult("info", `이미 ${data.alreadyAt ? data.alreadyAt + "에 " : ""}${label} 처리되었습니다.`);
+      } else if (res.ok && data.matched) {
         showResult(
           "success",
           (data.studentName ? data.studentName + " 학생 " : "") + label + " 처리되었습니다. 학부모님께 알림을 보냈습니다."
         );
-      } else {
+      } else if (res.ok && data.matched === false) {
         showResult("error", "일치하는 연락처를 찾을 수 없습니다. 등록된 번호인지 확인해주세요.");
+      } else {
+        showResult("error", data.error || "처리 중 오류가 발생했습니다.");
       }
     } catch (err) {
       showResult("error", "연결에 실패했습니다. 잠시 후 다시 시도해주세요.");
@@ -441,6 +478,14 @@
     activeBtn.textContent = originalText;
     digits = "";
     updateDisplay();
+  }
+
+  function submitAttendance(type) {
+    if (digits.length < 9) {
+      showResult("error", "전화번호를 정확히 입력해주세요.");
+      return;
+    }
+    runCheckin(type);
   }
 
   checkinBtn.addEventListener("click", () => submitAttendance("checkin"));
@@ -463,12 +508,15 @@
   function showAppScreen() {
     document.getElementById("login-screen").style.display = "none";
     document.getElementById("app-screen").style.display = "flex";
-    if (!getWebhookUrl()) {
-      showSettings();
-    } else {
-      showMain();
-    }
+    showMain();
   }
+  logoutBtn.addEventListener("click", () => {
+    if (!confirm("로그아웃 하시겠습니까?")) return;
+    localStorage.removeItem(ADMIN_KEY_STORAGE);
+    digits = "";
+    updateDisplay();
+    showLoginScreen();
+  });
   async function submitLogin() {
     const input = document.getElementById("login-input");
     const key = input.value.trim();

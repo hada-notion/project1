@@ -156,6 +156,18 @@ export async function notionPatchPageProperties(pageId: string, properties: Reco
   return res.json()
 }
 
+// [NEW, 2026-09-19] kiosk-checkin이 정규 수업이 없는 날의 방문(보강)을 위해 출석(학원) DB에
+// 새 페이지를 만들 때 사용. notionPatchPageProperties와 동일한 패턴(fetchWithRetry + notionHeaders).
+export async function notionCreatePage(databaseId: string, properties: Record<string, unknown>): Promise<any> {
+  const res = await fetchWithRetry(NOTION_API_BASE + "/pages", {
+    method: "POST",
+    headers: notionHeaders(),
+    body: JSON.stringify({ parent: { database_id: databaseId }, properties }),
+  })
+  if (!res.ok) throw new Error("Notion page create failed: " + res.status + " " + (await res.text()))
+  return res.json()
+}
+
 export async function notionGetDatabase(databaseId: string): Promise<any> {
   const res = await fetchWithRetry(NOTION_API_BASE + "/databases/" + databaseId, { headers: notionHeaders() })
   if (!res.ok) throw new Error("Notion database fetch failed: " + res.status + " " + (await res.text()))
@@ -191,7 +203,16 @@ export function generateToken(): string {
 
 // "전송로그(학원) DB"에 알림톡 발송 결과 한 건을 기록합니다.
 // [NEW] "출석"(relation) / "발송자"(person)를 채워서, 출석 DB의 "전송 완료" 수식이 자동 계산하도록 합니다.
-export type SendLogCategory = "일일 보고서" | "주간 보고서" | "월간 보고서" | "수강료 안내" | "교재비 안내"
+// [NEW, 2026-09-19] 출결 키오스크(attendance_kiosk.html) 등원/하원 알림용 카테고리.
+// kiosk-checkin Edge Function이 사용한다 (로드맵: 키오스크의 Make.com 웹훅 의존 제거).
+export type SendLogCategory =
+  | "일일 보고서"
+  | "주간 보고서"
+  | "월간 보고서"
+  | "수강료 안내"
+  | "교재비 안내"
+  | "등원 알림"
+  | "하원 알림"
 export type SendLogStatus = "성공" | "실패"
 
 function formatSendLogDate(periodStart?: string): string {
