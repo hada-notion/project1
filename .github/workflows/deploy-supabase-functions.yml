@@ -42,9 +42,7 @@ jobs:
           set -e
           # 비밀번호에 특수문자(@, :, / 등)가 있으면 접속 URL이 깨지므로 percent-encode 해서 넣는다.
           # 복사/붙여넣기 과정에서 섞여 들어갈 수 있는 앞뒤 공백/개행 문자도 제거한다.
-          echo "DEBUG: raw password length (with any stray whitespace) = ${#SUPABASE_DB_PASSWORD}"
           ENCODED_DB_PASSWORD=$(python3 -c "import urllib.parse, os; print(urllib.parse.quote(os.environ['SUPABASE_DB_PASSWORD'].strip(), safe=''))")
-          echo "DEBUG: encoded password length = ${#ENCODED_DB_PASSWORD}"
           supabase db push --db-url "postgresql://postgres.${SUPABASE_PROJECT_ID}:${ENCODED_DB_PASSWORD}@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres"
         env:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
@@ -54,4 +52,56 @@ jobs:
         run: supabase functions deploy --project-ref "$SUPABASE_PROJECT_ID" --no-verify-jwt
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+
+      - name: Verify deployed function list matches repository
+        run: |
+          set -e
+          LIST_OUTPUT=$(supabase functions list --project-ref "$SUPABASE_PROJECT_ID")
+          echo "$LIST_OUTPUT"
+          MISSING=""
+          for dir in supabase/functions/*/; do
+            name=$(basename "$dir")
+            [ "$name" = "_shared" ] && continue
+            if ! echo "$LIST_OUTPUT" | grep -qF "$name"; then
+              MISSING="$MISSING $name"
+            fi
+          done
+          if [ -n "$MISSING" ]; then
+            echo "::error::배포 목록에서 확인되지 않은 함수:$MISSING"
+            exit 1
+          fi
+          echo "저장소의 모든 함수가 배포 목록에서 확인되었습니다."
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+
+      - name: Verify baseline required Secrets are present
+        run: |
+          set -e
+          SECRETS_OUTPUT=$(supabase secrets list --project-ref "$SUPABASE_PROJECT_ID")
+          echo "$SECRETS_OUTPUT"
+          # 여기 나열된 4개는 코드에서 확인 가능한 최소 기본값이며, 실제 필요한 Secrets 전체 목록은 아니다.
+          MISSING=""
+          for name in SB_URL SB_SERVICE_ROLE_KEY NOTION_TOKEN ADMIN_SECRET; do
+            if ! echo "$SECRETS_OUTPUT" | grep -qF "$name"; then
+              MISSING="$MISSING $name"
+            fi
+          done
+          if [ -n "$MISSING" ]; then
+            echo "::warning::기본 필수 Secret 중 이름을 찾을 수 없는 항목이 있습니다 (다른 이름으로 설정되어 있을 수도 있음):$MISSING"
+          else
+            echo "기본 필수 Secret(SB_URL, SB_SERVICE_ROLE_KEY, NOTION_TOKEN, ADMIN_SECRET)이 모두 확인되었습니다."
+          fi
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+
+      - name: Show migration status
+        run: |
+          set -e
+          ENCODED_DB_PASSWORD=$(python3 -c "import urllib.parse, os; print(urllib.parse.quote(os.environ['SUPABASE_DB_PASSWORD'].strip(), safe=''))")
+          supabase migration list --db-url "postgresql://postgres.${SUPABASE_PROJECT_ID}:${ENCODED_DB_PASSWORD}@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres"
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
