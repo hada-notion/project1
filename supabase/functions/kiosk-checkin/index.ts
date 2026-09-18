@@ -17,9 +17,10 @@
 //   "🔵 보강"으로 설정한다. 하원인데 등원 기록이 없던 경우엔 하원스템프만 채우고 등원스템프는
 //   비워둔다.
 // - 등원인데 이미 등원스템프가 있으면 덮어쓰지 않고 { alreadyDone: true, alreadyAt }로 안내한다.
-// - 카카오 알림톡: "알림톡 설정(학원) DB"에 코드 "등원 알림"/"하원 알림" 행이 있고 활성화되어
-//   있어야 실제 발송된다. Solapi 템플릿 승인 전(비활성 상태)에는 조용히 건너뛰고, 출결 기록
-//   자체는 항상 정상 동작한다.
+// - 카카오 알림톡: 등원/하원을 별도 템플릿 두 개로 운영하면 Solapi 템플릿 승인을 두 번 받아야 해서
+//   (2026-09-19) "키오스크 알림톡" 코드 하나로 통합했다. "알림톡 설정(학원) DB"에 이 코드 행이
+//   있고 활성화되어 있어야 실제 발송된다. Solapi 템플릿 승인 전(비활성 상태)에는 조용히 건너뛰고,
+//   출결 기록 자체는 항상 정상 동작한다. 템플릿 변수는 학생이름/구분("등원" 또는 "하원")/일자/시간.
 
 import {
   CORS_HEADERS,
@@ -216,9 +217,9 @@ Deno.serve(async (req: Request) => {
       stateChanged = true
     }
 
-    // 카카오 알림톡 (등원/하원용 템플릿이 아직 설정 전이면 조용히 건너뛴다)
+    // 카카오 알림톡 (등원/하원 통합 템플릿이 아직 설정 전이면 조용히 건너뛴다)
     if (stateChanged) {
-      const category = type === "checkin" ? "등원 알림" : "하원 알림"
+      const category = "키오스크 알림톡"
       const config = await getAlimtalkConfig(category, { pfId: "", templateId: "", senderNumber: "" })
       if (config.pfId && config.templateId) {
         try {
@@ -236,7 +237,12 @@ Deno.serve(async (req: Request) => {
             kakaoOptions: {
               pfId: config.pfId,
               templateId: config.templateId,
-              variables: { "이름": studentName, "시각": formatKstTime(nowIso) },
+              variables: {
+                "학생이름": studentName,
+                "구분": type === "checkin" ? "등원" : "하원",
+                "일자": todayKst(),
+                "시간": formatKstTime(nowIso),
+              },
               disableSms: false,
             },
           })

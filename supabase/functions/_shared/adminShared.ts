@@ -205,14 +205,16 @@ export function generateToken(): string {
 // [NEW] "출석"(relation) / "발송자"(person)를 채워서, 출석 DB의 "전송 완료" 수식이 자동 계산하도록 합니다.
 // [NEW, 2026-09-19] 출결 키오스크(attendance_kiosk.html) 등원/하원 알림용 카테고리.
 // kiosk-checkin Edge Function이 사용한다 (로드맵: 키오스크의 Make.com 웹훅 의존 제거).
+// [CHANGED, 2026-09-19 #2] 등원/하원을 별도 템플릿 두 개로 운영하면 Solapi 템플릿 승인을 두 번
+// 받아야 해서, "등원 알림"/"하원 알림" 두 카테고리를 "키오스크 알림톡" 하나로 통합했다. 등원/하원
+// 구분은 카테고리가 아니라 알림톡 템플릿 변수("구분": "등원"|"하원")로만 표시한다.
 export type SendLogCategory =
   | "일일 보고서"
   | "주간 보고서"
   | "월간 보고서"
   | "수강료 안내"
   | "교재비 안내"
-  | "등원 알림"
-  | "하원 알림"
+  | "키오스크 알림톡"
 export type SendLogStatus = "성공" | "실패"
 
 function formatSendLogDate(periodStart?: string): string {
