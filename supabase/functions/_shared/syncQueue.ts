@@ -117,6 +117,54 @@ export async function markSyncQueueItemFailed(id: number, errorMessage: string):
   if (!res.ok) console.error(`sync_queue #${id} failed 표시 실패: ${res.status} ${await res.text()}`)
 }
 
+// (2026-09-18 밤) 처리 중 오류가 나면 지금까지는 곧바로 failed로 확정해서 재시도가 전혀 없었다.
+// 이제 시도 횟수(item.attempts, claim_next_sync_queue_item이 집을 때마다 이미 +1 되어 있는 값)가
+// 한도 미만이면 pending으로 되돌려 다시 시도할 기회를 주고, 한도에 도달했을 때만 failed로 확정한다.
+// 이 재시도는 각 target 핸들러가 처리 전 현재 상태를 확인하고 진행하도록 설계되어 있다는 전제 하에
+// 안전하다 -- create-assignment(학습기록당 학습활동 1회 생성 확인 추가)와 create-learning-record
+// ("오늘 학습" 체크를 생성 전에 먼저 소비)도 이 전제에 맞게 함께 정리했다(2026-09-18).
+export async function markSyncQueueItemFailedOrRetry(
+  item: SyncQueueItem,
+  errorMessage: string,
+  maxAttempts = 3,
+): Promise<"retrying" | "failed"> {
+  requireEnv()
+  const willRetry = item.attempts < maxAttempts
+  const res = await fetchSupabaseWithRetry(`${SB_URL}/rest/v1/sync_queue?id=eq.${item.id}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(), Prefer: "return=minimal" },
+    body: JSON.stringify(
+      willRetry
+        ? { status: "pending", updated_at: new Date().toISOString(), last_error: errorMessage.slice(0, 1900) }
+        : { status: "failed", finished_at: new Date().toISOString(), last_error: errorMessage.slice(0, 1900) },
+    ),
+  })
+  if (!res.ok) {
+    console.error(`sync_queue #${item.id} 재시도/실패 표시 실패: ${res.status} ${await res.text()}`)
+  }
+  return willRetry ? "retrying" : "failed"
+}
+
+// (2026-09-18 밤) 워커 프로세스 자체가 중간에 죽어서(배포 중 재시작, 메모리 부족 등) processing
+// 상태로 영원히 멈춰있는 작업을 찾아 되돌린다. stale_after_seconds는 이 워커의 정상적인 처리
+// 시간(전체 루프 예산 100초, 잠금 리스 120초)보다 훨씬 여유있게 큰 기본값(15분)을 쓴다 -- 너무
+// 짧게 잡으면 실제로는 아직 살아서 느리게 처리 중인 작업을 오작동으로 잘못 판단해 되돌려, 두 워커가
+// 같은 작업을 동시에 처리하는 위험(중복 생성)이 생길 수 있기 때문이다.
+export async function recoverStaleSyncQueueItems(staleAfterSeconds = 900, maxAttempts = 3): Promise<number> {
+  requireEnv()
+  const res = await fetchSupabaseWithRetry(`${SB_URL}/rest/v1/rpc/recover_stale_sync_queue_items`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ stale_after_seconds: staleAfterSeconds, max_attempts: maxAttempts }),
+  })
+  if (!res.ok) {
+    console.error(`recover_stale_sync_queue_items 실패: ${res.status} ${await res.text()}`)
+    return 0
+  }
+  const rows = await res.json()
+  return Array.isArray(rows) ? rows.length : 0
+}
+
 // 큐에 pending 상태인 작업이 남아있는지 확인한다 (워커가 시간 예산을 다 쓰고 멈췄을 때, 남은 작업이
 // 있으면 스스로를 다시 깨워서 다음 pg_cron 주기(최대 1분)까지 기다리지 않고 계속 이어가게 한다).
 export async function hasPendingSyncQueueItems(): Promise<boolean> {
