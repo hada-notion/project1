@@ -293,56 +293,6 @@ const ALIMTALK_CONFIG_CACHE_MS = 60_000
 // 전송로그의 "발송 구분"(일일/주간/월간/수강료)은 이와 별개로 그대로 유지됩니다.
 export type AlimtalkConfigCategory = SendLogCategory | "보고서"
 
-// [NEW] 자동 스케줄(run-auto-schedule)이 읽는 생성/발송 스케줄 설정.
-// "알림톡 설정(학원) DB"의 "자동 발송 사용"/"발송 시각"/"월간 생성일"/"주간 생성요일"/"안내멘트"를 읽어온다.
-export type ScheduleConfig = {
-  rowId: string
-  autoEnabled: boolean
-  sendTime: string // "HH:mm", 비어있으면 미설정
-  monthDay: number | null
-  weekdays: string[] // 한글 요일 라벨 배열, 예: ["월", "수"]
-  notice: string // "수강료 안내" 행에서만 의미 있음
-  // [NEW] 월간/주간 생성 시 "이전달·이전주"(막 끝난 기간), "이번달·이번주"(지금 진행중인 기간), 또는 "다음달·다음주"(앞으로 올 기간)
-  // 중 어느 쪽을 대상으로 생성할지. 설정값이 없으면 기존 동작(다음달/다음주)을 그대로 유지한다.
-  monthlyDirection: "이전달" | "이번달" | "다음달"
-  weeklyDirection: "이전주" | "이번주" | "다음주"
-}
-
-export async function getScheduleConfig(category: AlimtalkConfigCategory): Promise<ScheduleConfig | null> {
-  if (!ALIMTALK_CONFIG_DB_ID) return null
-  try {
-    const json = await notionQueryDatabase(ALIMTALK_CONFIG_DB_ID, {
-      filter: { property: "발송 구분", title: { equals: category } },
-      page_size: 1,
-    })
-    const page = json.results?.[0]
-    if (!page) return null
-    const getText = (name: string) =>
-      (page.properties?.[name]?.rich_text ?? []).map((t: any) => t.plain_text).join("").trim()
-    const weekdays = (page.properties?.["주간 생성요일"]?.multi_select ?? []).map((o: any) => o.name)
-    const monthlyDirectionRaw = page.properties?.["월간 기준"]?.select?.name
-    const weeklyDirectionRaw = page.properties?.["주간 기준"]?.select?.name
-    const monthlyDirection: ScheduleConfig["monthlyDirection"] =
-      monthlyDirectionRaw === "이전달" || monthlyDirectionRaw === "이번달" ? monthlyDirectionRaw : "다음달"
-    const weeklyDirection: ScheduleConfig["weeklyDirection"] =
-      weeklyDirectionRaw === "이전주" || weeklyDirectionRaw === "이번주" ? weeklyDirectionRaw : "다음주"
-    return {
-      rowId: page.id,
-      autoEnabled: page.properties?.["자동 발송 사용"]?.checkbox === true,
-      sendTime: getText("발송 시각"),
-      monthDay: page.properties?.["월간 생성일"]?.number ?? null,
-      weekdays,
-      notice: getText("안내멘트"),
-      // [NEW] 값이 없으면 기존 동작과 동일하게 "다음달"/"다음주"를 기본값으로 사용한다.
-      monthlyDirection,
-      weeklyDirection,
-    }
-  } catch (e) {
-    console.error("getScheduleConfig 실패:", e)
-    return null
-  }
-}
-
 // [NEW] 연락처(휴대폰/유선) 형식 검증. 비정상이면 "연락처 오류: ..." 형태의 명확한 에러를 던져서,
 // 실패 사유(전송로그)에 그대로 남도록 한다.
 export function assertValidPhone(phone: string, label = "학부모 연락처"): void {
