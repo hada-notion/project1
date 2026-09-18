@@ -134,6 +134,20 @@ function openFeedImage(url) {
   document.body.appendChild(layer)
 }
 
+// [FIX, 2026-09-19] "수업일시" 같은 속성은 UTC 순간(instant)으로 내려온다(예: "2026-09-18T23:11:00.000Z").
+// 오후/저녁 수업은 KST로 변환해도 같은 날짜라 문제가 없었지만, 키오스크 보강 체크인처럼 자정
+// 근처(KST 00시~09시)에 만들어진 기록은 그냥 앞 10자만 자르면(UTC 기준) 하루 전 날짜로 표시된다
+// (캘린더 칸이 비어보이거나 다른 날짜와 겹쳐 보이는 문제로 나타남). Asia/Seoul 기준으로 정확히
+// 변환해서 날짜를 뽑는다.
+function isoToKstDate(iso) {
+  if (!iso) return null
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date(iso))
+  } catch (_e) {
+    return null
+  }
+}
+
 const LEADING_EMOJI_RE = /^(\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic})*)\s*/u
 function splitClassNameEmoji(rawClassName) {
   const str = String(rawClassName || "").trim()
@@ -166,7 +180,11 @@ function mapRegistration(reg) {
       const rawDate = a.iso || a.date_iso || (typeof a.date === "string" && /^\d{4}-\d{2}-\d{2}/.test(a.date) ? a.date : null)
       // [FIX] 백엔드가 시간/타임존까지 포함된 ISO 문자열을 보낼 수 있어, 항상 앞 10자(YYYY-MM-DD)로 정규화한다.
       // 정규화하지 않으면 캘린더(slice 비교)는 매칭되지만 일일 보고서(=== 비교)는 매칭되지 않는 문제가 생긴다.
-      return { date: rawDate ? String(rawDate).slice(0, 10) : null, weekday: a.weekday || "", status: a.status || "" }
+      // [FIX, 2026-09-19] 위 "정규화"가 실제로는 UTC 기준 slice라서, 자정 근처(KST 00시~09시)에
+      // 생성된 기록은 하루 전 날짜로 잘못 표시됐다 (예: 키오스크 보강 체크인). isoToKstDate로
+      // Asia/Seoul 기준 날짜를 우선 사용하고, 실패하면 기존 방식(UTC slice)으로 되돌아간다.
+      const kstDate = isoToKstDate(rawDate)
+      return { date: kstDate || (rawDate ? String(rawDate).slice(0, 10) : null), weekday: a.weekday || "", status: a.status || "" }
     }),
     study_logs: (reg.study_logs || []).map((s) => ({ book: s.book || "", range: s.range || "", unit: s.unit || "", date: s.iso || null, note: s.note || "", body: normalizeFeedBody(s.body) })),
     homework: (reg.homework || []).map((h) => ({ title: h.title || "", book: h.book || "", range: h.range || "", unit: h.unit || "", note: h.note || "", due: h.due_iso || null, status: h.status || "미제출" })),

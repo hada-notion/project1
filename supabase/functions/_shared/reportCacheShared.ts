@@ -1,7 +1,3 @@
-// 학부모 리포트 캐시(report_cache) 관련 함수(sync-report-cache/get-report-fast/get-report-detail)가
-// 공통으로 쓰는 헬퍼. Notion API 호출 자체는 notionClient.ts(fetchWithRetry/getPage/queryAllPages 등)를
-// 그대로 재사용하고, 여기서는 리포트 전용 속성 파싱 + Supabase(Postgres REST) 접근만 추가한다.
-
 import { getPage } from "./notionClient.ts"
 
 export const CORS_HEADERS = {
@@ -12,8 +8,6 @@ export const CORS_HEADERS = {
 
 const SB_URL = Deno.env.get("SB_URL") ?? ""
 const SB_SERVICE_ROLE_KEY = Deno.env.get("SB_SERVICE_ROLE_KEY") ?? ""
-
-// ---------- Notion 속성 읽기 (raw Notion API 페이지 property 객체 기준) ----------
 
 export function text(prop: any): string {
   if (!prop) return ""
@@ -85,8 +79,6 @@ export function firstRelationId(prop: any): string | undefined {
   return relationIds(prop)[0]
 }
 
-// 속성명을 몰라도, 페이지의 title 타입 속성을 찾아서 반환한다 (DB마다 title 속성명이 달라서
-// "이름"/"교재명"처럼 이름을 아는 경우를 빼고는 이 함수를 쓰는 게 안전하다).
 export function anyTitle(page: any): string {
   const properties = page?.properties ?? {}
   for (const key of Object.keys(properties)) {
@@ -100,16 +92,41 @@ export function anyTitle(page: any): string {
 
 const WEEKDAY_KR = ["일", "월", "화", "수", "목", "금", "토"]
 
+// [FIX, 2026-09-19] "수업일시" 등은 순간(instant)을 UTC로 저장한다 (예: "2026-09-18T23:11:00.000Z").
+// 오후/저녁 수업은 KST로 변환해도 항상 같은 날짜라 문제가 없었지만, 키오스크 보강 체크인처럼
+// 자정 근처(KST 00시~09시)에 생성되는 기록은 UTC 기준 날짜가 KST 기준 날짜보다 하루 빠르게 나온다.
+// dmWeekday/fmtDateKr가 원래 new Date(iso).getMonth()/getDate()/getDay()(서버 실행 타임존 기준,
+// Supabase Edge Functions는 UTC로 동작)를 그대로 썼던 게 원인. 항상 Asia/Seoul 기준 날짜로
+// 변환한 뒤 월/일/요일을 계산하도록 고친다.
+export function kstDateOf(iso: string | null): string {
+  if (!iso) return ""
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date(iso))
+  } catch (_e) {
+    return ""
+  }
+}
+
+function kstYmd(iso: string | null): { y: number; m: number; d: number } | null {
+  const kst = kstDateOf(iso)
+  if (!kst) return null
+  const [y, m, d] = kst.split("-").map(Number)
+  if (!y || !m || !d) return null
+  return { y, m, d }
+}
+
 export function dmWeekday(iso: string | null): { dm: string; wd: string } {
-  if (!iso) return { dm: "", wd: "" }
-  const d = new Date(iso)
-  return { dm: `${d.getMonth() + 1}/${d.getDate()}`, wd: WEEKDAY_KR[d.getDay()] }
+  const ymd = kstYmd(iso)
+  if (!ymd) return { dm: "", wd: "" }
+  const wd = WEEKDAY_KR[new Date(Date.UTC(ymd.y, ymd.m - 1, ymd.d)).getUTCDay()]
+  return { dm: `${ymd.m}/${ymd.d}`, wd }
 }
 
 export function fmtDateKr(iso: string | null): string {
-  if (!iso) return ""
-  const d = new Date(iso)
-  return `${d.getMonth() + 1}월 ${d.getDate()}일 (${WEEKDAY_KR[d.getDay()]})`
+  const ymd = kstYmd(iso)
+  if (!ymd) return ""
+  const wd = WEEKDAY_KR[new Date(Date.UTC(ymd.y, ymd.m - 1, ymd.d)).getUTCDay()]
+  return `${ymd.m}월 ${ymd.d}일 (${wd})`
 }
 
 export function normalizeStatus(s: string): string {
@@ -122,8 +139,6 @@ export function normalizeStatus(s: string): string {
   return s.replace(/^[^\w가-힣]+/u, "").trim()
 }
 
-// "1학기 중간고사", "3월 모의고사" 같은 시험범위 이름 + 학년 라벨을 짧은 표시용 문구로 조합한다.
-// (2026-09-16 성적 DB "시험구분" 속성 삭제로, 더 이상 그 속성을 직접 쓸 수 없어 새로 만든 대체 로직)
 export function shortExamLabel(examTitle: string, gradeLabel: string): string {
   const t = (examTitle || "").trim()
   const g = (gradeLabel || "").trim()
@@ -142,8 +157,6 @@ export function shortExamLabel(examTitle: string, gradeLabel: string): string {
   return [g, t].filter(Boolean).join(" ").trim()
 }
 
-// ---------- 페이지 캐시 (같은 실행 안에서 같은 페이지 중복 조회 방지) ----------
-
 export function makePageCache() {
   const cache = new Map<string, Promise<any>>()
   return function cachedGetPage(pageId: string): Promise<any> {
@@ -156,19 +169,12 @@ export function makePageCache() {
   }
 }
 
-// ---------- Supabase(Postgres) REST 접근 ----------
-
 function requireSupabaseEnv() {
   if (!SB_URL || !SB_SERVICE_ROLE_KEY) {
     throw new Error("SB_URL / SB_SERVICE_ROLE_KEY Secrets가 설정되어 있지 않습니다. Supabase 대시보드 Edge Functions Secrets에 추가하세요.")
   }
 }
 
-// Supabase REST(PostgREST) 호출이 순간적인 401(예: "JWT issued in future" PGRST303처럼 서버 쪽
-// 시계가 아주 잠깐 어긋나서 생기는 오류)이나 일시적인 5xx로 실패하는 경우를 짧게 재시도한다
-// (2026-09-18, 정규교재 웹훅 추가 후 실제로 겪은 1회성 오류 대응). 키 자체가 잘못된 진짜 인증
-// 실패라면 재시도해도 계속 401이 나오므로, maxRetries를 다 쓰면 그대로 실패한 응답을 반환해서
-// 원래 동작(에러 throw)이 그대로 유지된다.
 export async function fetchSupabaseWithRetry(url: string, init: RequestInit, maxRetries = 3): Promise<Response> {
   let lastRes: Response | undefined
   for (let attempt = 0; attempt <= maxRetries; attempt++) {

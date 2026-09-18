@@ -1,31 +1,3 @@
-// 등록 1건의 학부모 리포트 캐시(report_cache 행)를 조립하는 로직.
-// 원래 sync-report-cache/index.ts 안에만 있었지만, send-report(보고서 발송 직전 재동기화)와
-// nightly-report-sync-audit(야간 정합성 점검)에서도 동일한 조립 로직을 그대로 재사용해야 해서
-// 공용 모듈로 분리했다. (2026-09-17, 리포트 동기화 안정화 3단계 구조)
-//
-// [FIX, 2026-09-17 밤] 분리 과정에서 원래 sync-report-cache/index.ts(커밋 d0db5c3, 2026-09-16)에
-// 있던 조립 로직 대부분이 누락된 채, report_cache 실제 테이블 스키마(access_token/registration_id/
-// student_key/link_disabled/student_fields/registration_overview/registration_detail)와도,
-// get-report-fast·get-report-detail·student_report.html이 기대하는 모양과도 전혀 맞지 않는
-// 훨씬 단순화된 플레이스홀더 코드로 잘못 옮겨졌다. 그 결과 report_cache upsert가 매번
-// "Could not find the 'activity_count' column of 'report_cache' in the schema cache" 400
-// 에러로 실패하고 있었다 (트리거/웹훅 자체는 정상 동작했지만, 이 버그 때문에 리포트 캐시가
-// 한 번도 성공적으로 갱신된 적이 없었다). 이번 수정은 d0db5c3의 원래 조립 로직을 그대로
-// 복원한다 (호출 시그니처는 지금의 buildCacheRowForRegistration(reg, cachedGetPage) /
-// syncReportCacheForRegistration(registrationId, cachedGetPage)를 그대로 유지해서
-// sync-report-cache/index.ts, send-report, nightly-report-sync-audit을 수정할 필요가 없다).
-//
-// [FIX, 2026-09-18] notices(공지/일정) 필드가 백엔드-프론트엔드 간 모양이 어긋나 있었다.
-// - 이전: buildNotices(classId, ...)가 "클래스"에 걸린 일정만 모아서 registration_overview.notices에
-//   담았는데, student_report.html의 mapRegistration()은 그 필드를 전혀 읽지 않았다 (죽은 데이터).
-// - student_report.html의 mapReportToStudent(r)는 r.notices(최상위)를 읽는데, get-report-fast는
-//   student_fields를 스프레드해서 최상위 응답을 만들기 때문에 notices는 student_fields 쪽에
-//   있어야 한다.
-// - 또한 "일정(학원) DB"는 학생/클래스/학교/학년 4개의 독립된 관계축을 갖고 있는데(학교·학년은
-//   비어있으면 전체, 채워지면 그 값만 필터하는 와일드카드 규칙), 기존 코드는 클래스 축만 봤다.
-// 이번 수정은 buildStudentFields()가 학생 1명 기준으로 4개 축을 모두 합쳐 상위 notices를
-// 계산해서 반환하도록 바꾼다. registration_overview.notices(사용되지 않던 필드)는 제거한다.
-
 import { queryAllPages } from "./notionClient.ts"
 import { parseTokenValue } from "./adminShared.ts"
 import {
@@ -39,6 +11,7 @@ import {
   anyTitle,
   dmWeekday,
   fmtDateKr,
+  kstDateOf,
   normalizeStatus,
   shortExamLabel,
   upsertReportCacheRows,
@@ -46,11 +19,9 @@ import {
 } from "./reportCacheShared.ts"
 import { selectAttendanceByRegistrationId } from "./attendanceSyncShared.ts"
 
-// 워크스페이스 구조상 고정값인 데이터소스 ID (sync-report-cache/index.ts와 동일한 값).
 const DS_STUDY_ACTIVITY = "ea2ba040-586b-8368-8bb6-070564a5a31c"
 const DS_REPORT = "610ba040-586b-83ff-9384-07ae85f58df1"
 
-// 리포트 상세(출석/학습기록/과제/시험) 조회 기간. 너무 오래된 기록까지 매번 조회하지 않도록 제한한다.
 const DETAIL_LOOKBACK_MONTHS = 6
 
 function sinceIsoMonthsAgo(months: number): string {
@@ -63,16 +34,10 @@ function todayIsoSeoul(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" })
 }
 
-// 노션 포뮬러/이모지 값을 프런트(student_report.html)가 원하는 "순수한 태그" 형태로 정리한다.
 function stripLeadingEmoji(s: string): string {
   return s.replace(/^[^\w가-힣]+/u, "").trim()
 }
 
-// 학생에게 노출할 일정/공지를 4개 관계축(학생 직접·클래스·학교·학년)에서 모두 모아 병합한다.
-// - 학생에게 직접 걸린 일정, 그리고 학생이 "수강 중"인 클래스에 걸린 일정은 무조건 노출한다.
-// - 학교/학년에 걸린 일정은 "비어있으면 전체, 채워지면 그 값만" 와일드카드 규칙으로 교차 검증한다
-//   (학교만 채워져 있으면 그 학교 전체 학년, 학년만 채워져 있으면 전체 학교의 그 학년,
-//   둘 다 채워져 있으면 그 학교의 그 학년만 노출된다).
 async function buildStudentNotices(
   studentId: string,
   studentProps: any,
@@ -115,9 +80,7 @@ async function buildStudentNotices(
       if (category.includes("할일")) return false
       const startIso = dateStartOf(n.properties["날짜"])
       if (!startIso || startIso < sinceIso) return false
-      // 학생/클래스에 직접 걸린 항목은 학교·학년 조건과 무관하게 그대로 노출한다.
       if (directIds.has(n.id)) return true
-      // 학교/학년 백링크로만 걸린 항목은 "비어있으면 전체, 채워지면 그 값만" 규칙으로 교차 검증한다.
       const noticeSchoolIds = relationIds(n.properties["학교"])
       const noticeGradeIds = relationIds(n.properties["학년"])
       const schoolMatch = noticeSchoolIds.length === 0 || (!!schoolId && noticeSchoolIds.includes(schoolId))
@@ -447,9 +410,13 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
     }))
   const homework = homeworkAll.slice(0, 6)
 
+  // [FIX, 2026-09-19] 아래 slice(0, 10)는 UTC 기준 날짜라, 자정 근처(KST 00시~09시)에 만들어진
+  // 출석 기록(수업일시)에 연결된 과제/평가는 하루 전 날짜의 "과제 현황" 칸에 잘못 표시됐다.
+  // kstDateOf로 항상 Asia/Seoul 기준 날짜를 쓰도록 고친다 (reportCacheShared.ts dmWeekday/fmtDateKr
+  // 수정과 동일한 원인/수정).
   const homeworkDayMap: Record<string, boolean[]> = {}
   homeworkAll.forEach((h) => {
-    const day = (h.iso ?? "").slice(0, 10)
+    const day = kstDateOf(h.iso)
     if (!day) return
     if (!homeworkDayMap[day]) homeworkDayMap[day] = []
     homeworkDayMap[day].push(h.status === "제출")
@@ -520,9 +487,6 @@ export async function buildCacheRowForRegistration(
   }
 }
 
-// 등록 1건의 리포트 캐시를 다시 계산해서 report_cache에 upsert한다.
-// registrationId에 "토큰"이 없거나 "학생정보" 관계가 비어있으면 null을 반환하고 아무것도 쓰지 않는다.
-// (즉, 아직 정식으로 등록이 완료되지 않은 페이지를 편집해도 report_cache가 오염되지 않는다.)
 export async function syncReportCacheForRegistration(
   registrationId: string,
   cachedGetPage: (id: string) => Promise<any>,
