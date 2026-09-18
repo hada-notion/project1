@@ -25,13 +25,23 @@
 // "남은 버튼"들도 같은 이유로 큐로 옮긴 것. sync-registration-timetable의 매일 cron 전체 스캔과
 // sync-registration-textbook의 cleanup-on-end 라우트(다른 함수가 내부적으로 동기 호출)는 의도적으로
 // 큐를 거치지 않고 계속 동기 처리된다.
+//
+// (2026-09-18 밤, 복구/재시도 도입) 지금까지는 (a) 워커가 항목 처리 도중 죽으면 그 항목이 processing
+// 상태로 영원히 멈췄있었고, (b) 처리 중 오류가 나면 재시도 없이 곧바로 failed로 확정됐다. 이제 매 실행
+// 시작 시 STALE_PROCESSING_SECONDS(15분)보다 오래 processing 상태로 멈췄있는 항목을 자동으로
+// 되돌리고(recoverStaleSyncQueueItems), 처리 중 오류가 나면 시도 횟수가 MAX_ATTEMPTS(3회) 미만일
+// 때는 pending으로 되돌려 재시도하게 한다(markSyncQueueItemFailedOrRetry). 이 재시도가 안전하려면
+// 각 target 핸들러가 "처리 전 현재 상태를 확인하고 진행"하도록 되어 있어야 한다 -- 13개 target을
+// 모두 검토했고, create-assignment(학습기록당 학습활동 1회 생성 확인 추가)와 create-learning-record
+// ("오늘 학습" 체크를 생성 전에 먼저 소비하도록 순서 변경)를 이 재시도 도입에 맞춰 함께 정리했다.
 
 import {
   tryAcquireWorkerLock,
   releaseWorkerLock,
   claimNextSyncQueueItem,
   markSyncQueueItemDone,
-  markSyncQueueItemFailed,
+  markSyncQueueItemFailedOrRetry,
+  recoverStaleSyncQueueItems,
   hasPendingSyncQueueItems,
   wakeSyncQueueWorker,
   type SyncQueueItem,
@@ -75,6 +85,12 @@ const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Pro
 // 쪽이 처리 중이던 항목이 애매한 상태로 남을 위험이 적다).
 const TIME_BUDGET_MS = 100_000
 
+// (2026-09-18 밤) 이 값들보다 오래 processing 상태로 멈췄있으면 복구 대상으로 보고, 실패한 항목은
+// 이 횟수까지만 재시도한다. 두 값 모두 13개 target 전체에 동일하게 적용한다 (함수별로 실제 처리
+// 시간 편차가 있을 수 있지만, 지금은 실측 데이터가 없어 안전 마진이 큰 값 하나로 통일했다).
+const STALE_PROCESSING_SECONDS = 900 // 15분
+const MAX_ATTEMPTS = 3
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS })
 
@@ -91,10 +107,19 @@ Deno.serve(async (req: Request) => {
 
   let processed = 0
   let failed = 0
+  let retried = 0
   const cachedGetPage = makePageCache()
   const deadline = Date.now() + TIME_BUDGET_MS
 
   try {
+    const recoveredCount = await recoverStaleSyncQueueItems(STALE_PROCESSING_SECONDS, MAX_ATTEMPTS).catch((err) => {
+      console.error("[process-sync-queue] 멈춘 작업 복구 중 오류:", (err as Error)?.message)
+      return 0
+    })
+    if (recoveredCount > 0) {
+      console.log(`[process-sync-queue] 처리 중 상태로 멈췄있던 작업 ${recoveredCount}건을 복구함 (pending 또는 failed로 확정)`)
+    }
+
     while (Date.now() < deadline) {
       const item: SyncQueueItem | null = await claimNextSyncQueueItem()
       if (!item) break
@@ -106,9 +131,21 @@ Deno.serve(async (req: Request) => {
         await markSyncQueueItemDone(item.id)
         processed++
       } catch (err) {
-        failed++
-        console.error(`[process-sync-queue] #${item.id} (target=${item.target}) 처리 실패:`, (err as Error)?.message)
-        await markSyncQueueItemFailed(item.id, String((err as Error)?.message ?? err))
+        const message = String((err as Error)?.message ?? err)
+        const outcome = await markSyncQueueItemFailedOrRetry(item, message, MAX_ATTEMPTS)
+        if (outcome === "retrying") {
+          retried++
+          console.error(
+            `[process-sync-queue] #${item.id} (target=${item.target}) 처리 실패, 재시도 예정 (시도 ${item.attempts}/${MAX_ATTEMPTS}):`,
+            message,
+          )
+        } else {
+          failed++
+          console.error(
+            `[process-sync-queue] #${item.id} (target=${item.target}) 처리 실패, 재시도 한도(${MAX_ATTEMPTS}회) 초과로 최종 실패:`,
+            message,
+          )
+        }
       }
     }
   } finally {
@@ -121,7 +158,7 @@ Deno.serve(async (req: Request) => {
     wakeSyncQueueWorker()
   }
 
-  return new Response(JSON.stringify({ ok: true, processed, failed }), {
+  return new Response(JSON.stringify({ ok: true, processed, retried, failed }), {
     status: 200,
     headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
   })
