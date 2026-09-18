@@ -152,7 +152,7 @@ export async function processFromCartQueueItem(payload: { cartId: string }): Pro
 		const registrationIds = relationIds(cart, PROP_CART_REGISTRATION)
 		if (registrationIds.length === 0) throw new Error("교재비 페이지에 연결된 등록이 없음")
 		const result = await distributeForRegistration(registrationIds[0])
-		await setCartStatus(payload.cartId, "완럌")
+		await setCartStatus(payload.cartId, "완료")
 		console.log("[sync-textbook-distribution] (queue) from-cart finished:", payload.cartId, result)
 	} catch (err) {
 		console.error("[sync-textbook-distribution] (queue) from-cart ERROR:", err)
@@ -171,7 +171,7 @@ export async function processFromClassCartsQueueItem(payload: { classId: string 
 			const result = await ensureCartForRegistration(reg.id, reg)
 			if (result.cartCreated) createdCount++
 		}
-		await setClassCartStatus(payload.classId, "완럌")
+		await setClassCartStatus(payload.classId, "완료")
 		console.log("[sync-textbook-distribution] (queue) from-class-carts finished:", payload.classId, {
 			activeCount: activeRegistrations.length,
 			createdCount,

@@ -293,6 +293,39 @@ const ALIMTALK_CONFIG_CACHE_MS = 60_000
 // 전송로그의 "발송 구분"(일일/주간/월간/수강료)은 이와 별개로 그대로 유지됩니다.
 export type AlimtalkConfigCategory = SendLogCategory | "보고서"
 
+// [NEW, 복원 2026-09-18] "알림톡 설정(학원) DB"에서 발송 구분별 행 ID와 안내멘트만 가져온다.
+// generate-tuition/textbookDistributionTarget이 표시용 "알림톡 설정" 관계를 채울 rowId로,
+// send-textbook-notice가 계좌번호 등 공통 안내 문구("안내멘트")를 가져오는 데 쓴다.
+// [FIX, 2026-09-18] 원래 이름이 같았던 getScheduleConfig()는 자동 스케줄(run-auto-schedule) 전용
+// 필드(자동 발송 사용/발송 시각/월간·주간 생성일·기준)까지 함께 갖고 있었는데, 그 함수를 통째로
+// 지웠다가 위 세 곳에서 rowId/notice를 쓰고 있는 걸 놓쳐서 배포가 깨졌었다. 자동 스케줄 전용
+// 필드는 빼고 rowId/notice만 남긴 축소판으로 복원한다.
+export type ScheduleConfigRow = {
+  rowId: string
+  notice: string // "수강료 안내"/"교재비 안내" 행에서만 의미 있음
+}
+
+export async function getScheduleConfig(category: AlimtalkConfigCategory): Promise<ScheduleConfigRow | null> {
+  if (!ALIMTALK_CONFIG_DB_ID) return null
+  try {
+    const json = await notionQueryDatabase(ALIMTALK_CONFIG_DB_ID, {
+      filter: { property: "발송 구분", title: { equals: category } },
+      page_size: 1,
+    })
+    const page = json.results?.[0]
+    if (!page) return null
+    const getText = (name: string) =>
+      (page.properties?.[name]?.rich_text ?? []).map((t: any) => t.plain_text).join("").trim()
+    return {
+      rowId: page.id,
+      notice: getText("안내멘트"),
+    }
+  } catch (e) {
+    console.error("getScheduleConfig 실패:", e)
+    return null
+  }
+}
+
 // [NEW] 연락처(휴대폰/유선) 형식 검증. 비정상이면 "연락처 오류: ..." 형태의 명확한 에러를 던져서,
 // 실패 사유(전송로그)에 그대로 남도록 한다.
 export function assertValidPhone(phone: string, label = "학부모 연락처"): void {

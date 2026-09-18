@@ -36,7 +36,7 @@ export async function processSyncClassReportCacheQueueItem(payload: { classId: s
 	try {
 		const summary = await processClass(payload.classId)
 		console.log("sync-class-report-cache (queue) finished:", payload.classId, summary)
-		await setClassStatus(payload.classId, "완럌")
+		await setClassStatus(payload.classId, "완료")
 	} catch (err) {
 		console.error("sync-class-report-cache (queue) failed:", (err as Error).message, "\nstack:", (err as Error).stack)
 		await setClassStatus(payload.classId, "오류", (err as Error).message)
