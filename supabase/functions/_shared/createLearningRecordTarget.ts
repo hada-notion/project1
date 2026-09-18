@@ -247,6 +247,18 @@ export async function finishCreateLearningRecord(sessionId: string): Promise<unk
 					.join(" ")
 					.trim()
 
+				// (2026-09-18 밤, 재시도 안전성 도입) "오늘 학습" 체크는 1회성 필터 신호일 뿐이고, 학습기록은
+				// 여러 개 생성될 수 있어야 한다 (진도 -> 과제 -> 평가처럼 다시 체크해서 새 학습활동을 만들 수 있게).
+				// 이전에는 학습기록 생성 성공 직후에 체크를 해제했는데, 그 사이(생성 성공 ~ 체크 해제)에 워커가
+				// 죽으면 재시도 시 체크가 아직 켜져 있어 학습기록이 중복 생성될 수 있는 좁은 race window가 있었다.
+				// 체크 해제를 학습기록 생성보다 먼저 하도록 순서를 바꿔서, 체크는 "소비 즉시" 해제되고 학습기록
+				// 생성 자체가 이 작업의 마지막 단계가 되도록 만들었다. 이러면 재시도 시 이미 해제된 체크 때문에
+				// no_books_marked_today로 조용히 스킵될 수 있지만, 그 경우 학습기록 생성이 실제로는 이미
+				// 끝났을 가능성이 높고(체크 해제는 생성 전에 이미 성공했으므로) 중복 생성보다 안전한 방향이다.
+				await updatePageProperties(bookId, {
+					[PROP_BOOK_TODAY]: { checkbox: false },
+				})
+
 				const createProps: JsonRecord = {
 					[PROP_RECORD_TITLE]: { title: [{ text: { content: title } }] },
 					[PROP_RECORD_BOOK]: { relation: [{ id: bookId }] },
@@ -263,10 +275,6 @@ export async function finishCreateLearningRecord(sessionId: string): Promise<unk
 				}
 
 				const createdPage = await createPage(DS_STUDY_RECORD, createProps)
-
-				await updatePageProperties(bookId, {
-					[PROP_BOOK_TODAY]: { checkbox: false },
-				})
 
 				await setBookGenDone(bookId)
 
