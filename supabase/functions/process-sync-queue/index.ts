@@ -13,6 +13,11 @@
 // public.sync_queue_worker_lock 테이블 기반의 리스(lease) 잠금을 먼저 얻어야 시작한다. 잠금을 못
 // 얻으면 (이미 다른 실행이 돌고 있다는 뜻) 바로 조용히 끝낸다 -- 이렇게 해서 아무리 많은 요청이
 // 동시에 몰려도 실제 처리는 항상 한 번에 하나씩, 큐에 쌓인 순서대로만 진행된다.
+//
+// (2026-09-18, Phase 2) cascade-delete / create-assignment / create-learning-record /
+// sync-textbook-distribution(from-cart, from-class-carts) / sync-class-report-cache 를 HANDLERS에
+// 추가했다. 이 다섯 함수 모두 여러 Notion DB에서 동시에 웹훅이 몰릴 수 있는 함수라, 이제 sync-report-cache와
+// 동일하게 요청을 받으면 즉시 큐에 적재만 하고, 실제 무거운 처리는 이 워커가 순서대로 하나씩 담당한다.
 
 import {
   tryAcquireWorkerLock,
@@ -26,10 +31,24 @@ import {
 } from "../_shared/syncQueue.ts"
 import { CORS_HEADERS, makePageCache } from "../_shared/reportCacheShared.ts"
 import { processSyncReportCacheQueueItem } from "../_shared/syncReportCacheTarget.ts"
+import { processCascadeDeleteQueueItem } from "../_shared/cascadeDeleteTarget.ts"
+import { processCreateAssignmentQueueItem } from "../_shared/createAssignmentTarget.ts"
+import { processCreateLearningRecordQueueItem } from "../_shared/createLearningRecordTarget.ts"
+import {
+  processFromCartQueueItem,
+  processFromClassCartsQueueItem,
+} from "../_shared/textbookDistributionTarget.ts"
+import { processSyncClassReportCacheQueueItem } from "../_shared/classReportCacheTarget.ts"
 
 // target별 실제 처리 함수. 앞으로 다른 웹훅 함수들도 같은 큐 패턴으로 옮기면 여기에 추가한다.
 const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Promise<any>) => Promise<void>> = {
   "sync-report-cache": processSyncReportCacheQueueItem,
+  "cascade-delete": processCascadeDeleteQueueItem,
+  "create-assignment": processCreateAssignmentQueueItem,
+  "create-learning-record": processCreateLearningRecordQueueItem,
+  "sync-textbook-distribution:from-cart": processFromCartQueueItem,
+  "sync-textbook-distribution:from-class-carts": processFromClassCartsQueueItem,
+  "sync-class-report-cache": processSyncClassReportCacheQueueItem,
 }
 
 // Edge Function 자체의 실행 시간 한도보다 여유 있게 짧은 시간 예산 안에서만 계속 처리하고, 남으면
