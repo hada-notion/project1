@@ -28,6 +28,10 @@
 //   (2026-09-19) "키오스크 알림톡" 코드 하나로 통합했다. "알림톡 설정(학원) DB"에 이 코드 행이
 //   있고 활성화되어 있어야 실제 발송된다. Solapi 템플릿 승인 전(비활성 상태)에는 조용히 건너뛰고,
 //   출결 기록 자체는 항상 정상 동작한다. 템플릿 변수는 학생이름/구분("등원" 또는 "하원")/일자/시간.
+// - [FIX, 2026-09-19 #2] "발신번호"는 이 DB의 모든 행에서 비어 있고, 다른 발송 함수들처럼
+//   Secrets의 SOLAPI_SENDER_NUMBER로 대체하도록 되어 있어야 하는데 여기만 빈 문자열을 기본값으로
+//   써서 활성화 후에도 Solapi 발송이 매번 "from 없음"으로 실패하고 있었다. 다른 함수와 동일하게
+//   SOLAPI_SENDER_NUMBER를 fallback으로 쓰도록 고쳤다.
 
 import {
   CORS_HEADERS,
@@ -233,7 +237,16 @@ Deno.serve(async (req: Request) => {
     // 카카오 알림톡 (등원/하원 통합 템플릿이 아직 설정 전이면 조용히 건너뛴다)
     if (stateChanged) {
       const category = "키오스크 알림톡"
-      const config = await getAlimtalkConfig(category, { pfId: "", templateId: "", senderNumber: "" })
+      // [FIX, 2026-09-19] "알림톡 설정(학원) DB"의 "발신번호"가 비어 있으면(운영 중인 모든 행이 그렇다)
+      // 다른 발송 함수들(send-daily-report 등, _shared/alimtalkShared.ts)처럼 Secrets의
+      // SOLAPI_SENDER_NUMBER로 대체해야 하는데, 여기만 빈 문자열 fallback을 써서 Solapi 발송이
+      // "from"이 비어 있다는 이유로 매번 조용히 실패하고 있었다(전송로그에는 실패로 남았지만
+      // 활성화 전 정상 skip과 구분이 잘 안 됐음).
+      const config = await getAlimtalkConfig(category, {
+        pfId: "",
+        templateId: "",
+        senderNumber: Deno.env.get("SOLAPI_SENDER_NUMBER") ?? "",
+      })
       if (config.pfId && config.templateId) {
         try {
           const parentPhone = await resolveParentPhone(attendance, registrationId)
