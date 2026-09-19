@@ -451,6 +451,11 @@ body {
 .cal-month-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .cal-nav-btn { background: #f0eefc; border: none; width: clamp(28px, 4vw, 40px); height: clamp(28px, 4vw, 40px); border-radius: 50%; color: #6c5ce7; font-size: clamp(15px, 2.4vw, 20px); font-weight: 700; cursor: pointer; }
 .cal-nav-btn:disabled { opacity: 0.3; cursor: default; }
+.cal-sync-row { display: flex; flex-direction: column; align-items: center; gap: 5px; margin-top: 12px; }
+.cal-sync-btn { background: #f0eefc; border: none; color: #6c5ce7; font-size: clamp(11px, 1.9vw, 13px); font-weight: 700; padding: 7px 16px; border-radius: 999px; cursor: pointer; }
+.cal-sync-btn:active { background: #ece9ff; }
+.cal-sync-btn:disabled { opacity: 0.5; cursor: default; }
+.cal-sync-msg { font-size: 11px; color: #888; }
 .schedule-cal-wrap { width: 100%; margin: 0 auto; max-width: min(var(--content-w), 68vh); overflow: hidden; }
 .attendance-cal-wrap { width: 100%; margin: 0 auto; max-width: min(var(--content-w), 62vh); overflow: hidden; transition: max-width 0.24s ease; }
 

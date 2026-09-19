@@ -92,12 +92,6 @@ export function anyTitle(page: any): string {
 
 const WEEKDAY_KR = ["일", "월", "화", "수", "목", "금", "토"]
 
-// [FIX, 2026-09-19] "수업일시" 등은 순간(instant)을 UTC로 저장한다 (예: "2026-09-18T23:11:00.000Z").
-// 오후/저녁 수업은 KST로 변환해도 항상 같은 날짜라 문제가 없었지만, 키오스크 보강 체크인처럼
-// 자정 근처(KST 00시~09시)에 생성되는 기록은 UTC 기준 날짜가 KST 기준 날짜보다 하루 빠르게 나온다.
-// dmWeekday/fmtDateKr가 원래 new Date(iso).getMonth()/getDate()/getDay()(서버 실행 타임존 기준,
-// Supabase Edge Functions는 UTC로 동작)를 그대로 썼던 게 원인. 항상 Asia/Seoul 기준 날짜로
-// 변환한 뒤 월/일/요일을 계산하도록 고친다.
 export function kstDateOf(iso: string | null): string {
   if (!iso) return ""
   try {
@@ -228,13 +222,16 @@ export async function selectReportCacheByToken(token: string): Promise<ReportCac
   return rows[0] ?? null
 }
 
+// [FIX, 2026-09-19] 형제 등록 목록을 조회할 때 registration_overview만 가져와서, 프론트엔드가
+// 화면에 열려 있는 등록(예: 다른 형제의 반)에 대해 "지금 바로 동기화" 요청을 보낼 registrationId를
+// 알 방법이 없었다. registration_id도 함께 select해서 각 overview 객체에 얹어준다.
 export async function selectReportCacheOverviewsByStudentKey(studentKey: string): Promise<Record<string, unknown>[]> {
   requireSupabaseEnv()
   const res = await fetchSupabaseWithRetry(
-    `${SB_URL}/rest/v1/report_cache?student_key=eq.${encodeURIComponent(studentKey)}&link_disabled=eq.false&select=registration_overview`,
+    `${SB_URL}/rest/v1/report_cache?student_key=eq.${encodeURIComponent(studentKey)}&link_disabled=eq.false&select=registration_id,registration_overview`,
     { headers: { apikey: SB_SERVICE_ROLE_KEY, Authorization: `Bearer ${SB_SERVICE_ROLE_KEY}` } },
   )
   if (!res.ok) throw new Error(`report_cache(형제) 조회 실패: ${res.status} ${await res.text()}`)
   const rows = await res.json()
-  return rows.map((r: any) => r.registration_overview)
+  return rows.map((r: any) => ({ ...r.registration_overview, registration_id: r.registration_id }))
 }

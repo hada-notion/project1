@@ -150,7 +150,55 @@ function goRegCalToday() {
 function setCalMode(mode) {
   calMode = mode
   regCalMonthIndex = 0
+  calSyncMessage = ""
   renderApp()
+}
+
+// [NEW, 2026-09-19] 캘린더 탭의 데이터는 report_cache에 미리 계산돼 있는 값을 그대로 보여준다.
+// 출결 상태가 바뀌어도 report_cache는 sync-report-cache 큐 처리(웹훅/1시간 주기 동기화/야간 점검)가
+// 끝나야 반영되기 때문에, 방금 키오스크에서 체크인/체크아웃한 직후에는 화면이 곧바로 바뀌지 않을 수
+// 있다. 학생/학부모가 기다리지 않고 바로 최신 상태를 확인할 수 있도록, 이 버튼으로 지금 열려 있는
+// 등록의 sync-report-cache를 직접 요청한다. sync-report-cache는 인증 없이 큐에 적재만 하고 바로
+// 202를 반환하므로(다른 버튼 웹훅들과 동일한 신뢰 모델), 워커가 처리할 시간을 잠깐 기다렸다가
+// 데이터를 다시 불러온다.
+async function requestReportSync() {
+  if (calSyncing) return
+  const r = currentReg()
+  if (!r) return
+  calSyncing = true
+  calSyncMessage = ""
+  refreshCalArea()
+  try {
+    if (r.registration_id) {
+      await fetch(`${SUPABASE_URL}/functions/v1/sync-report-cache`, {
+        method: "POST",
+        headers: {
+          "apikey": SUPABASE_ANON_KEY,
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ registrationId: r.registration_id }),
+      })
+    }
+    // sync-report-cache는 즉시 큐에만 적재하고(실제 재계산은 process-sync-queue 워커가 비동기로
+    // 처리) 202를 반환하므로, 워커가 처리를 끝낼 시간을 잠깐 준 다음 최신 데이터를 다시 불러온다.
+    await new Promise((resolve) => setTimeout(resolve, 3000))
+    await loadReportFromServer()
+    calSyncMessage = "✅ 최신 정보로 갱신했어요"
+  } catch (e) {
+    calSyncMessage = "동기화에 실패했어요. 잠시 후 다시 시도해주세요"
+  } finally {
+    calSyncing = false
+    refreshCalArea()
+  }
+}
+function refreshCalArea() {
+  const area = document.getElementById("reg-cal-area")
+  if (area) {
+    area.innerHTML = buildRegCalendarHtml(currentReg(), calMode)
+  } else {
+    renderApp()
+  }
 }
 function buildRegCalendarHtml(r, mode) {
   if (!r) return '<div class="empty">등록 정보가 없습니다.</div>'
@@ -211,6 +259,10 @@ function buildRegCalendarHtml(r, mode) {
       </div>
       ${summaryHtml}
       <div class="cal-hint">날짜를 탭하면 데일리 리포트를 볼 수 있어요</div>
+      <div class="cal-sync-row">
+        <button class="cal-sync-btn" ${calSyncing ? "disabled" : ""} onclick="requestReportSync()">${calSyncing ? "🔄 동기화 중..." : "🔄 최신 정보로 동기화"}</button>
+        ${calSyncMessage ? `<div class="cal-sync-msg">${esc(calSyncMessage)}</div>` : ""}
+      </div>
     </div>
   `
 }

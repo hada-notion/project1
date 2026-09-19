@@ -163,6 +163,8 @@ function splitClassNameEmoji(rawClassName) {
 function mapRegistration(reg) {
   return {
     token: reg.access_token || "",
+    // [NEW, 2026-09-19] 캘린더 탭의 "동기화" 버튼이 sync-report-cache를 호출할 때 필요하다.
+    registration_id: reg.registration_id || null,
     emoji: splitClassNameEmoji(reg.class_name).emoji || pickClassColorEmoji(splitClassNameEmoji(reg.class_name).name),
     class_name: splitClassNameEmoji(reg.class_name).name || reg.class_name || "",
     // 변경 후 (실제 값 반영)
@@ -290,6 +292,9 @@ let selectedCalDate = null
 let regTab = "books" // "books" | "calendar" | "study" | "report"
 let calMode = "attendance" // "attendance" | "homework"
 let regCalMonthIndex = 0
+// [NEW, 2026-09-19] 캘린더 탭 "동기화" 버튼 상태 (sync-report-cache 요청 진행 중 여부 / 결과 메시지).
+let calSyncing = false
+let calSyncMessage = ""
 let reportPeriod = "week" // "week" | "month" | "day"
 let reportOffset = 0 // 0 = current period, 1 = previous period, etc.
 let reportDayDate = null // used when reportPeriod === "day"
@@ -343,6 +348,8 @@ function openRegistration(token) {
   selectedBookTitle = null
   calMode = "attendance"
   regCalMonthIndex = 0
+  calSyncing = false
+  calSyncMessage = ""
   reportPeriod = "week"
   reportOffset = 0
   reportDayDate = null
