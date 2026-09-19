@@ -292,9 +292,10 @@ let selectedCalDate = null
 let regTab = "books" // "books" | "calendar" | "study" | "report"
 let calMode = "attendance" // "attendance" | "homework"
 let regCalMonthIndex = 0
-// [NEW, 2026-09-19] 캘린더 탭 "동기화" 버튼 상태 (sync-report-cache 요청 진행 중 여부 / 결과 메시지).
-let calSyncing = false
-let calSyncMessage = ""
+// [NEW, 2026-09-19] 우측 하단 동기화 버튼(FAB) 상태. 캘린더 탭에만 있던 버튼을 화면 전역으로 옮기면서,
+// 특정 등록의 캘린더 상태가 아니라 앱 전체 상태로 관리한다 (10-12 참고).
+let globalSyncing = false
+let globalSyncMessage = ""
 let reportPeriod = "week" // "week" | "month" | "day"
 let reportOffset = 0 // 0 = current period, 1 = previous period, etc.
 let reportDayDate = null // used when reportPeriod === "day"
@@ -348,8 +349,6 @@ function openRegistration(token) {
   selectedBookTitle = null
   calMode = "attendance"
   regCalMonthIndex = 0
-  calSyncing = false
-  calSyncMessage = ""
   reportPeriod = "week"
   reportOffset = 0
   reportDayDate = null

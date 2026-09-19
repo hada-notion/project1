@@ -451,11 +451,51 @@ body {
 .cal-month-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .cal-nav-btn { background: #f0eefc; border: none; width: clamp(28px, 4vw, 40px); height: clamp(28px, 4vw, 40px); border-radius: 50%; color: #6c5ce7; font-size: clamp(15px, 2.4vw, 20px); font-weight: 700; cursor: pointer; }
 .cal-nav-btn:disabled { opacity: 0.3; cursor: default; }
-.cal-sync-row { display: flex; flex-direction: column; align-items: center; gap: 5px; margin-top: 12px; }
-.cal-sync-btn { background: #f0eefc; border: none; color: #6c5ce7; font-size: clamp(11px, 1.9vw, 13px); font-weight: 700; padding: 7px 16px; border-radius: 999px; cursor: pointer; }
-.cal-sync-btn:active { background: #ece9ff; }
-.cal-sync-btn:disabled { opacity: 0.5; cursor: default; }
-.cal-sync-msg { font-size: 11px; color: #888; }
+/* ===== 전역 동기화 FAB (2026-09-19: 캘린더 탭 전용 버튼에서 화면 전역 플로팅 버튼으로 이동, 10-12 참고) ===== */
+.global-sync-fab {
+  position: fixed;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  z-index: 70;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #6c5ce7;
+  color: #fff;
+  border: none;
+  font-size: 20px;
+  box-shadow: 0 3px 10px rgba(108,92,231,0.4);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: bottom 0.2s ease, transform 0.15s ease;
+}
+.global-sync-fab:active { transform: scale(0.92); }
+.global-sync-fab:disabled { opacity: 0.75; cursor: default; }
+.global-sync-fab.syncing { animation: global-sync-spin 0.9s linear infinite; }
+@keyframes global-sync-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+body.has-tabbar .global-sync-fab { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+.global-sync-toast {
+  position: fixed;
+  right: 16px;
+  bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  z-index: 70;
+  background: rgba(30,30,34,0.9);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 10px;
+  max-width: 240px;
+  text-align: right;
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease, bottom 0.2s ease;
+}
+.global-sync-toast.show { opacity: 1; transform: translateY(0); }
+body.has-tabbar .global-sync-toast { bottom: calc(130px + env(safe-area-inset-bottom, 0px)); }
 .schedule-cal-wrap { width: 100%; margin: 0 auto; max-width: min(var(--content-w), 68vh); overflow: hidden; }
 .attendance-cal-wrap { width: 100%; margin: 0 auto; max-width: min(var(--content-w), 62vh); overflow: hidden; transition: max-width 0.24s ease; }
 
@@ -537,6 +577,9 @@ body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
 </head>
 <body>
 <div id="app"></div>
+
+<button id="global-sync-fab" class="global-sync-fab" onclick="requestGlobalSync()" title="최신 정보로 동기화">🔄</button>
+<div id="global-sync-toast" class="global-sync-toast"></div>
 
 <div class="menu-overlay" id="menu">
   <div class="menu-panel">

@@ -150,54 +150,65 @@ function goRegCalToday() {
 function setCalMode(mode) {
   calMode = mode
   regCalMonthIndex = 0
-  calSyncMessage = ""
   renderApp()
 }
 
-// [NEW, 2026-09-19] 캘린더 탭의 데이터는 report_cache에 미리 계산돼 있는 값을 그대로 보여준다.
-// 출결 상태가 바뀌어도 report_cache는 sync-report-cache 큐 처리(웹훅/1시간 주기 동기화/야간 점검)가
-// 끝나야 반영되기 때문에, 방금 키오스크에서 체크인/체크아웃한 직후에는 화면이 곧바로 바뀌지 않을 수
-// 있다. 학생/학부모가 기다리지 않고 바로 최신 상태를 확인할 수 있도록, 이 버튼으로 지금 열려 있는
-// 등록의 sync-report-cache를 직접 요청한다. sync-report-cache는 인증 없이 큐에 적재만 하고 바로
-// 202를 반환하므로(다른 버튼 웹훅들과 동일한 신뢰 모델), 워커가 처리할 시간을 잠깐 기다렸다가
-// 데이터를 다시 불러온다.
-async function requestReportSync() {
-  if (calSyncing) return
-  const r = currentReg()
-  if (!r) return
-  calSyncing = true
-  calSyncMessage = ""
-  refreshCalArea()
+// [NEW, 2026-09-19, 자리 이동: 10-12] report_cache 기반 화면(캘린더 등)은 sync-report-cache 큐 처리(웹훅/1시간
+// 주기 동기화/야간 점검)가 끝나야 반영되므로, 방금 키오스크에서 체크인/체크아웃한 직후에는 화면이 곧바로
+// 바뀌지 않을 수 있다. 처음에는 캘린더 탭에만 있는 버튼으로 만들었지만, 교재·학습기록·보고서 탭이나 인트로
+// 화면에서도 최신 상태를 바로 확인하고 싶다는 요청에 따라 우측 하단 플로팅 버튼(FAB)으로 옮겼다.
+// 특정 등록 화면(캘린더 탭이 아니어도 상관없이 등록이 열려 있으면)에서는 그 등록만, 등록을 선택하지 않은
+// 인트로 화면에서는 학생의 모든 등록을 한 번에 동기화한다.
+async function requestSyncForRegistrationId(registrationId) {
+  if (!registrationId) return
+  await fetch(`${SUPABASE_URL}/functions/v1/sync-report-cache`, {
+    method: "POST",
+    headers: {
+      "apikey": SUPABASE_ANON_KEY,
+      "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ registrationId }),
+  })
+}
+function setGlobalSyncFabState(syncing) {
+  const btn = document.getElementById("global-sync-fab")
+  if (!btn) return
+  btn.disabled = syncing
+  btn.classList.toggle("syncing", syncing)
+}
+let globalSyncToastTimer = null
+function renderGlobalSyncToast(message) {
+  globalSyncMessage = message || ""
+  const el = document.getElementById("global-sync-toast")
+  if (!el) return
+  if (globalSyncToastTimer) { clearTimeout(globalSyncToastTimer); globalSyncToastTimer = null }
+  if (!message) { el.textContent = ""; el.classList.remove("show"); return }
+  el.textContent = message
+  el.classList.add("show")
+  globalSyncToastTimer = setTimeout(() => { el.classList.remove("show") }, 3500)
+}
+async function requestGlobalSync() {
+  if (globalSyncing) return
+  globalSyncing = true
+  setGlobalSyncFabState(true)
+  renderGlobalSyncToast("")
   try {
-    if (r.registration_id) {
-      await fetch(`${SUPABASE_URL}/functions/v1/sync-report-cache`, {
-        method: "POST",
-        headers: {
-          "apikey": SUPABASE_ANON_KEY,
-          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ registrationId: r.registration_id }),
-      })
-    }
+    const r = currentReg()
+    const targets = r ? [r] : (STUDENT?.registrations || [])
+    const ids = [...new Set(targets.map((t) => t.registration_id).filter(Boolean))]
     // sync-report-cache는 즉시 큐에만 적재하고(실제 재계산은 process-sync-queue 워커가 비동기로
     // 처리) 202를 반환하므로, 워커가 처리를 끝낼 시간을 잠깐 준 다음 최신 데이터를 다시 불러온다.
+    await Promise.all(ids.map((id) => requestSyncForRegistrationId(id)))
     await new Promise((resolve) => setTimeout(resolve, 3000))
     await loadReportFromServer()
-    calSyncMessage = "✅ 최신 정보로 갱신했어요"
-  } catch (e) {
-    calSyncMessage = "동기화에 실패했어요. 잠시 후 다시 시도해주세요"
-  } finally {
-    calSyncing = false
-    refreshCalArea()
-  }
-}
-function refreshCalArea() {
-  const area = document.getElementById("reg-cal-area")
-  if (area) {
-    area.innerHTML = buildRegCalendarHtml(currentReg(), calMode)
-  } else {
     renderApp()
+    renderGlobalSyncToast("✅ 최신 정보로 갱신했어요")
+  } catch (e) {
+    renderGlobalSyncToast("동기화에 실패했어요. 잠시 후 다시 시도해주세요")
+  } finally {
+    globalSyncing = false
+    setGlobalSyncFabState(false)
   }
 }
 function buildRegCalendarHtml(r, mode) {
@@ -259,10 +270,6 @@ function buildRegCalendarHtml(r, mode) {
       </div>
       ${summaryHtml}
       <div class="cal-hint">날짜를 탭하면 데일리 리포트를 볼 수 있어요</div>
-      <div class="cal-sync-row">
-        <button class="cal-sync-btn" ${calSyncing ? "disabled" : ""} onclick="requestReportSync()">${calSyncing ? "🔄 동기화 중..." : "🔄 최신 정보로 동기화"}</button>
-        ${calSyncMessage ? `<div class="cal-sync-msg">${esc(calSyncMessage)}</div>` : ""}
-      </div>
     </div>
   `
 }
@@ -685,6 +692,9 @@ function renderApp() {
     detachRegScrollShrink()
     app.innerHTML = renderIntro()
   }
+  // [NEW, 2026-09-19] 하단 탭바(교재/캘린더/학습기록/보고서)가 있는 "detail" 화면에서는
+  // 동기화 FAB이 탭바와 겹치지 않도록 body 클래스로 위치를 조정한다.
+  document.body.classList.toggle("has-tabbar", view === "detail")
 }
 
 async function initApp() {
