@@ -11,12 +11,19 @@
 // - 같은 번호로 매칭되는 등록이 여러 건이면(형제/자매가 보호자 번호 공유 등) 검색을 바로 끝내지
 //   않고 { needsSelection: true, candidates: [...] }를 반환한다. 프론트는 사용자가 고른
 //   registrationId를 담아 이 엔드포인트를 다시 호출한다.
-// - 오늘 날짜의 출석 페이지가 있으면 그 페이지에 등원/하원스템프만 기록한다(기존 "출석 상태"는
-//   건드리지 않음, 이미 정상적인 값이 들어있다고 가정).
+// - 오늘 날짜의 출석 페이지가 있으면 그 페이지에 등원/하원스템프를 기록한다. 이때 "출석 상태"가
+//   이미 "🔵 보강"이면 그대로 두고(정규 수업 없는 날의 방문을 유지), 그 외(기본값/결석 등)는
+//   실제로 등원·하원했으므로 "🟢 출석"으로 갱신한다.
+//   [FIX, 2026-09-19] 원래는 스템프만 찍고 "출석 상태"를 전혀 건드리지 않아서, 정규 수업이 있어
+//   미리 만들어진 출석 페이지가 있어도 키오스크로 등원/하원 처리해도 "출석"으로 바뀌지 않는 버그가
+//   있었다.
 // - 없으면(시험기간 등 정규 수업이 없는 날의 방문) 출석 페이지를 새로 만들고 "출석 상태"를
 //   "🔵 보강"으로 설정한다. 하원인데 등원 기록이 없던 경우엔 하원스템프만 채우고 등원스템프는
 //   비워둔다.
-// - 등원인데 이미 등원스템프가 있으면 덮어쓰지 않고 { alreadyDone: true, alreadyAt }로 안내한다.
+// - 등원인데 이미 등원스템프가 있으면, 하원인데 이미 하원스템프가 있으면 각각 덮어쓰지 않고
+//   { alreadyDone: true, alreadyAt }로 안내하고 알림톡도 다시 보내지 않는다(중복 처리 방지).
+//   [FIX, 2026-09-19] 원래는 하원에는 이 중복 방지가 없어서 하원 버튼을 다시 누르면 스템프를
+//   덮어쓰고 알림톡도 매번 다시 발송하는 문제가 있었다. 등원과 동일하게 맞춘다.
 // - 카카오 알림톡: 등원/하원을 별도 템플릿 두 개로 운영하면 Solapi 템플릿 승인을 두 번 받아야 해서
 //   (2026-09-19) "키오스크 알림톡" 코드 하나로 통합했다. "알림톡 설정(학원) DB"에 이 코드 행이
 //   있고 활성화되어 있어야 실제 발송된다. Solapi 템플릿 승인 전(비활성 상태)에는 조용히 건너뛰고,
@@ -187,17 +194,23 @@ Deno.serve(async (req: Request) => {
     let alreadyAt = ""
 
     if (attendance) {
-      if (type === "checkin") {
-        const existingStamp = attendance.properties?.["등원스템프"]?.date?.start
-        if (existingStamp) {
-          alreadyDone = true
-          alreadyAt = formatKstTime(existingStamp)
-        } else {
-          await notionPatchPageProperties(attendance.id, { "등원스템프": { date: { start: nowIso } } })
-          stateChanged = true
-        }
+      // [FIX, 2026-09-19] 등원/하원 모두 동일하게: 이미 처리된 스템프면 건너뛰고, 새로 처리하는
+      // 경우에만 스템프를 찍고 "출석 상태"도 함께 갱신한다.
+      const stampProp = type === "checkin" ? "등원스템프" : "하원스템프"
+      const existingStamp = attendance.properties?.[stampProp]?.date?.start
+      if (existingStamp) {
+        alreadyDone = true
+        alreadyAt = formatKstTime(existingStamp)
       } else {
-        await notionPatchPageProperties(attendance.id, { "하원스템프": { date: { start: nowIso } } })
+        const currentStatus = attendance.properties?.["출석 상태"]?.select?.name ?? ""
+        const patch: Record<string, unknown> = { [stampProp]: { date: { start: nowIso } } }
+        // 이미 "🔵 보강"으로 표시된 기록(정규 수업 없는 날의 방문)은 그대로 유지하고,
+        // 그 외(기본값·결석 등으로 만들어져 있던 정규 수업 출석 페이지)는 실제로 등원/하원했으니
+        // "🟢 출석"으로 갱신한다.
+        if (currentStatus !== "🔵 보강") {
+          patch["출석 상태"] = { select: { name: "🟢 출석" } }
+        }
+        await notionPatchPageProperties(attendance.id, patch)
         stateChanged = true
       }
     } else {
