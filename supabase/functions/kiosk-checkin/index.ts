@@ -27,7 +27,9 @@
 // - 카카오 알림톡: 등원/하원을 별도 템플릿 두 개로 운영하면 Solapi 템플릿 승인을 두 번 받아야 해서
 //   (2026-09-19) "키오스크 알림톡" 코드 하나로 통합했다. "알림톡 설정(학원) DB"에 이 코드 행이
 //   있고 활성화되어 있어야 실제 발송된다. Solapi 템플릿 승인 전(비활성 상태)에는 조용히 건너뛰고,
-//   출결 기록 자체는 항상 정상 동작한다. 템플릿 변수는 학생이름/구분("등원" 또는 "하원")/일자/시간.
+//   출결 기록 자체는 항상 정상 동작한다. 템플릿 변수는 학생이름/구분("등원" 또는 "하원")/일자/시간이며,
+//   일자/시간은 각각 "2026년 9월 19일"/"오전 9시 40분" 형식으로 만들어서 보낸다(2026-09-19 #3,
+//   템플릿 문구에 맞춤).
 // - [FIX, 2026-09-19 #2] "발신번호"는 이 DB의 모든 행에서 비어 있고, 다른 발송 함수들처럼
 //   Secrets의 SOLAPI_SENDER_NUMBER로 대체하도록 되어 있어야 하는데 여기만 빈 문자열을 기본값으로
 //   써서 활성화 후에도 Solapi 발송이 매번 "from 없음"으로 실패하고 있었다. 다른 함수와 동일하게
@@ -82,6 +84,29 @@ function formatKstTime(iso: string | null | undefined): string {
     minute: "2-digit",
     hour12: false,
   }).format(new Date(iso))
+}
+
+// [NEW, 2026-09-19] 카카오 알림톡 템플릿("등하원 안내")의 일자/시간 변수 전용 포맷.
+// 다른 곳(키오스크 화면의 "이미 처리됨" 안내, 보강 출석 페이지 제목 등)의 날짜/시간 표시는
+// 그대로 두고, 알림톡으로 나가는 값만 "2026년 9월 19일"/"오전 9시 40분" 형식으로 만든다.
+function formatKstDateKorean(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map((v) => parseInt(v, 10))
+  return `${y}년 ${m}월 ${d}일`
+}
+
+function formatKstTimeKorean(iso: string | null | undefined): string {
+  if (!iso) return ""
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Seoul",
+    hour: "numeric",
+    minute: "numeric",
+    hour12: true,
+  }).formatToParts(new Date(iso))
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ""
+  const period = get("dayPeriod").toUpperCase() === "PM" ? "오후" : "오전"
+  const hour = get("hour")
+  const minute = get("minute").padStart(2, "0")
+  return `${period} ${hour}시 ${minute}분`
 }
 
 type Candidate = { registrationId: string; studentName: string; className: string }
@@ -266,8 +291,8 @@ Deno.serve(async (req: Request) => {
               variables: {
                 "학생이름": studentName,
                 "구분": type === "checkin" ? "등원" : "하원",
-                "일자": todayKst(),
-                "시간": formatKstTime(nowIso),
+                "일자": formatKstDateKorean(todayKst()),
+                "시간": formatKstTimeKorean(nowIso),
               },
               disableSms: false,
             },
