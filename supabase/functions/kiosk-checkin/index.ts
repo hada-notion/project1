@@ -50,6 +50,9 @@ import {
   extractErrorMessage,
 } from "../_shared/adminShared.ts"
 import { normalizePhone, resolveParentPhone } from "../_shared/alimtalkShared.ts"
+// 대시보드(학원) DB 자동 연결: 이 함수가 Notion API로 직접 만드는/갱신하는 출석 페이지는 페이지
+// 자동화가 트리거되지 않으므로, 상태가 바뀐 직후 여기서 직접 큐에 적재한다 (2026-09-20, 대시보드 기능 추가).
+import { enqueueDashboardLink } from "../_shared/dashboardLinkTarget.ts"
 
 function plainText(prop: any): string {
   if (!prop) return ""
@@ -257,6 +260,10 @@ Deno.serve(async (req: Request) => {
 
       attendance = await notionCreatePage(attendanceDbId, properties)
       stateChanged = true
+    }
+
+    if (stateChanged) {
+      await enqueueDashboardLink(attendance.id)
     }
 
     // 카카오 알림톡 (등원/하원 통합 템플릿이 아직 설정 전이면 조용히 건너뛴다)

@@ -34,6 +34,9 @@ import {
 	PROP_SESSION_GEN_RUNNING,
 	PROP_LAST_ERROR,
 } from "../_shared/constants.ts"
+// 대시보드(학원) DB 자동 연결: 이 함수가 Notion API로 직접 만드는 수업/출석 페이지는 페이지
+// 자동화가 트리거되지 않으므로, 생성 직후 여기서 직접 큐에 적재한다 (2026-09-20, 대시보드 기능 추가).
+import { enqueueDashboardLink } from "../_shared/dashboardLinkTarget.ts"
 
 // Data source IDs (fixed by workspace structure, hardcoded)
 const DS = {
@@ -526,6 +529,7 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
     })
 
     log.push(`[created] ${timetableName}: class session created (${nextDate}), 등록 ${registrationIds.length}건 연결`)
+    await enqueueDashboardLink(classPage.id, log)
 
     // Perf (2026-09-11): attendance creation + pending-assignment-deadline linking for each
     // registration are independent of each other, so run them concurrently instead of
@@ -548,6 +552,7 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
             ],
           })
 
+          let attendanceId: string
           if (unlinkedCandidates.length > 0) {
             const candidate = unlinkedCandidates[0]
             await updatePageProperties(candidate.id, {
@@ -559,8 +564,9 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
               ...(teacherIds.length ? { 담당강사: { relation: teacherIds.map((id) => ({ id })) } } : {}),
             })
             log.push(`[linked] ${timetableName}: existing unlinked attendance ${candidate.id} -> reg ${regId} (${nextDate})`)
+            attendanceId = candidate.id
           } else {
-            await createPage(DS.attendance, {
+            const attendancePage = await createPage(DS.attendance, {
               출석: { title: [{ text: { content: `${nextDate} 출석` } }] },
               수업일시: { date: { start: startIso, end: endIso } },
               수업: { relation: [{ id: classPage.id }] },
@@ -569,7 +575,10 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
               // 2026-09-16 버그 수정: 시간표의 담당강사를 출석 생성 시에도 함께 복사한다.
               ...(teacherIds.length ? { 담당강사: { relation: teacherIds.map((id) => ({ id })) } } : {}),
             })
+            attendanceId = attendancePage.id
           }
+
+          await enqueueDashboardLink(attendanceId, log)
 
           try {
             await linkPendingAssignmentDeadlines(regId, log)

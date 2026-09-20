@@ -62,6 +62,7 @@ import { processSyncRegistrationEnrollQueueItem } from "../_shared/registrationE
 import { processSyncRegistrationEndQueueItem } from "../_shared/registrationEndTarget.ts"
 import { processSyncRegistrationTimetableQueueItem } from "../_shared/registrationTimetableTarget.ts"
 import { processCreateIndividualBooksQueueItem } from "../_shared/registrationTextbookTarget.ts"
+import { processDashboardLinkQueueItem } from "../_shared/dashboardLinkTarget.ts"
 
 // target별 실제 처리 함수. 앞으로 다른 웹훅 함수들도 같은 큐 패턴으로 옮기면 여기에 추가한다.
 const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Promise<any>) => Promise<void>> = {
@@ -78,6 +79,7 @@ const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Pro
   "sync-registration-end": processSyncRegistrationEndQueueItem,
   "sync-registration-timetable": processSyncRegistrationTimetableQueueItem,
   "sync-registration-textbook:create-individual": processCreateIndividualBooksQueueItem,
+  "sync-dashboard-link": processDashboardLinkQueueItem,
 }
 
 // Edge Function 자체의 실행 시간 한도보다 여유 있게 짧은 시간 예산 안에서만 계속 처리하고, 남으면
