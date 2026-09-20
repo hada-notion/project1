@@ -7,6 +7,7 @@
 // process-sync-queue/index.ts가 target별로 나눠서 호출한다.
 
 import { fetchSupabaseWithRetry } from "./reportCacheShared.ts"
+import { getCurrentAdminKey } from "./adminShared.ts"
 
 const SB_URL = Deno.env.get("SB_URL") ?? ""
 const SB_SERVICE_ROLE_KEY = Deno.env.get("SB_SERVICE_ROLE_KEY") ?? ""
@@ -51,15 +52,22 @@ export async function enqueueSync(target: string, payload: Record<string, unknow
 
 // 큐에 쌓인 작업을 지금 바로 처리하도록 워커를 깨운다 (지연시간을 줄이기 위한 것일 뿐이므로,
 // 실패해도 조용히 무시한다 -- 어차피 pg_cron이 매분 안전망으로 다시 깨워준다).
+// (2026-09-21, process-sync-queue 인증 추가) process-sync-queue가 이제 requireAdminKey로 보호되므로,
+// 이 내부 호출도 x-admin-key 헤더를 함께 보내야 한다. getCurrentAdminKey()를 그대로 써서 KV에
+// 저장된 관리자 비밀번호 변경이 있어도(admin.html에서 재발급) 항상 최신 값과 일치하게 한다.
 export function wakeSyncQueueWorker(): void {
   if (!SB_URL) return
-  fetch(`${SB_URL}/functions/v1/process-sync-queue`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ source: "wake" }),
-  }).catch((err) => {
-    console.error("[wakeSyncQueueWorker] 워커 즉시 트리거 실패 (pg_cron이 대신 처리함):", (err as Error)?.message)
-  })
+  getCurrentAdminKey()
+    .then((adminKey) =>
+      fetch(`${SB_URL}/functions/v1/process-sync-queue`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-key": adminKey },
+        body: JSON.stringify({ source: "wake" }),
+      }),
+    )
+    .catch((err) => {
+      console.error("[wakeSyncQueueWorker] 워커 즉시 트리거 실패 (pg_cron이 대신 처리함):", (err as Error)?.message)
+    })
 }
 
 export async function tryAcquireWorkerLock(leaseSeconds = 120): Promise<boolean> {

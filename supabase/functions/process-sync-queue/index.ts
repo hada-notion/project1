@@ -59,6 +59,7 @@ import {
   type SyncQueueItem,
 } from "../_shared/syncQueue.ts"
 import { CORS_HEADERS, makePageCache } from "../_shared/reportCacheShared.ts"
+import { requireAdminKey } from "../_shared/adminShared.ts"
 import { processSyncReportCacheQueueItem } from "../_shared/syncReportCacheTarget.ts"
 import { processCascadeDeleteQueueItem } from "../_shared/cascadeDeleteTarget.ts"
 import { processCreateAssignmentQueueItem } from "../_shared/createAssignmentTarget.ts"
@@ -114,6 +115,13 @@ const LOCK_LEASE_SECONDS = 120
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS })
+
+  // (2026-09-21, 인증 정책 감사 후속) 이 함수는 지금까지 인증이 전혀 없어서, URL만 알면 누구나
+  // 큐 처리를 강제로 트리거할 수 있었다. 호출자는 (a) 각 웹훅 함수의 wakeSyncQueueWorker
+  // (x-admin-key를 함께 보내도록 이미 수정함), (b) pg_cron의 매분 안전망(호출 SQL도 헤더를
+  // 추가한 마이그레이션으로 갱신함) 두 곳뿐이라 관리자 키 인증을 그대로 적용한다.
+  const authError = await requireAdminKey(req)
+  if (authError) return authError
 
   const acquired = await tryAcquireWorkerLock(LOCK_LEASE_SECONDS).catch((err) => {
     console.error("[process-sync-queue] 잠금 획득 실패:", (err as Error)?.message)
