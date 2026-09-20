@@ -15,86 +15,23 @@
 //     (cron 안전망용, 선택적).
 //
 // 수업/출석 생성의 실제 로직은 sync-registration-timetable의 복원(restore) 로직과 거의 동일했기
-// 때문에 _shared/registrationSync.ts로 옮겼다. 이 파일은 그 결과를 가지고 기존과 똑같은 문구로
-// 로그만 지어낸다 (로드맵: sync-* 리팩토링, 기능 변경 없음).
+// 때문에 _shared/registrationSync.ts로 옮겼다.
+//
+// (2026-09-20, 웹훅 코드 정리 2단계) 이 버튼도 sync-registration-enroll/end/timetable/textbook과
+// 동일하게 큐 기반으로 전환했다 (2026-09-18 Phase 3에서 이 버튼만 빠져 있었음 -- 여러 등록에서
+// 동시에 "수업 생성"이 눌리면 이 함수만 Notion API 요청이 서로 겹칠 수 있는 구조였다). 실제 처리
+// 로직은 _shared/registrationClassSessionTarget.ts로 옮겼고, 이 파일은 다른 등록 버튼들과 동일하게
+// 웹훅 body 파싱 + 잠금 선체크 + 큐 적재만 담당한다. body 없이 호출하는 cron 전체 스캔 경로는
+// 버튼이 기다리는 응답이 아니므로 기존과 동일하게 동기 처리를 유지한다.
 
+import { PROP_SYNC_CLASS_SESSION_RUNNING } from "../_shared/constants.ts"
+import { getPage, extractPageId, checkboxValue } from "../_shared/notionClient.ts"
 import {
-	DS_REGISTRATION,
-	PROP_CLASS,
-	PROP_ENROLL_DATE,
-	PROP_END_DATE,
-	PROP_TITLE,
-	PROP_STATUS,
-	PROP_TIMETABLE,
-	STATUS_ENDED,
-	PROP_SYNCED_AT,
-	PROP_SYNC_CLASS_SESSION_RUNNING,
-	PROP_SYNC_TIMETABLE_RUNNING,
-	PROP_SYNC_TEXTBOOK_RUNNING,
-	PROP_SYNC_END_RUNNING,
-	PROP_SYNC_ENROLL_RUNNING,
-} from "../_shared/constants.ts"
-import { queryDataSource, getPage, relIds, titleText, extractPageId, mapWithConcurrency, checkboxValue } from "../_shared/notionClient.ts"
-import { attachSessionsAndAttendance, makeSyncStatusSetter } from "../_shared/registrationSync.ts"
-
-const setSyncStatus = makeSyncStatusSetter(PROP_SYNC_CLASS_SESSION_RUNNING, [
-	PROP_SYNC_TIMETABLE_RUNNING,
-	PROP_SYNC_TEXTBOOK_RUNNING,
-	PROP_SYNC_END_RUNNING,
-	PROP_SYNC_ENROLL_RUNNING,
-])
-
-// 등록 1건에 대해, 연결된 시간표의 기존 수업들에 이 등록을 붙이고(roster) 출석을 생성한다.
-// 시간표는 "등록" 버튼(sync-registration-enroll)에서 클래스 기준으로 세팅하고, 필요하면
-// 담당자가 수동으로 조정한 뒤 이 함수(수업 생성 버튼)를 누르는 흐름이라 여기서는 시간표를
-// 건드리지 않고 이미 연결된 시간표만 그대로 사용한다.
-async function createSessionsAndAttendanceForRegistration(reg: any, log: string[]) {
-	const regName = titleText(reg, PROP_TITLE)
-
-	const enrollDate = reg.properties[PROP_ENROLL_DATE]?.date?.start
-	if (!enrollDate) {
-		log.push(`⏭️ [${regName}] 등록일이 없어 건너뜀`)
-		return
-	}
-
-	const timetableIds = relIds(reg.properties[PROP_TIMETABLE])
-	if (timetableIds.length === 0) {
-		log.push(`⏭️ [${regName}] 연결된 시간표가 없어 건너뜀 ("등록" 버튼을 먼저 눌러 시간표를 연결하세요)`)
-		return
-	}
-
-	const endDate = reg.properties[PROP_END_DATE]?.date?.start
-	const classIds = relIds(reg.properties[PROP_CLASS])
-
-	const {
-		sessionsTouched: touchedSessions,
-		attendanceCreated: createdAttendance,
-		recordsLinked,
-	} = await attachSessionsAndAttendance(reg, timetableIds, enrollDate, endDate, classIds)
-
-	if (createdAttendance > 0) {
-		log.push(
-			`✅ [${regName}] 수업 ${touchedSessions}건 확인, 출석 ${createdAttendance}건 생성 (기존 학습기록 연결 ${recordsLinked}건)`,
-		)
-	} else {
-		log.push(`✓ [${regName}] 이미 모든 수업/출석이 연결되어 있음 (수업 ${touchedSessions}건 확인)`)
-	}
-}
-
-// 안전망: 등록일이 있고 아직 종료되지 않은 모든 등록을 훑어서 누락분을 보정한다 (선택적 cron용).
-async function createSessionsForAllPending(log: string[]) {
-	const data = await queryDataSource(DS_REGISTRATION, {
-		filter: {
-			and: [
-				{ property: PROP_ENROLL_DATE, date: { is_not_empty: true } },
-				{ property: PROP_TIMETABLE, relation: { is_not_empty: true } },
-				{ property: PROP_STATUS, formula: { string: { does_not_equal: STATUS_ENDED } } },
-			],
-		},
-		page_size: 100,
-	})
-	await mapWithConcurrency(data.results, 4, (reg: any) => createSessionsAndAttendanceForRegistration(reg, log))
-}
+	setClassSessionSyncStatus,
+	createSessionsForAllPending,
+} from "../_shared/registrationClassSessionTarget.ts"
+import { respondAccepted } from "../_shared/backgroundTask.ts"
+import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 
 Deno.serve(async (req: Request) => {
 	if (req.method !== "POST") {
@@ -115,21 +52,27 @@ Deno.serve(async (req: Request) => {
 		console.log("[sync-registration-class-session] extracted pageId:", pageId)
 
 		if (pageId) {
-			const reg = await getPage(pageId)
 			// 이미 처리 중이면 새로 시작하지 않고 즉시 반환 -- 처리 중 재클릭으로 인한 중복 출석 생성 방지.
-			if (checkboxValue(reg, PROP_SYNC_CLASS_SESSION_RUNNING)) {
+			const regPageForLock = await getPage(pageId)
+			if (checkboxValue(regPageForLock, PROP_SYNC_CLASS_SESSION_RUNNING)) {
 				return new Response(JSON.stringify({ ok: true, message: "already_processing", pageId }, null, 2), {
 					status: 200,
 					headers: { "Content-Type": "application/json" },
 				})
 			}
-			await setSyncStatus(pageId, "처리중")
-			await createSessionsAndAttendanceForRegistration(reg, log)
-			await setSyncStatus(pageId, "완료")
-		} else {
-			// body가 없거나 페이지를 못 찾았으면(cron용) 전체 스캔.
-			await createSessionsForAllPending(log)
+			await setClassSessionSyncStatus(pageId, "처리중")
+
+			// 큐에 적재만 하고 즉시 응답한다 -- 실제 처리는 process-sync-queue 워커가 순서대로
+			// 처리한다. 진행 상황은 등록의 "동기화 상태"(이미 처리중으로 설정됨)로 확인할 수 있다.
+			await enqueueSync("sync-registration-class-session", { pageId })
+			wakeSyncQueueWorker()
+
+			return respondAccepted({ pageId })
 		}
+
+		// body가 없거나 페이지를 못 찾았으면(cron용) 전체 스캔 -- 버튼이 기다리는 응답이 아니므로
+		// 동기적으로 유지한다 (다른 등록 함수의 cron 안전망 경로와 동일한 패턴).
+		await createSessionsForAllPending(log)
 
 		return new Response(JSON.stringify({ ok: true, log }, null, 2), {
 			headers: { "Content-Type": "application/json" },
@@ -137,7 +80,7 @@ Deno.serve(async (req: Request) => {
 	} catch (err) {
 		console.error("[sync-registration-class-session] ERROR:", (err as Error).message, (err as Error).stack)
 		if (pageId) {
-			await setSyncStatus(pageId, "오류", (err as Error).message)
+			await setClassSessionSyncStatus(pageId, "오류", (err as Error).message)
 		}
 		return new Response(JSON.stringify({ ok: false, error: (err as Error).message, log }, null, 2), {
 			status: 500,

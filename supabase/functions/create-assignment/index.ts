@@ -1,5 +1,13 @@
-// create-assignment v3
+// create-assignment v4
 // Trigger: 학습기록(학원) DB의 "출제" 버튼 웹훅
+//
+// v4 변경 사항 (2026-09-20, 웹훅 코드 정리 1단계):
+//   - 자체적으로 들고 있던 extractPageId/findUuid/normalizeUuid/findPageObjectId(페이지 id 추출용
+//     함수 4개, create-learning-record와 거의 동일한 코드를 각자 복붙해서 갖고 있었음)를 지우고
+//     _shared/notionClient.ts의 공용 extractPageId로 교체했다. 이 함수와 create-learning-record/
+//     cascade-delete/fix-attendance 네 곳이 각자 비슷한 id 추출 로직을 들고 있었는데, 공용 버전만
+//     "문자열 끝에서만 UUID를 찾도록" 버그 수정(2026-09-09)이 반영돼 있었다. candidate 필드
+//     확인(data.id 우선 → pageId/pageUrl/url/id → 재귀 탐색) 동작 자체는 그대로 유지된다.
 //
 // v3 변경 사항 (2026-09-18, 큐 기반 순차 처리 도입, Phase 2):
 //   - 실제 학습활동 생성 로직(finishCreateAssignment 등)을 _shared/createAssignmentTarget.ts로
@@ -17,7 +25,7 @@
 //   "과제상태"는 🔴 미제출로 시작한다.
 // - 평가: 마감/점수 관련 필드는 비워두고 선생님이 학습활동 페이지에서 나중에 직접 입력한다.
 
-import { getPage, relIds as relIdsFromProp } from "../_shared/notionClient.ts"
+import { getPage, relIds as relIdsFromProp, extractPageId } from "../_shared/notionClient.ts"
 import { respondAccepted } from "../_shared/backgroundTask.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 import {
@@ -44,57 +52,6 @@ function checkboxValue(page: JsonRecord, propName: string): boolean {
 	return (page.properties as JsonRecord)?.[propName]
 		? ((page.properties as JsonRecord)[propName] as JsonRecord)?.checkbox === true
 		: false
-}
-
-// 노션 자동화(버튼) 웹훅 payload에서 페이지 ID를 다단계로 추출한다 (create-learning-record와 동일한 로직).
-function extractPageId(body: JsonRecord): string | null {
-	const data = body.data as JsonRecord | undefined
-	if (data && typeof data.id === "string") {
-		const found = findUuid(data.id)
-		if (found) return found
-	}
-
-	const topLevelCandidates = [body.pageId, body.pageUrl, body.url, body.id]
-	for (const candidate of topLevelCandidates) {
-		const found = findUuid(typeof candidate === "string" ? candidate : "")
-		if (found) return found
-	}
-
-	const recursiveMatch = findPageObjectId(body)
-	if (recursiveMatch) return recursiveMatch
-
-	return findUuid(JSON.stringify(body))
-}
-
-function findUuid(text: string): string | null {
-	const match = text.match(
-		/[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}/,
-	)
-	if (!match) return null
-	return normalizeUuid(match[0])
-}
-
-function normalizeUuid(raw: string): string {
-	const hex = raw.replace(/-/g, "")
-	if (hex.length !== 32) return raw
-	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
-}
-
-function findPageObjectId(node: unknown): string | null {
-	if (!node || typeof node !== "object") return null
-	const obj = node as JsonRecord
-	if (obj.object === "page" && typeof obj.id === "string") {
-		return normalizeUuid(obj.id)
-	}
-	for (const value of Object.values(obj)) {
-		if (value && typeof value === "object") {
-			const found: string | null = Array.isArray(value)
-				? (value.map(findPageObjectId).find((v) => v) ?? null)
-				: findPageObjectId(value)
-			if (found) return found
-		}
-	}
-	return null
 }
 
 async function handleRequest(req: Request): Promise<Response> {

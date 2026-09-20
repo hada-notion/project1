@@ -22,61 +22,15 @@
 //
 // (2026-09-18, 큐 기반 순차 처리 도입, Phase 3) 실제 출석 조정 로직은 _shared/fixAttendanceTarget.ts로
 // 옮겼다. 이 파일은 웹훅 body에서 수업 페이지 id를 찾은 뒤, 처리를 큐에 적재만 하고 즉시 응답한다.
+//
+// [2026-09-20, 웹훅 코드 정리 1단계] 자체 extractPageId/deepFindPageObjectId/resolveClassSessionId를
+// 지우고 _shared/notionClient.ts의 공용 extractPageId로 교체했다 (cascade-delete와 동일한 이유 --
+// 상세 설명은 그 파일 v9 주석 참고. 동작은 그대로, 더 안전한 "문자열 끝에서만 UUID 추출" 버전으로 교체).
 
+import { extractPageId } from "../_shared/notionClient.ts"
 import { respondAccepted } from "../_shared/backgroundTask.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 import { markAttendanceFixRunning } from "../_shared/fixAttendanceTarget.ts"
-
-function extractPageId(input: unknown): string | null {
-  if (typeof input !== "string") return null
-  const dashed = input.match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/)
-  if (dashed) return dashed[0]
-  const bare = input.match(/[0-9a-fA-F]{32}/)
-  if (bare) return bare[0]
-  return null
-}
-
-function deepFindPageObjectId(node: unknown, depth = 0): string | null {
-  if (depth > 8 || node === null || typeof node !== "object") return null
-  const obj = node as Record<string, unknown>
-  if (obj.object === "page" && typeof obj.id === "string") {
-    const id = extractPageId(obj.id)
-    if (id) return id
-  }
-  for (const key of Object.keys(obj)) {
-    const value = obj[key]
-    if (value && typeof value === "object") {
-      const found = deepFindPageObjectId(value, depth + 1)
-      if (found) return found
-    }
-  }
-  return null
-}
-
-// Same robust page-id extraction as cascade-delete/generate-classes: Notion's built-in
-// "웹훅 보내기" action has no free-text JSON body editor, so we look for the triggering
-// page's id in every place Notion is known to put it.
-function resolveClassSessionId(body: any): string | null {
-  const flatCandidates = [
-    body?.classSessionId,
-    body?.pageId,
-    body?.pageUrl,
-    body?.page_id,
-    body?.url,
-    body?.id,
-    body?.data?.id,
-    body?.data?.url,
-    body?.data?.page?.id,
-    body?.page?.id,
-  ]
-  for (const candidate of flatCandidates) {
-    const id = extractPageId(candidate)
-    if (id) return id
-  }
-  const deep = deepFindPageObjectId(body)
-  if (deep) return deep
-  return extractPageId(JSON.stringify(body))
-}
 
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
@@ -95,12 +49,12 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const classSessionId = resolveClassSessionId(body)
+    const classSessionId = extractPageId(body)
     if (!classSessionId) {
       return new Response(
         JSON.stringify({
           ok: false,
-          error: "수업 페이지 id를 payload에서 찾지 목하였습니다. raw body를 확인하세요.",
+          error: "수업 페이지 id를 payload에서 찾지 못하였습니다. raw body를 확인하세요.",
           receivedBodyPreview: rawText.slice(0, 500),
         }),
         { status: 400, headers: { "Content-Type": "application/json" } },

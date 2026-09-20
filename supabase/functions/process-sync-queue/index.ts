@@ -34,6 +34,10 @@
 // 각 target 핸들러가 "처리 전 현재 상태를 확인하고 진행"하도록 되어 있어야 한다 -- 13개 target을
 // 모두 검토했고, create-assignment(학습기록당 학습활동 1회 생성 확인 추가)와 create-learning-record
 // ("오늘 학습" 체크를 생성 전에 먼저 소비하도록 순서 변경)를 이 재시도 도입에 맞춰 함께 정리했다.
+//
+// (2026-09-20, 웹훅 코드 정리 2단계) sync-registration-class-session을 HANDLERS에 추가했다. 등록(학원)
+// DB의 다른 버튼(enroll/end/timetable/textbook)은 이미 Phase 3에서 큐로 옮겨졌는데 "수업 생성" 버튼만
+// 빠져 있었다 -- 같은 DB의 버튼인데 하나만 다른 동시성 모델을 쓰는 일관성 공백을 없앴다.
 
 import {
   tryAcquireWorkerLock,
@@ -63,6 +67,7 @@ import { processSyncRegistrationEndQueueItem } from "../_shared/registrationEndT
 import { processSyncRegistrationTimetableQueueItem } from "../_shared/registrationTimetableTarget.ts"
 import { processCreateIndividualBooksQueueItem } from "../_shared/registrationTextbookTarget.ts"
 import { processDashboardLinkQueueItem } from "../_shared/dashboardLinkTarget.ts"
+import { processSyncRegistrationClassSessionQueueItem } from "../_shared/registrationClassSessionTarget.ts"
 
 // target별 실제 처리 함수. 앞으로 다른 웹훅 함수들도 같은 큐 패턴으로 옮기면 여기에 추가한다.
 const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Promise<any>) => Promise<void>> = {
@@ -80,6 +85,7 @@ const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Pro
   "sync-registration-timetable": processSyncRegistrationTimetableQueueItem,
   "sync-registration-textbook:create-individual": processCreateIndividualBooksQueueItem,
   "sync-dashboard-link": processDashboardLinkQueueItem,
+  "sync-registration-class-session": processSyncRegistrationClassSessionQueueItem,
 }
 
 // Edge Function 자체의 실행 시간 한도보다 여유 있게 짧은 시간 예산 안에서만 계속 처리하고, 남으면
@@ -88,7 +94,7 @@ const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Pro
 const TIME_BUDGET_MS = 100_000
 
 // (2026-09-18 밤) 이 값들보다 오래 processing 상태로 멈췄있으면 복구 대상으로 보고, 실패한 항목은
-// 이 횟수까지만 재시도한다. 두 값 모두 13개 target 전체에 동일하게 적용한다 (함수별로 실제 처리
+// 이 횟수까지만 재시도한다. 두 값 모두 target 전체에 동일하게 적용한다 (함수별로 실제 처리
 // 시간 편차가 있을 수 있지만, 지금은 실측 데이터가 없어 안전 마진이 큰 값 하나로 통일했다).
 const STALE_PROCESSING_SECONDS = 900 // 15분
 const MAX_ATTEMPTS = 3
