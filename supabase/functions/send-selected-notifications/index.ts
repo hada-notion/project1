@@ -24,7 +24,7 @@ import {
 	queryAllPages,
 	extractPageId,
 } from "../_shared/notionClient.ts"
-import { getCurrentAdminKey } from "../_shared/adminShared.ts"
+import { getCurrentAdminKey, resolveAdminKeyFromRequest } from "../_shared/adminShared.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 import { DS_REPORT, DS_TUITION, PROP_NOTIFICATION_BATCH_RELATION, PROP_BATCH_TYPE } from "../_shared/generateShared.ts"
 
@@ -251,7 +251,7 @@ Deno.serve(async (req: Request) => {
 		})
 	}
 
-	const adminKey = req.headers.get("x-admin-key") ?? (body as any)?.adminKey ?? null
+	const adminKey = resolveAdminKeyFromRequest(req, body as any)
 	const currentAdminKey = await getCurrentAdminKey()
 	if (!adminKey || adminKey !== currentAdminKey) {
 		await setBatchError(batchId, `${nowKstLabel()} - 인증 실패: x-admin-key가 올바르지 않습니다. Notion 자동화의 웹훅 헤더와 현재 관리자 키가 일치하는지 확인하세요.`)

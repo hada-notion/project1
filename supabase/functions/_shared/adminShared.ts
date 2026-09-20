@@ -95,6 +95,17 @@ export async function requireAdminKey(req: Request): Promise<Response | null> {
   return null
 }
 
+// (2026-09-20, 웹훅 코드 정리 5단계) Notion 버튼의 "웹훅 보내기" 액션은 커스텀 HTTP 헤더를 못 보내는
+// 경우가 있어서, x-admin-key 헤더가 없으면 요청 바디의 adminKey 필드도 확인해야 하는 함수가 여러
+// 개(send-report/send-tuition-notice/send-textbook-notice/send-daily-report/
+// send-class-daily-reports/send-selected-notifications) 있다. 6개 파일에 똑같이 복사돼 있던
+// 이 한 줄을 여기로 옮겼다. 어떤 문자열을 "현재 유효한 키"로 볼지(getCurrentAdminKey vs
+// getEffectiveAdminKey)는 파일마다 다르므로 비교 로직까지는 통합하지 않고, 후보 키를 뽑아내는
+// 부분만 공용화했다.
+export function resolveAdminKeyFromRequest(req: Request, body: any): string | null {
+  return req.headers.get("x-admin-key") ?? body?.adminKey ?? null
+}
+
 let cachedBotUserId: string | null = null
 export async function getBotUserId(): Promise<string | null> {
   if (cachedBotUserId) return cachedBotUserId

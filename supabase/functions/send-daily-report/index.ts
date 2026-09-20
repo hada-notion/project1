@@ -12,7 +12,7 @@
 //   대신 전송로그(학원) DB 행에 "출석" 관계형과 "발송자" 인물 속성을 채워서, 출석 DB의 수식이 그 값을 읽어
 //   자동으로 계산하도록 합니다.
 
-import { createSendLogEntry, getBotUserId, notionGetPage } from "../_shared/adminShared.ts"
+import { createSendLogEntry, getBotUserId, notionGetPage, resolveAdminKeyFromRequest } from "../_shared/adminShared.ts"
 import {
   getFormulaText,
   getEffectiveAdminKey,
@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: "invalid JSON body" }), { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } })
   }
 
-  const adminKey = req.headers.get("x-admin-key") ?? body?.adminKey ?? null
+  const adminKey = resolveAdminKeyFromRequest(req, body)
   const effectiveAdminKey = await getEffectiveAdminKey()
   if (!adminKey || adminKey !== effectiveAdminKey) {
     return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } })

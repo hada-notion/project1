@@ -19,6 +19,7 @@ import {
   getAlimtalkConfig,
   getScheduleConfig,
   getCurrentAdminKey,
+  resolveAdminKeyFromRequest,
   getBotUserId,
   assertValidPhone,
   extractErrorMessage,
@@ -97,7 +98,7 @@ Deno.serve(async (req) => {
     })
   }
 
-  const adminKey = req.headers.get("x-admin-key") ?? body?.adminKey ?? null
+  const adminKey = resolveAdminKeyFromRequest(req, body)
   const currentAdminKey = await getCurrentAdminKey()
   if (!adminKey || adminKey !== currentAdminKey) {
     return new Response(JSON.stringify({ error: "unauthorized" }), {

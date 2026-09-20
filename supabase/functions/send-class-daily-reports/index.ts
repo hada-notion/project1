@@ -13,7 +13,7 @@
 //   _shared/alimtalkShared.ts로 옮기고 이 파일에서는 가져다 씁니다 (로드맵 5-9 공용 모듈화 후속).
 //   동작은 이전과 동일합니다.
 
-import { createSendLogEntry, getBotUserId, notionGetPage, notionPatchPageProperties } from "../_shared/adminShared.ts"
+import { createSendLogEntry, getBotUserId, notionGetPage, notionPatchPageProperties, resolveAdminKeyFromRequest } from "../_shared/adminShared.ts"
 import {
   getFormulaText,
   getEffectiveAdminKey,
@@ -187,7 +187,7 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: "invalid JSON body" }), { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } })
   }
 
-  const adminKey = req.headers.get("x-admin-key") ?? body?.adminKey ?? null
+  const adminKey = resolveAdminKeyFromRequest(req, body)
   const effectiveAdminKey = await getEffectiveAdminKey()
   if (!adminKey || adminKey !== effectiveAdminKey) {
     return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } })
