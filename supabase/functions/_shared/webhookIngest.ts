@@ -21,7 +21,14 @@ import { getPage, extractPageId, checkboxValue } from "./notionClient.ts"
 import { respondAccepted } from "./backgroundTask.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "./syncQueue.ts"
 
-export type SetSyncStatus = (pageId: string, phase: string, errorMessage?: string) => Promise<void>
+// 각 DB 전용 setter(makeSyncStatusSetter/makeClassStatusSetter 결과물)가 실제로 쓰는 리터럴 유니온
+// 타입과 정확히 맞춰야 한다 -- 여기를 그냥 string으로 넓혀두면 "이 함수는 '처리중'|'완료'|'오류'만
+// 받는데 아무 string이나 넘길 수 있는 타입으로 취급된다"는 반공변성 오류로 deno check가 실패한다.
+export type SetSyncStatus = (
+  pageId: string,
+  phase: "처리중" | "완료" | "오류",
+  errorMessage?: string,
+) => Promise<void>
 
 function jsonResponse(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body, null, 2), {
