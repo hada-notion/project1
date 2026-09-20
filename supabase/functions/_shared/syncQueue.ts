@@ -85,6 +85,22 @@ export async function releaseWorkerLock(): Promise<void> {
   }
 }
 
+// (2026-09-21, 워커 락 리스 연장 도입) 처리 루프가 길어질 때 120초 리스가 중간에 만료되지 않도록,
+// process-sync-queue가 처리 도중 주기적으로(약 60초마다) 호출해서 리스를 다시 120초로 늘린다.
+// 실패해도 throw하지 않고 조용히 로그만 남긴다 -- 이 호출이 실패한다고 지금 처리 중인 항목을
+// 멈출 이유는 없고, 최악의 경우에도 recoverStaleSyncQueueItems(15분 기준)가 나중에 정리해준다.
+export async function renewWorkerLock(leaseSeconds = 120): Promise<void> {
+  requireEnv()
+  const res = await fetchSupabaseWithRetry(`${SB_URL}/rest/v1/rpc/renew_sync_queue_lock`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ lease_seconds: leaseSeconds }),
+  })
+  if (!res.ok) {
+    console.error(`renew_sync_queue_lock 실패: ${res.status} ${await res.text()}`)
+  }
+}
+
 export async function claimNextSyncQueueItem(): Promise<SyncQueueItem | null> {
   requireEnv()
   const res = await fetchSupabaseWithRetry(`${SB_URL}/rest/v1/rpc/claim_next_sync_queue_item`, {
