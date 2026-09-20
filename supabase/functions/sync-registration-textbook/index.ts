@@ -32,12 +32,15 @@
 // process-sync-queue 워커가 순서대로 처리하도록 바꿔다 (_shared/registrationTextbookTarget.ts). cleanup-on-end
 // 는 sync-registration-timetable/sync-registration-end의 registrationSync.ts가 내부적으로 동기 호출(fetch)해서
 // 즉시 결과를 받아야 하므로 큐를 거치지 않고 그대로 동기 처리된다.
+//
+// (2026-09-20, 웹훅 코드 정리 4단계) create-individual 라우트의 "락 확인 -> 처리중 표시 -> 큐 적재 ->
+// 202 응답" 흐름을 _shared/webhookIngest.ts의 공용 헬퍼로 옮겼다. 3단계에서 다른 등록/시험범위/
+// 클래스 버튼 웹훅들을 옮길 때 이 함수는 이름이 sync-textbook-distribution과 비슷해서 빠뜨렸었다.
 
 import { PROP_SYNC_TEXTBOOK_RUNNING } from "../_shared/constants.ts"
-import { getPage, extractPageId, checkboxValue } from "../_shared/notionClient.ts"
-import { respondAccepted } from "../_shared/backgroundTask.ts"
-import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
+import { extractPageId } from "../_shared/notionClient.ts"
 import { setTextbookSyncStatus, cleanupUnusedBooksOnEnd } from "../_shared/registrationTextbookTarget.ts"
+import { runLockedQueueWebhookForPage } from "../_shared/webhookIngest.ts"
 
 Deno.serve(async (req: Request) => {
 	const url = new URL(req.url)
@@ -57,23 +60,12 @@ Deno.serve(async (req: Request) => {
 
 	try {
 		if (route === "create-individual") {
-			// 이미 처리 중이면 새로 시작하지 않고 즉시 반환 -- 처리 중 재클릭으로 인한 중복 개별교재 생성 방지.
-			const regPageForLock = await getPage(pageId)
-			if (checkboxValue(regPageForLock, PROP_SYNC_TEXTBOOK_RUNNING)) {
-				return new Response(JSON.stringify({ ok: true, message: "already_processing", pageId, route }), {
-					status: 200,
-					headers: { "Content-Type": "application/json" },
-				})
-			}
-			await setTextbookSyncStatus(pageId, "처리중")
-
-			// 큐에 적재만 하고 즉시 응답한다 -- 실제 처리는 process-sync-queue 워커가 순서대로
-			// 처리한다 (2026-09-18, Phase 3). 진행 상황은 등록의 "동기화 상태"(이미 처리중으로
-			// 설정됨)로 확인할 수 있다.
-			await enqueueSync("sync-registration-textbook:create-individual", { pageId })
-			wakeSyncQueueWorker()
-
-			return respondAccepted({ pageId, route })
+			return await runLockedQueueWebhookForPage(pageId, {
+				functionName: "sync-registration-textbook",
+				lockProp: PROP_SYNC_TEXTBOOK_RUNNING,
+				target: "sync-registration-textbook:create-individual",
+				setStatus: setTextbookSyncStatus,
+			})
 		} else if (route === "cleanup-on-end") {
 			// 다른 함수(registrationSync.ts의 callTextbookCleanup)가 내부적으로 동기 호출해서 즉시
 			// 결과를 받아야 하므로, 이 라우트는 큐를 거치지 않고 그대로 동기 처리된다.

@@ -26,6 +26,7 @@ import {
 import {
   getFormulaText,
   getRelationFirstId,
+  getRollupText,
   normalizePhone,
   isSendingLockActive,
   withSendingLock,
@@ -44,26 +45,8 @@ const corsHeaders = {
 }
 
 // 수강료 안내와 달리 부모 연락처는 교재비 카트 페이지 자신이 아니라, 연결된 "등록" 페이지의
-// "학부모 연락처" 롤업에 들어있다. send-tuition-notice의 getRollupText와 동일한 추출 로직.
-function extractRollupItemText(item: any): string {
-  if (!item) return ""
-  if (item.type === "title") return (item.title ?? []).map((t: any) => t.plain_text).join("")
-  if (item.type === "rich_text") return (item.rich_text ?? []).map((t: any) => t.plain_text).join("")
-  if (item.type === "formula" && item.formula?.type === "string") return item.formula.string ?? ""
-  if (item.type === "rollup") {
-    const nested = item.rollup?.array?.[0]
-    return extractRollupItemText(nested)
-  }
-  return ""
-}
-
-function getRollupText(page: any, name: string): string {
-  const rollup = page.properties?.[name]?.rollup
-  if (rollup?.type === "array") {
-    return extractRollupItemText(rollup.array?.[0])
-  }
-  return ""
-}
+// "학부모 연락처" 롤업에 들어있다. (2026-09-20, 웹훅 코드 정리 4단계) send-tuition-notice와
+// 100% 중복이던 getRollupText/extractRollupItemText는 _shared/alimtalkShared.ts로 옮겼다.
 
 function anyTitleText(page: any): string {
   const properties = page?.properties ?? {}

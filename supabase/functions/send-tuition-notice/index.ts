@@ -17,6 +17,8 @@
 //   "알림톡 설정(학원) DB"의 "수강료 안내" 행 안내멘트를 그대로 사용한다 (adminShared.ts 참고).
 // - [v5, 2026-09-17] 안내멘트가 여전히 발송 메시지에 안 보인다는 리포트로 원인 추적용 임시 디버그
 //   로그 추가 (실제로 solapi에 보내는 variables 전체와 notice 길이를 로그로 남김). 기능 변경 없음.
+// - [v6, 2026-09-20] send-textbook-notice와 100% 중복이던 getRollupText/extractRollupItemText를
+//   _shared/alimtalkShared.ts로 옮기고 이 파일에서는 가져다 쓴다 (웹훅 코드 정리 4단계). 동작은 동일.
 
 import {
   notionGetPage,
@@ -31,6 +33,7 @@ import {
   getFormulaText,
   getDateRange,
   getRelationFirstId,
+  getRollupText,
   normalizePhone,
   isSendingLockActive,
   withSendingLock,
@@ -50,26 +53,6 @@ const corsHeaders = {
 
 function getRichText(page: any, name: string): string {
   return (page.properties?.[name]?.rich_text ?? []).map((t: any) => t.plain_text).join("")
-}
-
-function extractRollupItemText(item: any): string {
-  if (!item) return ""
-  if (item.type === "title") return (item.title ?? []).map((t: any) => t.plain_text).join("")
-  if (item.type === "rich_text") return (item.rich_text ?? []).map((t: any) => t.plain_text).join("")
-  if (item.type === "formula" && item.formula?.type === "string") return item.formula.string ?? ""
-  if (item.type === "rollup") {
-    const nested = item.rollup?.array?.[0]
-    return extractRollupItemText(nested)
-  }
-  return ""
-}
-
-function getRollupText(page: any, name: string): string {
-  const rollup = page.properties?.[name]?.rollup
-  if (rollup?.type === "array") {
-    return extractRollupItemText(rollup.array?.[0])
-  }
-  return ""
 }
 
 async function sendAlimtalk(

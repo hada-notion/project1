@@ -33,6 +33,29 @@ export function normalizePhone(phone: string): string {
   return (phone || "").replace(/[^0-9]/g, "")
 }
 
+// ---------- 롤업 텍스트 읽기 (send-tuition-notice / send-textbook-notice 공용) ----------
+// (2026-09-20, 웹훅 코드 정리 4단계) 두 파일에 100% 동일하게 복사돼 있던 헬퍼를 이 파일로 옮겼다.
+
+function extractRollupItemText(item: any): string {
+  if (!item) return ""
+  if (item.type === "title") return (item.title ?? []).map((t: any) => t.plain_text).join("")
+  if (item.type === "rich_text") return (item.rich_text ?? []).map((t: any) => t.plain_text).join("")
+  if (item.type === "formula" && item.formula?.type === "string") return item.formula.string ?? ""
+  if (item.type === "rollup") {
+    const nested = item.rollup?.array?.[0]
+    return extractRollupItemText(nested)
+  }
+  return ""
+}
+
+export function getRollupText(page: any, name: string): string {
+  const rollup = page.properties?.[name]?.rollup
+  if (rollup?.type === "array") {
+    return extractRollupItemText(rollup.array?.[0])
+  }
+  return ""
+}
+
 // ---------- 관리자 키 확인 (send-daily-report / send-class-daily-reports 전용 방식) ----------
 
 const SUPABASE_URL = Deno.env.get("SB_URL")!
