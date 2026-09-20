@@ -72,6 +72,11 @@
 // 큐에 적재된 작업은 sync_queue 행에 영속적으로 남아있어서, 함수 실행이 중단돼도 다음 워커 실행에서
 // 이어서 처리되기 때문이다.
 //
+// (2026-09-20, 웹훅 코드 정리 3단계) from-cart 라우트의 "잠금 확인 -> 처리중 표시 -> 큐 적재 -> 202
+// 응답" 부분만 _shared/webhookIngest.ts의 runLockedQueueWebhookForPage로 옮겼다. from-class-carts
+// 라우트는 실행 전에 실제 데이터(활성 등록 중 교재비 누락 여부)부터 계산해서 즉시완료/이어서진행을
+// 판단하는 고유 로직이 있어 공용 헬퍼로 단순화하지 않고 그대로 뒀다.
+//
 // 라우트:
 //   POST /sync-textbook-distribution/from-cart         <- 교재비(학원) DB "진도교재 담기" 버튼 (학생 1명, 담기까지 수행)
 //   POST /sync-textbook-distribution/from-class-carts   <- 클래스(학원) DB "교재비 생성" 버튼 (반 전체, 교재비 페이지만 일괄 생성 - 교재 배부는 하지 않음)
@@ -79,6 +84,7 @@
 import { getPage, createPage, extractPageId, checkboxValue, relationIds } from "../_shared/notionClient.ts"
 import { respondAccepted } from "../_shared/backgroundTask.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
+import { runLockedQueueWebhookForPage } from "../_shared/webhookIngest.ts"
 import {
 	PROP_CART_RUNNING,
 	PROP_CLASS_CART_RUNNING,
@@ -145,23 +151,14 @@ Deno.serve(async (req: Request) => {
 
 	try {
 		if (route === "from-cart") {
-			// 교재비 페이지 자신이 클릭 대상. 이미 처리 중이면 재클릭을 무시한다.
-			const cartForLock = await getPage(pageId)
-			if (checkboxValue(cartForLock, PROP_CART_RUNNING)) {
-				return new Response(JSON.stringify({ ok: true, message: "already_processing", pageId, route }), {
-					status: 200,
-					headers: { "Content-Type": "application/json" },
-				})
-			}
-			await setCartStatus(pageId, "처리중")
-
-			// Notion의 "웹훅 보내기" 버튼 액션은 이 응답을 동기적으로 기다린다. 실제 담기 작업은
-			// sync_queue에 적재해 process-sync-queue 워커가 순차적으로 처리하게 하고, 이 함수는
-			// 즉시 202로 응답한다. 진행 상황은 교재비 페이지의 "담기 처리중" 체크박스로 확인한다.
-			await enqueueSync("sync-textbook-distribution:from-cart", { cartId: pageId })
-			wakeSyncQueueWorker()
-
-			return respondAccepted({ pageId, route })
+			// 교재비 페이지 자신이 클릭 대상.
+			return await runLockedQueueWebhookForPage(pageId, {
+				functionName: "sync-textbook-distribution:from-cart",
+				lockProp: PROP_CART_RUNNING,
+				target: "sync-textbook-distribution:from-cart",
+				setStatus: setCartStatus,
+				buildPayload: (id) => ({ cartId: id }),
+			})
 		} else if (route === "from-class-carts") {
 			// 클래스 페이지 자신이 클릭 대상.
 			// 먼저 실제 데이터(활성 등록 중 교재비 누락 여부)부터 계산한다. 체크박스 값만 보고 바로

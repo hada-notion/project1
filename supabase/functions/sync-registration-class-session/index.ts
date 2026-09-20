@@ -23,22 +23,23 @@
 // 로직은 _shared/registrationClassSessionTarget.ts로 옮겼고, 이 파일은 다른 등록 버튼들과 동일하게
 // 웹훅 body 파싱 + 잠금 선체크 + 큐 적재만 담당한다. body 없이 호출하는 cron 전체 스캔 경로는
 // 버튼이 기다리는 응답이 아니므로 기존과 동일하게 동기 처리를 유지한다.
+//
+// (2026-09-20, 웹훅 코드 정리 3단계) pageId가 있는 웹훅 단건 경로의 "잠금 확인 -> 처리중 표시 ->
+// 큐 적재 -> 202 응답" 부분을 _shared/webhookIngest.ts의 runLockedQueueWebhookForPage로 옮겼다.
 
 import { PROP_SYNC_CLASS_SESSION_RUNNING } from "../_shared/constants.ts"
-import { getPage, extractPageId, checkboxValue } from "../_shared/notionClient.ts"
+import { extractPageId } from "../_shared/notionClient.ts"
 import {
 	setClassSessionSyncStatus,
 	createSessionsForAllPending,
 } from "../_shared/registrationClassSessionTarget.ts"
-import { respondAccepted } from "../_shared/backgroundTask.ts"
-import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
+import { runLockedQueueWebhookForPage } from "../_shared/webhookIngest.ts"
 
 Deno.serve(async (req: Request) => {
 	if (req.method !== "POST") {
 		return new Response("Use POST", { status: 405 })
 	}
 	const log: string[] = []
-	let pageId: string | null = null
 	try {
 		let body: Record<string, unknown> = {}
 		try {
@@ -48,26 +49,16 @@ Deno.serve(async (req: Request) => {
 		}
 		console.log("[sync-registration-class-session] received body:", JSON.stringify(body))
 
-		pageId = extractPageId(body)
+		const pageId = extractPageId(body)
 		console.log("[sync-registration-class-session] extracted pageId:", pageId)
 
 		if (pageId) {
-			// 이미 처리 중이면 새로 시작하지 않고 즉시 반환 -- 처리 중 재클릭으로 인한 중복 출석 생성 방지.
-			const regPageForLock = await getPage(pageId)
-			if (checkboxValue(regPageForLock, PROP_SYNC_CLASS_SESSION_RUNNING)) {
-				return new Response(JSON.stringify({ ok: true, message: "already_processing", pageId }, null, 2), {
-					status: 200,
-					headers: { "Content-Type": "application/json" },
-				})
-			}
-			await setClassSessionSyncStatus(pageId, "처리중")
-
-			// 큐에 적재만 하고 즉시 응답한다 -- 실제 처리는 process-sync-queue 워커가 순서대로
-			// 처리한다. 진행 상황은 등록의 "동기화 상태"(이미 처리중으로 설정됨)로 확인할 수 있다.
-			await enqueueSync("sync-registration-class-session", { pageId })
-			wakeSyncQueueWorker()
-
-			return respondAccepted({ pageId })
+			return await runLockedQueueWebhookForPage(pageId, {
+				functionName: "sync-registration-class-session",
+				lockProp: PROP_SYNC_CLASS_SESSION_RUNNING,
+				target: "sync-registration-class-session",
+				setStatus: setClassSessionSyncStatus,
+			})
 		}
 
 		// body가 없거나 페이지를 못 찾았으면(cron용) 전체 스캔 -- 버튼이 기다리는 응답이 아니므로
@@ -79,9 +70,6 @@ Deno.serve(async (req: Request) => {
 		})
 	} catch (err) {
 		console.error("[sync-registration-class-session] ERROR:", (err as Error).message, (err as Error).stack)
-		if (pageId) {
-			await setClassSessionSyncStatus(pageId, "오류", (err as Error).message)
-		}
 		return new Response(JSON.stringify({ ok: false, error: (err as Error).message, log }, null, 2), {
 			status: 500,
 			headers: { "Content-Type": "application/json" },

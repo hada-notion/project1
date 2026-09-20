@@ -21,17 +21,17 @@
 // (2026-09-18, 큐 기반 순차 처리 도입, Phase 3) 웹훅 단건(pageId 있는) 경로만 큐로 옮겨서
 // process-sync-queue 워커가 순서대로 처리하도록 바꿔다 (_shared/registrationTimetableTarget.ts).
 // 매일 cron 전체 스캔 경로(body 없음)는 버튼이 기다리는 응답이 아니므로 의도적으로 그대로 동기 유지한다.
+//
+// (2026-09-20, 웹훅 코드 정리 3단계) pageId가 있는 웹훅 단건 경로의 "잠금 확인 -> 처리중 표시 ->
+// 큐 적재 -> 202 응답" 부분을 _shared/webhookIngest.ts의 runLockedQueueWebhookForPage로 옮겼다.
+// cron 전체 스캔 분기(pageId 없음)는 이 함수 고유의 로직이라 그대로 남긴다.
 
 import {
   PROP_STATUS,
   PROP_TIMETABLE,
   PROP_SYNC_TIMETABLE_RUNNING,
 } from "../_shared/constants.ts"
-import {
-  getPage,
-  extractPageId,
-  checkboxValue,
-} from "../_shared/notionClient.ts"
+import { extractPageId } from "../_shared/notionClient.ts"
 import {
   setTimetableSyncStatus,
   restoreAllPendingClassSessions,
@@ -39,8 +39,7 @@ import {
   cleanupAttendanceForAllEndedRegistrations,
   disconnectTimetableForEndedRegistrations,
 } from "../_shared/registrationTimetableTarget.ts"
-import { respondAccepted } from "../_shared/backgroundTask.ts"
-import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
+import { runLockedQueueWebhookForPage } from "../_shared/webhookIngest.ts"
 
 void PROP_STATUS
 void PROP_TIMETABLE
@@ -50,7 +49,6 @@ Deno.serve(async (req: Request) => {
     return new Response("Use POST", { status: 405 })
   }
   const log: string[] = []
-  let pageId: string | null = null
   try {
     let body: Record<string, unknown> = {}
     try {
@@ -61,30 +59,16 @@ Deno.serve(async (req: Request) => {
     console.log("[sync-registration-timetable] received body:", JSON.stringify(body))
 
     // 웹훅 body에 pageId / pageUrl / url / id 중 하나라도 들어오면 그 페이지 1건만 처리한다.
-    pageId = extractPageId(body)
+    const pageId = extractPageId(body)
     console.log("[sync-registration-timetable] extracted pageId:", pageId)
 
     if (pageId) {
-      // 이미 처리 중이면 새로 시작하지 않고 즉시 반환 -- 처리 중 재클릭으로 인한 중복 처리 방지.
-      const regPageForLock = await getPage(pageId)
-      if (checkboxValue(regPageForLock, PROP_SYNC_TIMETABLE_RUNNING)) {
-        return new Response(JSON.stringify({ ok: true, message: "already_processing", pageId }, null, 2), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        })
-      }
-
-      // 속도/가시성 개선: 시작하자마자 "동기화 상태"를 "처리 중"으로 표시해서 노션 화면에서 바로 보이게 한다.
-      console.log("[sync-registration-timetable] setting status 처리중")
-      await setTimetableSyncStatus(pageId, "처리중")
-
-      // 큐에 적재만 하고 즉시 응답한다 -- 실제 처리는 process-sync-queue 워커가 순서대로
-      // 처리한다 (2026-09-18, Phase 3). 진행 상황은 등록의 "동기화 상태"(이미 처리중으로 설정됨)로
-      // 확인할 수 있다.
-      await enqueueSync("sync-registration-timetable", { pageId })
-      wakeSyncQueueWorker()
-
-      return respondAccepted({ pageId })
+      return await runLockedQueueWebhookForPage(pageId, {
+        functionName: "sync-registration-timetable",
+        lockProp: PROP_SYNC_TIMETABLE_RUNNING,
+        target: "sync-registration-timetable",
+        setStatus: setTimetableSyncStatus,
+      })
     }
 
     // body가 없거나 페이지를 못 찾았으면(매일 cron용) 전체 스캔 — 웹훅을 놓친 경우의 안전망. 버튼이
@@ -99,9 +83,6 @@ Deno.serve(async (req: Request) => {
     })
   } catch (err) {
     console.error("[sync-registration-timetable] ERROR:", (err as Error).message, (err as Error).stack)
-    if (pageId) {
-      await setTimetableSyncStatus(pageId, "오류", (err as Error).message)
-    }
     return new Response(JSON.stringify({ ok: false, error: (err as Error).message, log }, null, 2), {
       status: 500,
       headers: { "Content-Type": "application/json" },

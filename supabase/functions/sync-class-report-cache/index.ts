@@ -29,47 +29,23 @@
 // (2026-09-18, 큐 기반 순차 처리 도입, Phase 2) 실제 재생산 로직(processClass)과 상태 setter는
 // _shared/classReportCacheTarget.ts로 옮겼다. 이 파일은 웹훅 payload 파싱 + 사전 잠금 확인 +
 // sync_queue에 작업 적재까지만 담당하고, 실제 작업은 process-sync-queue 워커가 순차적으로 처리한다.
+//
+// (2026-09-20, 웹훅 코드 정리 3단계) "잠금 확인 -> 처리중 표시 -> 큐 적재 -> 202 응답" 부분을
+// _shared/webhookIngest.ts로 옮겼다. 이전에는 이 파일에 try/catch가 전혀 없어서(다른 등록 버튼
+// 웹훅들과 달리) getPage/setClassStatus 등에서 예외가 나면 "오류" 표시 없이 조용히 500만 나가는
+// 차이가 있었는데, 공용 헬퍼로 옮기면서 다른 함수들과 동일하게 오류 시에도 "마지막 오류"가
+// 기록되고 재클릭이 가능해지도록 맞췄다 (부수적인 안정성 개선). classId를 못 찾았을 때 오류 문구의
+// 오타("찾지 목함" -> "찾지 못함")도 함께 고쳤다.
 
-import { getPage, extractPageId, checkboxValue } from "../_shared/notionClient.ts"
-import { respondAccepted } from "../_shared/backgroundTask.ts"
-import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
+import { handleLockedQueueWebhook } from "../_shared/webhookIngest.ts"
 import { CLASS_REPORT_SYNC_RUNNING, setClassStatus } from "../_shared/classReportCacheTarget.ts"
 
-Deno.serve(async (req: Request) => {
-	if (req.method !== "POST") {
-		return new Response("Use POST", { status: 405 })
-	}
-
-	let body: unknown
-	try {
-		body = await req.json()
-	} catch {
-		body = undefined
-	}
-	const classId = body ? extractPageId(body) : null
-	if (!classId) {
-		return new Response(JSON.stringify({ ok: false, error: "classId를 찾지 목함", rawBody: body }, null, 2), {
-			status: 400,
-			headers: { "Content-Type": "application/json" },
-		})
-	}
-
-	// 이미 처리 중이고 있을 시작하지 않고 바로 반환 -- 처리 중 재클릭으로 인한 중복 처리 방지.
-	const classPageForLock = await getPage(classId)
-	if (checkboxValue(classPageForLock, CLASS_REPORT_SYNC_RUNNING)) {
-		return new Response(JSON.stringify({ ok: true, message: "already_processing", classId }, null, 2), {
-			status: 200,
-			headers: { "Content-Type": "application/json" },
-		})
-	}
-
-	await setClassStatus(classId, "처리중")
-
-	// Notion의 "웹훅 보내기" 버튼 액션은 이 응답을 동기적으로 기다린다. 실제 재가곱 작업은
-	// sync_queue에 적재해 process-sync-queue 워커가 순차적으로 처리하게 하고, 이 함수는 즉시 202로
-	// 응답한다. 진행 상황은 클래스 페이지의 "학생 페이지 동기화중" 체크박스(이미 켜져 있음)로 확인한다.
-	await enqueueSync("sync-class-report-cache", { classId })
-	wakeSyncQueueWorker()
-
-	return respondAccepted({ classId })
-})
+Deno.serve((req: Request) =>
+	handleLockedQueueWebhook(req, {
+		functionName: "sync-class-report-cache",
+		lockProp: CLASS_REPORT_SYNC_RUNNING,
+		target: "sync-class-report-cache",
+		setStatus: setClassStatus,
+		buildPayload: (pageId) => ({ classId: pageId }),
+	}),
+)
