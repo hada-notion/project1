@@ -18,8 +18,8 @@
 // generate-classes/generate-tuition과 같은 버튼-웹훅 패턴: 즉시 202 응답 -> 백그라운드 실행.
 // 진행 상태는 클래스 페이지의 "실시간 처리 상태" 속성으로 확인한다.
 
-import { getPage, createPage, queryAllPages, extractPageId, archivePage, mapWithConcurrency, checkboxValue } from "../_shared/notionClient.ts"
-import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
+import { getPage, createPage, queryAllPages, archivePage, mapWithConcurrency } from "../_shared/notionClient.ts"
+import { handleLockedBackgroundWebhook } from "../_shared/webhookIngest.ts"
 import {
 	DS_REPORT,
 	DS_ATTENDANCE,
@@ -157,47 +157,20 @@ async function processClass(classId: string, log: string[]): Promise<void> {
 	)
 }
 
-Deno.serve(async (req: Request) => {
-	if (req.method !== "POST") {
-		return new Response("Use POST", { status: 405 })
-	}
-
-	let body: unknown
-	try {
-		body = await req.json()
-	} catch {
-		body = undefined
-	}
-	const classId = body ? extractPageId(body) : null
-	if (!classId) {
-		return new Response(JSON.stringify({ ok: false, error: "classId를 찾지 못함", rawBody: body }, null, 2), {
-			status: 400,
-			headers: { "Content-Type": "application/json" },
-		})
-	}
-
-	// 이미 처리 중이면 새로 시작하지 않고 바로 반환 -- 처리 중 재클릭으로 인한 중복 생성 방지.
-	const classPageForLock = await getPage(classId)
-	if (checkboxValue(classPageForLock, CLASS_REPORT_RUNNING)) {
-		return new Response(JSON.stringify({ ok: true, message: "already_processing", classId }, null, 2), {
-			status: 200,
-			headers: { "Content-Type": "application/json" },
-		})
-	}
-
-	const log: string[] = []
-	await setClassStatus(classId, "처리중")
-
-	runInBackground(async () => {
-		try {
-			await processClass(classId, log)
-			console.log("generate-report finished:", classId, "\n", log.join("\n"))
-			await setClassStatus(classId, "완료")
-		} catch (err) {
-			console.error("generate-report failed:", (err as Error).message, "\nlog so far:", log.join("\n"), "\nstack:", (err as Error).stack)
-			await setClassStatus(classId, "오류", (err as Error).message)
-		}
-	})
-
-	return respondAccepted({ classId })
-})
+// (2026-09-20, 웹훅 코드 정리 6단계) "POST 확인 -> body 파싱 -> classId 추출 -> 락 확인 ->
+// 처리중 표시 -> 백그라운드 실행 -> 완료/오류 표시 -> 202 응답" 뼈대를 generate-tuition과
+// 공유하는 _shared/webhookIngest.ts의 handleLockedBackgroundWebhook으로 옮겼다. processClass만
+// 그대로 이 헬퍼에 넘긴다.
+Deno.serve((req: Request) =>
+	handleLockedBackgroundWebhook(
+		req,
+		{
+			functionName: "generate-report",
+			lockProp: CLASS_REPORT_RUNNING,
+			setStatus: setClassStatus,
+			missingIdError: "classId를 찾지 못함",
+			idField: "classId",
+		},
+		processClass,
+	)
+)

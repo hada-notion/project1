@@ -30,10 +30,8 @@ import {
 	createPage,
 	archivePage,
 	mapWithConcurrency,
-	checkboxValue,
 } from "../_shared/notionClient.ts"
-import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
-import { extractPageId } from "../_shared/notionClient.ts"
+import { handleLockedBackgroundWebhook } from "../_shared/webhookIngest.ts"
 import { getScheduleConfig } from "../_shared/adminShared.ts"
 import {
 	DS_TUITION,
@@ -130,48 +128,19 @@ async function processClass(classId: string, log: string[]): Promise<void> {
 	)
 }
 
-Deno.serve(async (req: Request) => {
-	if (req.method !== "POST") {
-		return new Response("Use POST", { status: 405 })
-	}
-
-	let body: unknown
-	try {
-		body = await req.json()
-	} catch {
-		body = undefined
-	}
-	const classId = body ? extractPageId(body) : null
-	if (!classId) {
-		return new Response(JSON.stringify({ ok: false, error: "classId를 찾지 못함", rawBody: body }, null, 2), {
-			status: 400,
-			headers: { "Content-Type": "application/json" },
-		})
-	}
-
-	// 이미 처리 중이면(백그라운드 작업이 아직 안 끝남) 새로 시작하지 않고 바로 반환한다 --
-	// 이렇게 해야 처리 중 재클릭으로 인한 중복 생성 자체를 막을 수 있다.
-	const classPageForLock = await getPage(classId)
-	if (checkboxValue(classPageForLock, CLASS_TUITION_RUNNING)) {
-		return new Response(JSON.stringify({ ok: true, message: "already_processing", classId }, null, 2), {
-			status: 200,
-			headers: { "Content-Type": "application/json" },
-		})
-	}
-
-	const log: string[] = []
-	await setClassStatus(classId, "처리중")
-
-	runInBackground(async () => {
-		try {
-			await processClass(classId, log)
-			console.log("generate-tuition finished:", classId, "\n", log.join("\n"))
-			await setClassStatus(classId, "완료")
-		} catch (err) {
-			console.error("generate-tuition failed:", (err as Error).message, "\nlog so far:", log.join("\n"), "\nstack:", (err as Error).stack)
-			await setClassStatus(classId, "오류", (err as Error).message)
-		}
-	})
-
-	return respondAccepted({ classId })
-})
+// (2026-09-20, 웹훅 코드 정리 6단계) generate-report와 100% 같던 "POST 확인 -> body 파싱 ->
+// classId 추출 -> 락 확인 -> 처리중 표시 -> 백그라운드 실행 -> 완료/오류 표시 -> 202 응답" 뼈대를
+// _shared/webhookIngest.ts의 handleLockedBackgroundWebhook으로 옮겼다.
+Deno.serve((req: Request) =>
+	handleLockedBackgroundWebhook(
+		req,
+		{
+			functionName: "generate-tuition",
+			lockProp: CLASS_TUITION_RUNNING,
+			setStatus: setClassStatus,
+			missingIdError: "classId를 찾지 못함",
+			idField: "classId",
+		},
+		processClass,
+	)
+)

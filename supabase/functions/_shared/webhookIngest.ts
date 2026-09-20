@@ -18,7 +18,7 @@
 // 그 외 응답 형태(already_processing / accepted / 오류 메시지)는 기존과 동일하게 유지했다.
 
 import { getPage, extractPageId, checkboxValue } from "./notionClient.ts"
-import { respondAccepted } from "./backgroundTask.ts"
+import { runInBackground, respondAccepted } from "./backgroundTask.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "./syncQueue.ts"
 
 // 각 DB 전용 setter(makeSyncStatusSetter/makeClassStatusSetter 결과물)가 실제로 쓰는 리터럴 유니온
@@ -103,4 +103,72 @@ export async function handleLockedQueueWebhook(
   }
 
   return runLockedQueueWebhookForPage(pageId, opts)
+}
+
+// (2026-09-20, 웹훅 코드 정리 6단계) generate-report/generate-tuition처럼 큐를 거치지 않고 즉시
+// 백그라운드에서 처리하는 "버튼 웹훅" 계열도, 큐 계열(runLockedQueueWebhookForPage)과 뼈대가
+// 거의 같다: POST 확인 -> body 파싱 -> pageId 추출 -> 이미 처리 중이면 즉시 반환(락) ->
+// "처리중" 표시 -> 백그라운드 실행(성공하면 "완료", 실패하면 "오류") -> 즉시 202 응답.
+// generate-classes는 단건/일괄/전체자동 등 진입점이 여러 개라 이 헬퍼를 그대로 적용하지 않았다.
+export type LockedBackgroundWebhookOptions = {
+  // 로그 접두사로 쓰는 함수 이름 (예: "generate-report").
+  functionName: string
+  // 이 속성(체크박스)이 이미 true면 재클릭으로 보고 즉시 already_processing을 반환한다.
+  lockProp: string
+  // "처리중"/"완료"/"오류" 표시에 쓰는 상태 setter. 각 DB/함수 전용 setter를 그대로 넘기면 된다.
+  setStatus: SetSyncStatus
+  // pageId를 찾지 못했을 때의 오류 메시지 (기존 함수마다 "classId를 찾지 못함" 등 문구가 달랐다).
+  missingIdError: string
+  // 응답 JSON에 pageId를 담을 필드 이름 (기존 함수들은 "classId"를 그대로 썼다). 기본값 "pageId".
+  idField?: string
+}
+
+export async function handleLockedBackgroundWebhook(
+  req: Request,
+  opts: LockedBackgroundWebhookOptions,
+  run: (id: string, log: string[]) => Promise<void>,
+): Promise<Response> {
+  if (req.method !== "POST") {
+    return new Response("Use POST", { status: 405 })
+  }
+
+  let body: unknown
+  try {
+    body = await req.json()
+  } catch {
+    body = undefined
+  }
+  const id = body ? extractPageId(body) : null
+  const idField = opts.idField ?? "pageId"
+  if (!id) {
+    return jsonResponse({ ok: false, error: opts.missingIdError, rawBody: body }, 400)
+  }
+
+  const pageForLock = await getPage(id)
+  if (checkboxValue(pageForLock, opts.lockProp)) {
+    return jsonResponse({ ok: true, message: "already_processing", [idField]: id }, 200)
+  }
+
+  const log: string[] = []
+  await opts.setStatus(id, "처리중")
+
+  runInBackground(async () => {
+    try {
+      await run(id, log)
+      console.log(`${opts.functionName} finished:`, id, "\n", log.join("\n"))
+      await opts.setStatus(id, "완료")
+    } catch (err) {
+      console.error(
+        `${opts.functionName} failed:`,
+        (err as Error).message,
+        "\nlog so far:",
+        log.join("\n"),
+        "\nstack:",
+        (err as Error).stack,
+      )
+      await opts.setStatus(id, "오류", (err as Error).message)
+    }
+  })
+
+  return respondAccepted({ [idField]: id })
 }
