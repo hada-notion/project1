@@ -37,6 +37,10 @@ import {
 // 대시보드(학원) DB 자동 연결: 이 함수가 Notion API로 직접 만드는 수업/출석 페이지는 페이지
 // 자동화가 트리거되지 않으므로, 생성 직후 여기서 직접 큐에 적재한다 (2026-09-20, 대시보드 기능 추가).
 import { enqueueDashboardLink } from "../_shared/dashboardLinkTarget.ts"
+// (2026-09-21, 인증 정책 추가) 이 함수는 지금까지 아무 인증도 없이 POST만 확인하면 누구나 호출할 수 있었다.
+// 다른 어드민 함수들과 동일하게 x-admin-key 헤더를 요구해서, URL만 알면 전체 시간표를 강제로
+// 재생성시킬 수 있었던 구멍을 막는다.
+import { requireAdminKey } from "../_shared/adminShared.ts"
 
 // Data source IDs (fixed by workspace structure, hardcoded)
 const DS = {
@@ -628,6 +632,13 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
     return new Response("Use POST", { status: 405 })
   }
+
+  // (2026-09-21) 관리자 키 검증. Notion 버튼 자동화(수업추가/다음주 수업 일괄 생성)의 "웹훅 보내기"
+  // 액션에 x-admin-key 헤더를 추가해서 호출해야 한다. 만약 Supabase 대시보드 쪽에 이 함수를 직접
+  // 부르는 별도 pg_cron 등이 설정되어 있었다면, 그 호출도 이제 401을 받게 되므로 함께 헤더를
+  // 추가해야 한다 (이 저장소 안에서는 그런 예약 호출을 찾지 못했다).
+  const authError = await requireAdminKey(req)
+  if (authError) return authError
 
   // "?mode=bulk" query param -> 메뉴(학원) DB의 "다음주 수업 일괄 생성" 버튼 call.
   // Checked via the URL (not the body) because Notion's webhook body for a button on the
