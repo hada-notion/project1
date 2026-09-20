@@ -12,6 +12,9 @@
 //   "알림톡 설정(학원) DB"의 "교재비 안내" 행 "안내멘트"에서 가져와 안내문 뒤에 이어붙인다
 //   (getScheduleConfig, send-tuition-notice가 수강료 안내에 쓰는 것과 동일한 헬퍼).
 //   카카오 알림톡 템플릿은 여전히 이 합쳐진 전체 문구를 하나의 변수(#{안내문})로 받는 형태를 권장한다.
+// - [v2.1, 2026-09-21] #{학생이름} 변수에 등록 페이지의 제목("강인희 고1 A반"처럼 학생+반이 합쳐진 값)을
+//   그대로 넣던 버그를 수정. 등록(학원) DB의 "학생이름(등록)" 롤업(학생(학원) DB 제목만 반영)을 사용해
+//   실제 학생 이름만 들어가도록 변경했다.
 
 import {
   notionGetPage,
@@ -48,17 +51,6 @@ const corsHeaders = {
 // 수강료 안내와 달리 부모 연락처는 교재비 카트 페이지 자신이 아니라, 연결된 "등록" 페이지의
 // "학부모 연락처" 롤업에 들어있다. (2026-09-20, 웹훅 코드 정리 4단계) send-tuition-notice와
 // 100% 중복이던 getRollupText/extractRollupItemText는 _shared/alimtalkShared.ts로 옮겼다.
-
-function anyTitleText(page: any): string {
-  const properties = page?.properties ?? {}
-  for (const key of Object.keys(properties)) {
-    const prop = properties[key]
-    if (prop?.type === "title") {
-      return (prop.title ?? []).map((t: any) => t.plain_text ?? "").join("")
-    }
-  }
-  return ""
-}
 
 async function sendAlimtalk(
   to: string,
@@ -137,7 +129,8 @@ Deno.serve(async (req) => {
     }
 
     const registrationPage = await notionGetPage(registrationId)
-    const studentName = anyTitleText(registrationPage) || "학생"
+    // [v2.1] 등록 페이지 제목("강인희 고1 A반")이 아니라, 학생 실제 이름만 담긴 롤업을 사용한다.
+    const studentName = getRollupText(registrationPage, "학생이름(등록)") || "학생"
     const parentPhone = getRollupText(registrationPage, "학부모 연락처")
 
     const clickerUserId =
