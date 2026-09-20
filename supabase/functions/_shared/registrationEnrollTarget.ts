@@ -10,22 +10,13 @@ import {
 	PROP_TITLE,
 	PROP_TIMETABLE,
 	PROP_SYNC_ENROLL_RUNNING,
-	PROP_SYNC_TIMETABLE_RUNNING,
-	PROP_SYNC_TEXTBOOK_RUNNING,
-	PROP_SYNC_CLASS_SESSION_RUNNING,
-	PROP_SYNC_END_RUNNING,
 } from "./constants.ts"
 import { getPage, updatePageProperties, relIds, titleText, todaySeoulDate } from "./notionClient.ts"
 import { makeSyncStatusSetter } from "./registrationSync.ts"
 
 const PROP_CLASS_TIMETABLE = "시간표" // 클래스(학원) DB의 시간표 relation
 
-export const setEnrollSyncStatus = makeSyncStatusSetter(PROP_SYNC_ENROLL_RUNNING, [
-	PROP_SYNC_TIMETABLE_RUNNING,
-	PROP_SYNC_TEXTBOOK_RUNNING,
-	PROP_SYNC_CLASS_SESSION_RUNNING,
-	PROP_SYNC_END_RUNNING,
-])
+export const setEnrollSyncStatus = makeSyncStatusSetter(PROP_SYNC_ENROLL_RUNNING)
 
 export async function processEnrollForRegistration(pageId: string, log: string[]) {
 	const reg = await getPage(pageId)

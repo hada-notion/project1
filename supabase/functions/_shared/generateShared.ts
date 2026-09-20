@@ -49,7 +49,6 @@ export function makeClassStatusSetter(selfFlagProp: string) {
 	): Promise<void> {
 		await setCombinedSyncStatus(classId, {
 			selfFlagProp,
-			otherFlagProps: [],
 			errorProp: PROP_CLASS_LAST_ERROR,
 			phase: status === "처리중" ? "start" : status === "완료" ? "success" : "error",
 			errorMessage,

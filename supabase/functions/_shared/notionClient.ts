@@ -241,10 +241,6 @@ export async function setCombinedSyncStatus(
 	pageId: string,
 	args: {
 		selfFlagProp: string
-		// (v2, 2026-09-11) "동기화 상태" select를 조합하던 용도였는데, 체크박스를 실시간으로 읽는
-		// "실시간 처리 상태" 수식으로 대체되면서 이 함수 내부에서는 더 이상 쓰지 않는다. 호출부
-		// (makeSyncStatusSetter/makeClassStatusSetter)가 여전히 넘기고 있어서 시그니처만 유지한다.
-		otherFlagProps: string[]
 		// "마지막 오류" 텍스트 속성 이름. 실패 시 에러 메시지를 쓰고, 성공 시 비운다.
 		errorProp: string
 		syncedAtProp?: string

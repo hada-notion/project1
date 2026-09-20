@@ -102,10 +102,15 @@ export const PROP_TIMETABLE_GEN_RUNNING = "생성중"
 export const PROP_TIMETABLE_LAST_ERROR = "마지막 오류"
 
 // 참고: 아래 5개 "처리중" 체크박스는 서로 배타적이지 않고 동시에 여러 개가 true일 수 있다.
-// 각 함수는 자기 자신을 뺀 나머지를 setSyncStatus의 otherFlagProps로 넘겨서 "하나라도 처리중이면
-// 전체 상태를 처리중으로" 판단한다. (참고: 기존 sync-registration-textbook 코드는 이 중
-// PROP_SYNC_ENROLL_RUNNING을 otherFlagProps에서 빠뜨리고 있었음 - 리팩토링 시 동작을 바꾸지 않기
-// 위해 그 누락은 그대로 보존했다. 별도로 고칠지는 따로 판단 필요.)
+// "하나라도 처리중이면 전체 상태를 처리중으로" 보여주는 실제 계산은 등록(학원) DB의 "실시간 처리
+// 상태" 노션 수식이 이 체크박스들을 직접 실시간으로 조합해서 담당한다.
+// (2026-09-21 정리: 예전에는 각 함수가 setSyncStatus 호출 시 "자기 자신을 뺀 나머지" 목록을
+// otherFlagProps라는 인자로 넘기게 돼 있었는데, setCombinedSyncStatus 구현이 이 값을 전혀 읽지
+// 않는 완전한 죽은 인자였다. sync-registration-textbook만 그 목록에서 PROP_SYNC_ENROLL_RUNNING을
+// 빠뜨리고 있었지만, 애초에 아무 데도 쓰이지 않으니 실제 동작에는 아무 영향이 없었다. 혼동을
+// 줄이기 위해 otherFlagProps 인자 자체를 registrationSync.ts/generateShared.ts와 모든 호출부에서
+// 제거했다 — 이제 이 목록은 아래 ALL_SYNC_RUNNING_FLAGS 참고용으로만 남아 있고, 코드 어디에서도
+// 참조하지 않는다.)
 export const ALL_SYNC_RUNNING_FLAGS = [
 	PROP_SYNC_TIMETABLE_RUNNING,
 	PROP_SYNC_TEXTBOOK_RUNNING,

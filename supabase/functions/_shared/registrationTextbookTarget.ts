@@ -8,9 +8,6 @@
 import {
 	PROP_CLASS,
 	PROP_SYNC_TEXTBOOK_RUNNING,
-	PROP_SYNC_TIMETABLE_RUNNING,
-	PROP_SYNC_CLASS_SESSION_RUNNING,
-	PROP_SYNC_END_RUNNING,
 } from "./constants.ts"
 import {
 	getPage,
@@ -26,15 +23,11 @@ import {
 } from "./notionClient.ts"
 import { makeSyncStatusSetter } from "./registrationSync.ts"
 
-// NOTE: otherFlagProps here has only 3 entries, missing PROP_SYNC_ENROLL_RUNNING that the other
-// 4 sync-registration-* functions all include (pre-existing inconsistency, not something
-// introduced by this refactor). Kept exactly as-is per the "no functional change" rule;
-// a human can decide later whether to add it.
-export const setTextbookSyncStatus = makeSyncStatusSetter(PROP_SYNC_TEXTBOOK_RUNNING, [
-	PROP_SYNC_TIMETABLE_RUNNING,
-	PROP_SYNC_CLASS_SESSION_RUNNING,
-	PROP_SYNC_END_RUNNING,
-])
+// (2026-09-21: 예전에는 여기서 다른 4개 sync-registration-* 함수와 다르게 "다른 처리중 플래그"
+// 목록에 PROP_SYNC_ENROLL_RUNNING이 빠져 있었다. registrationSync.ts에서 그 목록 자체(otherFlagProps)를
+// 완전히 제거했으니 — 애초에 setCombinedSyncStatus가 그 값을 전혀 읽지 않는 죽은 인자였다 —
+// 이 불일치도 함께 사라졌다. constants.ts 10-1 5번 참고.)
+export const setTextbookSyncStatus = makeSyncStatusSetter(PROP_SYNC_TEXTBOOK_RUNNING)
 
 const DATA_SOURCE_PROGRESS_BOOK = Deno.env.get("DATA_SOURCE_PROGRESS_BOOK_ID")! // 진도교재(학원) DB
 

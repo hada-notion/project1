@@ -50,7 +50,7 @@ const STATUS_ACTIVE = "🟢 수강 중"
 
 export const PROP_CLASS_CART_RUNNING = "교재비 생성중"
 
-export const setCartStatus = makeSyncStatusSetter(PROP_CART_RUNNING, [])
+export const setCartStatus = makeSyncStatusSetter(PROP_CART_RUNNING)
 export const setClassCartStatus = makeClassStatusSetter(PROP_CLASS_CART_RUNNING)
 
 // 등록 하나에 대해 교재비(장바구니) 페이지를 확보한다: 이밀 있으맔 재사용, 없으맔 생성한다.

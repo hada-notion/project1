@@ -16,10 +16,6 @@ import {
   PROP_TITLE,
   STATUS_ENDED,
   PROP_SYNC_TIMETABLE_RUNNING,
-  PROP_SYNC_TEXTBOOK_RUNNING,
-  PROP_SYNC_CLASS_SESSION_RUNNING,
-  PROP_SYNC_END_RUNNING,
-  PROP_SYNC_ENROLL_RUNNING,
 } from "./constants.ts"
 import {
   queryDataSource,
@@ -42,12 +38,7 @@ import {
 // "동기화 상태"는 이 함수와 sync-registration-textbook이 각각 처리 중인지 표시하는 체크박스
 // 두 개를 조합해서 계산한다 (setCombinedSyncStatus) — 둘 중 하나라도 처리 중이면 "처리 중",
 // 둘 다 끝나야 "완료"로 표시한다.
-export const setTimetableSyncStatus = makeSyncStatusSetter(PROP_SYNC_TIMETABLE_RUNNING, [
-  PROP_SYNC_TEXTBOOK_RUNNING,
-  PROP_SYNC_CLASS_SESSION_RUNNING,
-  PROP_SYNC_END_RUNNING,
-  PROP_SYNC_ENROLL_RUNNING,
-])
+export const setTimetableSyncStatus = makeSyncStatusSetter(PROP_SYNC_TIMETABLE_RUNNING)
 
 // 참고: 클래스 기준 시간표 자동 연결은 이제 "등록" 버튼(sync-registration-enroll)에서만
 // 처리한다 — 클래스의 시간표가 학생 개개인에게 완전히 똑같이 적용되지 않을 수 있어서,

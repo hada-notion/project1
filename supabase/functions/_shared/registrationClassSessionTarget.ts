@@ -21,20 +21,11 @@ import {
 	PROP_TIMETABLE,
 	STATUS_ENDED,
 	PROP_SYNC_CLASS_SESSION_RUNNING,
-	PROP_SYNC_TIMETABLE_RUNNING,
-	PROP_SYNC_TEXTBOOK_RUNNING,
-	PROP_SYNC_END_RUNNING,
-	PROP_SYNC_ENROLL_RUNNING,
 } from "./constants.ts"
 import { queryDataSource, getPage, relIds, titleText, mapWithConcurrency } from "./notionClient.ts"
 import { attachSessionsAndAttendance, makeSyncStatusSetter } from "./registrationSync.ts"
 
-export const setClassSessionSyncStatus = makeSyncStatusSetter(PROP_SYNC_CLASS_SESSION_RUNNING, [
-	PROP_SYNC_TIMETABLE_RUNNING,
-	PROP_SYNC_TEXTBOOK_RUNNING,
-	PROP_SYNC_END_RUNNING,
-	PROP_SYNC_ENROLL_RUNNING,
-])
+export const setClassSessionSyncStatus = makeSyncStatusSetter(PROP_SYNC_CLASS_SESSION_RUNNING)
 
 // 등록 1건에 대해, 연결된 시간표의 기존 수업들에 이 등록을 붙이고(roster) 출석을 생성한다.
 // 시간표는 "등록" 버튼(sync-registration-enroll)에서 클래스 기준으로 세팅하고, 필요하면

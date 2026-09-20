@@ -8,10 +8,6 @@ import {
 	PROP_TITLE,
 	PROP_TIMETABLE,
 	PROP_SYNC_END_RUNNING,
-	PROP_SYNC_TIMETABLE_RUNNING,
-	PROP_SYNC_TEXTBOOK_RUNNING,
-	PROP_SYNC_CLASS_SESSION_RUNNING,
-	PROP_SYNC_ENROLL_RUNNING,
 } from "./constants.ts"
 import { getPage, updatePageProperties, relIds, titleText } from "./notionClient.ts"
 import {
@@ -21,12 +17,7 @@ import {
 	makeSyncStatusSetter,
 } from "./registrationSync.ts"
 
-export const setEndSyncStatus = makeSyncStatusSetter(PROP_SYNC_END_RUNNING, [
-	PROP_SYNC_TIMETABLE_RUNNING,
-	PROP_SYNC_TEXTBOOK_RUNNING,
-	PROP_SYNC_CLASS_SESSION_RUNNING,
-	PROP_SYNC_ENROLL_RUNNING,
-])
+export const setEndSyncStatus = makeSyncStatusSetter(PROP_SYNC_END_RUNNING)
 
 async function deleteAttendanceAfterEndDate(
 	registrationId: string,

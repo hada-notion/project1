@@ -42,20 +42,24 @@ import {
 
 // ---------- 0) "처리중/완료/오류" 상태 표시 헬퍼 ----------
 // class-session/end/enroll/textbook/timetable 다섯 함수 모두 거의 동일한 setSyncStatus를 각자
-// 정의하고 있었다. selfFlagProp/otherFlagProps만 다를 뿐이라 각 함수에 특화된 setSyncStatus
-// 함수를 만들어주는 헬퍼로 대신한다. (각 호출부는 기존 otherFlagProps 목록과 동일하게 그대로
-// 넘겨서 기존 동작을 100% 보존한다 — sync-registration-textbook의 PROP_SYNC_ENROLL_RUNNING
-// 누락도 그대로 포함.)
+// 정의하고 있었다. selfFlagProp만 다를 뿐이라 각 함수에 특화된 setSyncStatus 함수를 만들어주는
+// 헬퍼로 대신한다.
+// (2026-09-21 정리: 예전에는 여기서 otherFlagProps라는 두 번째 인자를 받아 setCombinedSyncStatus로
+// 그대로 넘겼는데, setCombinedSyncStatus 쪽 구현이 "동기화 상태" select 조합용이었던 이 값을
+// "실시간 처리 상태" 수식 도입 이후 전혀 읽지 않는 완전한 죽은 인자였다(체크박스는 노션 수식이
+// 직접 실시간으로 조합해서 보여준다). sync-registration-textbook의 호출부가 이 목록에서
+// PROP_SYNC_ENROLL_RUNNING 하나를 빠뜨리고 있었지만, 애초에 아무 데도 쓰이지 않는 값이라 실제
+// 동작 차이는 없었다. 혼동을 줄이기 위해 otherFlagProps 자체를 완전히 제거했다 — 각 호출부의
+// "다른 처리중 플래그 목록"도 함께 제거했으니 이제 이 불일치 자체가 존재하지 않는다.)
 //
 // [NEW, 2026-09-17] startedAtProp: 선택적으로 넘기면 "처리중"이 시작된 시각을 함께 기록한다.
 // 호출부가 나중에 이 시각을 확인해서, 락이 너무 오래(예: 10분 이상) 켜져 있으면 "이전 실행이
 // 응답 없이 멈춘 것"으로 보고 무시할 수 있게 하기 위함이다 (교재 일괄 배부 재클릭 시 무한 멈춤
 // 자동 복구 목적). 넘기지 않으면 기존과 100% 동일하게 동작한다.
-export function makeSyncStatusSetter(selfFlagProp: string, otherFlagProps: string[], startedAtProp?: string) {
+export function makeSyncStatusSetter(selfFlagProp: string, startedAtProp?: string) {
 	return async function setSyncStatus(pageId: string, status: "처리중" | "완료" | "오류", errorMessage?: string) {
 		await setCombinedSyncStatus(pageId, {
 			selfFlagProp,
-			otherFlagProps,
 			errorProp: PROP_LAST_ERROR,
 			syncedAtProp: PROP_SYNCED_AT,
 			startedAtProp,
