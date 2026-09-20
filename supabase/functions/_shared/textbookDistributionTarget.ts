@@ -2,7 +2,9 @@
 //
 // sync-textbook-distribution가 처리하는 실제 장바건지/교재배부 생성 로직을 별도 파일로 분리했다
 // (2026-09-18, 큐 기반 순차 처리 도입, Phase 2). 원래 index.ts 안에 있던 코드를 그대로 옮긴 것이다.
-// webhook payload 파싱/람다 route 분기/디버깅 로깅(logDebugWebhookCall)은 index.ts에 그대로 둔다.
+// webhook payload 파싱/람다 route 분기는 index.ts에 그대로 둔다. (2026-09-21) 원인 진단용 임시
+// 디버그 로깅(logDebugWebhookCall)과 "🔧 웹훅 디버그 로그 (임시)" DB는 원인 파악(웹훅 주소 오류) 완료 후
+// 함께 제거했다.
 //
 // (2026-09-18) 기존 runWithSafetyTimeout(개별 Edge Function 실행이 응답 없이 실패할 수 있으니 정해진
 // 시간 안에 스스로 오류 처리하는 안전장식)는 큐 숿으로 이전하지 앞눈다. 큐에 쓸이건 작업은 sync_queue

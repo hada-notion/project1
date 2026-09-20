@@ -81,7 +81,7 @@
 //   POST /sync-textbook-distribution/from-cart         <- 교재비(학원) DB "진도교재 담기" 버튼 (학생 1명, 담기까지 수행)
 //   POST /sync-textbook-distribution/from-class-carts   <- 클래스(학원) DB "교재비 생성" 버튼 (반 전체, 교재비 페이지만 일괄 생성 - 교재 배부는 하지 않음)
 
-import { getPage, createPage, extractPageId, checkboxValue, relationIds } from "../_shared/notionClient.ts"
+import { getPage, extractPageId, checkboxValue, relationIds } from "../_shared/notionClient.ts"
 import { respondAccepted } from "../_shared/backgroundTask.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 import { runLockedQueueWebhookForPage } from "../_shared/webhookIngest.ts"
@@ -96,38 +96,10 @@ import {
 // 등록(학원) DB 속성: from-class-carts 사전 확인(활성 등록 중 교재비 누락 여부 판정)에서만 쓴다.
 const PROP_REGISTRATION_CART = "교재비" // relation -> 교재비(학원) DB
 
-// [TEMP DEBUG] from-class-carts 실패 원인 진단용 임시 로그 DB ("🔧 웹훅 디버그 로그 (임시)", 교재비 관리
-// 페이지 하위). 민감 정보가 아니라 데이타소스 ID를 그대로 하드코딩한다. 원인 파악(웹훅 주소 오류로 확인됨) 후
-// 정리 예정 -- 당장 동작에는 영향 없으므로 이번 수정에서는 그대로 둔다.
-const DATA_SOURCE_DEBUG_LOG = "65bd92de36864b57be320cb4b8b5a3c8"
-
-// [TEMP DEBUG] 실제로 들어온 요샕을 노션의 임시 로그 DB에 기록한다 (fire-and-forget, 절대 메인 응답을
-// 막거나 실패시키지 않음). 원인 파악(웹훅 주소 오류로 확인됨) 후 정리 예정.
-async function logDebugWebhookCall(
-	route: string | undefined,
-	method: string,
-	rawBody: string,
-	pageId: string | null,
-): Promise<void> {
-	try {
-		const nowIso = new Date().toISOString()
-		await createPage(DATA_SOURCE_DEBUG_LOG, {
-			["이름"]: { title: [{ text: { content: `${nowIso} ${route ?? "(no route)"}` } }] },
-			["라우트"]: { rich_text: [{ text: { content: route ?? "" } }] },
-			["메소드"]: { rich_text: [{ text: { content: method } }] },
-			["pageId 추출 결과"]: { rich_text: [{ text: { content: pageId ?? "(추출 실패 - null)" } }] },
-			["원본 바디"]: { rich_text: [{ text: { content: rawBody.slice(0, 1900) } }] },
-			["수신시각(KST)"]: { rich_text: [{ text: { content: nowIso } }] },
-		})
-	} catch (err) {
-		console.error("[sync-textbook-distribution] (debug) logDebugWebhookCall 실패:", err)
-	}
-}
-
 Deno.serve(async (req: Request) => {
 	const url = new URL(req.url)
-	// [TEMP DEBUG 수정] 쉐랑시(trailing slash)가 붙어오면 기존 split("/").pop()은 빈 문자열을 맞럈 -
-	// filter(Boolean)으로 빈 조각을 거륩내서 언제도 뜻바릑이 담기가 정확히 잡히도록 한다.
+	// (2026-09-17) 트레일링 슬래시가 붙어오면 기존 split("/").pop()은 빈 문자열을 반환했다 --
+	// filter(Boolean)으로 빈 조각을 걸러내서 트레일링 슬래시가 있어도 라우트가 정확히 잡히도록 한다.
 	const route = url.pathname.split("/").filter(Boolean).pop()
 	const rawBodyText = await req.text()
 	let body: unknown = {}
@@ -139,11 +111,6 @@ Deno.serve(async (req: Request) => {
 	console.log("sync-textbook-distribution payload:", route, JSON.stringify(body))
 
 	const pageId = extractPageId(body)
-
-	// [TEMP DEBUG 수정] 이전에는 route === "from-class-carts"일 떄만 로그를 둘얈다. 그런데 실제로는
-	// 로그가 0건이었다 - route가 기대한 것과 다르게 들어온 것일 수도 있다도 보기 위해, route가 뭐땜대
-	// 상관없이 모든 요샕을 대상으로 무조거 남겨 범위를 늘마다 (fire-and-forget, 응답에는 영향 없음).
-	logDebugWebhookCall(route, req.method, rawBodyText, pageId).catch(() => {})
 
 	if (!pageId) {
 		return new Response(JSON.stringify({ error: "pageId를 찾을 수 없음" }), { status: 400 })
