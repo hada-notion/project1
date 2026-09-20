@@ -268,11 +268,20 @@ async function peekNextNeededDate(timetable: any): Promise<string | null> {
   return findNextClassDate(baseDate, weekday, closures)
 }
 
-// Fetches the "클래스명" text property from the class page. Used to build the class-session title.
-async function getClassName(classId: string): Promise<string> {
+// Fetches the class page's "클래스명" (title) and "담당강사" (relation) properties together.
+// [2026-09-21] Changed from a "클래스명 문자열만 가져오는" helper to also read 담당강사 directly
+// from 클래스(학원) DB — the ultimate source of truth for a class's teacher assignment — instead
+// of relying on 시간표.담당강사 (see processTimetable below). 시간표.담당강사 was previously
+// populated only by a Notion AI "자동채우기" 에이전트, which fires only for rows a person edits by
+// hand in the Notion UI (never for rows this function or other API calls touch), and turned out
+// to be duplicated (2 identical agents wired to the same property). Reading straight from 클래스
+// removes that fragile dependency and matches how kiosk-checkin already reads 담당강사 (메뉴얼 5-10).
+async function getClassInfo(classId: string): Promise<{ name: string; teacherIds: string[] }> {
   const page = await getPage(classId)
   // "클래스명" is the TITLE property of the 클래스 DB, so it's under `.title`, not `.rich_text`.
-  return page.properties["클래스명"]?.title?.[0]?.plain_text ?? "class"
+  const name = page.properties["클래스명"]?.title?.[0]?.plain_text ?? "class"
+  const teacherIds = relIds(page.properties["담당강사"])
+  return { name, teacherIds }
 }
 
 // "2026-09-14" -> "09.14"
@@ -446,7 +455,8 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
 
   const startTime = props["등원시간(HH:mm)"]?.rich_text?.[0]?.plain_text || "09:00"
   const endTime = props["하원시간(HH:mm)"]?.rich_text?.[0]?.plain_text || "10:00"
-  const teacherIds = relIds(props["담당강사"])
+  // [2026-09-21] 담당강사는 더 이상 시간표 자신의 "담당강사" 속성에서 읽지 않는다 — 아래에서
+  // getClassInfo(classId)로 클래스(학원) DB에서 직접 가져온다 (이유는 getClassInfo 주석 참고).
   // Per-timetable time-of-day gate for cron (auto) creation of *today's* session.
   // Configurable via the "자동생성 시간" text property (HH:mm) instead of a hardcoded constant,
   // so each class's auto-creation time can be adjusted later without a code change.
@@ -465,7 +475,7 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
   // front removes most of the redundant network calls that made a multi-session backfill (the
   // first-ever "일주일 일괄 생성" run) slow.
   const closures = await getClosurePeriods(classId)
-  const className = await getClassName(classId)
+  const { name: className, teacherIds } = await getClassInfo(classId)
   const weekdayKr = WEEKDAY_KR[weekday]
   const timetableRegs = await getTimetableRegistrations(timetableId)
 
