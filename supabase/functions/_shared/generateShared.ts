@@ -94,10 +94,6 @@ export function weekRange(dateStr: string): { start: string; end: string } {
 export type ActiveRegistration = {
 	id: string
 	studentLabel: string
-	// 등록(학원) DB "월간 수업 횟수" 수식(prop("시간표").length()*4) 값. 수강료 생성 시 실제
-	// 출석 건수 대신 이 값을 "수업 횟수"로 사용한다 (2026-09-15) -- 다음달 수강료를 미리 생성할 때는
-	// 아직 그 달의 수업/출석 레코드가 하나도 없어서 실제 출석 카운트가 항상 0이 되는 문제가 있었음.
-	monthlyClassCount: number
 }
 
 function anyTitleOf(page: any): string {
@@ -138,7 +134,6 @@ export async function getActiveRegistrationsForClass(
 	return results.map((p: any) => ({
 		id: p.id,
 		studentLabel: anyTitleOf(p),
-		monthlyClassCount: p?.properties?.["월간 수업 횟수"]?.formula?.number ?? 0,
 	}))
 }
 

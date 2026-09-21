@@ -7,12 +7,17 @@
 // (발송함의 '일괄 전송' 버튼이 이 관계로 대상을 찾는다). 같은 달에 이미 생성된 건이 있으면
 // 건너뛴다 (버튼을 여러 번 눌러도 안전 -- idempotent).
 //
-// 수강료(학원) DB의 "청구금액" 수식은 등록.수강료 * (수업 횟수 / 등록.월간 수업 횟수) + 청구금액 조정
-// 으로 계산되므로, 이 함수는 "수업 횟수"만 채우면 나머지는 수식이 자동으로 계산한다.
+// (2026-09-21, 월수강료 계산방식 재설계) 수강료(학원) DB의 "청구금액" 수식은 이제 항상
+// 등록.수강료 * (실제 수업량 / 등록.월간 수업 총량(클래스)) + 청구금액 조정 으로 계산된다
+// (예전의 "정산방식"(횟수제/총량제) 분기는 제거됨 -- "단위"는 이제 화면 표시용일 뿐 계산에는
+// 영향을 주지 않는다). 그래서 이 함수는 "실제 수업량"만 채우면 나머지는 수식이 자동으로
+// 계산한다. 생성 시점에는 완납을 가정해 클래스의 "월간 수업 총량"과 동일한 값을 기본으로
+// 채운다 -- 결석/중도등록 등 예외가 있으면 생성된 수강료 건의 "실제 수업량"을 직접 수정한다
+// (예전처럼 "월간 수업 횟수" 수식(시간표 수*4)을 분자로 쓰지 않는다: 그 수식은 더 이상 청구
+// 계산에 쓰이지 않고, 참고용으로만 등록(학원) DB에 남아있다).
 //
-// "수업 횟수"는 실제 출석 건수 대신 등록의 "월간 수업 횟수" 수식값(클래스 시간표의 요일 수 * 4)을
-// 그대로 사용한다 (다음달 수강료를 미리 생성해두는 흐름에서는 그 달의 수업/출석 레코드가 아직
-// 하나도 없어 실제 출석 건수가 항상 0이 되는 문제가 있었음).
+// 클래스의 "월간 수업 총량"이 비어있으면(신규 클래스 등 설정 전) 이 클래스는 통째로 건너뛴다 --
+// 0으로 청구금액을 만들어버리는 대신 사용자가 클래스 설정을 먼저 채우도록 유도한다.
 //
 // (2026-09-16) 수강료(학원) DB에 "알림톡 설정" 관계 속성이 다시 있다. 이 관계는 표시 전용이다 --
 // send-tuition-notice는 여전히 발송 시점에 "발송 구분" 문자열로 알림톡 설정 DB를 조회해서 안내멘트
@@ -77,6 +82,14 @@ async function processClass(classId: string, log: string[]): Promise<void> {
 	const monthStart = monthDefault.start
 	const monthEnd = (periodProp?.end ?? null) ? String(periodProp.end).slice(0, 10) : monthDefault.end
 
+	// (2026-09-21) 청구금액 계산의 분모. 비어있으면(신규 클래스 등 미설정) 0원짜리 수강료를
+	// 만들어버리는 대신 클래스 설정을 먼저 채우도록 안내하고 건너뛴다.
+	const monthlyTotalQuantity: number | null = classPage.properties?.["월간 수업 총량"]?.number ?? null
+	if (monthlyTotalQuantity == null) {
+		log.push(`[skip] ${className}: "월간 수업 총량"이 설정되지 않음 (클래스 설정에서 먼저 입력해주세요)`)
+		return
+	}
+
 	// 클래스 DB "해당월 수강료 생성 내역" 수식과 동일하게, 청구 기간(monthStart~monthEnd)과
 	// 등록 기간(등록일~종료일)이 겹치는 등록만 대상으로 함 (당일 등록생 포함).
 	const registrations = await getActiveRegistrationsForClass(classId, monthStart, monthEnd)
@@ -106,13 +119,14 @@ async function processClass(classId: string, log: string[]): Promise<void> {
 			skipped++
 			continue
 		}
-		const sessionCount = reg.monthlyClassCount
 		const title = `${reg.studentLabel} ${monthStart.slice(0, 7)} 수강료`
 		await createPage(DS_TUITION, {
 			청구명: { title: [{ text: { content: title.slice(0, 200) } }] },
 			청구기간: { date: { start: monthStart, end: monthEnd !== monthStart ? monthEnd : null } },
 			등록: { relation: [{ id: reg.id }] },
-			"수업 횟수": { number: sessionCount },
+			// 완납 가정: 클래스의 "월간 수업 총량"과 동일한 값을 기본으로 채운다. 결석/중도등록 등
+			// 예외가 있으면 생성 후 이 값을 직접 조정한다.
+			"실제 수업량": { number: monthlyTotalQuantity },
 			// 이 건이 속한 알림톡 발송함(배치)과 연결 -- "일괄 전송" 버튼이 이 관계로 대상을 찾는다.
 			[PROP_NOTIFICATION_BATCH_RELATION]: { relation: [{ id: batchId }] },
 			// [NEW] 표시용: 이 건의 발송 설정이 알림톡 설정(학원) DB의 어느 행인지 한눈에 보여준다
