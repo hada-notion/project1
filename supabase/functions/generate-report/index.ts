@@ -17,6 +17,10 @@
 //
 // generate-classes/generate-tuition과 같은 버튼-웹훅 패턴: 즉시 202 응답 -> 백그라운드 실행.
 // 진행 상태는 클래스 페이지의 "실시간 처리 상태" 속성으로 확인한다.
+//
+// (2026-09-21, PART N-2: 관리자 키 인증 추가) 이 함수를 호출하는 클래스(학원) DB "보고서 생성"
+// 버튼 자동화에 x-admin-key 헤더를 먼저 추가해둔 뒤, webhookIngest.ts의 handleLockedBackgroundWebhook
+// 에 새로 추가된 opt-in requireAdminKey 옵션을 여기서 켠다.
 
 import { getPage, createPage, queryAllPages, archivePage, mapWithConcurrency } from "../_shared/notionClient.ts"
 import { handleLockedBackgroundWebhook } from "../_shared/webhookIngest.ts"
@@ -170,6 +174,7 @@ Deno.serve((req: Request) =>
 			setStatus: setClassStatus,
 			missingIdError: "classId를 찾지 못함",
 			idField: "classId",
+			requireAdminKey: true,
 		},
 		processClass,
 	)

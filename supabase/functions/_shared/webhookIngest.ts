@@ -21,6 +21,9 @@
 // 관리자 키 인증이 필요해서, requireAdminKey 옵션을 새로 추가했다(기본값 false/undefined = 기존과
 // 동일하게 인증 없이 통과). 이 옵션을 켜지 않은 기존 호출자(sync-registration-enroll 등)는 동작이
 // 전혀 바뀌지 않는다.
+//
+// [2026-09-21, PART N-2] handleLockedBackgroundWebhook(generate-report/generate-tuition이 사용)에도
+// 같은 이유로 동일한 opt-in requireAdminKey 옵션을 추가했다. 이 옵션을 켜지 않은 기존 동작은 그대로다.
 
 import { getPage, extractPageId, checkboxValue } from "./notionClient.ts"
 import { runInBackground, respondAccepted } from "./backgroundTask.ts"
@@ -140,6 +143,10 @@ export type LockedBackgroundWebhookOptions = {
   missingIdError: string
   // 응답 JSON에 pageId를 담을 필드 이름 (기존 함수들은 "classId"를 그대로 썼다). 기본값 "pageId".
   idField?: string
+  // true면 x-admin-key 헤더(또는 body.adminKey)가 현재 유효한 관리자 키와 일치하지 않으면
+  // 401을 반환하고 처리를 중단한다. 생략(기본값 false/undefined)하면 기존과 동일하게 인증을
+  // 요구하지 않는다. (2026-09-21, PART N-2)
+  requireAdminKey?: boolean
 }
 
 export async function handleLockedBackgroundWebhook(
@@ -157,6 +164,15 @@ export async function handleLockedBackgroundWebhook(
   } catch {
     body = undefined
   }
+
+  if (opts.requireAdminKey) {
+    const adminKey = resolveAdminKeyFromRequest(req, (body as Record<string, unknown>) ?? {})
+    const currentAdminKey = await getCurrentAdminKey()
+    if (!adminKey || adminKey !== currentAdminKey) {
+      return jsonResponse({ error: "unauthorized" }, 401)
+    }
+  }
+
   const id = body ? extractPageId(body) : null
   const idField = opts.idField ?? "pageId"
   if (!id) {

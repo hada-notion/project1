@@ -14,9 +14,10 @@
 // 적재해 순차대로 처리. (등록 1건만 재가곱해땄 Notion API를 수십 번 호출해야 해서, 반 전체를 듙 엱으난
 // 춘적으로 처리하면 Notion "웹훅 보내기" 자동화가 응답을 기다리다 타임아웃난다. 그러른데
 // sync-report-cache와 동일하게 항상 즉시 202로 응답하고 나리네 작업은 큐 워커가 처리한다.)
-// 다른 클래스 버튼들(교재 생성/돴고서 생성/월 수강릤 생성)과 동일하게 버로 인증 없이, 클래스
-// 페이지에서 온 신뇌된 버튼 웹훅으로 취급한다 (admin-key 불필요). 진행 상황은 클래스 페이지의
-// "실시간 처리 상태" 속성("학생 페이지 동기화중" 체크박스 + "마지막 오류")로 확인한다.
+// (2026-09-21, PART N-2: 관리자 키 인증 추가) 이 함수를 호출하는 클래스(학원) DB "학생 페이지
+// 동기화" 버튼 자동화에 x-admin-key 헤더를 먼저 추가해둔 뒤, webhookIngest.ts의 handleLockedQueueWebhook
+// 에 이미 있는 opt-in requireAdminKey 옵션을 여기서 켠다(더 이상 무인증 신뢰 버튼 웹훅이 아니다).
+// 진행 상황은 클래스 페이지의 "실시간 처리 상태" 속성("학생 페이지 동기화중" 체크박스 + "마지막 오류")으로 확인한다.
 //
 // [FIX, 2026-09-18] CLASS_REPORT_SYNC_RUNNING이 "리포트 동기화중"으로 하드코딩되어 있었는데,
 // 클래스(학원) DB의 실제 체크박스 이맄이 이땄까지 돰 하("리포트 보다 동기화중" -> "학생 페이지
@@ -47,5 +48,6 @@ Deno.serve((req: Request) =>
 		target: "sync-class-report-cache",
 		setStatus: setClassStatus,
 		buildPayload: (pageId) => ({ classId: pageId }),
+		requireAdminKey: true,
 	}),
 )

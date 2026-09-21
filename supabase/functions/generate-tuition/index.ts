@@ -29,6 +29,10 @@
 // Notion의 "웹훅 보내기" 액션은 응답을 동기적으로 기다리므로, 처리가 오래 걸리면 타임아웃
 // 알림이 뜰 수 있다. 그래서 즉시 202를 반환하고 실제 작업은 백그라운드에서 계속한다.
 // 진행 상태는 클래스 페이지의 "실시간 처리 상태" 속성으로 확인한다.
+//
+// (2026-09-21, PART N-2: 관리자 키 인증 추가) 이 함수를 호출하는 클래스(학원) DB "월 수강료 생성"
+// 버튼 자동화에 x-admin-key 헤더를 먼저 추가해둔 뒤, webhookIngest.ts의 handleLockedBackgroundWebhook
+// 에 새로 추가된 opt-in requireAdminKey 옵션을 여기서 켠다.
 
 import {
 	getPage,
@@ -154,6 +158,7 @@ Deno.serve((req: Request) =>
 			setStatus: setClassStatus,
 			missingIdError: "classId를 찾지 못함",
 			idField: "classId",
+			requireAdminKey: true,
 		},
 		processClass,
 	)
