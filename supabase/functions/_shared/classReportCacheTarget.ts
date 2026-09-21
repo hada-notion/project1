@@ -7,9 +7,9 @@ import { getPage, queryAllPages, mapWithConcurrency } from "./notionClient.ts"
 import { makePageCache, upsertReportCacheRows, type ReportCacheRow } from "./reportCacheShared.ts"
 import { buildCacheRowForRegistration } from "./reportCacheBuilder.ts"
 import { makeClassStatusSetter } from "./generateShared.ts"
-
-// 등록(학원) DB. sync-report-cache/index.ts와 동일한 고정값.
-export const DS_REGISTRATION = "16dba040-586b-838a-ae3c-876c0e9cd474"
+import { DS_REGISTRATION } from "./constants.ts"
+// (2026-09-21, 이식성 리팩토링) 등록(학원) DB ID를 여기서도 하드코딩하지 않고 constants.ts에서
+// 가져온다 (다른 여러 파일과 동일한 값).
 
 export const CLASS_REPORT_SYNC_RUNNING = "학생 페이지 동기화중"
 export const setClassStatus = makeClassStatusSetter(CLASS_REPORT_SYNC_RUNNING)

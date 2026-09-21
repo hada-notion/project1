@@ -20,6 +20,7 @@
 
 import { requireAdminKey, CORS_HEADERS as ADMIN_CORS } from "../_shared/adminShared.ts"
 import { getPage, queryAllPages, extractPageId } from "../_shared/notionClient.ts"
+import { DS_ATTENDANCE } from "../_shared/constants.ts"
 import {
   buildAttendanceRow,
   upsertAttendanceRows,
@@ -30,8 +31,6 @@ import {
 } from "../_shared/attendanceSyncShared.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 
-// 출석(학원) DB의 데이터소스 ID (sync-report-cache/index.ts와 동일한 값).
-const DS_ATTENDANCE = "8aaba040-586b-8322-8437-87608a763415"
 const SYNC_SOURCE = "attendance"
 // 클럭 오차/처리 중 발생한 수정을 놓치지 않기 위해 다음 커서를 이만큼 여유있게 되돌려서 저장한다.
 const CURSOR_SAFETY_MARGIN_MS = 2 * 60 * 1000

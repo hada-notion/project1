@@ -18,10 +18,9 @@ import { queryAllPages, mapWithConcurrency } from "../_shared/notionClient.ts"
 import { makePageCache, firstRelationId } from "../_shared/reportCacheShared.ts"
 import { syncReportCacheForRegistration } from "../_shared/reportCacheBuilder.ts"
 import { syncAttendanceForRegistration } from "../_shared/attendanceSyncShared.ts"
+import { DS_ATTENDANCE } from "../_shared/constants.ts"
 
 const SEND_LOG_DB_ID = Deno.env.get("NOTION_SEND_LOG_DB_ID") ?? ""
-// 출석(학원) DB의 데이터소스 ID (sync-attendance/index.ts와 동일한 값).
-const DS_ATTENDANCE = "8aaba040-586b-8322-8437-87608a763415"
 
 function todayIsoSeoul(): string {
   // 날짜만 필요 (Notion 날짜 필터는 date-only 문자열도 받는다).

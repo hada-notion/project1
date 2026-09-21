@@ -29,14 +29,17 @@ const SEND_LOG_DB_ID = Deno.env.get("NOTION_SEND_LOG_DB_ID") ?? ""
 // (2026-09-15) Secrets에 이 값이 등록돼 있지 않으면 getScheduleConfig()가 항상 null을 반환해서
 // generate-report/generate-tuition이 새로 만드는 건마다 "알림톡 설정" 관계형을 못 채우는 버그가 있었다.
 // (getAlimtalkConfig 쪽은 실패 시 fallback 값으로 조용히 대체되어 발송 자체는 문제없이 되고 있었어서
-// 이 문제가 드러나지 않았음). Secrets 미등록 시에도 항상 동작하도록 실제 DB ID를 기본값으로 넣어둔다.
+// 이 문제가 드러나지 않았음). getScheduleConfig/getAlimtalkConfig 양쪽 모두 이 값이 비어있을 때를
+// 대비한 안전한 fallback 경로(경고 로그 + null/기본값 반환)를 이미 갖추고 있으므로, 여기서는 특정
+// 학원(고객)의 실제 DB ID를 기본값으로 하드코딩하지 않는다 (새 학원 이식 시 잘못된 DB로 조회/기록
+// 되는 사고를 막기 위함, 2026-09-XX 이식성 정리).
 // [FIX, 2026-09-17] 2026-09-16 커밋(027a8ce)이 실수로 이름을 ALIMTALK_CONFIG_DB_ID로 바꿔서
 // Secrets에 등록된 기존 이름(NOTION_ALIMTALK_CONFIG_DB_ID)을 못 읽는 상태였다. 두 이름을 모두
 // 인식하도록 해서 Secrets 이름 불일치로 인한 누락 가능성을 없앤다.
 const ALIMTALK_CONFIG_DB_ID =
   Deno.env.get("NOTION_ALIMTALK_CONFIG_DB_ID") ||
   Deno.env.get("ALIMTALK_CONFIG_DB_ID") ||
-  "e40c92b3-53cf-4f7e-bef5-46ffe52f4007"
+  ""
 const NOTION_VERSION = "2022-06-28"
 const NOTION_API_BASE = "https://api.notion.com/v1"
 

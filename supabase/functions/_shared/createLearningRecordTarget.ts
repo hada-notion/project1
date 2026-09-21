@@ -16,10 +16,15 @@ import {
 	anyTitleText,
 } from "./notionClient.ts"
 
-export const DS_REGISTRATION = "16dba040-586b-838a-ae3c-876c0e9cd474" // 등록(학원) DB
-export const DS_STUDY_RECORD = "d97ba040-586b-8310-b710-8782e29b5c73" // 학습기록(학원) DB
-export const DS_CLASS_SESSION = "3b1ba040-586b-80ec-af20-000b31bb69b7" // 수업(학원) DB
-export const DS_ATTENDANCE = "8aaba040-586b-8322-8437-87608a763415" // 출석(학원) DB
+import {
+	DS_REGISTRATION,
+	DS_LEARNING_RECORD as DS_STUDY_RECORD,
+	DS_CLASS_SESSION,
+	DS_ATTENDANCE,
+} from "./constants.ts"
+// (2026-09-21, 이식성 리팩토링) 위 4개도 constants.ts로 이동함 — 그 파일 상단 주석 참고.
+// DS_ATTENDANCE는 create-learning-record/index.ts가 여기서 다시 가져다 쓰고 있었는데, 그쪽도
+// constants.ts에서 바로 가져오도록 함께 고쳤다 (아래 참고).
 
 const PROP_SESSION_REGISTRATION = "등록"
 const PROP_SESSION_ATTENDANCE = "출석"

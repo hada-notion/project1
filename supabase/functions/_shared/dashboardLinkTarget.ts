@@ -17,11 +17,10 @@
 
 import { getPage, updatePageProperties, createPage, queryAllPages, dateStart } from "./notionClient.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "./syncQueue.ts"
-
-export const DS_DASHBOARD = "3c5ba040-586b-8012-8e92-000bac7521e8" // 대시보드(학원) DB
-export const DS_CLASS_SESSION = "3b1ba040-586b-80ec-af20-000b31bb69b7" // 수업(학원) DB
-export const DS_ATTENDANCE = "8aaba040-586b-8322-8437-87608a763415" // 출석(학원) DB
-export const DS_SCHEDULE_EVENT = "4ebba040-586b-836b-bfb0-8741d650419b" // 일정(학원) DB
+import { DS_DASHBOARD, DS_CLASS_SESSION, DS_ATTENDANCE, DS_SCHEDULE_EVENT } from "./constants.ts"
+// (2026-09-21, 이식성 리팩토링) 위 4개도 constants.ts로 이동함 — 그 파일 상단 주석 참고.
+// nightly-dashboard-link-audit/index.ts가 이 중 3개를 여기서 다시 가져다 쓰고 있었는데, 그쪽도
+// constants.ts에서 바로 가져오도록 함께 고쳤다.
 
 const PROP_SESSION_DATETIME = "수업일시" // 수업(학원)/출석(학원) DB 공용
 const PROP_SCHEDULE_DATE = "날짜" // 일정(학원) DB (기간 가능)

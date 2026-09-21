@@ -6,15 +6,21 @@
 // 처리할 수 있게 하기 위함이다. webhook 요청 파싱(resolvePageId 등)은 index.ts에 그대로 둔다.
 
 import { getPage, queryAllPages, updatePageProperties, archivePage, mapWithConcurrency } from "./notionClient.ts"
-import { PROP_DELETE_CHECKBOX, PROP_DELETING_RUNNING, PROP_LAST_ERROR } from "./constants.ts"
-
-export const DS_CLASS_SESSION = "3b1ba040-586b-80ec-af20-000b31bb69b7" // 수업(학원) DB
-export const DS_ATTENDANCE = "8aaba040-586b-8322-8437-87608a763415" // 출석(학원) DB
-export const DS_STUDY_RECORD = "d97ba040-586b-8310-b710-8782e29b5c73" // 학습기록(학원) DB
-export const DS_STUDY_ACTIVITY = "ea2ba040-586b-8368-8bb6-070564a5a31c" // 학습활동(학원) DB
-export const DS_TEXTBOOK_CART = "d1dba040-586b-8215-af75-8778a3ec57e9" // 교재비(학원) DB
-export const DS_TEXTBOOK_DISTRIBUTION = "784ba040-586b-82e3-b5aa-87e11fb8d97a" // 교재배부(학원) DB
-export const DS_TEXTBOOK_PAYMENT = "b86ba040-586b-83e3-8d2d-07c61bbece1a" // 교재결제(학원) DB
+import {
+	PROP_DELETE_CHECKBOX,
+	PROP_DELETING_RUNNING,
+	PROP_LAST_ERROR,
+	DS_CLASS_SESSION,
+	DS_ATTENDANCE,
+	DS_LEARNING_RECORD as DS_STUDY_RECORD,
+	DS_STUDY_ACTIVITY,
+	DS_TEXTBOOK_CART,
+	DS_TEXTBOOK_DISTRIBUTION,
+	DS_TEXTBOOK_PAYMENT,
+} from "./constants.ts"
+// (2026-09-21, 이식성 리팩토링) 위 7개 데이터소스 ID는 이 파일에 직접 하드코딩돼 있었는데, 이제
+// constants.ts 한 곳에서 환경변수로 읽어와 공유한다 (constants.ts 상단 주석 참고). export하지 않아도
+// 되도록 이 파일 밖에서 이 이름들을 가져다 쓰는 곳이 없는지 확인했다.
 
 const PROP_STUDY_RECORD_TEXTBOOK = "진도교재"
 const PROP_PROGRESS_TYPE = "진도방식"

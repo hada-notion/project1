@@ -14,9 +14,18 @@ export const NOTION_TOKEN =
 export const NOTION_VERSION = "2025-09-03" // 멀티 데이터소스 DB의 parent.data_source_id를 쓰려면 이 버전 이상이 필요
 export const NOTION_API = "https://api.notion.com/v1"
 
-// 등록(학원) DB / 클래스(학원) DB — timetable, textbook 두 함수가 모두 조회한다.
-export const DS_REGISTRATION = "16dba040-586b-838a-ae3c-876c0e9cd474" // 등록(학원) DB
-export const DS_CLASS = "67cba040-586b-835b-b02f-8708589c7cf1" // 클래스(학원) DB
+// ---------- 데이터소스(Notion DB) ID ----------
+// (2026-09-21, 이식성 리팩토링) 이 워크스페이스 전용 데이터소스 ID 17개를 이 파일 한 곳에서만
+// Supabase Secrets(환경변수)로 읽어오도록 통일했다. 예전에는 같은 ID 리터럴이 cascadeDeleteTarget.ts/
+// createAssignmentTarget.ts/createLearningRecordTarget.ts/dashboardLinkTarget.ts/
+// fixAttendanceTarget.ts/generateShared.ts/reportCacheBuilder.ts/syncReportCacheTarget.ts/
+// classReportCacheTarget.ts/attendanceSyncShared.ts/sync-attendance/nightly-report-sync-audit
+// 12개 파일에 각자 복사돼 있었다 — 다른 노션 워크스페이스(다른 학원)로 이 코드를 그대로 재사용하려면
+// 그 12개 파일을 전부 찾아 고쳐야 했다는 뜻이다. 이제는 이 파일의 환경변수 이름 17개만 그 학원의
+// 실제 데이터소스 ID로 채우면 코드 수정 없이 재사용할 수 있다 (메뉴얼 "이식 체크리스트" 참고).
+// (진도교재 DB는 이미 이전부터 DATA_SOURCE_PROGRESS_BOOK_ID로 환경변수화돼 있었다, registrationTextbookTarget.ts 참고.)
+export const DS_REGISTRATION = Deno.env.get("DATA_SOURCE_REGISTRATION_ID")! // 등록(학원) DB
+export const DS_CLASS = Deno.env.get("DATA_SOURCE_CLASS_ID")! // 클래스(학원) DB
 
 export const PROP_CLASS = "클래스" // 등록 DB의 클래스 relation (limit 1)
 export const PROP_ENROLL_DATE = "등록일" // 등록 DB
@@ -28,9 +37,20 @@ export const STATUS_ENDED = "🔴 수강 종료"
 
 // 등록 관련 자동화(수업 생성/종료 처리/복원)가 공통으로 조회하는 데이터소스.
 // class-session, end, timetable 세 함수가 각자 같은 리터럴을 들고 있던 것을 하나로 모음 (로드맵 리팩토링).
-export const DS_ATTENDANCE = "8aaba040-586b-8322-8437-87608a763415" // 출석(학원) DB
-export const DS_CLASS_SESSION = "3b1ba040-586b-80ec-af20-000b31bb69b7" // 수업(학원) DB
-export const DS_LEARNING_RECORD = "d97ba040-586b-8310-b710-8782e29b5c73" // 학습기록(학원) DB
+export const DS_ATTENDANCE = Deno.env.get("DATA_SOURCE_ATTENDANCE_ID")! // 출석(학원) DB
+export const DS_CLASS_SESSION = Deno.env.get("DATA_SOURCE_CLASS_SESSION_ID")! // 수업(학원) DB
+export const DS_LEARNING_RECORD = Deno.env.get("DATA_SOURCE_LEARNING_RECORD_ID")! // 학습기록(학원) DB
+
+// 아래 8개는 원래 각 target 파일이 자기 것만 로컬로 들고 있던 것을, 위와 같은 이유로 여기로 모았다.
+export const DS_STUDY_ACTIVITY = Deno.env.get("DATA_SOURCE_STUDY_ACTIVITY_ID")! // 학습활동(학원) DB
+export const DS_DASHBOARD = Deno.env.get("DATA_SOURCE_DASHBOARD_ID")! // 대시보드(학원) DB
+export const DS_SCHEDULE_EVENT = Deno.env.get("DATA_SOURCE_SCHEDULE_EVENT_ID")! // 일정(학원) DB
+export const DS_TEXTBOOK_CART = Deno.env.get("DATA_SOURCE_TEXTBOOK_CART_ID")! // 교재비(학원) DB
+export const DS_TEXTBOOK_DISTRIBUTION = Deno.env.get("DATA_SOURCE_TEXTBOOK_DISTRIBUTION_ID")! // 교재배부(학원) DB
+export const DS_TEXTBOOK_PAYMENT = Deno.env.get("DATA_SOURCE_TEXTBOOK_PAYMENT_ID")! // 교재결제(학원) DB
+export const DS_TIMETABLE = Deno.env.get("DATA_SOURCE_TIMETABLE_ID")! // 시간표(학원) DB
+export const DS_TUITION = Deno.env.get("DATA_SOURCE_TUITION_ID")! // 수강료(학원) DB
+export const DS_REPORT = Deno.env.get("DATA_SOURCE_REPORT_ID")! // 보고서(학원) DB
 
 // 출석(학원) DB 속성
 export const PROP_ATTENDANCE_TITLE = "출석"
@@ -62,8 +82,10 @@ export const PROP_RECORD_REGISTRATION = "등록"
 
 // 종료된(또는 등록일이 삭제된) 등록의 미사용 개별 진도교재를 정리하는 내부 라우트.
 // class-session/end/timetable 세 함수가 모두 이 URL로 fetch한다.
-export const TEXTBOOK_CLEANUP_URL =
-	"https://twczhsxybkcvjkdfdxvs.supabase.co/functions/v1/sync-registration-textbook/cleanup-on-end"
+// (2026-09-21, 이식성 리팩토링) 예전에는 이 Supabase 프로젝트의 URL이 그대로 박혀 있어서, 다른
+// 학원(다른 Supabase 프로젝트)에 재배포하면 항상 이 워크스페이스의 함수를 잘못 호출하게 되는
+// 문제가 있었다. SB_URL(다른 파일들과 동일한 환경변수)로 조립하도록 고쳤다.
+export const TEXTBOOK_CLEANUP_URL = `${Deno.env.get("SB_URL") ?? ""}/functions/v1/sync-registration-textbook/cleanup-on-end`
 
 // 클래스.수업방식(그룹/개별 진도)은 삭제됨 — 이제 진도교재(학원) DB의 "진도방식" select로
 // 반별교재(템플릿) 단위로 표현한다 (sync-registration-textbook에서 직접 문자열로 참조).
@@ -129,9 +151,9 @@ export const ALL_SYNC_RUNNING_FLAGS = [
 // 학생 DB의 레거시 "성적 생성" 체크박스·"시험범위(변수)" 관계형은 함께 제거했다
 // (더 이상 어떤 자동화도 그 값을 읽지 않는다).
 // "시험구분"(성적 DB)은 실사용 판단 결과 불필요해 제거함 (2026-09-16).
-export const DS_EXAM_SCOPE = "3bdba040-586b-807a-91bd-000b5b4f2d98" // 시험범위(학원) DB
-export const DS_GRADE = "3bdba040-586b-8006-9f62-000b39d855cc" // 성적(학원) DB
-export const DS_STUDENT = "bdeba040-586b-827d-8ef6-871aff52cce9" // 학생(학원) DB
+export const DS_EXAM_SCOPE = Deno.env.get("DATA_SOURCE_EXAM_SCOPE_ID")! // 시험범위(학원) DB
+export const DS_GRADE = Deno.env.get("DATA_SOURCE_GRADE_ID")! // 성적(학원) DB
+export const DS_STUDENT = Deno.env.get("DATA_SOURCE_STUDENT_ID")! // 학생(학원) DB
 
 // 시험범위(학원) DB 속성
 export const PROP_SCOPE_TITLE = "이름"

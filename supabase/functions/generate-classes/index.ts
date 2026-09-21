@@ -41,17 +41,28 @@ import { enqueueDashboardLink } from "../_shared/dashboardLinkTarget.ts"
 // 다른 어드민 함수들과 동일하게 x-admin-key 헤더를 요구해서, URL만 알면 전체 시간표를 강제로
 // 재생성시킬 수 있었던 구멍을 막는다.
 import { requireAdminKey } from "../_shared/adminShared.ts"
+import {
+	DS_TIMETABLE,
+	DS_CLASS_SESSION,
+	DS_CLASS,
+	DS_ATTENDANCE,
+	DS_REGISTRATION,
+	DS_SCHEDULE_EVENT,
+	DS_STUDY_ACTIVITY,
+	DS_LEARNING_RECORD,
+} from "../_shared/constants.ts"
 
-// Data source IDs (fixed by workspace structure, hardcoded)
+// Data source IDs: 이제 하드코딩하지 않고 _shared/constants.ts(환경변수 기반 단일 소스)에서
+// 가져온다 (2026-09-XX, 이식성 정리). 아래 함수 안에서는 기존과 동일하게 DS.xxx 형태로 쓴다.
 const DS = {
-  timetable: "4e4ba040-586b-832c-989b-8703a89aa322", // 시간표
-  classSession: "3b1ba040-586b-80ec-af20-000b31bb69b7", // 수업
-  studentClass: "67cba040-586b-835b-b02f-8708589c7cf1", // 클래스
-  attendance: "8aaba040-586b-8322-8437-87608a763415", // 출석
-  registration: "16dba040-586b-838a-ae3c-876c0e9cd474", // 등록
-  scheduleEvent: "4ebba040-586b-836b-bfb0-8741d650419b", // 일정
-  studyActivity: "ea2ba040-586b-8368-8bb6-070564a5a31c", // 학습활동
-  learningRecord: "d97ba040-586b-8310-b710-8782e29b5c73", // 학습기록
+  timetable: DS_TIMETABLE,
+  classSession: DS_CLASS_SESSION,
+  studentClass: DS_CLASS,
+  attendance: DS_ATTENDANCE,
+  registration: DS_REGISTRATION,
+  scheduleEvent: DS_SCHEDULE_EVENT,
+  studyActivity: DS_STUDY_ACTIVITY,
+  learningRecord: DS_LEARNING_RECORD,
 }
 
 // ---- 학습활동(학원) DB: 대기 중인 과제 마감 백필용 ----

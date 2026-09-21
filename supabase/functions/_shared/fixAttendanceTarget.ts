@@ -6,6 +6,8 @@
 // 웹훅 payload에서 페이지 id를 찾는 로직(resolveClassSessionId 등)은 index.ts에 그대로 둔다.
 
 import { getPage, queryAllPages, createPage, updatePageProperties, relIds } from "./notionClient.ts"
+import { DS_TIMETABLE, DS_CLASS_SESSION, DS_ATTENDANCE, DS_REGISTRATION } from "./constants.ts"
+// (2026-09-21, 이식성 리팩토링) 아래 4개 데이터소스 ID는 constants.ts로 이동함 — 그 파일 상단 주석 참고.
 
 // 수업(학원) DB의 "출석조정 처리중" 체크박스 + "마지막 오류" 텍스트 필드로 진행 상황을 표시한다
 // (2026-09-11: 공유 select "동기화 상태"에서 체크박스로 마이그레이션됨). best-effort로 갱신하며 실패해도 무시한다.
@@ -46,11 +48,6 @@ export async function markAttendanceFixError(classSessionId: string, message: st
     console.error("[fix-attendance] failed to set 마지막 오류:", (err as Error).message)
   }
 }
-
-export const DS_TIMETABLE = "4e4ba040-586b-832c-989b-8703a89aa322" // 시간표
-export const DS_CLASS_SESSION = "3b1ba040-586b-80ec-af20-000b31bb69b7" // 수업(학원) DB
-export const DS_ATTENDANCE = "8aaba040-586b-8322-8437-87608a763415" // 출석(학원) DB
-export const DS_REGISTRATION = "16dba040-586b-838a-ae3c-876c0e9cd474" // 등록(학원) DB
 
 const KST_OFFSET = "+09:00"
 

@@ -29,16 +29,14 @@
 import { queryAllPages, mapWithConcurrency, relationIds } from "./notionClient.ts"
 import { firstRelationId } from "./reportCacheShared.ts"
 import { syncReportCacheForRegistration } from "./reportCacheBuilder.ts"
-
-// 워크스페이스 구조상 고정값인 데이터소스 ID.
-export const DS_REGISTRATION = "16dba040-586b-838a-ae3c-876c0e9cd474"
+import { DS_REGISTRATION, DS_STUDENT } from "./constants.ts"
+// (2026-09-21, 이식성 리팩토링) 위 2개도 constants.ts로 이동함 — 그 파일 상단 주석 참고.
+// sync-report-cache/index.ts가 DS_REGISTRATION을 이 파일에서 가져다 쓰고 있어서(re-export),
+// 그 파일은 건드리지 않고 여기서 계속 재수출한다.
+export { DS_REGISTRATION }
 // 진도교재(학원) DB. sync-registration-textbook/index.ts와 동일한 값 (정규교재 페이지 -> 그 교재를
 // 쓰는 진도교재 인스턴스를 찾기 위해 필요).
 const DATA_SOURCE_PROGRESS_BOOK = Deno.env.get("DATA_SOURCE_PROGRESS_BOOK_ID")!
-// 학생(학원) DB. _shared/constants.ts의 DS_STUDENT와 동일한 값 (일정 웹훅의 학교/학년 와일드카드
-// 대상을 찾기 위해 필요 -- 이 파일은 다른 함수 폴더처럼 자기 것만 쓰는 값이라 공용 모듈에서
-// 가져오지 않고 그대로 복사해 둔다).
-const DS_STUDENT = "bdeba040-586b-827d-8ef6-871aff52cce9"
 
 // 일정(학원) 페이지 식별: "구분"(select)과 "날짜"(date) 조합은 일정(학원) DB에만 있다. 등록/학습기록/
 // 학습활동/보고서/정규교재는 모두 아래에서 "등록" 관계 또는 "북커버" 속성으로 먼저 걸러지므로, 이

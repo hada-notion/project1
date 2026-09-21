@@ -7,12 +7,11 @@
 
 import { text, dateStartOf, dateEndOf, relationIds, firstRelationId, normalizeStatus, fetchSupabaseWithRetry } from "./reportCacheShared.ts"
 import { queryAllPages } from "./notionClient.ts"
+import { DS_ATTENDANCE } from "./constants.ts"
+// (2026-09-21, 이식성 리팩토링) DS_ATTENDANCE도 constants.ts로 이동함 — 그 파일 상단 주석 참고.
 
 const SB_URL = Deno.env.get("SB_URL") ?? ""
 const SB_SERVICE_ROLE_KEY = Deno.env.get("SB_SERVICE_ROLE_KEY") ?? ""
-
-// 워크스페이스 구조상 고정값인 데이타소스 ID (sync-attendance/index.ts, cascade-delete/index.ts와 동일한 값).
-const DS_ATTENDANCE = "8aaba040-586b-8322-8437-87608a763415"
 
 function requireSupabaseEnv() {
   if (!SB_URL || !SB_SERVICE_ROLE_KEY) {

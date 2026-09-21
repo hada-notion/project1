@@ -18,9 +18,8 @@ import {
   type ReportCacheRow,
 } from "./reportCacheShared.ts"
 import { selectAttendanceByRegistrationId } from "./attendanceSyncShared.ts"
-
-const DS_STUDY_ACTIVITY = "ea2ba040-586b-8368-8bb6-070564a5a31c"
-const DS_REPORT = "610ba040-586b-83ff-9384-07ae85f58df1"
+import { DS_STUDY_ACTIVITY, DS_REPORT } from "./constants.ts"
+// (2026-09-21, 이식성 리팩토링) 위 2개도 constants.ts로 이동함 — 그 파일 상단 주석 참고.
 
 const DETAIL_LOOKBACK_MONTHS = 6
 

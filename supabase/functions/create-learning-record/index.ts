@@ -28,8 +28,8 @@
 import { getPage, relIds as relIdsFromProp, extractPageId } from "../_shared/notionClient.ts"
 import { respondAccepted } from "../_shared/backgroundTask.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
+import { DS_ATTENDANCE } from "../_shared/constants.ts"
 import {
-	DS_ATTENDANCE,
 	PROP_ATTENDANCE_SESSION,
 	PROP_RECORD_GEN_RUNNING,
 	dedupe,

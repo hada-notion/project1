@@ -28,7 +28,8 @@ import { getCurrentAdminKey, resolveAdminKeyFromRequest } from "../_shared/admin
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 import { DS_REPORT, DS_TUITION, PROP_NOTIFICATION_BATCH_RELATION, PROP_BATCH_TYPE } from "../_shared/generateShared.ts"
 
-const FUNCTIONS_BASE = "https://twczhsxybkcvjkdfdxvs.supabase.co/functions/v1"
+// (이식성 정리) 다른 파일들과 동일하게 SB_URL 환경변수로 조립한다. 특정 프로젝트 URL을 하드코딩하지 않는다.
+const FUNCTIONS_BASE = `${Deno.env.get("SB_URL") ?? ""}/functions/v1`
 
 const corsHeaders = {
 	"Access-Control-Allow-Origin": "*",

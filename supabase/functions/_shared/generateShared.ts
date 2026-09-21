@@ -15,14 +15,21 @@ import {
 	queryDataSource,
 	setCombinedSyncStatus,
 } from "./notionClient.ts"
-import { DS_REGISTRATION, DS_CLASS, DS_ATTENDANCE, DS_LEARNING_RECORD } from "./constants.ts"
+import {
+	DS_REGISTRATION,
+	DS_CLASS,
+	DS_ATTENDANCE,
+	DS_LEARNING_RECORD,
+	DS_TUITION,
+	DS_REPORT,
+	DS_STUDY_ACTIVITY,
+} from "./constants.ts"
+// (2026-09-21, 이식성 리팩토링) DS_TUITION/DS_REPORT/DS_STUDY_ACTIVITY도 이제 constants.ts에서
+// 가져온다(예전엔 이 파일에 하드코딩돼 있었음). generate-report/generate-tuition/
+// send-selected-notifications가 이 파일의 재수출(re-export)을 그대로 쓰고 있어서 아래 export
+// 목록은 그대로 유지한다.
 
-// 새로 참조하는 데이터소스 ID (워크스페이스 구조상 고정값).
-export const DS_TUITION = "6e8ba040-586b-83bd-b0e3-872ca0d17208" // 수강료(학원) DB
-export const DS_REPORT = "610ba040-586b-83ff-9384-07ae85f58df1" // 보고서(학원) DB
-export const DS_STUDY_ACTIVITY = "ea2ba040-586b-8368-8bb6-070564a5a31c" // 학습활동(학원) DB
-
-export { DS_REGISTRATION, DS_CLASS, DS_ATTENDANCE, DS_LEARNING_RECORD, queryAllPages, getPage, updatePageProperties, relIds, dateStart, selectName, queryDataSource }
+export { DS_REGISTRATION, DS_CLASS, DS_ATTENDANCE, DS_LEARNING_RECORD, DS_TUITION, DS_REPORT, DS_STUDY_ACTIVITY, queryAllPages, getPage, updatePageProperties, relIds, dateStart, selectName, queryDataSource }
 
 // 알림톡 발송함(학원) DB 관련 공용 속성명.
 // (2026-09-16) generate-report/generate-tuition/send-selected-notifications 세 파일이 각각

@@ -14,13 +14,8 @@
 
 import { requireAdminKey, CORS_HEADERS as ADMIN_CORS } from "../_shared/adminShared.ts"
 import { queryAllPages, mapWithConcurrency } from "../_shared/notionClient.ts"
-import {
-	DS_CLASS_SESSION,
-	DS_ATTENDANCE,
-	DS_SCHEDULE_EVENT,
-	linkSessionOrAttendanceToDashboard,
-	linkScheduleToDashboards,
-} from "../_shared/dashboardLinkTarget.ts"
+import { DS_CLASS_SESSION, DS_ATTENDANCE, DS_SCHEDULE_EVENT } from "../_shared/constants.ts"
+import { linkSessionOrAttendanceToDashboard, linkScheduleToDashboards } from "../_shared/dashboardLinkTarget.ts"
 
 const PROP_DASHBOARD_RELATION = "대시보드" // 수업/출석/일정 DB 공용
 
