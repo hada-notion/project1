@@ -19,6 +19,10 @@
 //
 // (2026-09-20, 웹훅 코드 정리 3단계) 반복되던 "pageId 추출 -> 잠금 확인 -> 처리중 표시 -> 큐 적재 ->
 // 202 응답" 뼈대를 _shared/webhookIngest.ts로 옮겼다.
+//
+// (2026-09-21, PART N: 관리자 키 인증 추가) 이 함수를 호출하는 버튼/자동화 웹훅에 x-admin-key
+// 커스텀 헤더를 미리 추가해둔 뒤, requireAdminKey: true로 함수 쪽 검증을 켠다. 헤더가 없으면
+// body.adminKey도 확인한다 (webhookIngest.ts의 handleLockedQueueWebhook 참고).
 
 import { PROP_SCOPE_RUNNING } from "../_shared/constants.ts"
 import { handleLockedQueueWebhook } from "../_shared/webhookIngest.ts"
@@ -30,5 +34,6 @@ Deno.serve((req: Request) =>
 		lockProp: PROP_SCOPE_RUNNING,
 		target: "sync-exam-scope",
 		setStatus: setExamScopeStatus,
+		requireAdminKey: true,
 	}),
 )

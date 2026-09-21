@@ -16,10 +16,16 @@
 //
 // 기존 함수들이 각자 갖고 있던 log: string[] (한 번도 채워지지 않던 죽은 코드)는 정리하면서 빠졌다.
 // 그 외 응답 형태(already_processing / accepted / 오류 메시지)는 기존과 동일하게 유지했다.
+//
+// [2026-09-21, PART N: 관리자 키 인증 추가] handleLockedQueueWebhook 호출자 중 sync-exam-scope만
+// 관리자 키 인증이 필요해서, requireAdminKey 옵션을 새로 추가했다(기본값 false/undefined = 기존과
+// 동일하게 인증 없이 통과). 이 옵션을 켜지 않은 기존 호출자(sync-registration-enroll 등)는 동작이
+// 전혀 바뀌지 않는다.
 
 import { getPage, extractPageId, checkboxValue } from "./notionClient.ts"
 import { runInBackground, respondAccepted } from "./backgroundTask.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "./syncQueue.ts"
+import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "./adminShared.ts"
 
 // 각 DB 전용 setter(makeSyncStatusSetter/makeClassStatusSetter 결과물)가 실제로 쓰는 리터럴 유니온
 // 타입과 정확히 맞춰야 한다 -- 여기를 그냥 string으로 넓혀두면 "이 함수는 '처리중'|'완료'|'오류'만
@@ -49,6 +55,11 @@ export type LockedQueueWebhookOptions = {
   // 큐에 적재할 payload를 pageId 외의 모양으로 만들어야 할 때(예: { classId: pageId }) 사용.
   // 생략하면 기본값 { pageId }를 그대로 적재한다.
   buildPayload?: (pageId: string) => Record<string, unknown>
+  // true면 x-admin-key 헤더(또는 body.adminKey)가 현재 유효한 관리자 키와 일치하지 않으면
+  // 401을 반환하고 처리를 중단한다. 생략(기본값 false/undefined)하면 기존과 동일하게 인증을
+  // 요구하지 않는다. handleLockedQueueWebhook에서만 검사한다(runLockedQueueWebhookForPage는
+  // req를 받지 않으므로 대상이 아니다).
+  requireAdminKey?: boolean
 }
 
 // pageId를 이미 알고 있는 상태에서: 잠금 확인 -> "처리중" 표시 -> 큐 적재 -> 202 응답.
@@ -96,6 +107,14 @@ export async function handleLockedQueueWebhook(
     body = {}
   }
   console.log(`[${opts.functionName}] received body:`, JSON.stringify(body))
+
+  if (opts.requireAdminKey) {
+    const adminKey = resolveAdminKeyFromRequest(req, body)
+    const currentAdminKey = await getCurrentAdminKey()
+    if (!adminKey || adminKey !== currentAdminKey) {
+      return jsonResponse({ error: "unauthorized" }, 401)
+    }
+  }
 
   const pageId = extractPageId(body)
   if (!pageId) {

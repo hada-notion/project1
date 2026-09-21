@@ -26,11 +26,17 @@
 // [2026-09-20, 웹훅 코드 정리 1단계] 자체 extractPageId/deepFindPageObjectId/resolveClassSessionId를
 // 지우고 _shared/notionClient.ts의 공용 extractPageId로 교체했다 (cascade-delete와 동일한 이유 --
 // 상세 설명은 그 파일 v9 주석 참고. 동작은 그대로, 더 안전한 "문자열 끝에서만 UUID 추출" 버전으로 교체).
+//
+// [2026-09-21, PART N: 관리자 키 인증 추가] 이 함수를 호출하는 "출석 조정" 버튼 웹훅에 x-admin-key
+// 커스텀 헤더를 미리 추가해둔 뒤, 함수 쪽에도 동일한 검증을 추가한다. adminShared.ts의
+// resolveAdminKeyFromRequest/getCurrentAdminKey를 그대로 사용(다른 관리자 함수들과 동일한 패턴).
+// 헤더가 없으면 body.adminKey도 확인한다.
 
 import { extractPageId } from "../_shared/notionClient.ts"
 import { respondAccepted } from "../_shared/backgroundTask.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 import { markAttendanceFixRunning } from "../_shared/fixAttendanceTarget.ts"
+import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
 
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
@@ -46,6 +52,15 @@ Deno.serve(async (req: Request) => {
     body = rawText ? JSON.parse(rawText) : {}
   } catch {
     body = {}
+  }
+
+  const adminKey = resolveAdminKeyFromRequest(req, body)
+  const currentAdminKey = await getCurrentAdminKey()
+  if (!adminKey || adminKey !== currentAdminKey) {
+    return new Response(JSON.stringify({ error: "unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    })
   }
 
   try {

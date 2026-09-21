@@ -1,5 +1,11 @@
-// create-learning-record v5
+// create-learning-record v6
 // Trigger: 수업(세션) DB 또는 출석(학원) DB의 "학습기록 생성" 버튼 웹훅
+//
+// v6 변경 사항 (2026-09-21, PART N: 관리자 키 인증 추가):
+//   - 이 함수를 호출하는 "학습기록 생성" 버튼 웹훅(수업/출석 두 DB)에 x-admin-key 커스텀 헤더를
+//     미리 추가해둔 뒤, 함수 쪽에도 동일한 검증을 추가한다. adminShared.ts의
+//     resolveAdminKeyFromRequest/getCurrentAdminKey를 그대로 사용(다른 관리자 함수들과 동일한
+//     패턴). 헤더가 없으면 body.adminKey도 확인한다.
 //
 // v5 변경 사항 (2026-09-20, 웹훅 코드 정리 1단계):
 //   - 자체적으로 들고 있던 extractPageId/findUuid/normalizeUuid/findPageObjectId(페이지 id 추출용
@@ -29,6 +35,7 @@ import { getPage, relIds as relIdsFromProp, extractPageId } from "../_shared/not
 import { respondAccepted } from "../_shared/backgroundTask.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 import { DS_ATTENDANCE } from "../_shared/constants.ts"
+import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
 import {
 	PROP_ATTENDANCE_SESSION,
 	PROP_RECORD_GEN_RUNNING,
@@ -60,6 +67,12 @@ async function handleRequest(req: Request): Promise<Response> {
 	} catch (err) {
 		console.error("Failed to parse request body", err)
 		return new Response(JSON.stringify({ error: "invalid_json" }), { status: 400 })
+	}
+
+	const adminKey = resolveAdminKeyFromRequest(req, body)
+	const currentAdminKey = await getCurrentAdminKey()
+	if (!adminKey || adminKey !== currentAdminKey) {
+		return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { "Content-Type": "application/json" } })
 	}
 
 	const clickedId = extractPageId(body)

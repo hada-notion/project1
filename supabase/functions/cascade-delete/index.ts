@@ -1,4 +1,10 @@
-// Supabase Edge Function: cascade-delete (v9)
+// Supabase Edge Function: cascade-delete (v10)
+//
+// v10 변경 사항 (2026-09-21, PART N: 관리자 키 인증 추가):
+//   - 이 함수를 호출하는 Notion 버튼 자동화(수업/출석/학습기록/학습활동/교재비 등 각 DB의
+//     "삭제" 웹훅)에 x-admin-key 커스텀 헤더를 미리 추가해둔 뒤, 함수 쪽에도 동일한 검증을
+//     추가한다. adminShared.ts의 resolveAdminKeyFromRequest/getCurrentAdminKey를 그대로
+//     사용(다른 관리자 함수 6개와 동일한 패턴). 헤더가 없으면 body.adminKey도 확인한다.
 //
 // v9 변경 사항 (2026-09-20, 리스크 낮은 순서로 진행한 웹훅 코드 정리 1단계):
 //   - 자체적으로 들고 있던 extractPageId/deepFindPageObjectId/resolvePageId(페이지 id 추출용
@@ -28,6 +34,7 @@ import { respondAccepted } from "../_shared/backgroundTask.ts"
 import { PROP_DELETING_RUNNING } from "../_shared/constants.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 import { isDeletingFlagSet, markDeletingRunning, markDeletingError } from "../_shared/cascadeDeleteTarget.ts"
+import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
 
 // "삭제 처리중" 체크박스가 켜진 채로 이 시간(ms) 이상 페이지가 갱신되지 않았으면, 실행 중인
 // 작업이 죽었다고 (서버 타임아웃/재시작 등) 판단하고 막아두지 않고 다시 진행한다.
@@ -46,6 +53,15 @@ Deno.serve(async (req: Request) => {
     body = rawText ? JSON.parse(rawText) : {}
   } catch {
     body = {}
+  }
+
+  const adminKey = resolveAdminKeyFromRequest(req, body)
+  const currentAdminKey = await getCurrentAdminKey()
+  if (!adminKey || adminKey !== currentAdminKey) {
+    return new Response(JSON.stringify({ error: "unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    })
   }
 
   const pageId = extractPageId(body)
