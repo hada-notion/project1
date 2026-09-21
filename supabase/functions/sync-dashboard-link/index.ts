@@ -8,10 +8,16 @@
 //
 // 실제 처리(같은 날짜의 대시보드 찾기/만들기 + 양방향 연결, 또는 대시보드 쪼 재구성)는
 // process-sync-queue 워커가 순서대로 담당한다 (_shared/dashboardLinkTarget.ts).
+//
+// (2026-09-21, PART N-2) 대시보드/일정/수업/출석(학원) DB의 "페이지가 생성되면 → 웹훅 보내기"
+// 자동화에 x-admin-key 헤더를 미리 추가해둔 뒤, 이 파일 진입부에서 직접 관리자 키를 확인한다
+// (generate-classes/kiosk-checkin은 이 HTTP 엔드포인트를 거치지 않고 같은 큐에 직접 적재하므로
+// 이 검사의 영향을 받지 않는다).
 
 import { extractPageId } from "../_shared/notionClient.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 import { respondAccepted } from "../_shared/backgroundTask.ts"
+import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
 
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
@@ -25,6 +31,15 @@ Deno.serve(async (req: Request) => {
     body = {}
   }
   console.log("[sync-dashboard-link] received body:", JSON.stringify(body))
+
+  const adminKey = resolveAdminKeyFromRequest(req, body)
+  const currentAdminKey = await getCurrentAdminKey()
+  if (!adminKey || adminKey !== currentAdminKey) {
+    return new Response(JSON.stringify({ error: "unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    })
+  }
 
   const pageId = extractPageId(body)
   if (!pageId) {

@@ -36,11 +36,19 @@
 // (2026-09-20, 웹훅 코드 정리 4단계) create-individual 라우트의 "락 확인 -> 처리중 표시 -> 큐 적재 ->
 // 202 응답" 흐름을 _shared/webhookIngest.ts의 공용 헬퍼로 옮겼다. 3단계에서 다른 등록/시험범위/
 // 클래스 버튼 웹훅들을 옮길 때 이 함수는 이름이 sync-textbook-distribution과 비슷해서 빠뜨렸었다.
+//
+// (2026-09-21, PART N-2) 두 라우트 모두에 관리자 키 인증을 추가한다. create-individual은 등록(학원)
+// DB "개별교재 생성" 버튼 자동화에 이미 x-admin-key 헤더를 추가해두었다. cleanup-on-end는 Notion
+// 자동화가 직접 부르지 않고 _shared/registrationSync.ts의 callTextbookCleanup()이 내부적으로만
+// 호출하는데, 그 호출도 이번에 x-admin-key 헤더를 보내도록 함께 고쳤으므로(같은 커밋) 여기서
+// cleanup-on-end까지 막아도 그 내부 호출은 깨지지 않는다. 두 라우트 모두 pageId 추출 이전에
+// 공통으로 검사한다.
 
 import { PROP_SYNC_TEXTBOOK_RUNNING } from "../_shared/constants.ts"
 import { extractPageId } from "../_shared/notionClient.ts"
 import { setTextbookSyncStatus, cleanupUnusedBooksOnEnd } from "../_shared/registrationTextbookTarget.ts"
 import { runLockedQueueWebhookForPage } from "../_shared/webhookIngest.ts"
+import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
 
 Deno.serve(async (req: Request) => {
 	const url = new URL(req.url)
@@ -52,6 +60,15 @@ Deno.serve(async (req: Request) => {
 		// 빈 바디 허용하지 않음 - 아래에서 pageId 누락으로 에러 처리
 	}
 	console.log("sync-registration-textbook payload:", route, JSON.stringify(body))
+
+	const adminKey = resolveAdminKeyFromRequest(req, body)
+	const currentAdminKey = await getCurrentAdminKey()
+	if (!adminKey || adminKey !== currentAdminKey) {
+		return new Response(JSON.stringify({ error: "unauthorized" }), {
+			status: 401,
+			headers: { "Content-Type": "application/json" },
+		})
+	}
 
 	const pageId = extractPageId(body)
 	if (!pageId) {

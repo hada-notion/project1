@@ -19,6 +19,9 @@
 //
 // (2026-09-20, 웹훅 코드 정리 3단계) 반복되던 "pageId 추출 -> 잠금 확인 -> 처리중 표시 -> 큐 적재 ->
 // 202 응답" 뼈대를 _shared/webhookIngest.ts로 옮겼다.
+//
+// (2026-09-21, PART N-2) 등록(학원) DB "종료 처리" 버튼 자동화에 x-admin-key 헤더를 미리 추가해둔 뒤,
+// requireAdminKey: true로 인증을 켰다.
 
 import { PROP_SYNC_END_RUNNING } from "../_shared/constants.ts"
 import { handleLockedQueueWebhook } from "../_shared/webhookIngest.ts"
@@ -30,5 +33,6 @@ Deno.serve((req: Request) =>
 		lockProp: PROP_SYNC_END_RUNNING,
 		target: "sync-registration-end",
 		setStatus: setEndSyncStatus,
+		requireAdminKey: true,
 	}),
 )

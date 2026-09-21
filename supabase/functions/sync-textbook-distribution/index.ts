@@ -77,6 +77,10 @@
 // 라우트는 실행 전에 실제 데이터(활성 등록 중 교재비 누락 여부)부터 계산해서 즉시완료/이어서진행을
 // 판단하는 고유 로직이 있어 공용 헬퍼로 단순화하지 않고 그대로 뒀다.
 //
+// (2026-09-21, PART N-2) 두 라우트 모두에 관리자 키 인증을 추가한다. 교재비(학원) DB "진도교재 담기"
+// (from-cart)와 클래스(학원) DB "교재비 생성"(from-class-carts) 버튼 자동화에 이미 x-admin-key
+// 헤더를 추가해두었다. route 분기 전에 공통으로 한 번만 검사한다.
+//
 // 라우트:
 //   POST /sync-textbook-distribution/from-cart         <- 교재비(학원) DB "진도교재 담기" 버튼 (학생 1명, 담기까지 수행)
 //   POST /sync-textbook-distribution/from-class-carts   <- 클래스(학원) DB "교재비 생성" 버튼 (반 전체, 교재비 페이지만 일괄 생성 - 교재 배부는 하지 않음)
@@ -85,6 +89,7 @@ import { getPage, extractPageId, checkboxValue, relationIds } from "../_shared/n
 import { respondAccepted } from "../_shared/backgroundTask.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 import { runLockedQueueWebhookForPage } from "../_shared/webhookIngest.ts"
+import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
 import {
 	PROP_CART_RUNNING,
 	PROP_CLASS_CART_RUNNING,
@@ -109,6 +114,15 @@ Deno.serve(async (req: Request) => {
 		// 빈 바디 허용하지 않음 - 아래에서 pageId 누락으로 에러 처리
 	}
 	console.log("sync-textbook-distribution payload:", route, JSON.stringify(body))
+
+	const adminKey = resolveAdminKeyFromRequest(req, body)
+	const currentAdminKey = await getCurrentAdminKey()
+	if (!adminKey || adminKey !== currentAdminKey) {
+		return new Response(JSON.stringify({ error: "unauthorized" }), {
+			status: 401,
+			headers: { "Content-Type": "application/json" },
+		})
+	}
 
 	const pageId = extractPageId(body)
 

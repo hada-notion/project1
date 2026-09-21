@@ -8,7 +8,7 @@
 //      완전히 똑같이 적용되지 않을 수 있어서, 한 번 수동으로 조정해 둔 값은 유지한다.
 //      (기존에는 클래스 속성 편집 웹훅으로 자동 처리했지만, 이제 이 버튼으로 기능을 옮겼다.)
 //
-// 호출 방식: body에 { pageId: "등록 페이지 id" } 를 담아 호출 (\"등록\" 버튼용).
+// 호출 방식: body에 { pageId: \"등록 페이지 id\" } 를 담아 호출 (\"등록\" 버튼용).
 //
 // (2026-09-18, 큐 기반 순차 처리 도입, Phase 3) 실제 처리 로직은 _shared/registrationEnrollTarget.ts로
 // 옮겼다. 이 파일은 웹훅 body 파싱과 잠금 선체크만 하고, 실제 처리는 큐에 적재한다.
@@ -16,6 +16,9 @@
 // (2026-09-20, 웹훅 코드 정리 3단계) 반복되던 "pageId 추출 -> 잠금 확인 -> 처리중 표시 -> 큐 적재 ->
 // 202 응답" 뼈대를 _shared/webhookIngest.ts로 옮겼다. 이 파일은 이제 자신의 target 이름 / 잠금
 // 속성 / 상태 setter만 넘긴다.
+//
+// (2026-09-21, PART N-2) 등록(학원) DB "등록" 버튼 자동화에 x-admin-key 헤더를 미리 추가해둔 뒤,
+// requireAdminKey: true로 인증을 켰다 (다른 관리자 함수들과 동일한 패턴).
 
 import { PROP_SYNC_ENROLL_RUNNING } from "../_shared/constants.ts"
 import { handleLockedQueueWebhook } from "../_shared/webhookIngest.ts"
@@ -27,5 +30,6 @@ Deno.serve((req: Request) =>
 		lockProp: PROP_SYNC_ENROLL_RUNNING,
 		target: "sync-registration-enroll",
 		setStatus: setEnrollSyncStatus,
+		requireAdminKey: true,
 	}),
 )

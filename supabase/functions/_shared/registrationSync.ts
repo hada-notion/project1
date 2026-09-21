@@ -8,6 +8,13 @@
 // 호출하는 쪽(class-session/end/enroll/textbook/timetable)이 각자 기존과 똑같이 작성한다.
 // 함수마다 로그 문구가 조금씩 달랐기 때문에(이모지/영문 표기 차이), 그걸 여기서 통일해버리면
 // 겉보기 동작(응답 로그)이 달라진다. 그래서 실제 Notion 조작 로직만 합치고, 문구는 그대로 보존한다.
+//
+// [FIX, 2026-09-21, PART N-2] callTextbookCleanup이 sync-registration-textbook의 cleanup-on-end
+// 라우트를 호출할 때 x-admin-key 헤더를 전혀 보내지 않고 있었다. 이번 라운드에서 그 라우트를 포함해
+// sync-registration-textbook 전체에 관리자 키 인증을 추가하므로, 이 내부 호출도 함께 헤더를 보내도록
+// 고쳐야 한다 (안 그러면 sync-registration-end/timetable이 내부적으로 부르는 이 호출이 401로 깨짐).
+// wakeSyncQueueWorker()(_shared/syncQueue.ts)가 이미 같은 패턴(getCurrentAdminKey를 읽어 헤더에 실어
+// 내부 함수 호출)을 쓰고 있어서 그대로 따라간다.
 
 import { PROP_SYNCED_AT, PROP_LAST_ERROR } from "./constants.ts"
 import {
@@ -39,6 +46,7 @@ import {
 	mapWithConcurrency,
 	setCombinedSyncStatus,
 } from "./notionClient.ts"
+import { getCurrentAdminKey } from "./adminShared.ts"
 
 // ---------- 0) "처리중/완료/오류" 상태 표시 헬퍼 ----------
 // class-session/end/enroll/textbook/timetable 다섯 함수 모두 거의 동일한 setSyncStatus를 각자
@@ -239,6 +247,10 @@ export async function attachSessionsAndAttendance(
 // 문구는 함수마다 조금씩 다르므로 여기서는 fetch + 파싱만 담당하고, 로깅은 호출부가 직접 구성한다.
 // end.ts와 timetable.ts가 http-실패(!res.ok)와 fetch 예외(catch)를 서로 다른 로그 문구로 지어왔다
 // ("호출 실패" vs "호출 오류" / "call failed" vs "call error"). 그 원인 구분을 kind 필드로 그대로 넘겨준다.
+//
+// [FIX, 2026-09-21, PART N-2] cleanup-on-end 라우트에 관리자 키 인증을 추가하면서, 이 내부 호출도
+// x-admin-key 헤더를 실어 보내도록 고쳤다 (이전에는 헤더 없이 호출해서 인증을 추가하는 즉시 이
+// 내부 호출이 401로 깨질 뻔했다).
 export async function callTextbookCleanup(
 	registrationId: string,
 ): Promise<
@@ -247,9 +259,10 @@ export async function callTextbookCleanup(
 	| { ok: false; kind: "exception"; message: string }
 > {
 	try {
+		const adminKey = await getCurrentAdminKey()
 		const res = await fetch(TEXTBOOK_CLEANUP_URL, {
 			method: "POST",
-			headers: { "Content-Type": "application/json" },
+			headers: { "Content-Type": "application/json", "x-admin-key": adminKey },
 			body: JSON.stringify({ pageId: registrationId }),
 		})
 		if (!res.ok) {

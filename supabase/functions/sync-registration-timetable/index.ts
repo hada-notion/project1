@@ -25,6 +25,12 @@
 // (2026-09-20, 웹훅 코드 정리 3단계) pageId가 있는 웹훅 단건 경로의 "잠금 확인 -> 처리중 표시 ->
 // 큐 적재 -> 202 응답" 부분을 _shared/webhookIngest.ts의 runLockedQueueWebhookForPage로 옮겼다.
 // cron 전체 스캔 분기(pageId 없음)는 이 함수 고유의 로직이라 그대로 남긴다.
+//
+// (2026-09-21, PART N-2) 이 함수를 호출하던 유일한 자동화("클래스 속성 편집 웹훅")는 2026-09-10에
+// 이미 목적을 잃어(자동 연결 로직이 sync-registration-enroll로 옮겨짐) 곧 삭제될 예정이라, 실제로
+// 깨질 수 있는 살아있는 호출자가 없다. runLockedQueueWebhookForPage는 req를 받지 않아
+// requireAdminKey 옵션을 쓸 수 없으므로, 이 파일 진입부에서 직접 관리자 키를 확인한다 (pageId 단건
+// 경로와 cron 전체 스캔 경로 모두 보호 — 이 저장소에는 스캔 경로를 호출하는 실제 cron이 없다).
 
 import {
   PROP_STATUS,
@@ -40,6 +46,7 @@ import {
   disconnectTimetableForEndedRegistrations,
 } from "../_shared/registrationTimetableTarget.ts"
 import { runLockedQueueWebhookForPage } from "../_shared/webhookIngest.ts"
+import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
 
 void PROP_STATUS
 void PROP_TIMETABLE
@@ -57,6 +64,15 @@ Deno.serve(async (req: Request) => {
       body = {}
     }
     console.log("[sync-registration-timetable] received body:", JSON.stringify(body))
+
+    const adminKey = resolveAdminKeyFromRequest(req, body)
+    const currentAdminKey = await getCurrentAdminKey()
+    if (!adminKey || adminKey !== currentAdminKey) {
+      return new Response(JSON.stringify({ error: "unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
 
     // 웹훅 body에 pageId / pageUrl / url / id 중 하나라도 들어오면 그 페이지 1건만 처리한다.
     const pageId = extractPageId(body)

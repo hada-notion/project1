@@ -26,6 +26,12 @@
 //
 // (2026-09-20, 웹훅 코드 정리 3단계) pageId가 있는 웹훅 단건 경로의 "잠금 확인 -> 처리중 표시 ->
 // 큐 적재 -> 202 응답" 부분을 _shared/webhookIngest.ts의 runLockedQueueWebhookForPage로 옮겼다.
+//
+// (2026-09-21, PART N-2) runLockedQueueWebhookForPage는 req를 받지 않아 requireAdminKey 옵션을 쓸 수
+// 없으므로, 이 파일 진입부에서 직접 관리자 키를 확인한다 (cascade-delete와 동일한 인라인 패턴).
+// pageId 단건 경로뿐 아니라 body 없는 cron 스캔 경로도 함께 보호한다 -- 이 저장소에는 실제로 이
+// 스캔 경로를 호출하는 cron이 없어(안전망으로만 존재) 막아도 깨지는 자동 호출이 없다. 등록(학원)
+// DB "수업 생성" 버튼 자동화에는 이미 x-admin-key 헤더를 미리 추가해두었다.
 
 import { PROP_SYNC_CLASS_SESSION_RUNNING } from "../_shared/constants.ts"
 import { extractPageId } from "../_shared/notionClient.ts"
@@ -34,6 +40,7 @@ import {
 	createSessionsForAllPending,
 } from "../_shared/registrationClassSessionTarget.ts"
 import { runLockedQueueWebhookForPage } from "../_shared/webhookIngest.ts"
+import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
 
 Deno.serve(async (req: Request) => {
 	if (req.method !== "POST") {
@@ -48,6 +55,15 @@ Deno.serve(async (req: Request) => {
 			body = {}
 		}
 		console.log("[sync-registration-class-session] received body:", JSON.stringify(body))
+
+		const adminKey = resolveAdminKeyFromRequest(req, body)
+		const currentAdminKey = await getCurrentAdminKey()
+		if (!adminKey || adminKey !== currentAdminKey) {
+			return new Response(JSON.stringify({ error: "unauthorized" }), {
+				status: 401,
+				headers: { "Content-Type": "application/json" },
+			})
+		}
 
 		const pageId = extractPageId(body)
 		console.log("[sync-registration-class-session] extracted pageId:", pageId)
