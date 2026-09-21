@@ -8,6 +8,15 @@
 // (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환) create-individual 라우트도 등록 페이지 1건만
 // 대상으로 하는 개별 트리거라 processCreateIndividualBooksQueueItem(process-sync-queue 전용
 // 진입점)은 제거했다. index.ts가 createIndividualBooksForRegistration을 직접 호출한다.
+//
+// (2026-09-22, PART N-7: 클래스 "진도교재" 25개 제한 버그 수정) createIndividualBooksForRegistration이
+// 클래스 페이지를 getPage로 통째로 읽어서 그 안의 "진도교재" relation을 후보로 쓰고 있었는데, Notion
+// 페이지 조회 API는 relation 속성을 최대 25개까지만 돌려주고 나머지는 잘라버린다. "진도교재"는
+// "클래스"<->"진도교재" 양방향 관계라 인스턴스가 생길 때마다 이 목록에도 자동으로 끼어들기 때문에,
+// 개별 지도처럼 학생이 많이 쌓이는 클래스는 금방 25개를 넘기고 그 뒤로는 진짜 템플릿 일부가 후보
+// 목록에서 조용히 사라진다 (실제로 "고등 과외" 클래스에서 템플릿 8개 중 4개가 이렇게 누락되어 개별
+// 진도 교재 인스턴스가 일부만 생성되는 문제로 나타났다). 클래스 페이지를 거치지 않고, 진도교재
+// 데이터소스를 "클래스 = 이 클래스"로 직접 쿼리(queryAllPages, 커서 끝까지 따라감)하도록 고쳤다.
 
 import {
 	PROP_CLASS,
@@ -16,6 +25,7 @@ import {
 import {
 	getPage,
 	queryDataSource,
+	queryAllPages,
 	createPage,
 	updatePageProperties,
 	archivePage,
@@ -111,16 +121,21 @@ export async function createIndividualBooksForRegistration(registrationId: strin
 	const classIds = relationIds(registration, PROP_CLASS)
 	if (classIds.length === 0) return { skipped: "클래스가 아직 연결되어 있지 않음" }
 
-	const classPage = await getPage(classIds[0])
-	const candidateIds = relationIds(classPage, "진도교재")
-	if (candidateIds.length === 0) return { skipped: "클래스에 반별교재(템플릿)가 아직 없음 - 먼저 진도교재 DB에서 템플릿을 만들어 클래스에 연결하세요" }
+	// (PART N-7) 클래스 페이지를 getPage로 읽어서 그 안의 "진도교재" relation을 쓰면 25개까지만
+	// 돌아온다 (Notion 페이지 조회 API의 relation 절단 제약). "진도교재"는 "클래스"<->"진도교재"
+	// 양방향 관계라서 인스턴스가 생길 때마다 이 목록에도 자동으로 끼어들기 때문에, 개별 지도처럼
+	// 학생이 쌓이는 클래스는 금방 25개를 넘기고 그 뒤 진짜 템플릿 일부가 조용히 누락된다. 그 대신
+	// 진도교재 데이터소스를 "클래스 = 이 클래스"로 직접 쿼리한다 - queryAllPages가 커서를 끝까지
+	// 따라가므로 개수 제한 없이 전부 가져온다.
+	const candidates = await queryAllPages(DATA_SOURCE_PROGRESS_BOOK, {
+		property: PROP_CLASS_ON_BOOK,
+		relation: { contains: classIds[0] },
+	})
+	if (candidates.length === 0) return { skipped: "클래스에 반별교재(템플릿)가 아직 없음 - 먼저 진도교재 DB에서 템플릿을 만들어 클래스에 연결하세요" }
 
-	// 클래스."진도교재"는 "클래스"<->"진도교재" 양방향 관계라서, 인스턴스를 만들 때 인스턴스의
-	// "클래스"를 채우기만 해도 그 인스턴스가 이 목록에 자동으로 끼어든다. 그래서 이 목록에는
-	// 진짜 반별교재(템플릿) 외에 이미 생성된 개별교재 인스턴스도 섞여 있을 수 있다.
-	// 진짜 템플릿은 절대 PROP_TEMPLATE_RELATION("반별교재")이 채워지지 않으므로, 그것으로만
-	// 필터링해서 인스턴스가 실수로 "템플릿"으로 취급되어 또 다른 인스턴스를 낳는(무한 증식) 일을 막는다.
-	const candidates = await mapWithConcurrency(candidateIds, 4, (id) => getPage(id))
+	// 이 쿼리 결과에도 진짜 반별교재(템플릿) 외에 이미 생성된 개별교재 인스턴스가 섞여 있다 (둘 다
+	// "클래스"를 갖기 때문). 진짜 템플릿은 절대 PROP_TEMPLATE_RELATION("반별교재")이 채워지지 않으므로,
+	// 그것으로만 필터링해서 인스턴스가 실수로 "템플릿"으로 취급되어 또 다른 인스턴스를 낳는(무한 증식) 일을 막는다.
 	const templatePages = candidates.filter((p: any) => relationIds(p, PROP_TEMPLATE_RELATION).length === 0)
 	if (templatePages.length === 0) {
 		return { skipped: "클래스에 연결된 진도교재 중 진짜 템플릿이 없음 (전부 이미 생성된 개별교재 인스턴스로 보임)" }
