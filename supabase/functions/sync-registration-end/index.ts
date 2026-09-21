@@ -22,17 +22,30 @@
 //
 // (2026-09-21, PART N-2) 등록(학원) DB "종료 처리" 버튼 자동화에 x-admin-key 헤더를 미리 추가해둔 뒤,
 // requireAdminKey: true로 인증을 켰다.
+//
+// (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환) "종료 처리"도 등록 페이지 1건만 대상으로
+// 하는 개별 트리거라 sync_queue를 거칠 필요가 없다. handleSyncWebhook으로 바꿔서 버튼 클릭과
+// 동시에 끝나도록 한다 — 자세한 설명은 sync-registration-enroll/index.ts 참고.
 
 import { PROP_SYNC_END_RUNNING } from "../_shared/constants.ts"
-import { handleLockedQueueWebhook } from "../_shared/webhookIngest.ts"
-import { setEndSyncStatus } from "../_shared/registrationEndTarget.ts"
+import { handleSyncWebhook } from "../_shared/webhookIngest.ts"
+import { setEndSyncStatus, processEndForRegistration } from "../_shared/registrationEndTarget.ts"
+
+async function processPage(pageId: string): Promise<void> {
+	const log: string[] = []
+	try {
+		await processEndForRegistration(pageId, log)
+	} finally {
+		console.log("[sync-registration-end] finished:", pageId, "\n", log.join("\n"))
+	}
+}
 
 Deno.serve((req: Request) =>
-	handleLockedQueueWebhook(req, {
+	handleSyncWebhook(req, {
 		functionName: "sync-registration-end",
 		lockProp: PROP_SYNC_END_RUNNING,
-		target: "sync-registration-end",
 		setStatus: setEndSyncStatus,
+		process: processPage,
 		requireAdminKey: true,
 	}),
 )

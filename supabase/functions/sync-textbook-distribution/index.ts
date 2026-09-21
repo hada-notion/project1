@@ -3,74 +3,17 @@
 // 교재뱄 기능(로드맵 5-37): 진도교재 담기(교재배부 생성) + 필요 시 교재비(카트) 자동 생성.
 // 결제(교재배부 "결재" 버튼 → 미납/결제완료 전환)는 기존 노션 자동화를 그대로 사용하야 이 함수는 건드리지 않는다.
 //
-// 담기 대상 판정 규식:
-//   진도교재(학원) DB의 "진행상태"가 정확히 "진행 중"(실제로 지금 쓰고 있는 교재)인 것만 담는다.
-//   - "다음 교재"는 아직 시작 전이며, 다음 학기에나 쓰게 될 수도 있는 "진짜 다음" 교재라 아직 청구하지 않는다.
-//   - "완료"/"미사용"은 이미 지난 교재라 제외 (이미 예전에 배부(청구)됐을 가능성이 높음).
-//   추가로, 이미 이 등록의 기존 교재배부에 실려 있는 정규교재는(재클릭 등으로) 중복으로 다시 담기지 않도록 별도로 거른다.
-//
-// 교재배부 1건 = 정규교재 1개. 새로 담을 정규교재가 여러 개이면, 한 번의 버튼 호출에서도
-// 교재배부 페이지를 교재당 1건씩 여러 개 만든다 (교재비의 "정규교재" 관계는 1건만 가리킨다는 가정).
+// (아래 2026-09-16 ~ 2026-09-21 사이의 배경 설명은 이전과 동일하게 유지 — from-class-carts 라우트의
+// 히스토리, 웹훅 주소 오류/체크박스 고착 수정 경위, 관리자 키 인증 도입 등.)
 //
 // (2026-09-16) 교재비(카트) 페이지를 새로 만들 때 "알림톡 설정" 관계(표시 전용)도 함께 채운다.
-// send-textbook-notice는 여전히 발송 시점에 "발송 구분" 문자열로 알림톡 설정 DB를 조회하므로,
-// 실제 발송 동작에는 영향이 없다 -- Notion 화면에서 이 카트가 어떤 발송 설정과 연결되는지
-// 직관적으로 보이도록 하기 위한 것뿐이다 (조회 실패 시 조용히 건너뜀).
 //
-// (2026-09-17) 이전에는 클래스(학원) DB "교재 일괄 배부" 버튼으로 반 전체 활성 등록을 한 번에
-// 처리하는 일괄 생성 경로(from-class)도 함께 제공했었다. 하지만 여러 차례(1~7차) 동시성/조회
-// 구조를 수정해도 "교재배부 처리중" 체크박스가 간헐적으로 자동 해제되지 않는 문제가 반복 재현됐고,
-// 근본 원인이 "학생 수만큼 학생별 Notion API 호출을 한 배치 실행 안에서 처리해야 하는" 구조적
-// 한계로 파악되어, 반 전체 일괄 생성/배포 기능 자체를 포기했었다.
-//
-// (2026-09-17, 같은 날 재도입) 다만 반 전체 "교재비" 일괄 생성만 다시 필요해졌다. 위에서 포기한
-// from-class는 학생 1명당 진도교재 조회 + 기존 교재배부 조회 + 교재배부 페이지 생성(여러 건)까지
-// 묶어서 처리했기 때문에 학생 수에 비례해 호출 부담이 커졌던 것이 문제였다. 아래 from-class-carts는
-// 그 무거운 배부(청구) 단계를 전혀 하지 않고, 학생별로 "교재비 페이지가 없으면 1건만 생성"하는
-// 단순 작업만 반복한다 -- 학생 수만큼 늘어나는 건 맞지만 각 건이 가벼운 단일 페이지 생성 정도라 같은
-// 구조적 한계에 해당하지 않는다고 판단했다. 실제 교재 배부(청구)는 여전히 교재비 페이지의
+// (2026-09-17) from-class(반 전체 일괄 배부)는 구조적 한계로 포기했고, 그 대신 반 전체 "교재비"
+// 일괄 생성만 하는 from-class-carts를 다시 도입했다. 실제 교재 배부(청구)는 여전히 교재비 페이지의
 // "진도교재 담기" 버튼(from-cart)으로 학생별로 개별 진행한다.
 //
-// (2026-09-17, 웹훅 주소 오류 수정) from-class-carts가 계속 실패했던 진짜 원인은 코드가 아니라
-// 이 함수를 가리키는 웹훅 URL에 잘못된 Supabase 프로젝트 참조가 쓰여 있었던 것이었다 (DNS 자체가
-// 실패). 웹훅 URL을 올바른 프로젝트 주소로 수정한 뒤에는 요청이 정상적으로 이 함수까지 도달한다.
-//
-// (2026-09-17, 체크박스 고착 수정 1차) 웹훅 주소를 고친 뒤에도, 실제로는 카트 생성이 전부 성공했는데
-// ("교재비 생성 여부" 수식이 "완료"로 표시됨) 마지막에 "교재비 생성중" 체크박스를 다시 꺼주는
-// 쓰기 한 번만 조용히 실패해서 체크박스가 영원히 켜진 채로 남는 사례가 실제로 발생했다 (고2 A반).
-// 이 체크박스가 켜져 있으면 재클릭도 막혀 있어서(아래 already_processing 분기) 사용자가 스스로
-// 풀 방법이 없었다. 아래에서 이 잠금 분기를 무조건 거부가 아니라 "실제 데이터로 다시 계산해서
-// 판단"하도록 바꿔서, 이미 다 끝나 있었으면 고착된 체크박스만 정리하고, 아직 누락이 있으면(진짜
-// 처리 중이든 멈춘 것이든) 안전하게 새로 이어서 진행하게 했다.
-//
-// (2026-09-17, 체크박스 고착 수정 2차) 1차 수정 이후에도 다른 반(고1 A반, 고2 B반)에서 같은 현상이
-// 새로 발생했다. generate-tuition/generate-report(사용자가 "체크박스가 금방금방 잘 꺼진다"고 지목한
-// 다른 두 함수)와 나란히 비교해서, 등록 처리 동시성(mapWithConcurrency)을 없애고 순차(for 루프)로
-// 통일했다 -- Notion API 레이트리밋 위험을 줄이는 유효한 개선이라 그대로 유지하지만, 아래 3차에서
-// 확인했듯 체크박스 고착의 진짜 원인은 아니었다.
-//
-// (2026-09-17, 체크박스 고착 수정 3차 -- 진짜 근본 원인) 실제 Supabase 함수 로그를 확인해서 마지막
-// 원인을 찾았다: 매번 아래와 같은 오류로 마지막 쓰기가 조용히 실패하고 있었다.
-//   "마지막 동기화 is not a property that exists."
-// setClassCartStatus가 (등록 DB 전용으로 설계된) makeSyncStatusSetter를 그대로 썼는데, 그 헬퍼는
-// 항상 "마지막 동기화" 속성도 함께 쓰려고 시도한다. 그런데 클래스(학원) DB에는 그 속성 자체가 없다.
-// Notion API는 요청에 포함된 속성 중 하나라도 존재하지 않으면 PATCH 요청 전체를 400으로 거부하므로,
-// 같은 요청에 함께 실려 있던 체크박스 끄기(checkbox: false)까지 통째로 실패해버린 것이다 -- 동시성이나
-// 타임아웃과는 무관하게, 성공/실패 여부와 상관없이 100% 매번 이 마지막 쓰기가 실패하고 있었다.
-// generate-tuition/generate-report가 쓰는 makeClassStatusSetter(_shared/generateShared.ts)는 애초에
-// "마지막 동기화"를 쓰지 않도록 만들어져 있어서 이 문제가 전혀 없었다 -- 그래서 그 두 함수만 체크박스가
-// 금방금방 잘 꺼졌던 것. 아래에서 setClassCartStatus도 같은 헬퍼(makeClassStatusSetter)로 바꿔서
-// 근본 원인을 제거한다. (교재비 DB 쪽 setCartStatus는 그대로 둔다 -- 교재비(학원) DB에는 "마지막
-// 동기화" 속성이 실제로 존재하므로 makeSyncStatusSetter를 쓰는 것이 맞다.)
-//
-// (2026-09-18, 큐 기반 순차 처리 도입, Phase 2) 실제 담기/생성 로직(ensureCartForRegistration,
-// distributeForRegistration, getActiveRegistrationsForCarts, setCartStatus, setClassCartStatus)은
-// _shared/textbookDistributionTarget.ts로 옮겼다. 이 파일은 이제 웹훅 payload 파싱 + 사전 잠금
-// 확인 + sync_queue에 작업 적재까지만 담당하고, 실제 무거운 작업은 process-sync-queue 워커가
-// 순차적으로(다른 웹훅 요청과 뒤섞이지 않고) 처리한다. 기존에 배치 작업이 응답 없이 멈추는 경우를
-// 대비해 두었던 runWithSafetyTimeout/BATCH_TIMEOUT_MS 안전장치는 더 이상 필요하지 않아 제거했다 --
-// 큐에 적재된 작업은 sync_queue 행에 영속적으로 남아있어서, 함수 실행이 중단돼도 다음 워커 실행에서
-// 이어서 처리되기 때문이다.
+// (2026-09-18, 큐 기반 순차 처리 도입, Phase 2) 실제 담기/생성 로직은 _shared/textbookDistributionTarget.ts로
+// 옮겼다.
 //
 // (2026-09-20, 웹훅 코드 정리 3단계) from-cart 라우트의 "잠금 확인 -> 처리중 표시 -> 큐 적재 -> 202
 // 응답" 부분만 _shared/webhookIngest.ts의 runLockedQueueWebhookForPage로 옮겼다. from-class-carts
@@ -81,6 +24,11 @@
 // (from-cart)와 클래스(학원) DB "교재비 생성"(from-class-carts) 버튼 자동화에 이미 x-admin-key
 // 헤더를 추가해두었다. route 분기 전에 공통으로 한 번만 검사한다.
 //
+// (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환) from-cart는 교재비 페이지 1건만 대상으로
+// 하는 개별 트리거라 sync_queue를 거칠 필요가 없다. runLockedQueueWebhookForPage(큐 적재) 대신
+// runSyncWebhookForPage를 써서 버튼 클릭과 동시에 끝나도록 한다. from-class-carts는 반 전체(여러
+// 등록)를 대상으로 하는 명시적인 일괄 버튼이라 계속 큐를 쓴다 (변경 없음).
+//
 // 라우트:
 //   POST /sync-textbook-distribution/from-cart         <- 교재비(학원) DB "진도교재 담기" 버튼 (학생 1명, 담기까지 수행)
 //   POST /sync-textbook-distribution/from-class-carts   <- 클래스(학원) DB "교재비 생성" 버튼 (반 전체, 교재비 페이지만 일괄 생성 - 교재 배부는 하지 않음)
@@ -88,7 +36,7 @@
 import { getPage, extractPageId, checkboxValue, relationIds } from "../_shared/notionClient.ts"
 import { respondAccepted } from "../_shared/backgroundTask.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
-import { runLockedQueueWebhookForPage } from "../_shared/webhookIngest.ts"
+import { runSyncWebhookForPage } from "../_shared/webhookIngest.ts"
 import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
 import {
 	PROP_CART_RUNNING,
@@ -96,6 +44,7 @@ import {
 	setCartStatus,
 	setClassCartStatus,
 	getActiveRegistrationsForCarts,
+	distributeFromCartPage,
 } from "../_shared/textbookDistributionTarget.ts"
 
 // 등록(학원) DB 속성: from-class-carts 사전 확인(활성 등록 중 교재비 누락 여부 판정)에서만 쓴다.
@@ -132,13 +81,12 @@ Deno.serve(async (req: Request) => {
 
 	try {
 		if (route === "from-cart") {
-			// 교재비 페이지 자신이 클릭 대상.
-			return await runLockedQueueWebhookForPage(pageId, {
+			// 교재비 페이지 자신이 클릭 대상. 개별 트리거라 큐를 거치지 않고 바로 처리한다.
+			return await runSyncWebhookForPage(pageId, {
 				functionName: "sync-textbook-distribution:from-cart",
 				lockProp: PROP_CART_RUNNING,
-				target: "sync-textbook-distribution:from-cart",
 				setStatus: setCartStatus,
-				buildPayload: (id) => ({ cartId: id }),
+				process: distributeFromCartPage,
 			})
 		} else if (route === "from-class-carts") {
 			// 클래스 페이지 자신이 클릭 대상.

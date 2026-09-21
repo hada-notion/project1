@@ -2,8 +2,11 @@
 //
 // fix-attendance가 처리하는 실제 출석 조정 로직을 별도 파일로 분리했다 (2026-09-18, 큐 기반 순차
 // 처리 도입, Phase 3). 원래 supabase/functions/fix-attendance/index.ts 안에 있던 코드를 그대로
-// 옮긴 것이다 -- process-sync-queue 워커가 이 함수를 직접 호출해서 순차 처리할 수 있게 하기 위함.
-// 웹훅 payload에서 페이지 id를 찾는 로직(resolveClassSessionId 등)은 index.ts에 그대로 둔다.
+// 옮긴 것이다. 웹훅 payload에서 페이지 id를 찾는 로직(resolveClassSessionId 등)은 index.ts에 그대로 둔다.
+//
+// (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환) processFixAttendanceQueueItem
+// (process-sync-queue 전용 진입점)은 제거했다. index.ts가 fixAttendanceForClassSession을 직접
+// 호출한다.
 
 import { getPage, queryAllPages, createPage, updatePageProperties, relIds } from "./notionClient.ts"
 import { DS_TIMETABLE, DS_CLASS_SESSION, DS_ATTENDANCE, DS_REGISTRATION } from "./constants.ts"
@@ -214,26 +217,5 @@ export async function fixAttendanceForClassSession(classSessionId: string, log: 
 
   if (createdCount === 0 && linkedCount === 0 && deletedFlagCount === 0) {
     log.push(`[ok] ${sessionName}: attendance already matches active registrations, nothing to fix`)
-  }
-}
-
-// process-sync-queue 워커가 target: "fix-attendance" 작업을 처리할 때 호출하는 진입점.
-export async function processFixAttendanceQueueItem(payload: { classSessionId: string }): Promise<void> {
-  const bgLog: string[] = []
-  try {
-    await fixAttendanceForClassSession(payload.classSessionId, bgLog)
-    await markAttendanceFixDone(payload.classSessionId)
-    console.log("[fix-attendance] (queue) finished:", payload.classSessionId, "\n", bgLog.join("\n"))
-  } catch (err) {
-    console.error(
-      "[fix-attendance] (queue) ERROR:",
-      (err as Error).message,
-      "\nlog so far:",
-      bgLog.join("\n"),
-      "\nstack:",
-      (err as Error).stack,
-    )
-    await markAttendanceFixError(payload.classSessionId, (err as Error).message)
-    throw err
   }
 }

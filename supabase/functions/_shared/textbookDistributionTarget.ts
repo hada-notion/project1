@@ -10,6 +10,12 @@
 // 시간 안에 스스로 오류 처리하는 안전장식)는 큐 숿으로 이전하지 앞눈다. 큐에 쓸이건 작업은 sync_queue
 // 헉에 영속적으로 농이있어서(함수 실행이 중단되어도 다시 집어지지 않습), 응답을 바로 되맔면서
 // 실패로 감지해 되늄렱해야하는 근거 자신이 사라졌다.
+//
+// (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환) from-cart는 교재비 페이지 1건만 대상으로
+// 하는 개별 트리거라 큐를 거칠 필요가 없다고 판단했다. processFromCartQueueItem(process-sync-queue
+// 전용 진입점)은 제거하고 대신 distributeFromCartPage(pageId만 받는 얇은 래퍼)를 추가했다 --
+// index.ts가 이제 이 함수를 직접 호출한다. from-class-carts는 반 전체(여러 등록)를 대상으로 하는
+// 명시적인 일괄 버튼이라 processFromClassCartsQueueItem은 그대로 두고 계속 큐를 쓴다.
 
 import { PROP_LAST_ERROR, PROP_SYNCED_AT, DS_REGISTRATION, PROP_CLASS, PROP_STATUS } from "./constants.ts"
 import {
@@ -147,20 +153,13 @@ export async function getActiveRegistrationsForCarts(classId: string): Promise<a
 	return registrations.filter((reg: any) => formulaString(reg, PROP_STATUS) === STATUS_ACTIVE)
 }
 
-// process-sync-queue 워커가 target: "sync-textbook-distribution:from-cart" 작업을 처리할 때 호출하는 진입점.
-export async function processFromCartQueueItem(payload: { cartId: string }): Promise<void> {
-	try {
-		const cart = await getPage(payload.cartId)
-		const registrationIds = relationIds(cart, PROP_CART_REGISTRATION)
-		if (registrationIds.length === 0) throw new Error("교재비 페이지에 연결된 등록이 없음")
-		const result = await distributeForRegistration(registrationIds[0])
-		await setCartStatus(payload.cartId, "완료")
-		console.log("[sync-textbook-distribution] (queue) from-cart finished:", payload.cartId, result)
-	} catch (err) {
-		console.error("[sync-textbook-distribution] (queue) from-cart ERROR:", err)
-		await setCartStatus(payload.cartId, "오류", (err as Error)?.message ?? String(err))
-		throw err
-	}
+// index.ts의 from-cart 라우트가 직접 호출하는 진입점 (2026-09-22, PART N-4: 개별 트리거 동기화 전환).
+export async function distributeFromCartPage(cartId: string): Promise<void> {
+	const cart = await getPage(cartId)
+	const registrationIds = relationIds(cart, PROP_CART_REGISTRATION)
+	if (registrationIds.length === 0) throw new Error("교재비 페이지에 연결된 등록이 없음")
+	const result = await distributeForRegistration(registrationIds[0])
+	console.log("[sync-textbook-distribution] from-cart finished:", cartId, result)
 }
 
 // process-sync-queue 워커가 target: "sync-textbook-distribution:from-class-carts" 작업을 처리할 때 호출하는 진입점.

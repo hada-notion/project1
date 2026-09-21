@@ -4,6 +4,10 @@
 // 파일로 분리했다 (2026-09-18, 큐 기반 순차 처리 도입, Phase 3). cleanup-on-end 라우트는
 // 다른 함수들이 내부적으로 동기 호출(fetch)해서 즉시 결과를 받아야 하므로 큐로 옮기지 않고
 // index.ts에 그대로 둔다 (이 파일에서는 그 로직도 함께 두어 라우트 핸들러를 가벼게 유지한다).
+//
+// (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환) create-individual 라우트도 등록 페이지 1건만
+// 대상으로 하는 개별 트리거라 processCreateIndividualBooksQueueItem(process-sync-queue 전용
+// 진입점)은 제거했다. index.ts가 createIndividualBooksForRegistration을 직접 호출한다.
 
 import {
 	PROP_CLASS,
@@ -184,17 +188,4 @@ export async function cleanupUnusedBooksOnEnd(registrationId: string) {
 	}
 
 	return { unlinked, deleted, kept }
-}
-
-// process-sync-queue 워커가 target: "sync-registration-textbook:create-individual" 작업을 처리할 때 호출하는 진입점.
-export async function processCreateIndividualBooksQueueItem(payload: { pageId: string }): Promise<void> {
-	try {
-		const result = await createIndividualBooksForRegistration(payload.pageId)
-		await setTextbookSyncStatus(payload.pageId, "완료")
-		console.log("[sync-registration-textbook] (queue) create-individual finished:", payload.pageId, result)
-	} catch (err) {
-		console.error("[sync-registration-textbook] (queue) create-individual ERROR:", err)
-		await setTextbookSyncStatus(payload.pageId, "오류", (err as Error)?.message ?? String(err))
-		throw err
-	}
 }

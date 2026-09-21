@@ -1,8 +1,10 @@
 // POST /functions/v1/sync-report-cache
 // body: { registrationId: string } 또는 { pageId: string }
 //   -- 등록/학습기록/학습활동/보고서/정규교재/일정 DB의 Notion 버튼(웹훅 보내기) / "생성 또는 편집 시"
-//      자동화에서 호출하는 기본 경로. 즉시 202를 반환하고, 실제 재계산은 sync_queue에 적재해서
-//      process-sync-queue 워커가 순서대로 처리한다 (2026-09-18, 큐 기반 순차 처리 도입 -- 아래 설명).
+//      자동화에서 호출하는 기본 경로. (2026-09-22, PART N-4) 즉시 재계산해서 결과를 그대로
+//      반환한다 -- 예전에는 202를 반환하고 sync_queue에 적재해 process-sync-queue 워커가
+//      처리했지만(2026-09-18, 큐 기반 순차 처리 도입), 개별(단건) 트리거는 즉시 동기 처리로
+//      되돌린다는 원칙에 따라 되돌렸다 (아래 설명 참고).
 // body: { registrationId, awaitCompletion: true }  (x-admin-key 필요)
 //   -- 내부 전용 동기 경로. 응답을 기다렸다가 결과를 그대로 반환한다.
 //      보고서 발송 직전(send-report) 강제 재동기화, 야간 점검(nightly-report-sync-audit)에서 사용.
@@ -23,22 +25,24 @@
 // [큐 기반 순차 처리 도입, 2026-09-18] 등록/학습기록/학습활동/보고서/정규교재/일정 DB 6개가 동시에
 // 편집되면 웹훅이 한꺼번에 몰릴 수 있다. 예전에는 각 요청이 받는 즉시 EdgeRuntime.waitUntil로
 // "따로따로" 백그라운드 처리를 했는데(2026-09-10 도입, _shared/backgroundTask.ts), 이 방식은 요청
-// 하나하나는 타임아웃 없이 끝나지만 서로 다른 요청들 사이의 순서/조율이 전혀 없었다. 이제는 실제
-// 처리를 바로 하지 않고 _shared/syncQueue.ts로 sync_queue 테이블에 작업 1건을 적재하기만 하고
-// 202를 반환한다. 적재된 작업은 process-sync-queue 워커가 "쌓인 순서대로 하나씩만" 꺼내서 처리하므로,
-// 아무리 많이 동시에 들어와도 실행이 멈추지 않고(대기열에 쌓일 뿐) 유실 없이 전부 순차적으로
-// 처리된다. 이 함수가 직접 재계산하던 실제 로직(resolveRegistrationIds 등)은
-// _shared/syncReportCacheTarget.ts로 옮겨서, 이 함수의 awaitCompletion/mode:"all" 경로와
-// process-sync-queue 워커가 동일한 코드를 공유한다 (정규교재/일정 DB 웹훅에 대한 상세 설명도 그
-// 파일로 옮겼다).
+// 하나하나는 타임아웃 없이 끝나지만 서로 다른 요청들 사이의 순서/조율이 전혀 없었다. 그래서 한동안
+// sync_queue에 적재만 하고 202를 반환하는 방식으로 바꿨었다 (실제 처리 로직은
+// _shared/syncReportCacheTarget.ts로 옮겨서, awaitCompletion/mode:"all" 경로와 공유).
+//
+// [2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환] 그런데 이 함수를 트리거하는 automation은
+// "등록/학습기록/학습활동/보고서/정규교재/일정 DB의 한 페이지가 편집됨" 이라는 개별(단건) 이벤트이고,
+// 실제 재계산 대상(resolveRegistrationIds)도 대부분 등록 1건 또는 소수의 등록이다 (정규교재/일정처럼
+// 여러 등록에 걸쳐 있는 경우도 있지만, 이미 awaitCompletion 경로가 큐 없이 동기로 이 정도 규모를
+// 처리해왔다). "개별 트리거는 즉시 동기 처리, 일괄 트리거만 큐 사용"이라는 원칙에 맞춰 기본 경로도
+// awaitCompletion 경로와 동일하게 즉시 동기 처리로 되돌렸다. mode:"all"(수동 전체 재계산)은 원래도
+// 큐를 쓰지 않고 그 자리에서 전체를 처리하던 경로라 변경하지 않았다.
 
 import { requireAdminKey, CORS_HEADERS as ADMIN_CORS } from "../_shared/adminShared.ts"
 import { queryAllPages, mapWithConcurrency, extractPageId } from "../_shared/notionClient.ts"
-import { respondAccepted } from "../_shared/backgroundTask.ts"
-import { makePageCache, upsertReportCacheRows, type ReportCacheRow } from "../_shared/reportCacheShared.ts"
+import { makePageCache } from "../_shared/reportCacheShared.ts"
+import { upsertReportCacheRows, type ReportCacheRow } from "../_shared/reportCacheShared.ts"
 import { buildCacheRowForRegistration, syncReportCacheForRegistration } from "../_shared/reportCacheBuilder.ts"
 import { resolveRegistrationIds, DS_REGISTRATION } from "../_shared/syncReportCacheTarget.ts"
-import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: ADMIN_CORS })
@@ -68,20 +72,17 @@ Deno.serve(async (req: Request) => {
     if (body?.awaitCompletion === true) {
       const authError = await requireAdminKey(req)
       if (authError) return authError
-      const registrationIds = await resolveRegistrationIds(rawId, cachedGetPage)
-      const rows = await mapWithConcurrency(registrationIds, 4, (id) => syncReportCacheForRegistration(id, cachedGetPage))
-      const synced = rows.filter((r): r is ReportCacheRow => r !== null).length
-      return new Response(JSON.stringify({ synced, registrationIds }), {
-        headers: { ...ADMIN_CORS, "Content-Type": "application/json" },
-      })
     }
 
     // Notion 버튼(웹훅 보내기) / 각 DB의 "생성 또는 편집 시" 자동화 호출 경로 -- 다른 버튼 웹훅들과
-    // 동일하게 별도 인증 없이 신뢰한다. 큐에 적재만 하고 즉시 202를 돌려준다 (실제 처리는
-    // process-sync-queue 워커가 쌓인 순서대로 한다).
-    await enqueueSync("sync-report-cache", { pageId: rawId })
-    wakeSyncQueueWorker()
-    return respondAccepted({ pageId: rawId, queued: true })
+    // 동일하게 별도 인증 없이 신뢰한다. (2026-09-22, PART N-4) 개별 트리거라 큐를 거치지 않고 그
+    // 자리에서 바로 재계산하고, 완료된 결과를 그대로 응답한다 (awaitCompletion 경로와 동일한 처리).
+    const registrationIds = await resolveRegistrationIds(rawId, cachedGetPage)
+    const rows = await mapWithConcurrency(registrationIds, 4, (id) => syncReportCacheForRegistration(id, cachedGetPage))
+    const synced = rows.filter((r): r is ReportCacheRow => r !== null).length
+    return new Response(JSON.stringify({ synced, registrationIds }), {
+      headers: { ...ADMIN_CORS, "Content-Type": "application/json" },
+    })
   } catch (err) {
     return new Response(JSON.stringify({ error: String((err as any)?.message ?? err) }), {
       status: 500,

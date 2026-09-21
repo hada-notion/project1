@@ -18,29 +18,42 @@
 // 때문에 _shared/registrationSync.ts로 옮겼다.
 //
 // (2026-09-20, 웹훅 코드 정리 2단계) 이 버튼도 sync-registration-enroll/end/timetable/textbook과
-// 동일하게 큐 기반으로 전환했다 (2026-09-18 Phase 3에서 이 버튼만 빠져 있었음 -- 여러 등록에서
-// 동시에 "수업 생성"이 눌리면 이 함수만 Notion API 요청이 서로 겹칠 수 있는 구조였다). 실제 처리
-// 로직은 _shared/registrationClassSessionTarget.ts로 옮겼고, 이 파일은 다른 등록 버튼들과 동일하게
-// 웹훅 body 파싱 + 잠금 선체크 + 큐 적재만 담당한다. body 없이 호출하는 cron 전체 스캔 경로는
-// 버튼이 기다리는 응답이 아니므로 기존과 동일하게 동기 처리를 유지한다.
+// 동일하게 큐 기반으로 전환했다. 실제 처리 로직은 _shared/registrationClassSessionTarget.ts로
+// 옮겼고, 이 파일은 다른 등록 버튼들과 동일하게 웹훅 body 파싱 + 잠금 선체크만 담당한다. body 없이
+// 호출하는 cron 전체 스캔 경로는 버튼이 기다리는 응답이 아니므로 기존과 동일하게 동기 처리를 유지한다.
 //
-// (2026-09-20, 웹훅 코드 정리 3단계) pageId가 있는 웹훅 단건 경로의 "잠금 확인 -> 처리중 표시 ->
-// 큐 적재 -> 202 응답" 부분을 _shared/webhookIngest.ts의 runLockedQueueWebhookForPage로 옮겼다.
+// (2026-09-21, PART N-2) runLockedQueueWebhookForPage/runSyncWebhookForPage는 req를 받지 않아
+// requireAdminKey 옵션을 쓸 수 없으므로, 이 파일 진입부에서 직접 관리자 키를 확인한다 (cascade-delete와
+// 동일한 인라인 패턴). pageId 단건 경로뿐 아니라 body 없는 cron 스캔 경로도 함께 보호한다 -- 이
+// 저장소에는 실제로 이 스캔 경로를 호출하는 cron이 없어(안전망으로만 존재) 막아도 깨지는 자동 호출이
+// 없다. 등록(학원) DB "수업 생성" 버튼 자동화에는 이미 x-admin-key 헤더를 미리 추가해두었다.
 //
-// (2026-09-21, PART N-2) runLockedQueueWebhookForPage는 req를 받지 않아 requireAdminKey 옵션을 쓸 수
-// 없으므로, 이 파일 진입부에서 직접 관리자 키를 확인한다 (cascade-delete와 동일한 인라인 패턴).
-// pageId 단건 경로뿐 아니라 body 없는 cron 스캔 경로도 함께 보호한다 -- 이 저장소에는 실제로 이
-// 스캔 경로를 호출하는 cron이 없어(안전망으로만 존재) 막아도 깨지는 자동 호출이 없다. 등록(학원)
-// DB "수업 생성" 버튼 자동화에는 이미 x-admin-key 헤더를 미리 추가해두었다.
+// (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환) pageId가 있는 단건 경로를 큐 기반
+// (runLockedQueueWebhookForPage)에서 동기 처리(runSyncWebhookForPage)로 되돌렸다 -- 등록 1건만
+// 대상으로 하는 개별 트리거라 sync_queue를 거칠 필요가 없다고 판단했다 (이 버튼이 "등록/종료
+// 처리"보다 유독 큐에 오래 걸려 있곤 했던 것도 이번 전환의 계기가 됐다 -- Bug 1: "실시간 처리
+// 상태"가 실제 완료 전에 사라져 보이던 문제). body 없는 cron 전체 스캔 경로(createSessionsForAllPending)는
+// 그대로 동기 유지한다(원래도 큐를 거치지 않았음).
 
 import { PROP_SYNC_CLASS_SESSION_RUNNING } from "../_shared/constants.ts"
-import { extractPageId } from "../_shared/notionClient.ts"
+import { extractPageId, getPage } from "../_shared/notionClient.ts"
 import {
 	setClassSessionSyncStatus,
 	createSessionsForAllPending,
+	createSessionsAndAttendanceForRegistration,
 } from "../_shared/registrationClassSessionTarget.ts"
-import { runLockedQueueWebhookForPage } from "../_shared/webhookIngest.ts"
+import { runSyncWebhookForPage } from "../_shared/webhookIngest.ts"
 import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
+
+async function processPage(pageId: string): Promise<void> {
+	const log: string[] = []
+	const reg = await getPage(pageId)
+	try {
+		await createSessionsAndAttendanceForRegistration(reg, log)
+	} finally {
+		console.log("[sync-registration-class-session] finished:", pageId, "\n", log.join("\n"))
+	}
+}
 
 Deno.serve(async (req: Request) => {
 	if (req.method !== "POST") {
@@ -69,11 +82,11 @@ Deno.serve(async (req: Request) => {
 		console.log("[sync-registration-class-session] extracted pageId:", pageId)
 
 		if (pageId) {
-			return await runLockedQueueWebhookForPage(pageId, {
+			return await runSyncWebhookForPage(pageId, {
 				functionName: "sync-registration-class-session",
 				lockProp: PROP_SYNC_CLASS_SESSION_RUNNING,
-				target: "sync-registration-class-session",
 				setStatus: setClassSessionSyncStatus,
+				process: processPage,
 			})
 		}
 

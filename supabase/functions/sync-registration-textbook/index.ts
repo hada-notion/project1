@@ -43,12 +43,26 @@
 // 호출하는데, 그 호출도 이번에 x-admin-key 헤더를 보내도록 함께 고쳤으므로(같은 커밋) 여기서
 // cleanup-on-end까지 막아도 그 내부 호출은 깨지지 않는다. 두 라우트 모두 pageId 추출 이전에
 // 공통으로 검사한다.
+//
+// (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환) create-individual도 등록 페이지 1건만
+// 대상으로 하는 개별 트리거라 sync_queue를 거칠 필요가 없다. runLockedQueueWebhookForPage(큐 적재)
+// 대신 runSyncWebhookForPage를 써서 버튼 클릭과 동시에 끝나도록 한다. cleanup-on-end 라우트는
+// 원래부터 동기 처리였으므로 그대로 둔다.
 
 import { PROP_SYNC_TEXTBOOK_RUNNING } from "../_shared/constants.ts"
 import { extractPageId } from "../_shared/notionClient.ts"
-import { setTextbookSyncStatus, cleanupUnusedBooksOnEnd } from "../_shared/registrationTextbookTarget.ts"
-import { runLockedQueueWebhookForPage } from "../_shared/webhookIngest.ts"
+import {
+	setTextbookSyncStatus,
+	cleanupUnusedBooksOnEnd,
+	createIndividualBooksForRegistration,
+} from "../_shared/registrationTextbookTarget.ts"
+import { runSyncWebhookForPage } from "../_shared/webhookIngest.ts"
 import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
+
+async function processPage(pageId: string): Promise<void> {
+	const result = await createIndividualBooksForRegistration(pageId)
+	console.log("[sync-registration-textbook] create-individual finished:", pageId, result)
+}
 
 Deno.serve(async (req: Request) => {
 	const url = new URL(req.url)
@@ -77,11 +91,11 @@ Deno.serve(async (req: Request) => {
 
 	try {
 		if (route === "create-individual") {
-			return await runLockedQueueWebhookForPage(pageId, {
+			return await runSyncWebhookForPage(pageId, {
 				functionName: "sync-registration-textbook",
 				lockProp: PROP_SYNC_TEXTBOOK_RUNNING,
-				target: "sync-registration-textbook:create-individual",
 				setStatus: setTextbookSyncStatus,
+				process: processPage,
 			})
 		} else if (route === "cleanup-on-end") {
 			// 다른 함수(registrationSync.ts의 callTextbookCleanup)가 내부적으로 동기 호출해서 즉시

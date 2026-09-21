@@ -2,6 +2,9 @@
 //
 // sync-exam-scope가 처리하는 실제 응시학생 등록 로직을 별도 파일로 분리했다 (2026-09-18, 큐 기반 순차
 // 처리 도입, Phase 3). 원래 index.ts 안에 있던 코드를 그대로 옮긴 것이다.
+//
+// (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환) processSyncExamScopeQueueItem
+// (process-sync-queue 전용 진입점)은 제거했다. index.ts가 processExamScope를 직접 호출한다.
 
 import {
 	DS_GRADE,
@@ -107,19 +110,5 @@ export async function processExamScope(pageId: string, log: string[]) {
 		log.push(`👥 [${scopeName}] 대상 학생 ${candidates.length}명 중 신규 성적 행 ${created}건 생성함`)
 	} else {
 		log.push(`⏭️ [${scopeName}] 학년이 비어있어 응시학생 등록을 건너뜀`)
-	}
-}
-
-// process-sync-queue 워커가 target: "sync-exam-scope" 작업을 처리할 때 호출하는 진입점.
-export async function processSyncExamScopeQueueItem(payload: { pageId: string }): Promise<void> {
-	const bgLog: string[] = []
-	try {
-		await processExamScope(payload.pageId, bgLog)
-		await setExamScopeStatus(payload.pageId, "완료")
-		console.log("[sync-exam-scope] (queue) finished:", payload.pageId, "\n", bgLog.join("\n"))
-	} catch (err) {
-		console.error("[sync-exam-scope] (queue) ERROR:", (err as Error).message, (err as Error).stack)
-		await setExamScopeStatus(payload.pageId, "오류", (err as Error).message)
-		throw err
 	}
 }

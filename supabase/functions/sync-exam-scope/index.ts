@@ -15,7 +15,6 @@
 // 호출 방식: body에 { pageId: "시험범위 페이지 id" } 를 담아 호출 ("응시학생 등록"/"시험일정 추가" 버튼용).
 //
 // (2026-09-18, 큐 기반 순차 처리 도입, Phase 3) 실제 처리 로직은 _shared/examScopeTarget.ts로 옮겼다.
-// 이 파일은 웹훅 body 파싱과 잠금 선체크만 하고, 실제 처리는 큐에 적재한다.
 //
 // (2026-09-20, 웹훅 코드 정리 3단계) 반복되던 "pageId 추출 -> 잠금 확인 -> 처리중 표시 -> 큐 적재 ->
 // 202 응답" 뼈대를 _shared/webhookIngest.ts로 옮겼다.
@@ -23,17 +22,30 @@
 // (2026-09-21, PART N: 관리자 키 인증 추가) 이 함수를 호출하는 버튼/자동화 웹훅에 x-admin-key
 // 커스텀 헤더를 미리 추가해둔 뒤, requireAdminKey: true로 함수 쪽 검증을 켠다. 헤더가 없으면
 // body.adminKey도 확인한다 (webhookIngest.ts의 handleLockedQueueWebhook 참고).
+//
+// (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환) "응시학생 등록"은 시험범위 1건만 대상으로
+// 하는 개별 트리거라 sync_queue를 거칠 필요가 없다. handleLockedQueueWebhook(큐 적재) 대신
+// handleSyncWebhook을 써서 버튼 클릭과 동시에 끝나도록 바꿨다.
 
 import { PROP_SCOPE_RUNNING } from "../_shared/constants.ts"
-import { handleLockedQueueWebhook } from "../_shared/webhookIngest.ts"
-import { setExamScopeStatus } from "../_shared/examScopeTarget.ts"
+import { handleSyncWebhook } from "../_shared/webhookIngest.ts"
+import { setExamScopeStatus, processExamScope } from "../_shared/examScopeTarget.ts"
+
+async function processPage(pageId: string): Promise<void> {
+	const log: string[] = []
+	try {
+		await processExamScope(pageId, log)
+	} finally {
+		console.log("[sync-exam-scope] finished:", pageId, "\n", log.join("\n"))
+	}
+}
 
 Deno.serve((req: Request) =>
-	handleLockedQueueWebhook(req, {
+	handleSyncWebhook(req, {
 		functionName: "sync-exam-scope",
 		lockProp: PROP_SCOPE_RUNNING,
-		target: "sync-exam-scope",
 		setStatus: setExamScopeStatus,
+		process: processPage,
 		requireAdminKey: true,
 	}),
 )

@@ -21,7 +21,7 @@
 //     학습활동 records).
 //
 // (2026-09-18, 큐 기반 순차 처리 도입, Phase 3) 실제 출석 조정 로직은 _shared/fixAttendanceTarget.ts로
-// 옮겼다. 이 파일은 웹훅 body에서 수업 페이지 id를 찾은 뒤, 처리를 큐에 적재만 하고 즉시 응답한다.
+// 옮겼다.
 //
 // [2026-09-20, 웹훅 코드 정리 1단계] 자체 extractPageId/deepFindPageObjectId/resolveClassSessionId를
 // 지우고 _shared/notionClient.ts의 공용 extractPageId로 교체했다 (cascade-delete와 동일한 이유 --
@@ -31,11 +31,18 @@
 // 커스텀 헤더를 미리 추가해둔 뒤, 함수 쪽에도 동일한 검증을 추가한다. adminShared.ts의
 // resolveAdminKeyFromRequest/getCurrentAdminKey를 그대로 사용(다른 관리자 함수들과 동일한 패턴).
 // 헤더가 없으면 body.adminKey도 확인한다.
+//
+// [2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환] "출석 조정"은 수업 세션 1건만 대상으로 하는
+// 개별 트리거라 sync_queue를 거칠 필요가 없다. 큐 적재(enqueueSync/wakeSyncQueueWorker) 대신
+// fixAttendanceForClassSession을 바로 await하고, 완료(또는 실패) 결과를 그 자리에서 응답한다.
 
 import { extractPageId } from "../_shared/notionClient.ts"
-import { respondAccepted } from "../_shared/backgroundTask.ts"
-import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
-import { markAttendanceFixRunning } from "../_shared/fixAttendanceTarget.ts"
+import {
+  markAttendanceFixRunning,
+  markAttendanceFixDone,
+  markAttendanceFixError,
+  fixAttendanceForClassSession,
+} from "../_shared/fixAttendanceTarget.ts"
 import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
 
 Deno.serve(async (req: Request) => {
@@ -63,8 +70,9 @@ Deno.serve(async (req: Request) => {
     })
   }
 
+  let classSessionId: string | null = null
   try {
-    const classSessionId = extractPageId(body)
+    classSessionId = extractPageId(body)
     if (!classSessionId) {
       return new Response(
         JSON.stringify({
@@ -77,15 +85,22 @@ Deno.serve(async (req: Request) => {
     }
     await markAttendanceFixRunning(classSessionId)
 
-    // 큐에 적재만 하고 즉시 응답한다 -- 실제 출석 조정은 process-sync-queue 워커가 순서대로
-    // 처리한다 (2026-09-18, Phase 3). 진행 상황은 그 수업의 "동기화 상태"(이미 처리중으로
-    // 설정됨)로 확인할 수 있다.
-    await enqueueSync("fix-attendance", { classSessionId })
-    wakeSyncQueueWorker()
+    // (2026-09-22, PART N-4) 개별 트리거라 큐를 거치지 않고 바로 처리한다. Notion의 "웹훅 보내기"
+    // 버튼 액션은 이 응답을 동기적으로 기다리므로, 완료(또는 실패) 결과를 그 자리에서 그대로
+    // 돌려준다. 진행 상황은 그 수업의 "출석조정 처리중"(이미 처리중으로 설정됨) 체크박스로도
+    // 확인할 수 있다.
+    await fixAttendanceForClassSession(classSessionId, log)
+    await markAttendanceFixDone(classSessionId)
 
-    return respondAccepted({ classSessionId })
+    return new Response(JSON.stringify({ ok: true, classSessionId, log }, null, 2), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    })
   } catch (err) {
     console.error("fix-attendance failed:", (err as Error).message, "\nlog so far:", log.join("\n"), "\nstack:", (err as Error).stack)
+    if (classSessionId) {
+      await markAttendanceFixError(classSessionId, (err as Error).message)
+    }
     return new Response(JSON.stringify({ ok: false, error: (err as Error).message, log }, null, 2), {
       status: 500,
       headers: { "Content-Type": "application/json" },

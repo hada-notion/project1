@@ -10,6 +10,11 @@
 // 등록일 입력·종료일 제거는 이 오류 이전에 이미 저장되므로 그대로 유지된다. 클래스를 채운 뒤 다시
 // "등록"을 누르면 시간표까지 정상적으로 이어서 채워진다 (재시도 시 처음부터 다시 실행되는 구조라
 // 별도 복구 로직이 필요 없음).
+//
+// (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환) "등록" 버튼은 등록 페이지 1건만 대상으로
+// 하고(개별 트리거) 실제 작업도 Notion API 호출 1~2건 수준으로 가벼워서, sync_queue를 거칠 이유가
+// 없었다. process-sync-queue 워커가 담당하던 processSyncRegistrationEnrollQueueItem은 제거하고,
+// index.ts가 이 파일의 processEnrollForRegistration을 직접 호출해서 버튼 클릭과 동시에 끝낸다.
 
 import {
 	PROP_CLASS,
@@ -76,18 +81,4 @@ export async function processEnrollForRegistration(pageId: string, log: string[]
 		[PROP_TIMETABLE]: { relation: timetableIds.map((id: string) => ({ id })) },
 	})
 	log.push(`🔗 [${regName}] 클래스 기준 시간표 ${timetableIds.length}건 연결함 (필요하면 지금 수동으로 조정 후 "수업 생성"을 누르세요)`)
-}
-
-// process-sync-queue 워커가 target: "sync-registration-enroll" 작업을 처리할 때 호출하는 진입점.
-export async function processSyncRegistrationEnrollQueueItem(payload: { pageId: string }): Promise<void> {
-	const bgLog: string[] = []
-	try {
-		await processEnrollForRegistration(payload.pageId, bgLog)
-		await setEnrollSyncStatus(payload.pageId, "완료")
-		console.log("[sync-registration-enroll] (queue) finished:", payload.pageId, "\n", bgLog.join("\n"))
-	} catch (err) {
-		console.error("[sync-registration-enroll] (queue) ERROR:", (err as Error).message, (err as Error).stack)
-		await setEnrollSyncStatus(payload.pageId, "오류", (err as Error).message)
-		throw err
-	}
 }

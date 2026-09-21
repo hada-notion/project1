@@ -2,8 +2,10 @@
 //
 // cascade-delete가 처리하는 실제 재귀 삭제 로직을 별도 파일로 분리했다 (2026-09-18, 큐 기반 순차
 // 처리 도입, Phase 2). 원래 supabase/functions/cascade-delete/index.ts 안에 있던 코드를 그대로
-// 옮긴 것이다 -- process-sync-queue 워커가 HTTP를 다시 거치지 않고 이 함수를 직접 호출해서 순차
-// 처리할 수 있게 하기 위함이다. webhook 요청 파싱(resolvePageId 등)은 index.ts에 그대로 둔다.
+// 옮긴 것이다. webhook 요청 파싱(resolvePageId 등)은 index.ts에 그대로 둔다.
+//
+// (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환) processCascadeDeleteQueueItem
+// (process-sync-queue 전용 진입점)은 제거했다. index.ts가 cascadeDelete를 직접 호출한다.
 
 import { getPage, queryAllPages, updatePageProperties, archivePage, mapWithConcurrency } from "./notionClient.ts"
 import {
@@ -29,8 +31,8 @@ const GROUP_PROGRESS_TYPE = "그룹 진도"
 export const MAX_CASCADE_DEPTH = 20
 export const CASCADE_CHILD_CONCURRENCY = 5
 // (2026-09-18) 큐 도입 이전에는 이 상수(STALE_LOCK_MS)로 "응답 없이 멈춘 이전 실행"을 감지해서 막지
-// 않고 재시도하게 했다. 큐 기반으로 바뀐 뒤에도 웹훅이 들어온 즉시 판단하는 이 프리체크는 index.ts에
-// 그대로 남아있으므로, 그 상수도 그대로 index.ts에서 쓴다 (여기서는 재수출하지 않음).
+// 않고 재시도하게 했다. (2026-09-22, PART N-4) 큐를 다시 없앤 뒤에도 웹훅이 들어온 즉시 판단하는 이
+// 프리체크는 index.ts에 그대로 남아있으므로, 그 상수도 그대로 index.ts에서 쓴다 (여기서는 재수출하지 않음).
 
 type CascadeChild = {
   dataSourceId: string
@@ -208,26 +210,6 @@ export async function cascadeDelete(
     log.push(`${indent}🗑️ [${name}] 삭제되어 휴지통으로 이동됨`)
   } catch (err) {
     await markDeletingError(pageId, (err as Error).message)
-    throw err
-  }
-}
-
-// process-sync-queue 워커가 target: "cascade-delete" 작업을 처리할 때 호출하는 진입점.
-export async function processCascadeDeleteQueueItem(payload: { pageId: string; resumeNote?: string }): Promise<void> {
-  const log: string[] = []
-  try {
-    await cascadeDelete(payload.pageId, log, new Set<string>(), 0, payload.resumeNote)
-    console.log("cascade-delete (queue) finished:", payload.pageId, "\n", log.join("\n"))
-  } catch (err) {
-    console.error(
-      "cascade-delete (queue) failed:",
-      (err as Error).message,
-      "\nlog so far:",
-      log.join("\n"),
-    )
-    // cascadeDelete 내부에서 이미 실패한 페이지 자신의 markDeletingError를 호출했지만, 최상위
-    // 페이지 자신에서 터진 오류(예: getPage 자체 실패)는 여기서 한번 더 확실히 표시해둔다.
-    await markDeletingError(payload.pageId, (err as Error).message)
     throw err
   }
 }

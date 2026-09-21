@@ -14,37 +14,29 @@
 // 얻으면 (이미 다른 실행이 돌고 있다는 뜻) 바로 조용히 끝난다 -- 이렇게 해서 아무리 많은 요청이
 // 동시에 몰려도 실제 처리는 항상 한 번에 하나씩, 큐에 쌓인 순서대로만 진행된다.
 //
-// (2026-09-18, Phase 2) cascade-delete / create-assignment / create-learning-record /
-// sync-textbook-distribution(from-cart, from-class-carts) / sync-class-report-cache 를 HANDLERS에
-// 추가했다. 이 다섯 함수 모두 여러 Notion DB에서 동시에 웹훅이 몰릴 수 있는 함수라, 이제 sync-report-cache와
-// 동일하게 요청을 받으면 즉시 큐에 적재만 하고, 실제 무거운 처리는 이 워커가 순서대로 하나씩 담당한다.
+// (2026-09-18, Phase 2~3 / 2026-09-20, 웹훅 코드 정리 2단계) 한때 이 워커가 처리하던 target은
+// cascade-delete / create-assignment / create-learning-record / sync-textbook-distribution
+// (from-cart, from-class-carts) / sync-class-report-cache / fix-attendance / sync-exam-scope /
+// sync-registration-enroll / sync-registration-end / sync-registration-timetable / sync-registration-textbook
+// (create-individual) / sync-dashboard-link / sync-registration-class-session까지 총 15개였다.
+// 당시에는 "여러 DB에서 동시에 웹훅이 몰릴 수 있으니 전부 큐로" 라는 방향으로 일관되게 통일했었다.
 //
-// (2026-09-18, Phase 3) fix-attendance / sync-exam-scope / sync-registration-enroll /
-// sync-registration-end / sync-registration-timetable(웹훅 단건 경로만) /
-// sync-registration-textbook(create-individual 라우트만) 를 HANDLERS에 추가했다. 등록(학원) DB의
-// "남은 버튼"들도 같은 이유로 큐로 옥긴 것. sync-registration-timetable의 매일 cron 전체 스캔과
-// sync-registration-textbook의 cleanup-on-end 라우트(다른 함수가 내부적으로 동기 호출)는 의도적으로
-// 큐를 거치지 않고 계속 동기 처리된다.
-//
-// (2026-09-18 밤, 복구/재시도 도입) 지금까지는 (a) 워커가 항목 처리 도중 죽으면 그 항목이 processing
-// 상태로 영원히 멈춰있었고, (b) 처리 중 오류가 나면 재시도 없이 곳바로 failed로 확정됐다. 이제 매 실행
-// 시작 시 STALE_PROCESSING_SECONDS(15분)보다 오래 processing 상태로 멈춰있는 항목을 자동으로
-// 되돌리고(recoverStaleSyncQueueItems), 처리 중 오류가 나면 시도 횟수가 MAX_ATTEMPTS(3회) 미만일
-// 때는 pending으로 되돌려 재시도하게 한다(markSyncQueueItemFailedOrRetry). 이 재시도가 안전하려면
-// 각 target 핸들러가 "처리 전 현재 상태를 확인하고 진행"하도록 되어 있어야 한다 -- 13개 target을
-// 모두 검토했고, create-assignment(학습기록당 학습활동 1회 생성 확인 추가)와 create-learning-record
-// ("오늘 학습" 체크를 생성 전에 먼저 소비하도록 순서 변경)를 이 재시도 도입에 맞춰 함께 정리했다.
-//
-// (2026-09-20, 웹훅 코드 정리 2단계) sync-registration-class-session을 HANDLERS에 추가했다. 등록(학원)
-// DB의 다른 버튼(enroll/end/timetable/textbook)은 이미 Phase 3에서 큐로 옥겨졌는데 "수업 생성" 버튼만
-// 빠져 있었다 -- 같은 DB의 버튼인데 하나만 다른 동시성 모델을 쓰는 일관성 공백을 없옌다.
-//
-// (2026-09-21, 워커 락 리스 연장 도입) 잠금은 120초 리스로 얻고 전체 루프 예산은 100초라 평소에는 여유가
-// 있지만, target 핸들러 중 하나가 유난히 느린 외부 호출에 걸려 단일 항목 처리가 오래 걸리면 리스가
-// 루프 중간에 만료될 수 있었다. 이렇게 되면 pg_cron이 매분 깨우는 다음 실행이 새로 잠금을 얻어버려,
-// 두 워커가 동시에 같은 작업을 중복 처리할 위험이 생긴다. 이를 막기 위해 잠금을 얻은 직후부터
-// setInterval로 60초마다 renewWorkerLock(120)을 호출해 리스를 계속 연장하고, finally에서
-// clearInterval로 정리한다 (releaseWorkerLock과 마찬가지로 마지막에 반드시 정리되어야 함).
+// (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환) 그런데 돌이켜보면 이 target들 중 대부분은
+// "한 페이지에서 누른 버튼 1건"이라는 개별(단건) 트리거였고, 실제 작업도 Notion API 호출 몇 건
+// 수준으로 가벼웠다. 큐를 거치면 (a) 실제 완료 시점과 무관하게 버튼 클릭 즉시 202가 떨어져서
+// "실시간 처리 상태"가 진짜 완료 훨씬 전에 사라져 보이고, (b) 지금 이 워커(즉시 트리거 또는 최대
+// 1분 뒤 cron)가 실제로 돌 때까지 사용자가 기다려야 하는 불필요한 지연이 생겼다 (등록(학원) DB
+// "등록" 버튼이 실제로 오래 멈춰 보이는 사고로 이어짐 -- PART N-2가 이 워커에 관리자 키 인증을
+// 추가하면서, 그동안 숨어있던 wakeSyncQueueWorker의 EdgeRuntime.waitUntil 누락 버그가 겉으로
+// 드러난 사례). "개별 트리거는 즉시 동기 처리, 일괄(여러 페이지를 한 번에 대상으로 하는) 트리거만
+// 큐 사용"이라는 원칙으로 정리하면서, 아래 셋만 이 워커에 남기고 나머지는 각자의 index.ts가
+// 실제 처리 함수를 직접 호출하는 동기 방식으로 되돌렸다 (_shared/webhookIngest.ts의
+// runSyncWebhookForPage/handleSyncWebhook 참고):
+//   - create-learning-record: 트리거 DB(수업/출석)와 무관하게 항상 그 수업 세션의 로스터
+//     전체(여러 학생)를 처리하는 내부 구조라, 어느 쪽에서 호출되든 실질적으로 "일괄" 작업이다.
+//   - sync-textbook-distribution:from-class-carts: 클래스(학원) DB "교재비 생성" 버튼 —
+//     명시적으로 반 전체(여러 등록)를 대상으로 하는 일괄 버튼.
+//   - sync-class-report-cache: 클래스 단위로 여러 등록의 보고서 캐시를 한 번에 재계산하는 일괄 작업.
 
 import {
   tryAcquireWorkerLock,
@@ -60,41 +52,16 @@ import {
 } from "../_shared/syncQueue.ts"
 import { CORS_HEADERS, makePageCache } from "../_shared/reportCacheShared.ts"
 import { requireAdminKey } from "../_shared/adminShared.ts"
-import { processSyncReportCacheQueueItem } from "../_shared/syncReportCacheTarget.ts"
-import { processCascadeDeleteQueueItem } from "../_shared/cascadeDeleteTarget.ts"
-import { processCreateAssignmentQueueItem } from "../_shared/createAssignmentTarget.ts"
 import { processCreateLearningRecordQueueItem } from "../_shared/createLearningRecordTarget.ts"
-import {
-  processFromCartQueueItem,
-  processFromClassCartsQueueItem,
-} from "../_shared/textbookDistributionTarget.ts"
+import { processFromClassCartsQueueItem } from "../_shared/textbookDistributionTarget.ts"
 import { processSyncClassReportCacheQueueItem } from "../_shared/classReportCacheTarget.ts"
-import { processFixAttendanceQueueItem } from "../_shared/fixAttendanceTarget.ts"
-import { processSyncExamScopeQueueItem } from "../_shared/examScopeTarget.ts"
-import { processSyncRegistrationEnrollQueueItem } from "../_shared/registrationEnrollTarget.ts"
-import { processSyncRegistrationEndQueueItem } from "../_shared/registrationEndTarget.ts"
-import { processSyncRegistrationTimetableQueueItem } from "../_shared/registrationTimetableTarget.ts"
-import { processCreateIndividualBooksQueueItem } from "../_shared/registrationTextbookTarget.ts"
-import { processDashboardLinkQueueItem } from "../_shared/dashboardLinkTarget.ts"
-import { processSyncRegistrationClassSessionQueueItem } from "../_shared/registrationClassSessionTarget.ts"
 
-// target별 실제 처리 함수. 앞으로 다른 웹훅 함수들도 같은 큐 패턴으로 옥기면 여기에 추가한다.
+// target별 실제 처리 함수. 앞으로 다른 "일괄(bulk)" 웹훅 함수가 추가되면 여기에 추가한다 (개별
+// 트리거 버튼은 큐를 쓰지 않는다 -- 위 2026-09-22 주석 참고).
 const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Promise<any>) => Promise<void>> = {
-  "sync-report-cache": processSyncReportCacheQueueItem,
-  "cascade-delete": processCascadeDeleteQueueItem,
-  "create-assignment": processCreateAssignmentQueueItem,
   "create-learning-record": processCreateLearningRecordQueueItem,
-  "sync-textbook-distribution:from-cart": processFromCartQueueItem,
   "sync-textbook-distribution:from-class-carts": processFromClassCartsQueueItem,
   "sync-class-report-cache": processSyncClassReportCacheQueueItem,
-  "fix-attendance": processFixAttendanceQueueItem,
-  "sync-exam-scope": processSyncExamScopeQueueItem,
-  "sync-registration-enroll": processSyncRegistrationEnrollQueueItem,
-  "sync-registration-end": processSyncRegistrationEndQueueItem,
-  "sync-registration-timetable": processSyncRegistrationTimetableQueueItem,
-  "sync-registration-textbook:create-individual": processCreateIndividualBooksQueueItem,
-  "sync-dashboard-link": processDashboardLinkQueueItem,
-  "sync-registration-class-session": processSyncRegistrationClassSessionQueueItem,
 }
 
 // Edge Function 자체의 실행 시간 한도보다 여유 있게 짧은 시간 예산 안에서만 계속 처리하고, 남으면
@@ -117,9 +84,8 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS })
 
   // (2026-09-21, 인증 정책 감사 후속) 이 함수는 지금까지 인증이 전혀 없어서, URL만 알면 누구나
-  // 큐 처리를 강제로 트리거할 수 있었다. 호출자는 (a) 각 웹훅 함수의 wakeSyncQueueWorker
-  // (x-admin-key를 함께 보내도록 이미 수정함), (b) pg_cron의 매분 안전망(호출 SQL도 헤더를
-  // 추가한 마이그레이션으로 갱신함) 두 곳뿐이라 관리자 키 인증을 그대로 적용한다.
+  // 큐 처리를 강제로 트리거할 수 있었다. 호출자는 (a) 남은 세 target(create-learning-record 등)의
+  // wakeSyncQueueWorker, (b) pg_cron의 매분 안전망 두 곳뿐이라 관리자 키 인증을 그대로 적용한다.
   const authError = await requireAdminKey(req)
   if (authError) return authError
 

@@ -11,7 +11,7 @@
 //   - 종료일이 입력/수정되면 즉시(웹훅) 종료일 이후 날짜의 출석 페이지를 삭제하고,
 //     종료일 이후 날짜의 수업 페이지들에서도 이 등록을 roster에서 제거한다.
 //     (종료일이 미래여도 즉시 실행 — 아직 남은 정상 수강 기간의 수업엔 영향 없음.)
-//   - 수강상태가 실제로 "수강 종료"로 바뀌 뒤에는(매일 cron 스캔 포함, 상태 계산은 종료일 지남 여부로 자동 결정)
+//   - 수강상태가 실제로 "수강 종료"로 바뀐 뒤에는(매일 cron 스캔 포함, 상태 계산은 종료일 지남 여부로 자동 결정)
 //     시간표 관계 전체를 해제해서, 시간표에는 현재 수강 중인 등록만 남도록 한다.
 //
 // 호출 방식:
@@ -19,37 +19,65 @@
 //   - body 없이 호출하면 전체 스캔: 연결 누락분 보정 + 종료된 등록 해제까지 한 번에 처리 (매일 cron용).
 //
 // (2026-09-18, 큐 기반 순차 처리 도입, Phase 3) 웹훅 단건(pageId 있는) 경로만 큐로 옮겨서
-// process-sync-queue 워커가 순서대로 처리하도록 바꿔다 (_shared/registrationTimetableTarget.ts).
-// 매일 cron 전체 스캔 경로(body 없음)는 버튼이 기다리는 응답이 아니므로 의도적으로 그대로 동기 유지한다.
+// process-sync-queue 워커가 순서대로 처리하도록 바꿔다. 매일 cron 전체 스캔 경로(body 없음)는
+// 버튼이 기다리는 응답이 아니므로 의도적으로 그대로 동기 유지한다.
 //
-// (2026-09-20, 웹훅 코드 정리 3단계) pageId가 있는 웹훅 단건 경로의 "잠금 확인 -> 처리중 표시 ->
-// 큐 적재 -> 202 응답" 부분을 _shared/webhookIngest.ts의 runLockedQueueWebhookForPage로 옮겼다.
-// cron 전체 스캔 분기(pageId 없음)는 이 함수 고유의 로직이라 그대로 남긴다.
+// (2026-09-20, 웹훅 코드 정리 3단계) pageId가 있는 웹훅 단건 경로의 뼈대를
+// _shared/webhookIngest.ts의 공용 헬퍼로 옮겼다. cron 전체 스캔 분기(pageId 없음)는 이 함수
+// 고유의 로직이라 그대로 남긴다.
 //
 // (2026-09-21, PART N-2) 이 함수를 호출하던 유일한 자동화("클래스 속성 편집 웹훅")는 2026-09-10에
 // 이미 목적을 잃어(자동 연결 로직이 sync-registration-enroll로 옮겨짐) 곧 삭제될 예정이라, 실제로
-// 깨질 수 있는 살아있는 호출자가 없다. runLockedQueueWebhookForPage는 req를 받지 않아
-// requireAdminKey 옵션을 쓸 수 없으므로, 이 파일 진입부에서 직접 관리자 키를 확인한다 (pageId 단건
-// 경로와 cron 전체 스캔 경로 모두 보호 — 이 저장소에는 스캔 경로를 호출하는 실제 cron이 없다).
+// 깨질 수 있는 살아있는 호출자가 없다. runLockedQueueWebhookForPage/runSyncWebhookForPage는 req를
+// 받지 않아 requireAdminKey 옵션을 쓸 수 없으므로, 이 파일 진입부에서 직접 관리자 키를 확인한다
+// (pageId 단건 경로와 cron 전체 스캔 경로 모두 보호 — 이 저장소에는 스캔 경로를 호출하는 실제
+// cron이 없다).
+//
+// (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환) pageId가 있는 단건 경로를 큐 기반에서
+// 동기 처리(runSyncWebhookForPage)로 되돌렸다 -- 살아있는 호출자가 없어 실질적인 영향은 없지만,
+// 다른 등록 버튼들과 구조를 통일해뒀다. cron 전체 스캔 경로는 그대로 동기 유지한다(변경 없음).
 
 import {
   PROP_STATUS,
   PROP_TIMETABLE,
   PROP_SYNC_TIMETABLE_RUNNING,
 } from "../_shared/constants.ts"
-import { extractPageId } from "../_shared/notionClient.ts"
+import { extractPageId, getPage } from "../_shared/notionClient.ts"
 import {
   setTimetableSyncStatus,
   restoreAllPendingClassSessions,
   cleanupTextbooksForEndedOrInvalidRegistrations,
   cleanupAttendanceForAllEndedRegistrations,
   disconnectTimetableForEndedRegistrations,
+  handleEndDateChange,
+  restoreClassSessionsAndAttendance,
+  disconnectTimetableIfEndedSingle,
+  cleanupTextbooksIfNeededSingle,
 } from "../_shared/registrationTimetableTarget.ts"
-import { runLockedQueueWebhookForPage } from "../_shared/webhookIngest.ts"
+import { runSyncWebhookForPage } from "../_shared/webhookIngest.ts"
 import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
 
 void PROP_STATUS
 void PROP_TIMETABLE
+
+async function processPage(pageId: string): Promise<void> {
+  const log: string[] = []
+  try {
+    await handleEndDateChange(pageId, log)
+
+    // 종료일 연장/삭제로 등록이 다시 유효해졌을 수 있으니, 최신 상태로 다시 읽어서 복원 처리한다.
+    const refreshedReg = await getPage(pageId)
+    // 복원/종료확정 시 시간표 해제/교재 정리는 각각 서로 배타적인 조건(수강상태)을 보고 스스로
+    // 건너뛰니까 동시에 실행해도 안전하다.
+    await Promise.all([
+      restoreClassSessionsAndAttendance(refreshedReg, log),
+      disconnectTimetableIfEndedSingle(refreshedReg, log),
+      cleanupTextbooksIfNeededSingle(refreshedReg, log),
+    ])
+  } finally {
+    console.log("[sync-registration-timetable] finished:", pageId, "\n", log.join("\n"))
+  }
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
@@ -79,11 +107,11 @@ Deno.serve(async (req: Request) => {
     console.log("[sync-registration-timetable] extracted pageId:", pageId)
 
     if (pageId) {
-      return await runLockedQueueWebhookForPage(pageId, {
+      return await runSyncWebhookForPage(pageId, {
         functionName: "sync-registration-timetable",
         lockProp: PROP_SYNC_TIMETABLE_RUNNING,
-        target: "sync-registration-timetable",
         setStatus: setTimetableSyncStatus,
+        process: processPage,
       })
     }
 

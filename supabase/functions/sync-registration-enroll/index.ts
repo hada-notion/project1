@@ -19,17 +19,32 @@
 //
 // (2026-09-21, PART N-2) 등록(학원) DB "등록" 버튼 자동화에 x-admin-key 헤더를 미리 추가해둔 뒤,
 // requireAdminKey: true로 인증을 켰다 (다른 관리자 함수들과 동일한 패턴).
+//
+// (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환) "등록" 버튼은 등록 페이지 1건만 대상으로
+// 하는 개별 트리거이고 실제 작업(등록일/종료일/시간표 업데이트)도 가벼워서, sync_queue를 거칠
+// 필요가 없다고 판단했다. handleLockedQueueWebhook(큐 적재) 대신 handleSyncWebhook을 써서,
+// process-sync-queue 워커를 기다리지 않고 버튼 클릭과 동시에 끝나도록 바꿨다. target 이름은
+// 더 이상 쓰이지 않으므로 넘기지 않는다.
 
 import { PROP_SYNC_ENROLL_RUNNING } from "../_shared/constants.ts"
-import { handleLockedQueueWebhook } from "../_shared/webhookIngest.ts"
-import { setEnrollSyncStatus } from "../_shared/registrationEnrollTarget.ts"
+import { handleSyncWebhook } from "../_shared/webhookIngest.ts"
+import { setEnrollSyncStatus, processEnrollForRegistration } from "../_shared/registrationEnrollTarget.ts"
+
+async function processPage(pageId: string): Promise<void> {
+	const log: string[] = []
+	try {
+		await processEnrollForRegistration(pageId, log)
+	} finally {
+		console.log("[sync-registration-enroll] finished:", pageId, "\n", log.join("\n"))
+	}
+}
 
 Deno.serve((req: Request) =>
-	handleLockedQueueWebhook(req, {
+	handleSyncWebhook(req, {
 		functionName: "sync-registration-enroll",
 		lockProp: PROP_SYNC_ENROLL_RUNNING,
-		target: "sync-registration-enroll",
 		setStatus: setEnrollSyncStatus,
+		process: processPage,
 		requireAdminKey: true,
 	}),
 )

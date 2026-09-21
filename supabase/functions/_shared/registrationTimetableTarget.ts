@@ -1,10 +1,13 @@
 // _shared/registrationTimetableTarget.ts
 //
 // sync-registration-timetable이 처리하는 실제 등록일/종료일 후처리 로직을 별도 파일로 분리했다
-// (2026-09-18, 큐 기반 순차 처리 도입, Phase 3). 원래 index.ts 안에 있던 코드를 그대로 옮긴 것이다.
-// 웹훅 body 파싱과 매일 cron 전체 스캔 진입점(Deno.serve)은 index.ts에 그대로 둔다. 전체 스캔이
-// 호출하는 개별 처리 함수(restoreClassSessionsAndAttendance 등)는 웹훅 단건 큐 처리와 공유하므로
-// 여기 함께 둔다.
+// (2026-09-18, 큐 기반 순차 처리 도입, Phase 3). 웹훅 body 파싱과 매일 cron 전체 스캔 진입점
+// (Deno.serve)은 index.ts에 그대로 둔다. 전체 스캔이 호출하는 개별 처리 함수(restoreClassSessionsAndAttendance
+// 등)는 웹훅 단건 처리와 공유하므로 여기 함께 둔다.
+//
+// (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환) processSyncRegistrationTimetableQueueItem
+// (process-sync-queue 전용 진입점)은 제거했다. index.ts가 이 파일이 내보내는 개별 함수들을 직접
+// 조합해서 호출한다 (원래 그 진입점이 하던 조합과 동일).
 
 import {
   DS_REGISTRATION,
@@ -249,36 +252,4 @@ export async function cleanupTextbooksForEndedOrInvalidRegistrations(log: string
     const regName = titleText(reg, PROP_TITLE)
     return cleanupTextbooksForRegistration(reg.id, regName, log)
   })
-}
-
-// process-sync-queue 워커가 target: "sync-registration-timetable" 작업을 처리할 때 호출하는 진입점.
-// 기존 웹훅 단건(pageId) 경로가 runInBackground로 하던 일을 그대로 옮긴 것이다.
-export async function processSyncRegistrationTimetableQueueItem(payload: { pageId: string }): Promise<void> {
-  const bgLog: string[] = []
-  try {
-    await handleEndDateChange(payload.pageId, bgLog)
-
-    // 종료일 연장/삭제로 등록이 다시 유효해졌을 수 있으니, 최신 상태로 다시 읽어서 복원 처리한다.
-    const refreshedReg = await getPage(payload.pageId)
-    // 복원/종료확정 시 시간표 해제/교재 정리는 각각 서로 배타적인 조건(수강상태)을 보고 스스로 건너뛰니까 동시에 실행해도 안전하다.
-    await Promise.all([
-      restoreClassSessionsAndAttendance(refreshedReg, bgLog),
-      disconnectTimetableIfEndedSingle(refreshedReg, bgLog),
-      cleanupTextbooksIfNeededSingle(refreshedReg, bgLog),
-    ])
-
-    await setTimetableSyncStatus(payload.pageId, "완료")
-    console.log("[sync-registration-timetable] (queue) finished:", payload.pageId, "\n", bgLog.join("\n"))
-  } catch (err) {
-    console.error(
-      "[sync-registration-timetable] (queue) ERROR:",
-      (err as Error).message,
-      "\nlog so far:",
-      bgLog.join("\n"),
-      "\nstack:",
-      (err as Error).stack,
-    )
-    await setTimetableSyncStatus(payload.pageId, "오류", (err as Error).message)
-    throw err
-  }
 }

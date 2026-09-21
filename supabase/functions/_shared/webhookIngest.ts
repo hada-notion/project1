@@ -24,6 +24,18 @@
 //
 // [2026-09-21, PART N-2] handleLockedBackgroundWebhook(generate-report/generate-tuition이 사용)에도
 // 같은 이유로 동일한 opt-in requireAdminKey 옵션을 추가했다. 이 옵션을 켜지 않은 기존 동작은 그대로다.
+//
+// [2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환] "개별(individual) 트리거 버튼은 즉시 동기
+// 처리, 일괄(bulk) 트리거만 큐 사용"이라는 원칙에 따라, 등록/시험범위 등 여러 DB의 단건 버튼 웹훅을
+// sync_queue에 적재하지 않고 바로 처리하도록 되돌린다. cron(process-sync-queue)이 큐를 매분 도는
+// 구조 자체는 버튼 클릭이 트리거하는 작업과 무관한데도, 그동안 모든 버튼이 그 큐를 거치도록
+// 되어 있어서 버튼 클릭 후 완료까지 지연/불투명함이 생겼다 (등록(학원) DB "등록" 버튼이 대표적
+// 사례). runLockedQueueWebhookForPage/handleLockedQueueWebhook과 거의 동일한 뼈대이지만, sync_queue에
+// 적재하는 대신 opts.process(pageId)를 바로 await하고, 그 결과에 따라 "완료"/"오류"를 즉시 반영한
+// 뒤 실제 동기 응답(200/500)을 돌려준다. create-learning-record(반 전체 roster 처리라 트리거가
+// 어느 DB든 항상 "일괄" 성격)와 sync-textbook-distribution:from-class-carts/sync-class-report-cache
+// (명시적으로 여러 페이지를 대상으로 하는 버튼)는 여전히 큐를 그대로 쓴다 — process-sync-queue/index.ts
+// 상단 주석 참고.
 
 import { getPage, extractPageId, checkboxValue } from "./notionClient.ts"
 import { runInBackground, respondAccepted } from "./backgroundTask.ts"
@@ -68,6 +80,9 @@ export type LockedQueueWebhookOptions = {
 // pageId를 이미 알고 있는 상태에서: 잠금 확인 -> "처리중" 표시 -> 큐 적재 -> 202 응답.
 // 처리 중 예외가 나면 setStatus(pageId, "오류", message)를 호출하고 500을 반환한다 (기존 각 함수의
 // catch 블록과 동일한 동작).
+//
+// (2026-09-22, PART N-4) 이제 남아있는 호출자는 sync-textbook-distribution의 from-class-carts처럼
+// 명시적으로 "일괄" 성격인 버튼뿐이다. 개별 버튼들은 아래 runSyncWebhookForPage로 옮겨졌다.
 export async function runLockedQueueWebhookForPage(
   pageId: string,
   opts: LockedQueueWebhookOptions,
@@ -125,6 +140,81 @@ export async function handleLockedQueueWebhook(
   }
 
   return runLockedQueueWebhookForPage(pageId, opts)
+}
+
+// (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환) 위 runLockedQueueWebhookForPage와 뼈대는
+// 똑같지만, sync_queue에 적재하지 않고 opts.process(pageId)를 그 자리에서 바로 await한다. 성공하면
+// "완료", 실패하면 "오류"를 즉시 반영하고, 진짜 최종 결과(200/500)를 그 자리에서 돌려준다 -- Notion의
+// "웹훅 보내기" 버튼 액션은 이 응답을 동기적으로 기다리므로, 사용자는 버튼을 누른 시점에 바로 결과를
+// (성공/실패 모두) 확인할 수 있다.
+export type SyncWebhookOptions = {
+  // 로그 접두사로 쓰는 함수 이름 (예: "sync-registration-enroll").
+  functionName: string
+  // 이 속성(체크박스)이 이미 true면 재클릭으로 보고 즉시 already_processing을 반환한다.
+  lockProp: string
+  // "처리중"/"완료"/"오류" 표시에 쓰는 상태 setter. 각 DB/함수 전용 setter를 그대로 넘기면 된다.
+  setStatus: SetSyncStatus
+  // 실제 처리 로직. 예외를 던지면 자동으로 "오류" 상태 + 500 응답으로 이어진다.
+  process: (pageId: string) => Promise<void>
+  // true면 x-admin-key 헤더(또는 body.adminKey)가 현재 유효한 관리자 키와 일치하지 않으면
+  // 401을 반환하고 처리를 중단한다.
+  requireAdminKey?: boolean
+}
+
+export async function runSyncWebhookForPage(
+  pageId: string,
+  opts: SyncWebhookOptions,
+): Promise<Response> {
+  try {
+    const pageForLock = await getPage(pageId)
+    if (checkboxValue(pageForLock, opts.lockProp)) {
+      return jsonResponse({ ok: true, message: "already_processing", pageId }, 200)
+    }
+
+    await opts.setStatus(pageId, "처리중")
+    await opts.process(pageId)
+    await opts.setStatus(pageId, "완료")
+
+    return jsonResponse({ ok: true, pageId }, 200)
+  } catch (err) {
+    console.error(`[${opts.functionName}] ERROR:`, (err as Error).message, (err as Error).stack)
+    if (pageId) {
+      await opts.setStatus(pageId, "오류", (err as Error).message)
+    }
+    return jsonResponse({ ok: false, error: (err as Error).message }, 500)
+  }
+}
+
+// POST 확인 + body 파싱 + pageId 추출까지 포함한 완전한 버전 (handleLockedQueueWebhook의 동기 버전).
+export async function handleSyncWebhook(
+  req: Request,
+  opts: SyncWebhookOptions,
+): Promise<Response> {
+  if (req.method !== "POST") {
+    return new Response("Use POST", { status: 405 })
+  }
+  let body: Record<string, unknown> = {}
+  try {
+    body = await req.json()
+  } catch {
+    body = {}
+  }
+  console.log(`[${opts.functionName}] received body:`, JSON.stringify(body))
+
+  if (opts.requireAdminKey) {
+    const adminKey = resolveAdminKeyFromRequest(req, body)
+    const currentAdminKey = await getCurrentAdminKey()
+    if (!adminKey || adminKey !== currentAdminKey) {
+      return jsonResponse({ error: "unauthorized" }, 401)
+    }
+  }
+
+  const pageId = extractPageId(body)
+  if (!pageId) {
+    return jsonResponse({ error: "pageId를 찾을 수 없음" }, 400)
+  }
+
+  return runSyncWebhookForPage(pageId, opts)
 }
 
 // (2026-09-20, 웹훅 코드 정리 6단계) generate-report/generate-tuition처럼 큐를 거치지 않고 즉시

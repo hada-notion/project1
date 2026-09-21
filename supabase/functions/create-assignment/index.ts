@@ -1,5 +1,12 @@
-// create-assignment v5
+// create-assignment v6
 // Trigger: 학습기록(학원) DB의 "출제" 버튼 웹훅
+//
+// v6 변경 사항 (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환):
+//   - "출제" 버튼은 학습기록 1건만 대상으로 하는 개별 트리거이고, 실제 작업(대상 등록마다 학습활동
+//     1건 생성)도 sync_queue를 거칠 만큼 무겁지 않다고 판단해 큐 적재를 없앴다. 이제 잠금 확인 ->
+//     "처리중" 표시 이후 finishCreateAssignment를 바로 await하고, 그 결과(성공/실패)를 그 자리에서
+//     응답한다. 여러 학습기록에서 동시에 "출제"가 눌려도 각 요청이 자신의 레코드만 건드리므로
+//     서로 겹칠 일이 없다 (Notion API 요청은 레코드별로 독립적).
 //
 // v5 변경 사항 (2026-09-21, PART N: 관리자 키 인증 추가):
 //   - 이 함수를 호출하는 "출제" 버튼 웹훅에 x-admin-key 커스텀 헤더를 미리 추가해둔 뒤, 함수
@@ -17,10 +24,7 @@
 //
 // v3 변경 사항 (2026-09-18, 큐 기반 순차 처리 도입, Phase 2):
 //   - 실제 학습활동 생성 로직(finishCreateAssignment 등)을 _shared/createAssignmentTarget.ts로
-//     옮겼다. 이제 버튼 클릭 시 이 함수는 웹훅 payload 파싱 + "이미 처리중" 락 확인 + "출제 처리중"
-//     체크박스 표시까지만 동기적으로 하고, 실제 무거운 작업은 sync_queue에 한 건 적재한 뒤
-//     process-sync-queue 워커가 순서대로(다른 웹훅 요청과 뒤섞이지 않고) 처리하게 한다.
-//     여러 학습기록에서 동시에 "출제" 버튼이 눌려도 Notion API 요청이 서로 겹치지 않는다.
+//     옮겼다. (v6에서 큐 적재는 다시 제거했지만, 로직을 별도 파일로 분리한 구조는 그대로 유지한다.)
 //
 // v2에서 추가됨: "출제 처리중" 체크박스를 처리 중 락(lock)으로 사용한다. 같은 학습기록에 대해
 // 버튼이 짧은 시간 안에 여러 번(더블클릭, 웹훅 타임아웃 후 재시도 등) 눌려도, 이미 처리 중인
@@ -32,8 +36,6 @@
 // - 평가: 마감/점수 관련 필드는 비워두고 선생님이 학습활동 페이지에서 나중에 직접 입력한다.
 
 import { getPage, relIds as relIdsFromProp, extractPageId } from "../_shared/notionClient.ts"
-import { respondAccepted } from "../_shared/backgroundTask.ts"
-import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
 import {
 	CATEGORY_ASSIGNMENT,
@@ -44,6 +46,7 @@ import {
 	setAssignmentGenRunning,
 	setAssignmentGenDone,
 	setAssignmentGenError,
+	finishCreateAssignment,
 } from "../_shared/createAssignmentTarget.ts"
 
 type JsonRecord = Record<string, unknown>
@@ -124,13 +127,13 @@ async function handleRequest(req: Request): Promise<Response> {
 			)
 		}
 
-		// Notion의 "웹훅 보내기" 버튼 액션은 이 응답을 동기적으로 기다린다. 실제 생성 작업은
-		// sync_queue에 적재해 process-sync-queue 워커가 순서대로 처리하게 하고, 이 함수는 즉시
-		// 202로 응답한다. 진행 상황은 학습기록의 "출제 처리중"(이미 켜져 있음) 체크박스로 확인할 수 있다.
-		await enqueueSync("create-assignment", { recordId, category, registrationIds })
-		wakeSyncQueueWorker()
+		// (2026-09-22, PART N-4) 개별 트리거라 큐를 거치지 않고 바로 처리한다. Notion의 "웹훅
+		// 보내기" 버튼 액션은 이 응답을 동기적으로 기다리므로, 완료(또는 실패) 결과를 그 자리에서
+		// 그대로 돌려준다. 진행 상황은 학습기록의 "출제 처리중"(이미 켜져 있음) 체크박스로도
+		// 확인할 수 있다.
+		await finishCreateAssignment(recordId, category, registrationIds)
 
-		return respondAccepted({ recordId, category })
+		return new Response(JSON.stringify({ ok: true, recordId, category }), { status: 200 })
 	} catch (err) {
 		console.error("create-assignment failed", err)
 		await setAssignmentGenError(recordId, (err as Error)?.message ?? String(err))

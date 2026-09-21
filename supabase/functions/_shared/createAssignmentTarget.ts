@@ -8,8 +8,14 @@
 // 끝나야 한다. 새로운 학습활동이 필요하면 학습기록을 새로 만들어서 다시 출제하는 방식이 맞는 흐름이고,
 // 같은 학습기록으로 또 출제하는 것은 의도된 동작이 아니다. 그래서 생성 전에 이미 이 학습기록+등록
 // 조합으로 만들어진 학습활동이 있는지 확인해서, 있으면 새로 만들지 않고 그 페이지를 그대로 재사용한다.
-// 이 확인은 process-sync-queue의 재시도(최대 3회)가 이 함수를 다시 호출해도 중복 생성되지 않도록
-// 만드는 안전장치이기도 하다.
+// 이 확인은 (2026-09-22 이전) process-sync-queue의 재시도(최대 3회)가 이 함수를 다시 호출해도
+// 중복 생성되지 않도록 만드는 안전장치이기도 했다.
+//
+// (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환) "출제" 버튼은 학습기록 1건만 대상으로 하는
+// 개별 트리거라 sync_queue를 거칠 필요가 없다고 판단했다. process-sync-queue 전용 진입점
+// processCreateAssignmentQueueItem은 제거했고, index.ts가 finishCreateAssignment를 직접 호출한다.
+// (재시도가 없어졌지만, 기존에도 재시도는 최대 3회뿐이었고 실패 시 "마지막 오류"에 안내가 남으므로
+// 사용자가 버튼을 다시 누르면 된다 -- 위 중복 방지 확인 덕분에 다시 눌러도 안전하다.)
 
 import {
 	mapWithConcurrency,
@@ -155,7 +161,7 @@ async function findExistingActivity(recordId: string, registrationId: string): P
 	return (results[0]?.id as string) ?? null
 }
 
-// 등록/학습활동 생성 등 시간이 걸리는 실제 작업. process-sync-queue 워커가 호출한다.
+// 등록/학습활동 생성 등 실제 작업. index.ts가 직접 호출한다.
 export async function finishCreateAssignment(
 	recordId: string,
 	category: string,
@@ -177,8 +183,8 @@ export async function finishCreateAssignment(
 		}
 
 		const created = await mapWithConcurrency(registrationIds, 3, async (registrationId) => {
-			// 학습기록당 학습활동은 한 번만 생성되어야 한다 (재시도로 이 함수가 다시 호출돼도 중복
-			// 생성되지 않도록, 이미 만들어진 게 있으면 새로 만들지 않고 그대로 재사용한다).
+			// 학습기록당 학습활동은 한 번만 생성되어야 한다 (버튼을 다시 눌러도 이미 만들어진 게
+			// 있으면 새로 만들지 않고 그대로 재사용한다).
 			const existingActivityId = await findExistingActivity(recordId, registrationId)
 			if (existingActivityId) {
 				return {
@@ -241,20 +247,5 @@ export async function finishCreateAssignment(
 		})
 
 		await setAssignmentGenDone(recordId)
-		console.log("create-assignment (queue) finished", recordId, category, created)
-}
-
-// process-sync-queue 워커가 target: "create-assignment" 작업을 처리할 때 호출하는 진입점.
-export async function processCreateAssignmentQueueItem(payload: {
-	recordId: string
-	category: string
-	registrationIds: string[]
-}): Promise<void> {
-	try {
-		await finishCreateAssignment(payload.recordId, payload.category, payload.registrationIds)
-	} catch (err) {
-		console.error("create-assignment (queue) failed", err)
-		await setAssignmentGenError(payload.recordId, (err as Error)?.message ?? String(err))
-		throw err
-	}
+		console.log("create-assignment finished", recordId, category, created)
 }
