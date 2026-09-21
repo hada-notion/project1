@@ -17,10 +17,25 @@
 // 목록에서 조용히 사라진다 (실제로 "고등 과외" 클래스에서 템플릿 8개 중 4개가 이렇게 누락되어 개별
 // 진도 교재 인스턴스가 일부만 생성되는 문제로 나타났다). 클래스 페이지를 거치지 않고, 진도교재
 // 데이터소스를 "클래스 = 이 클래스"로 직접 쿼리(queryAllPages, 커서 끝까지 따라감)하도록 고쳤다.
+//
+// (2026-09-22, PART N-8: 클래스 "교재 생성" 버튼 라우트 누락 수정) 클래스(학원) DB "교재 생성" 버튼
+// 자동화가 실제로는 sync-registration-textbook의 create-class 라우트를 호출하고 있었는데, 이
+// 파일과 index.ts에는 create-individual/cleanup-on-end 두 라우트만 있었고 create-class는 애초에
+// 구현된 적이 없었다 (항상 404 "알 수 없는 경로: create-class" — Supabase 로그로 실제 운영 클래스
+// "고1 A반"에서도 확인됨, 화면에는 그냥 아무 반응 없음으로만 보였다). 클래스에 연결된 활성(🟢 수강
+// 중) 등록 전체에 대해 createIndividualBooksForRegistration을 실행하는 createBooksForClass를
+// 추가했다. generate-report/generate-tuition(클래스 단위 일괄 버튼)과 동일하게 "즉시 202 응답 +
+// EdgeRuntime.waitUntil 백그라운드 처리" 방식을 쓰되, 별도 헬퍼 없이 이미 create-individual이 쓰는
+// runSyncWebhookForPage를 그대로 재사용한다 (pageId 자리에 classId를 넘겨도 동작은 동일 — 잠금/상태
+// 속성만 클래스 DB의 "교재 생성중"/"마지막 오류"로 바뀔 뿐이다). 학생 수가 크지 않은 일반적인 클래스
+// 규모(수십 명 이하)에서는 큐 없이도 안전하다는 점은 이미 generate-report/generate-tuition으로
+// 검증된 전제를 그대로 따른다.
 
 import {
 	PROP_CLASS,
 	PROP_SYNC_TEXTBOOK_RUNNING,
+	DS_REGISTRATION,
+	PROP_STATUS,
 } from "./constants.ts"
 import {
 	getPage,
@@ -33,15 +48,22 @@ import {
 	selectName,
 	statusName,
 	titleText,
+	formulaString,
 	mapWithConcurrency,
 } from "./notionClient.ts"
 import { makeSyncStatusSetter } from "./registrationSync.ts"
+import { makeClassStatusSetter } from "./generateShared.ts"
 
 // (2026-09-21: 예전에는 여기서 다른 4개 sync-registration-* 함수와 다르게 "다른 처리중 플래그"
 // 목록에 PROP_SYNC_ENROLL_RUNNING이 빠져 있었다. registrationSync.ts에서 그 목록 자체(otherFlagProps)를
 // 완전히 제거했으니 — 애초에 setCombinedSyncStatus가 그 값을 전혀 읽지 않는 죽은 인자였다 —
 // 이 불일치도 함께 사라졌다. constants.ts 10-1 5번 참고.)
 export const setTextbookSyncStatus = makeSyncStatusSetter(PROP_SYNC_TEXTBOOK_RUNNING)
+
+// (2026-09-22, PART N-8) 클래스(학원) DB "교재 생성" 버튼 전용 잠금/상태. 클래스 DB의 "마지막 오류"는
+// 수강료 생성/보고서 생성 등과 공유하는 필드라 makeClassStatusSetter(generateShared.ts)를 그대로 쓴다.
+export const PROP_CLASS_TEXTBOOK_RUNNING = "교재 생성중"
+export const setClassTextbookStatus = makeClassStatusSetter(PROP_CLASS_TEXTBOOK_RUNNING)
 
 const DATA_SOURCE_PROGRESS_BOOK = Deno.env.get("DATA_SOURCE_PROGRESS_BOOK_ID")! // 진도교재(학원) DB
 
@@ -56,6 +78,10 @@ const PROP_REGISTRATION_ON_BOOK = "등록" // relation
 const PROP_LEARNING_RECORD = "학습기록" // relation
 const PROP_REGISTRATION_BOOKS = "진도교재" // 등록 DB 쪽 relation
 const STATUS_NEXT = "다음 교재"
+
+// 클래스(학원) DB "교재 생성" 버튼 대상 판정 기준. 보고서 생성/수강료 생성/교재비 생성 등 다른
+// 클래스 단위 일괄 버튼과 동일하게 "현재 🟢 수강 중"인 등록만 대상으로 한다.
+const STATUS_ACTIVE = "🟢 수강 중"
 
 // 반별교재(템플릿) 하나를 보고, 이 등록에 연결할 개별교재 인스턴스를 확보한다.
 // - 그룹 진도: 반 전체가 인스턴스 "하나"를 공유한다. 이미 이 템플릿의 인스턴스가 있으면
@@ -155,6 +181,27 @@ export async function createIndividualBooksForRegistration(registrationId: strin
 	}
 
 	return { results }
+}
+
+// 클래스에 연결된 등록 중 현재 "🟢 수강 중"인 등록만 반환한다. (PART N-8) 보고서 생성/수강료 생성/
+// 교재비 생성처럼 "학생수" 수식과 같은 기준으로 대상을 정한다 -- 종료된 학생은 새로 교재를 만들
+// 필요가 없기 때문이다.
+async function getActiveRegistrationsForClassNow(classId: string): Promise<any[]> {
+	const registrations = await queryAllPages(DS_REGISTRATION, {
+		property: PROP_CLASS,
+		relation: { contains: classId },
+	})
+	return registrations.filter((reg: any) => formulaString(reg, PROP_STATUS) === STATUS_ACTIVE)
+}
+
+// index.ts의 create-class 라우트가 직접 호출하는 진입점 (2026-09-22, PART N-8). 클래스(학원) DB
+// "교재 생성" 버튼 -- 클래스에서 수강 중인 등록 전체에 대해 createIndividualBooksForRegistration을
+// 실행한다. createIndividualBooksForRegistration은 이미 (등록+템플릿) 조합 단위로 멱등이므로,
+// 이 버튼을 여러 번 누러거나 나중에 클래스에 템플릿이 추가된 뒤 다시 눌러도 중복 생성되지 않는다.
+export async function createBooksForClass(classId: string): Promise<{ processed: number }> {
+	const registrations = await getActiveRegistrationsForClassNow(classId)
+	await mapWithConcurrency(registrations, 4, (reg: any) => createIndividualBooksForRegistration(reg.id))
+	return { processed: registrations.length }
 }
 
 // 종료 처리 시 교재 정리: "다음 교재" 상태 + 학습기록 없음 인 인스턴스만 정리 대상.

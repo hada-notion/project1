@@ -25,6 +25,7 @@
 //
 // 라우트:
 //   POST /sync-registration-textbook/create-individual  <- 등록 DB "개별교재 생성" 버튼
+//   POST /sync-registration-textbook/create-class        <- 클래스(학원) DB "교재 생성" 버튼
 //   POST /sync-registration-textbook/cleanup-on-end      <- sync-registration-timetable이 등록
 //                                                            종료 확정 시 내부적으로 호출
 //
@@ -48,6 +49,17 @@
 // 대상으로 하는 개별 트리거라 sync_queue를 거칠 필요가 없다. runLockedQueueWebhookForPage(큐 적재)
 // 대신 runSyncWebhookForPage를 써서 버튼 클릭과 동시에 끝나도록 한다. cleanup-on-end 라우트는
 // 원래부터 동기 처리였으므로 그대로 둔다.
+//
+// (2026-09-22, PART N-8: 클래스 "교재 생성" 버튼 라우트 누락 수정) 클래스(학원) DB "교재 생성" 버튼
+// 자동화가 실제로 이 함수의 create-class 라우트를 호출하고 있었는데, 그런 라우트가 애초에 구현된
+// 적이 없어서 항상 404("알 수 없는 경로: create-class")로 끝났다 (Supabase 로그로 실제 운영 클래스
+// "고1 A반"에서도 확인됨 - 사용자 화면에는 그냥 아무 반응 없음으로만 보였다). create-class 라우트를
+// 추가한다. 클래스 페이지 자신이 클릭 대상이라 pageId 자리에 classId가 그대로 들어오고,
+// createBooksForClass(_shared/registrationTextbookTarget.ts)가 클래스의 활성 등록 전체에 대해
+// createIndividualBooksForRegistration을 실행한다. generate-report/generate-tuition과 동일하게
+// "즉시 202 + 백그라운드 처리"면 충분하다고 보고(그 두 함수도 클래스 단위 일괄 버튼이지만 큐를 쓰지
+// 않는다), create-individual과 똑같이 runSyncWebhookForPage를 그대로 재사용한다 -- 잠금/상태 속성만
+// setClassTextbookStatus(클래스 DB의 "교재 생성중"/"마지막 오류")로 바뀔 뿐 흐름은 동일하다.
 
 import { PROP_SYNC_TEXTBOOK_RUNNING } from "../_shared/constants.ts"
 import { extractPageId } from "../_shared/notionClient.ts"
@@ -55,6 +67,9 @@ import {
 	setTextbookSyncStatus,
 	cleanupUnusedBooksOnEnd,
 	createIndividualBooksForRegistration,
+	PROP_CLASS_TEXTBOOK_RUNNING,
+	setClassTextbookStatus,
+	createBooksForClass,
 } from "../_shared/registrationTextbookTarget.ts"
 import { runSyncWebhookForPage } from "../_shared/webhookIngest.ts"
 import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
@@ -62,6 +77,13 @@ import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/admin
 async function processPage(pageId: string): Promise<void> {
 	const result = await createIndividualBooksForRegistration(pageId)
 	console.log("[sync-registration-textbook] create-individual finished:", pageId, result)
+}
+
+// (2026-09-22, PART N-8) create-class 라우트 전용 얇은 래퍼. runSyncWebhookForPage의
+// process(pageId) 시그니처(Promise<void>)에 맞추기 위해 createBooksForClass의 결과를 로그로만 남긴다.
+async function processClassPage(classId: string): Promise<void> {
+	const result = await createBooksForClass(classId)
+	console.log("[sync-registration-textbook] create-class finished:", classId, result)
 }
 
 Deno.serve(async (req: Request) => {
@@ -96,6 +118,14 @@ Deno.serve(async (req: Request) => {
 				lockProp: PROP_SYNC_TEXTBOOK_RUNNING,
 				setStatus: setTextbookSyncStatus,
 				process: processPage,
+			})
+		} else if (route === "create-class") {
+			// 클래스(학원) DB "교재 생성" 버튼 -- 클릭 대상(pageId)이 클래스 페이지 자신이다.
+			return await runSyncWebhookForPage(pageId, {
+				functionName: "sync-registration-textbook:create-class",
+				lockProp: PROP_CLASS_TEXTBOOK_RUNNING,
+				setStatus: setClassTextbookStatus,
+				process: processClassPage,
 			})
 		} else if (route === "cleanup-on-end") {
 			// 다른 함수(registrationSync.ts의 callTextbookCleanup)가 내부적으로 동기 호출해서 즉시
