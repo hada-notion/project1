@@ -34,7 +34,15 @@
 //
 // [2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환] "출석 조정"은 수업 세션 1건만 대상으로 하는
 // 개별 트리거라 sync_queue를 거칠 필요가 없다. 큐 적재(enqueueSync/wakeSyncQueueWorker) 대신
-// fixAttendanceForClassSession을 바로 await하고, 완료(또는 실패) 결과를 그 자리에서 응답한다.
+// fixAttendanceForClassSession을 바로 await하고, 완료(또는 실패) 결과를 그 자리에서 응답했다
+// (PART N-5에서 백그라운드 처리로 다시 바뀜).
+//
+// [2026-09-22, PART N-5: 동기 응답 -> 즉시 응답 + 백그라운드 처리로 전환] PART N-4(동기 처리)로 바꾼
+// 뒤, Notion "웹훅 보내기" 버튼이 응답을 기다리다 시간 초과로 실패 표시를 띄우는 사례가 다른 버튼
+// (종료 처리)에서 발견됐다 (실제로는 백엔드가 나중에 정상 완료됨 -- _shared/webhookIngest.ts 상단
+// PART N-5 주석 참고). "출석조정 처리중" 표시까지는 응답 전에 동기로 끝내고, 실제
+// fixAttendanceForClassSession은 EdgeRuntime.waitUntil로 백그라운드에서 계속 진행한 뒤 완료/오류를
+// 반영하도록 바꿨다.
 
 import { extractPageId } from "../_shared/notionClient.ts"
 import {
@@ -44,13 +52,13 @@ import {
   fixAttendanceForClassSession,
 } from "../_shared/fixAttendanceTarget.ts"
 import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
+import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
     return new Response("Use POST", { status: 405 })
   }
 
-  const log: string[] = []
   const rawText = await req.text()
   console.log("fix-attendance raw body:", rawText)
 
@@ -70,40 +78,35 @@ Deno.serve(async (req: Request) => {
     })
   }
 
-  let classSessionId: string | null = null
-  try {
-    classSessionId = extractPageId(body)
-    if (!classSessionId) {
-      return new Response(
-        JSON.stringify({
-          ok: false,
-          error: "수업 페이지 id를 payload에서 찾지 못하였습니다. raw body를 확인하세요.",
-          receivedBodyPreview: rawText.slice(0, 500),
-        }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
-      )
-    }
-    await markAttendanceFixRunning(classSessionId)
+  const classSessionId = extractPageId(body)
+  if (!classSessionId) {
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        error: "수업 페이지 id를 payload에서 찾지 못하였습니다. raw body를 확인하세요.",
+        receivedBodyPreview: rawText.slice(0, 500),
+      }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    )
+  }
 
-    // (2026-09-22, PART N-4) 개별 트리거라 큐를 거치지 않고 바로 처리한다. Notion의 "웹훅 보내기"
-    // 버튼 액션은 이 응답을 동기적으로 기다리므로, 완료(또는 실패) 결과를 그 자리에서 그대로
-    // 돌려준다. 진행 상황은 그 수업의 "출석조정 처리중"(이미 처리중으로 설정됨) 체크박스로도
-    // 확인할 수 있다.
-    await fixAttendanceForClassSession(classSessionId, log)
-    await markAttendanceFixDone(classSessionId)
+  await markAttendanceFixRunning(classSessionId)
 
-    return new Response(JSON.stringify({ ok: true, classSessionId, log }, null, 2), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    })
-  } catch (err) {
-    console.error("fix-attendance failed:", (err as Error).message, "\nlog so far:", log.join("\n"), "\nstack:", (err as Error).stack)
-    if (classSessionId) {
+  // (2026-09-22, PART N-5) 개별 트리거라 큐는 안 쓰지만, Notion의 "웹훅 보내기" 버튼이 응답을
+  // 기다리다 시간 초과로 실패 표시를 띄우는 걸 피하려고 응답은 즉시 돌려주고, 실제 처리는
+  // 백그라운드에서 계속한다. 진행 상황은 그 수업의 "출석조정 처리중"(이미 처리중으로 설정됨)
+  // 체크박스로도 확인할 수 있다.
+  runInBackground(async () => {
+    const log: string[] = []
+    try {
+      await fixAttendanceForClassSession(classSessionId, log)
+      await markAttendanceFixDone(classSessionId)
+      console.log("fix-attendance finished:", classSessionId, "\n", log.join("\n"))
+    } catch (err) {
+      console.error("fix-attendance failed:", (err as Error).message, "\nlog so far:", log.join("\n"), "\nstack:", (err as Error).stack)
       await markAttendanceFixError(classSessionId, (err as Error).message)
     }
-    return new Response(JSON.stringify({ ok: false, error: (err as Error).message, log }, null, 2), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    })
-  }
+  })
+
+  return respondAccepted({ classSessionId })
 })

@@ -36,6 +36,26 @@
 // 어느 DB든 항상 "일괄" 성격)와 sync-textbook-distribution:from-class-carts/sync-class-report-cache
 // (명시적으로 여러 페이지를 대상으로 하는 버튼)는 여전히 큐를 그대로 쓴다 — process-sync-queue/index.ts
 // 상단 주석 참고.
+//
+// [2026-09-22, PART N-5: 동기 응답 -> 즉시 응답 + 백그라운드 처리로 전환] PART N-4로 바꾼 뒤 실제로
+// 사용해보니, 강하을 학생 등록 페이지의 "종료 처리" 버튼에서 Notion이 "웹훅 요청 시간이
+// 초과되었습니다"라는 오류를 띄웠다 (Supabase 로그를 보면 함수 자체는 14초 뒤 정상적으로 끝났고
+// "마지막 오류"도 비어 있었다 — 즉 백엔드는 실패하지 않았다). 원인은 notionClient.ts의
+// fetchWithRetry가 Notion API 429(레이트리밋)를 만나면 지수 백오프(최대 5회, 최대 9초+ 대기)로
+// 재시도하는데, PART N-4로 개별 버튼들을 전부 동기 처리로 바꾸면서 여러 버튼/자동화가 동시에
+// 눌리면 Notion API 호출이 몰려 429를 더 자주 만나고, 그 대기 시간이 쌓이면 Notion "웹훅 보내기"
+// 버튼 자체가 응답을 기다리는 시간(짧게 잡혀 있는 것으로 보임)을 넘겨버린다. 백엔드는 결국 정상
+// 완료하지만, 사용자 화면에는 실패로 보였다.
+//
+// 해결: 큐(process-sync-queue)로 되돌리지 않고, generate-report/generate-tuition이 쓰는
+// handleLockedBackgroundWebhook과 똑같은 방식으로 "락 확인 -> '처리중' 표시 -> 즉시 202 응답,
+// 실제 처리(opts.process)는 EdgeRuntime.waitUntil로 백그라운드에서 계속 진행 -> 완료/오류를
+// 그때 가서 반영"으로 바꿨다. Notion 버튼은 항상 즉시 응답을 받으므로 시간 초과 문구가 사라지고,
+// "처리중"/"완료"/"마지막 오류" 표시는 실제 완료 시점에 맞게 그대로 갱신된다 (Bug 1을 고칠 때와
+// 같은 원리 — 응답 시점과 완료 시점을 분리하되, 이번엔 응답이 먼저 오고 완료가 뒤따르는 방향).
+// SyncWebhookOptions/handleSyncWebhook의 외부 시그니처는 그대로라 각 호출부(sync-registration-enroll
+// 등)는 전혀 수정할 필요가 없다. 공용 헬퍼를 쓰지 않는 커스텀 3곳(cascade-delete/create-assignment/
+// fix-attendance)도 같은 패턴으로 각각 개별 수정했다.
 
 import { getPage, extractPageId, checkboxValue } from "./notionClient.ts"
 import { runInBackground, respondAccepted } from "./backgroundTask.ts"
@@ -142,11 +162,12 @@ export async function handleLockedQueueWebhook(
   return runLockedQueueWebhookForPage(pageId, opts)
 }
 
-// (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환) 위 runLockedQueueWebhookForPage와 뼈대는
-// 똑같지만, sync_queue에 적재하지 않고 opts.process(pageId)를 그 자리에서 바로 await한다. 성공하면
-// "완료", 실패하면 "오류"를 즉시 반영하고, 진짜 최종 결과(200/500)를 그 자리에서 돌려준다 -- Notion의
-// "웹훅 보내기" 버튼 액션은 이 응답을 동기적으로 기다리므로, 사용자는 버튼을 누른 시점에 바로 결과를
-// (성공/실패 모두) 확인할 수 있다.
+// (2026-09-22, PART N-4/N-5: 개별 트리거 버튼 동기화 전환 -> 즉시 응답 + 백그라운드 처리) 위
+// runLockedQueueWebhookForPage와 뼈대는 똑같지만, sync_queue에 적재하지 않는다. "처리중" 표시까지는
+// 응답 전에 동기로 끝내고, 실제 처리(opts.process)는 handleLockedBackgroundWebhook과 동일하게
+// EdgeRuntime.waitUntil로 백그라운드에서 진행한 뒤 "완료"/"오류"를 반영한다. Notion의 "웹훅 보내기"
+// 버튼 액션은 이 202 응답을 받는 즉시 성공으로 처리하고, 실제 진행 상황은 각 페이지의 "처리중"
+// 체크박스/"실시간 처리 상태" 수식으로 확인한다.
 export type SyncWebhookOptions = {
   // 로그 접두사로 쓰는 함수 이름 (예: "sync-registration-enroll").
   functionName: string
@@ -154,7 +175,8 @@ export type SyncWebhookOptions = {
   lockProp: string
   // "처리중"/"완료"/"오류" 표시에 쓰는 상태 setter. 각 DB/함수 전용 setter를 그대로 넘기면 된다.
   setStatus: SetSyncStatus
-  // 실제 처리 로직. 예외를 던지면 자동으로 "오류" 상태 + 500 응답으로 이어진다.
+  // 실제 처리 로직. 예외를 던지면 자동으로 "오류" 상태로 이어진다 (백그라운드에서 실행되므로 HTTP
+  // 응답 코드에는 더 이상 영향을 주지 않는다).
   process: (pageId: string) => Promise<void>
   // true면 x-admin-key 헤더(또는 body.adminKey)가 현재 유효한 관리자 키와 일치하지 않으면
   // 401을 반환하고 처리를 중단한다.
@@ -165,27 +187,28 @@ export async function runSyncWebhookForPage(
   pageId: string,
   opts: SyncWebhookOptions,
 ): Promise<Response> {
-  try {
-    const pageForLock = await getPage(pageId)
-    if (checkboxValue(pageForLock, opts.lockProp)) {
-      return jsonResponse({ ok: true, message: "already_processing", pageId }, 200)
-    }
+  const pageForLock = await getPage(pageId)
+  if (checkboxValue(pageForLock, opts.lockProp)) {
+    return jsonResponse({ ok: true, message: "already_processing", pageId }, 200)
+  }
 
-    await opts.setStatus(pageId, "처리중")
-    await opts.process(pageId)
-    await opts.setStatus(pageId, "완료")
+  await opts.setStatus(pageId, "처리중")
 
-    return jsonResponse({ ok: true, pageId }, 200)
-  } catch (err) {
-    console.error(`[${opts.functionName}] ERROR:`, (err as Error).message, (err as Error).stack)
-    if (pageId) {
+  runInBackground(async () => {
+    try {
+      await opts.process(pageId)
+      await opts.setStatus(pageId, "완료")
+      console.log(`[${opts.functionName}] finished:`, pageId)
+    } catch (err) {
+      console.error(`[${opts.functionName}] ERROR:`, (err as Error).message, (err as Error).stack)
       await opts.setStatus(pageId, "오류", (err as Error).message)
     }
-    return jsonResponse({ ok: false, error: (err as Error).message }, 500)
-  }
+  })
+
+  return respondAccepted({ pageId })
 }
 
-// POST 확인 + body 파싱 + pageId 추출까지 포함한 완전한 버전 (handleLockedQueueWebhook의 동기 버전).
+// POST 확인 + body 파싱 + pageId 추출까지 포함한 완전한 버전 (handleLockedQueueWebhook과 같은 모양).
 export async function handleSyncWebhook(
   req: Request,
   opts: SyncWebhookOptions,
@@ -222,6 +245,10 @@ export async function handleSyncWebhook(
 // 거의 같다: POST 확인 -> body 파싱 -> pageId 추출 -> 이미 처리 중이면 즉시 반환(락) ->
 // "처리중" 표시 -> 백그라운드 실행(성공하면 "완료", 실패하면 "오류") -> 즉시 202 응답.
 // generate-classes는 단건/일괄/전체자동 등 진입점이 여러 개라 이 헬퍼를 그대로 적용하지 않았다.
+//
+// [2026-09-22, PART N-5] 위 runSyncWebhookForPage가 이제 이 함수와 완전히 동일한 모양(즉시 응답 +
+// 백그라운드 처리)이 됐다 -- 다만 process(pageId)가 log: string[]를 따로 받지 않는 더 단순한
+// 시그니처라 이 함수와 통합하지 않고 그대로 별도로 둔다.
 export type LockedBackgroundWebhookOptions = {
   // 로그 접두사로 쓰는 함수 이름 (예: "generate-report").
   functionName: string

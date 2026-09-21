@@ -1,12 +1,17 @@
-// create-assignment v6
+// create-assignment v7
 // Trigger: 학습기록(학원) DB의 "출제" 버튼 웹훅
+//
+// v7 변경 사항 (2026-09-22, PART N-5: 동기 응답 -> 즉시 응답 + 백그라운드 처리로 전환):
+//   - v6(동기 처리)로 바꾼 뒤, Notion "웹훅 보내기" 버튼이 응답을 기다리다 시간 초과로 실패
+//     표시를 띄우는 사례가 다른 버튼(종료 처리)에서 발견됐다 (실제로는 백엔드가 나중에 정상
+//     완료됨 -- _shared/webhookIngest.ts 상단 PART N-5 주석 참고). "출제 처리중" 표시까지는
+//     응답 전에 동기로 끝내고, 실제 finishCreateAssignment는 EdgeRuntime.waitUntil로
+//     백그라운드에서 계속 진행한 뒤 완료/오류를 반영하도록 바꿨다.
 //
 // v6 변경 사항 (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환):
 //   - "출제" 버튼은 학습기록 1건만 대상으로 하는 개별 트리거이고, 실제 작업(대상 등록마다 학습활동
-//     1건 생성)도 sync_queue를 거칠 만큼 무겁지 않다고 판단해 큐 적재를 없앴다. 이제 잠금 확인 ->
-//     "처리중" 표시 이후 finishCreateAssignment를 바로 await하고, 그 결과(성공/실패)를 그 자리에서
-//     응답한다. 여러 학습기록에서 동시에 "출제"가 눌려도 각 요청이 자신의 레코드만 건드리므로
-//     서로 겹칠 일이 없다 (Notion API 요청은 레코드별로 독립적).
+//     1건 생성)도 sync_queue를 거칠 만큼 무겁지 않다고 판단해 큐 적재를 없앴다. 완료(성공/실패) 결과를
+//     그 자리에서 응답했다 (v7에서 백그라운드 처리로 다시 바뀜).
 //
 // v5 변경 사항 (2026-09-21, PART N: 관리자 키 인증 추가):
 //   - 이 함수를 호출하는 "출제" 버튼 웹훅에 x-admin-key 커스텀 헤더를 미리 추가해둔 뒤, 함수
@@ -37,6 +42,7 @@
 
 import { getPage, relIds as relIdsFromProp, extractPageId } from "../_shared/notionClient.ts"
 import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
+import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 import {
 	CATEGORY_ASSIGNMENT,
 	CATEGORY_EVALUATION,
@@ -127,13 +133,20 @@ async function handleRequest(req: Request): Promise<Response> {
 			)
 		}
 
-		// (2026-09-22, PART N-4) 개별 트리거라 큐를 거치지 않고 바로 처리한다. Notion의 "웹훅
-		// 보내기" 버튼 액션은 이 응답을 동기적으로 기다리므로, 완료(또는 실패) 결과를 그 자리에서
-		// 그대로 돌려준다. 진행 상황은 학습기록의 "출제 처리중"(이미 켜져 있음) 체크박스로도
+		// (2026-09-22, PART N-5) 개별 트리거라 큐는 안 쓰지만, Notion의 "웹훅 보내기" 버튼이 응답을
+		// 기다리다 시간 초과로 실패 표시를 띄우는 걸 피하려고 응답은 즉시 돌려주고, 실제 처리는
+		// 백그라운드에서 계속한다. 진행 상황은 학습기록의 "출제 처리중"(이미 켜져 있음) 체크박스로
 		// 확인할 수 있다.
-		await finishCreateAssignment(recordId, category, registrationIds)
+		runInBackground(async () => {
+			try {
+				await finishCreateAssignment(recordId, category, registrationIds)
+			} catch (err) {
+				console.error("create-assignment failed", err)
+				await setAssignmentGenError(recordId, (err as Error)?.message ?? String(err))
+			}
+		})
 
-		return new Response(JSON.stringify({ ok: true, recordId, category }), { status: 200 })
+		return respondAccepted({ recordId, category })
 	} catch (err) {
 		console.error("create-assignment failed", err)
 		await setAssignmentGenError(recordId, (err as Error)?.message ?? String(err))

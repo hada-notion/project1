@@ -1,13 +1,18 @@
-// Supabase Edge Function: cascade-delete (v11)
+// Supabase Edge Function: cascade-delete (v12)
+//
+// v12 변경 사항 (2026-09-22, PART N-5: 동기 응답 -> 즉시 응답 + 백그라운드 처리로 전환):
+//   - v11(동기 처리)로 바꾼 뒤, 재귀가 깊은/하위 페이지가 많은 삭제에서 Notion "웹훅 보내기" 버튼이
+//     응답을 기다리다 "시간이 초과되었습니다"를 띄우는 사례가 나왔다 (실제로는 백엔드가 나중에
+//     정상 완료됨 -- _shared/webhookIngest.ts 상단 PART N-5 주석 참고). "삭제 처리중" 표시까지는
+//     응답 전에 동기로 끝내고, 실제 cascadeDelete는 EdgeRuntime.waitUntil로 백그라운드에서 계속
+//     진행한 뒤 완료/오류를 반영하도록 바꿨다. 재클릭 시 중복 실행 방지(잠금 확인)와 "응답 없이
+//     멈춘 실행" 감지(STALE_LOCK_MS)는 응답 전 단계에서 그대로 유지한다.
 //
 // v11 변경 사항 (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환):
 //   - "삭제" 버튼은 페이지 1건만 대상으로 하는 개별 트리거다 (재귀적으로 하위 페이지까지 지우긴
 //     하지만, 그것도 이 페이지 1건의 하위 트리다 — 여러 서로 무관한 페이지를 한 번에 대상으로
 //     하는 일괄 버튼이 아니다). sync_queue 적재를 없애고 cascadeDelete를 바로 await한 뒤, 완료
-//     (또는 실패) 결과를 그 자리에서 응답한다. 재귀가 깊거나 하위 페이지가 많으면 응답이 예전보다
-//     오래 걸릴 수 있지만, Notion의 "웹훅 보내기" 버튼은 이미 이 방식(동기 응답)을 다른 버튼들에서도
-//     쓰고 있어 문제가 되지 않을 것으로 판단했다. 기존의 "응답 없이 멈춘 실행" 감지(STALE_LOCK_MS)
-//     방지 로직은 그대로 유지한다 (재클릭 시 중복 실행 방지 목적은 여전히 유효함).
+//     (또는 실패) 결과를 그 자리에서 응답했다 (v12에서 백그라운드 처리로 다시 바뀜).
 //
 // v10 변경 사항 (2026-09-21, PART N: 관리자 키 인증 추가):
 //   - 이 함수를 호출하는 Notion 버튼 자동화(수업/출석/학습기록/학습활동/교재비 등 각 DB의
@@ -21,7 +26,6 @@
 //
 // v8 변경 사항 (2026-09-18, 큐 기반 순차 처리 도입, Phase 2):
 //   - 실제 캐스케이드 삭제 로직(cascadeDelete 및 관련 헬퍼)을 _shared/cascadeDeleteTarget.ts로 옮겼다.
-//     (v11에서 큐 적재는 다시 제거했지만, 로직을 별도 파일로 분리한 구조는 그대로 유지한다.)
 //   - 기존의 "응답 없이 멈춘 실행" 감지(STALE_LOCK_MS)와 중복 클릭 방지(이미 처리중이면 즉시 반환) 로직은
 //     웹훅 수신 시점 그대로 유지한다.
 //
@@ -31,6 +35,7 @@
 import { getPage, extractPageId } from "../_shared/notionClient.ts"
 import { isDeletingFlagSet, markDeletingRunning, markDeletingError, cascadeDelete } from "../_shared/cascadeDeleteTarget.ts"
 import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
+import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 
 // "삭제 처리중" 체크박스가 켜진 채로 이 시간(ms) 이상 페이지가 갱신되지 않았으면, 실행 중인
 // 작업이 죽었다고 (서버 타임아웃/재시작 등) 판단하고 막아두지 않고 다시 진행한다.
@@ -95,23 +100,21 @@ Deno.serve(async (req: Request) => {
     console.error("cascade-delete: failed to pre-check status:", (err as Error).message)
   }
 
-  // (2026-09-22, PART N-4) 개별 트리거라 큐를 거치지 않고 바로 처리한다. Notion의 "웹훅 보내기"
-  // 버튼 액션은 이 응답을 동기적으로 기다리므로, 완료(또는 실패) 결과를 그 자리에서 그대로 돌려준다.
-  try {
-    await markDeletingRunning(pageId)
+  // (2026-09-22, PART N-5) "삭제 처리중" 표시까지는 응답 전에 동기로 끝내고, 실제 재귀 삭제는
+  // 백그라운드에서 계속 진행한다 — Notion의 "웹훅 보내기" 버튼이 깊은/큰 재귀 삭제를 기다리다
+  // 시간 초과로 실패 표시를 띄우는 문제를 피하기 위함 (실제 처리는 항상 정상 완료됐었음).
+  await markDeletingRunning(pageId)
+
+  runInBackground(async () => {
     const log: string[] = []
-    await cascadeDelete(pageId, log, new Set<string>(), 0, resumeNote)
-    console.log("cascade-delete finished:", pageId, "\n", log.join("\n"))
-    return new Response(JSON.stringify({ ok: true, pageId }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    })
-  } catch (err) {
-    console.error("cascade-delete failed:", (err as Error).message)
-    await markDeletingError(pageId, (err as Error).message)
-    return new Response(
-      JSON.stringify({ error: "internal_error", message: String(err) }),
-      { status: 500, headers: { "Content-Type": "application/json" } },
-    )
-  }
+    try {
+      await cascadeDelete(pageId, log, new Set<string>(), 0, resumeNote)
+      console.log("cascade-delete finished:", pageId, "\n", log.join("\n"))
+    } catch (err) {
+      console.error("cascade-delete failed:", (err as Error).message)
+      await markDeletingError(pageId, (err as Error).message)
+    }
+  })
+
+  return respondAccepted({ pageId })
 })
