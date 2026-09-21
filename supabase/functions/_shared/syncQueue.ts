@@ -55,9 +55,18 @@ export async function enqueueSync(target: string, payload: Record<string, unknow
 // (2026-09-21, process-sync-queue 인증 추가) process-sync-queue가 이제 requireAdminKey로 보호되므로,
 // 이 내부 호출도 x-admin-key 헤더를 함께 보내야 한다. getCurrentAdminKey()를 그대로 써서 KV에
 // 저장된 관리자 비밀번호 변경이 있어도(admin.html에서 재발급) 항상 최신 값과 일치하게 한다.
+//
+// (2026-09-21, PART N-3 버그 수정) 이 fetch를 EdgeRuntime.waitUntil로 등록하지 않으면, 호출자
+// (runLockedQueueWebhookForPage 등)가 202 응답을 반환하는 순간 Edge Function 실행 환경이 그대로
+// 정리되면서 이 진행 중인 요청이 완료되기 전에 끊길 수 있다 (backgroundTask.ts의 runInBackground가
+// 이미 겪고 고친 것과 동일한 문제). 이 때문에 "즉시 트리거"가 거의 항상 유실되고, 실질적으로는
+// pg_cron 매분 안전망만이 유일하게 살아있는 처리 경로가 되어 있었다 -- 그 안전망마저
+// sync_queue_admin_key Vault 시크릿 누락 등으로 401을 맞고 있었다면, 큐에 적재된 작업을 아무도
+// 처리하지 않아 "처리중" 체크박스가 영원히 켜진 채로 멈추는 문제로 이어진다 (등록(학원) DB "등록"
+// 버튼에서 실제로 재현됨).
 export function wakeSyncQueueWorker(): void {
   if (!SB_URL) return
-  getCurrentAdminKey()
+  const promise = getCurrentAdminKey()
     .then((adminKey) =>
       fetch(`${SB_URL}/functions/v1/process-sync-queue`, {
         method: "POST",
@@ -68,6 +77,12 @@ export function wakeSyncQueueWorker(): void {
     .catch((err) => {
       console.error("[wakeSyncQueueWorker] 워커 즉시 트리거 실패 (pg_cron이 대신 처리함):", (err as Error)?.message)
     })
+  const edgeRuntime = (globalThis as Record<string, unknown>).EdgeRuntime as
+    | { waitUntil?: (p: Promise<unknown>) => void }
+    | undefined
+  if (edgeRuntime && typeof edgeRuntime.waitUntil === "function") {
+    edgeRuntime.waitUntil(promise)
+  }
 }
 
 export async function tryAcquireWorkerLock(leaseSeconds = 120): Promise<boolean> {
