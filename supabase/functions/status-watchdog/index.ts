@@ -1,0 +1,84 @@
+// Supabase Edge Function: status-watchdog
+//
+// (2026-09-21/22, 처리 상태 관리 리팩토링 Phase 2/4) _shared/statusTracking.ts의
+// sweepStaleStatus()를 여러 (데이터소스, 상태 속성 스펙) 조합에 대해 실행하는 관리용 엔드포인트.
+// process-sync-queue의 recoverStaleSyncQueueItems와 같은 역할을 하되, Postgres sync_queue가
+// 아니라 Notion 페이지의 "상태"(select) 속성을 대상으로 한다.
+// 마스터플랜: https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+//
+// 지금은 Phase 2 대상(시간표 DB + 메뉴 DB)만 등록돼 있다. Phase 3에서 나머지 DB/함수들을
+// 상태(select) 방식으로 전환할 때마다 TARGETS 배열에 항목을 추가하면 된다. Phase 4에서
+// pg_cron이 이 엔드포인트를 주기적으로 호출하도록 등록할 예정이다(아직 미등록 — 지금은
+// 관리자가 필요할 때 수동으로 호출하거나, 이 파일을 배포한 김에 수동 검증만 마친 상태).
+//
+// 요청: POST, 헤더 x-admin-key 필요. 바디 { "staleMinutes": <number> } 로 기본 임계값(15분)을
+// 이번 호출에 한해 덮어쓸 수 있다(운영 중 급하게 회수해야 할 때 등). 대상별로 다른 임계값이
+// 필요해지면 TARGETS 항목에 개별 staleMinutes를 추가하는 방식으로 확장한다.
+
+import { requireAdminKey } from "../_shared/adminShared.ts"
+import { sweepStaleStatus, type StatusSpec } from "../_shared/statusTracking.ts"
+import { DS_TIMETABLE } from "../_shared/constants.ts"
+
+// 메뉴(학원) DB는 다른 함수들이 DS.xxx 형태로 쿼리한 적이 없어서 전용 환경변수가 없다.
+// 이 워치독은 메뉴 DB 전체가 아니라 그 안의 "시간표" 단일 행 하나만 상태 관리 대상이므로,
+// 새 환경변수를 추가하는 대신 데이터소스 id를 여기 직접 적었다 (변경 시 여기만 고치면 됨).
+const DS_MENU = "0dcba040-586b-83c8-9974-07588b9ab04d" // 메뉴(학원) DB
+
+const TIMETABLE_STATUS_SPEC: StatusSpec = {
+	statusProp: "상태",
+	errorProp: "마지막 오류",
+	startedAtProp: "처리 시작 시각",
+}
+
+const TARGETS: Array<{ label: string; dataSourceId: string; spec: StatusSpec }> = [
+	{ label: "시간표", dataSourceId: DS_TIMETABLE, spec: TIMETABLE_STATUS_SPEC },
+	{ label: "메뉴", dataSourceId: DS_MENU, spec: TIMETABLE_STATUS_SPEC },
+]
+
+Deno.serve(async (req) => {
+	if (req.method === "OPTIONS") {
+		return new Response(null, {
+			headers: {
+				"Access-Control-Allow-Origin": "*",
+				"Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-admin-key",
+				"Access-Control-Allow-Methods": "POST, OPTIONS",
+			},
+		})
+	}
+
+	const authError = await requireAdminKey(req)
+	if (authError) return authError
+
+	let staleMinutesOverride: number | undefined
+	try {
+		const body = await req.json()
+		if (typeof body?.staleMinutes === "number" && body.staleMinutes > 0) {
+			staleMinutesOverride = body.staleMinutes
+		}
+	} catch {
+		// 바디 없음 -> 각 대상 기본값(15분) 사용
+	}
+
+	const results: Array<{ label: string; recovered: number; ids: string[] }> = []
+	for (const target of TARGETS) {
+		try {
+			const { recovered, ids } = await sweepStaleStatus(
+				target.dataSourceId,
+				target.spec,
+				staleMinutesOverride ?? 15,
+			)
+			results.push({ label: target.label, recovered, ids })
+		} catch (err) {
+			console.error(`[status-watchdog] ${target.label} sweep 실패:`, (err as Error).message)
+			results.push({ label: target.label, recovered: 0, ids: [] })
+		}
+	}
+
+	return new Response(JSON.stringify({ ok: true, results }, null, 2), {
+		status: 200,
+		headers: {
+			"Content-Type": "application/json",
+			"Access-Control-Allow-Origin": "*",
+		},
+	})
+})
