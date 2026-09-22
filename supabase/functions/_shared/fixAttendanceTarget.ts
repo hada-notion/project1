@@ -9,44 +9,43 @@
 // 호출한다.
 
 import { getPage, queryAllPages, createPage, updatePageProperties, relIds } from "./notionClient.ts"
-import { DS_TIMETABLE, DS_CLASS_SESSION, DS_ATTENDANCE, DS_REGISTRATION } from "./constants.ts"
+import { DS_TIMETABLE, DS_CLASS_SESSION, DS_ATTENDANCE, DS_REGISTRATION, PROP_LAST_ERROR } from "./constants.ts"
 // (2026-09-21, 이식성 리팩토링) 아래 4개 데이터소스 ID는 constants.ts로 이동함 — 그 파일 상단 주석 참고.
+import { markRunning, markDone, markError, type StatusSpec } from "./statusTracking.ts"
 
-// 수업(학원) DB의 "출석조정 처리중" 체크박스 + "마지막 오류" 텍스트 필드로 진행 상황을 표시한다
-// (2026-09-11: 공유 select "동기화 상태"에서 체크박스로 마이그레이션됨). best-effort로 갱신하며 실패해도 무시한다.
-export const PROP_ATTENDANCE_FIX_RUNNING = "출석조정 처리중"
-export const PROP_SHARED_LAST_ERROR = "마지막 오류"
+// 수업(학원) DB의 "출석조정 상태"(select) + "마지막 오류" 텍스트 필드로 진행 상황을 표시한다
+// (2026-09-11: 공유 select "동기화 상태"에서 체크박스로 마이그레이션 -> 2026-09-22, Phase 3에서
+// 다시 상태(select)+처리 시작 시각으로 전환. 기존 "출석조정 처리중" checkbox는 폐기. 마스터플랜 참고).
+// best-effort로 갱신하며 실패해도 무시한다.
+export const PROP_SHARED_LAST_ERROR = PROP_LAST_ERROR
+
+export const ATTENDANCE_FIX_STATUS_SPEC: StatusSpec = {
+  statusProp: "출석조정 상태",
+  errorProp: PROP_SHARED_LAST_ERROR,
+  startedAtProp: "출석조정 처리 시작 시각",
+}
 
 export async function markAttendanceFixRunning(classSessionId: string): Promise<void> {
   try {
     // 새 실행이 시작되는 순간(버튼 클릭 직후) 이전 오류를 바로 지워서, 끝날 때까지 오래된 오류
-    // 텍스트가 남아있지 않도록 합니다 (2026-09-11 fix).
-    await updatePageProperties(classSessionId, {
-      [PROP_ATTENDANCE_FIX_RUNNING]: { checkbox: true },
-      [PROP_SHARED_LAST_ERROR]: { rich_text: [] },
-    })
+    // 텍스트가 남아있지 않도록 합니다 (2026-09-11 fix). markRunning이 상태/시작시각/오류 비움을 함께 처리.
+    await markRunning(classSessionId, ATTENDANCE_FIX_STATUS_SPEC)
   } catch (err) {
-    console.error("[fix-attendance] failed to set 출석조정 처리중:", (err as Error).message)
+    console.error("[fix-attendance] failed to set 출석조정 상태:", (err as Error).message)
   }
 }
 
 export async function markAttendanceFixDone(classSessionId: string): Promise<void> {
   try {
-    await updatePageProperties(classSessionId, {
-      [PROP_ATTENDANCE_FIX_RUNNING]: { checkbox: false },
-      [PROP_SHARED_LAST_ERROR]: { rich_text: [] },
-    })
+    await markDone(classSessionId, ATTENDANCE_FIX_STATUS_SPEC)
   } catch (err) {
-    console.error("[fix-attendance] failed to clear 출석조정 처리중:", (err as Error).message)
+    console.error("[fix-attendance] failed to clear 출석조정 상태:", (err as Error).message)
   }
 }
 
 export async function markAttendanceFixError(classSessionId: string, message: string): Promise<void> {
   try {
-    await updatePageProperties(classSessionId, {
-      [PROP_ATTENDANCE_FIX_RUNNING]: { checkbox: false },
-      [PROP_SHARED_LAST_ERROR]: { rich_text: [{ text: { content: message.slice(0, 1900) } }] },
-    })
+    await markError(classSessionId, ATTENDANCE_FIX_STATUS_SPEC, message)
   } catch (err) {
     console.error("[fix-attendance] failed to set 마지막 오류:", (err as Error).message)
   }

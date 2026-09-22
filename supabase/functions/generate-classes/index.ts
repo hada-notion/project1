@@ -30,15 +30,14 @@ import {
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 import {
 	PROP_TIMETABLE_LAST_ERROR,
-	PROP_SESSION_GEN_RUNNING,
 	PROP_LAST_ERROR,
 } from "../_shared/constants.ts"
 // (2026-09-21, 처리 상태 관리 리팩토링 Phase 2) 시간표/메뉴 DB의 "생성중" 체크박스+마지막 오류
 // 조합을 "상태"(select, 대기/작업중/완료/오류/타임아웃복구) + "처리 시작 시각"으로 교체. 마스터플랜:
-// https://app.notion.com/p/903c90386c1d473494c5df6306c53517 — 수업(학원) DB 레벨의
-// PROP_SESSION_GEN_RUNNING(아래 markSessionDone/Error)은 이번 Phase 대상이 아니라 그대로 둔다
-// (Phase 3에서 전환).
-import { markRunning, markDone, markError, isRunning, type StatusSpec } from "../_shared/statusTracking.ts"
+// https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+// (2026-09-22, Phase 3) 수업(학원) DB 레벨(세션 단위)의 "생성중" 체크박스도 같은 방식(SESSION_GEN_STATUS_SPEC,
+// 아래)으로 전환했다 — 이전엔 이 파일 자체에서 checkbox를 직접 썼다 (markSessionDone/Error).
+import { markRunning, markDone, markError, isRunning, STATUS_RUNNING, type StatusSpec } from "../_shared/statusTracking.ts"
 
 // 시간표(학원) DB와 메뉴(학원) DB 모두 "상태"/"마지막 오류"/"처리 시작 시각" 속성 이름이 동일하므로
 // 하나의 스펙을 공유해서 쓴다 (버튼 단일/일괄/크론 세 경로 + 메뉴 페이지 모두 이 스펙 사용).
@@ -46,6 +45,15 @@ const TIMETABLE_STATUS_SPEC: StatusSpec = {
 	statusProp: "상태",
 	errorProp: PROP_TIMETABLE_LAST_ERROR,
 	startedAtProp: "처리 시작 시각",
+}
+
+// 수업(학원) DB 세션 단위 "생성 상태" (2026-09-22, Phase 3로 전환). 각 함수 폴더는 독립적으로
+// 배포되므로 다른 함수 폴더(status-watchdog 등)에서 이 파일을 직접 import하지 않는다 — 대신
+// TIMETABLE_STATUS_SPEC과 같은 패턴으로, 워치독 쪽에 동일한 프로퍼티 이름 literal을 그대로 복제해뒀다.
+const SESSION_GEN_STATUS_SPEC: StatusSpec = {
+	statusProp: "생성 상태",
+	errorProp: PROP_LAST_ERROR,
+	startedAtProp: "생성 처리 시작 시각",
 }
 // 대시보드(학원) DB 자동 연결: 이 함수가 Notion API로 직접 만드는 수업/출석 페이지는 페이지
 // 자동화가 트리거되지 않으므로, 생성 직후 여기서 직접 큐에 적재한다 (2026-09-20, 대시보드 기능 추가).
@@ -401,17 +409,13 @@ type ProcessMode =
 // markRunning/markDone/markError(TIMETABLE_STATUS_SPEC 사용)로 대체했다 — 동작은 동일하되
 // "작업중"으로 바뀐 시각도 함께 기록해서, 워치독이 오래 멈춘 항목을 자동으로 회수할 수 있게 됐다.
 
-// 수업(학원) DB 개별 행에 처리 상태 표시 (2026-09-11 추가). 이 레벨(세션 단위)은 아직 기존
-// 체크박스 방식 그대로다 -- Phase 3에서 전환 예정 (마스터플랜 참고). 시간표 DB의 markGenRunning과 달리
-// "생성중"은 세션 생성 시점에 이미 true로 함께 만들어지므로(아래 createPage 호출부 참고),
-// 여기서는 "끝났을 때" 끄는 markSessionDone/markSessionError만 필요하다. 실패해도 전체 캐스케이드를
-// 막지 않도록 조용히 무시한다.
+// 수업(학원) DB 개별 행에 처리 상태 표시 (2026-09-11 추가, 2026-09-22 Phase 3에서 상태(select)
+// 방식으로 전환). "생성 상태"는 세션 생성 시점에 이미 🔄 작업중으로 함께 만들어지므로(아래
+// createPage 호출부 참고), 여기서는 "끝났을 때" markDone/markError(SESSION_GEN_STATUS_SPEC)만
+// 감싸서 실패해도 전체 캐스케이드를 막지 않도록 조용히 무시한다.
 async function markSessionDone(sessionId: string): Promise<void> {
   try {
-    await updatePageProperties(sessionId, {
-      [PROP_SESSION_GEN_RUNNING]: { checkbox: false },
-      [PROP_LAST_ERROR]: { rich_text: [] },
-    })
+    await markDone(sessionId, SESSION_GEN_STATUS_SPEC)
   } catch (err) {
     console.error(`markSessionDone(${sessionId}) failed:`, (err as Error).message)
   }
@@ -419,10 +423,7 @@ async function markSessionDone(sessionId: string): Promise<void> {
 
 async function markSessionError(sessionId: string, message: string): Promise<void> {
   try {
-    await updatePageProperties(sessionId, {
-      [PROP_SESSION_GEN_RUNNING]: { checkbox: false },
-      [PROP_LAST_ERROR]: { rich_text: [{ text: { content: message.slice(0, 1900) } }] },
-    })
+    await markError(sessionId, SESSION_GEN_STATUS_SPEC, message)
   } catch (err) {
     console.error(`markSessionError(${sessionId}) failed:`, (err as Error).message)
   }
@@ -528,8 +529,9 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
       시간표: { relation: [{ id: timetableId }] },
       등록: { relation: registrationIds.map((id) => ({ id })) },
       ...(teacherIds.length ? { 담당강사: { relation: teacherIds.map((id) => ({ id })) } } : {}),
-      // 아래에서 출석 생성이 끝나는 즉시 false로 해제된다 (markSessionDone/markSessionError).
-      [PROP_SESSION_GEN_RUNNING]: { checkbox: true },
+      // 아래에서 출석 생성이 끝나는 즉시 markSessionDone/markSessionError로 완료/오류 처리된다.
+      [SESSION_GEN_STATUS_SPEC.statusProp]: { select: { name: STATUS_RUNNING } },
+      [SESSION_GEN_STATUS_SPEC.startedAtProp]: { date: { start: new Date().toISOString() } },
     })
 
     log.push(`[created] ${timetableName}: class session created (${nextDate}), 등록 ${registrationIds.length}건 연결`)

@@ -40,6 +40,11 @@ export const STATUS_ENDED = "🔴 수강 종료"
 export const DS_ATTENDANCE = Deno.env.get("DATA_SOURCE_ATTENDANCE_ID")! // 출석(학원) DB
 export const DS_CLASS_SESSION = Deno.env.get("DATA_SOURCE_CLASS_SESSION_ID")! // 수업(학원) DB
 export const DS_LEARNING_RECORD = Deno.env.get("DATA_SOURCE_LEARNING_RECORD_ID")! // 학습기록(학원) DB
+// (2026-09-22, Phase 3 status-watchdog 확장을 위해 추가) 진도교재(학원) DB는 이전부터 각 target
+// 파일이 로컬로 DATA_SOURCE_PROGRESS_BOOK_ID를 읽고 있었다(registrationTextbookTarget.ts 등) —
+// 그 로컬 선언들은 그대로 두고, 여기 공유 상수를 추가로 export해서 status-watchdog 등 새 코드가
+// 재사용할 수 있게 했다.
+export const DS_PROGRESS_BOOK = Deno.env.get("DATA_SOURCE_PROGRESS_BOOK_ID")! // 진도교재(학원) DB
 
 // 아래 8개는 원래 각 target 파일이 자기 것만 로컬로 들고 있던 것을, 위와 같은 이유로 여기로 모았다.
 export const DS_STUDY_ACTIVITY = Deno.env.get("DATA_SOURCE_STUDY_ACTIVITY_ID")! // 학습활동(학원) DB

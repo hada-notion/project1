@@ -2,8 +2,9 @@
 // 하나의 수업(학원) DB 페이지에 연결된 모든 출석 학생에게 일일 보고서 AlimTalk을 일괄 전송합니다.
 // - send-daily-report와 동일한 syncStudentReport/발송/로그 로직을 각 출석 건마다 반복 실행합니다.
 // - 개별 학생 전송 실패가 있어도 나머지 학생 전송은 계속 진행합니다 (부분 성공 허용).
-// - 진행 중에는 수업 페이지의 "보고서 일괄전송중" 체크박스를 켜서 "실시간 처리 상태" 수식에 표시되게 하고,
-//   완료 후 항상 다시 끕니다.
+// - 진행 중에는 수업 페이지의 "보고서 일괄전송 상태"를 🔄 작업중으로 바꿔서 "실시간 처리 상태" 수식에
+//   표시되게 하고, 완료 후 ✅ 완료(전원 성공) 또는 ⚠️ 오류(실패/건너뜀 있음)로 반영합니다.
+//   (2026-09-22, 처리 상태 관리 리팩토링 Phase 3 — 기존 "보고서 일괄전송중" checkbox 대체, 마스터플랜 참고)
 // - 실패한 학생이 있으면 수업 페이지의 "마지막 오류"에 요약("N명 중 M명 실패: 이름1, 이름2")을 남기고,
 //   전원 성공하면 그 필드를 비웁니다.
 // - Notion 버튼의 "웹훅 보내기" 액션은 커스텀 헤더를 보낼 수 없으므로, x-admin-key 헤더가 없으면
@@ -13,7 +14,7 @@
 //   _shared/alimtalkShared.ts로 옮기고 이 파일에서는 가져다 씁니다 (로드맵 5-9 공용 모듈화 후속).
 //   동작은 이전과 동일합니다.
 
-import { createSendLogEntry, getBotUserId, notionGetPage, notionPatchPageProperties, resolveAdminKeyFromRequest } from "../_shared/adminShared.ts"
+import { createSendLogEntry, getBotUserId, notionGetPage, resolveAdminKeyFromRequest } from "../_shared/adminShared.ts"
 import {
   getFormulaText,
   getEffectiveAdminKey,
@@ -25,6 +26,7 @@ import {
   setAttendanceReportLastError,
   setAttendanceReportCompleteFlag,
 } from "../_shared/alimtalkShared.ts"
+import { markRunning, markDone, markError, type StatusSpec } from "../_shared/statusTracking.ts"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -33,23 +35,37 @@ const corsHeaders = {
 }
 
 // --- 수업(학원) DB 페이지 단위 상태 표시 (이 함수 전용, 다른 파일과 중복되지 않음) ---
+// (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) 기존 "보고서 일괄전송중" checkbox +
+// "마지막 오류" text 조합을 "보고서 일괄전송 상태"(select) + "보고서 일괄전송 처리 시작 시각"(date)로
+// 전환. 기존 checkbox는 폐기. 마스터플랜 참고.
+const CLASS_BULK_SEND_STATUS_SPEC: StatusSpec = {
+  statusProp: "보고서 일괄전송 상태",
+  errorProp: "마지막 오류",
+  startedAtProp: "보고서 일괄전송 처리 시작 시각",
+}
+
 async function setClassBulkSendingFlag(classId: string, sending: boolean): Promise<void> {
   try {
-    const props: Record<string, unknown> = { "보고서 일괄전송중": { checkbox: sending } }
     if (sending) {
-      props["마지막 오류"] = { rich_text: [] }
+      await markRunning(classId, CLASS_BULK_SEND_STATUS_SPEC)
     }
-    await notionPatchPageProperties(classId, props)
+    // sending=false는 항상 finishClassBulkSend(아래)를 통해 처리한다 -- 완료 시점의 메세지
+    // 유무에 따라 markDone/markError를 골라야 하므로, 여기서는 아무것도 하지 않는다.
   } catch (_e) {
     // 상태 표시 실패는 전송 자체를 막지 않습니다.
   }
 }
 
-async function setClassLastError(classId: string, message: string | null): Promise<void> {
+// 기존 코드는 "마지막 오류 메세지 기록" + "일괄전송중 끄기"를 항상 순서대로 별도 호출했다. select
+// 모델에서는 이 두 가지를 한 번에 결정해야 하므로(메세지가 있으면 ⚠️ 오류, 없으면 ✅ 완료) 하나의
+// 헬퍼로 합쳤다.
+async function finishClassBulkSend(classId: string, message: string | null): Promise<void> {
   try {
-    await notionPatchPageProperties(classId, {
-      "마지막 오류": { rich_text: message ? [{ text: { content: message.slice(0, 1900) } }] : [] },
-    })
+    if (message) {
+      await markError(classId, CLASS_BULK_SEND_STATUS_SPEC, message)
+    } else {
+      await markDone(classId, CLASS_BULK_SEND_STATUS_SPEC)
+    }
   } catch (_e) {
     // 상태 표시 실패는 전송 자체를 막지 않습니다.
   }
@@ -171,8 +187,7 @@ async function processClassBulkSend(classSessionId: string, attendanceIds: strin
   if (skippedNames.length > 0) {
     messages.push(skippedNames.length + "명은 이미 전송 완료되어 건너뜀: " + skippedNames.join(", "))
   }
-  await setClassLastError(classSessionId, messages.length > 0 ? messages.join("\n") : null)
-  await setClassBulkSendingFlag(classSessionId, false)
+  await finishClassBulkSend(classSessionId, messages.length > 0 ? messages.join("\n") : null)
 }
 
 Deno.serve(async (req) => {
@@ -215,8 +230,7 @@ Deno.serve(async (req) => {
       null
 
     if (attendanceIds.length === 0) {
-      await setClassLastError(classSessionId, "이 수업에 연결된 출석 학생이 없습니다.")
-      await setClassBulkSendingFlag(classSessionId, false)
+      await finishClassBulkSend(classSessionId, "이 수업에 연결된 출석 학생이 없습니다.")
       return new Response(JSON.stringify({ started: false, total: 0, message: "no attendance rows" }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } })
     }
 
@@ -234,8 +248,7 @@ Deno.serve(async (req) => {
     )
   } catch (err) {
     if (classSessionId) {
-      await setClassLastError(classSessionId, String((err as any)?.message ?? err))
-      await setClassBulkSendingFlag(classSessionId, false)
+      await finishClassBulkSend(classSessionId, String((err as any)?.message ?? err))
     }
     return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } })
   }

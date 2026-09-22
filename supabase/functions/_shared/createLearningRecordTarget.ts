@@ -21,10 +21,12 @@ import {
 	DS_LEARNING_RECORD as DS_STUDY_RECORD,
 	DS_CLASS_SESSION,
 	DS_ATTENDANCE,
+	PROP_LAST_ERROR,
 } from "./constants.ts"
 // (2026-09-21, 이식성 리팩토링) 위 4개도 constants.ts로 이동함 — 그 파일 상단 주석 참고.
 // DS_ATTENDANCE는 create-learning-record/index.ts가 여기서 다시 가져다 쓰고 있었는데, 그쪽도
 // constants.ts에서 바로 가져오도록 함께 고쳤다 (아래 참고).
+import { markRunning, markDone, markError, type StatusSpec } from "./statusTracking.ts"
 
 const PROP_SESSION_REGISTRATION = "등록"
 const PROP_SESSION_ATTENDANCE = "출석"
@@ -51,11 +53,14 @@ const PROP_RECORD_REGISTRATION = "등록"
 const PROP_RECORD_SESSION = "수업"
 const PROP_RECORD_CATEGORY = "구분"
 
-export const PROP_RECORD_GEN_RUNNING = "학습기록 생성중"
-const PROP_SHARED_LAST_ERROR = "마지막 오류"
-
-const PROP_BOOK_GEN_RUNNING = "학습기록 생성중"
-const PROP_BOOK_LAST_ERROR = "마지막 오류"
+// (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) "학습기록 생성중" checkbox를 "학습기록 상태"(select)
+// + "학습기록 처리 시작 시각"(date)로 전환. 수업/출석/진도교재(학원) 3개 DB 모두 같은 속성 이름을
+// 쓰므로 하나의 스펙(RECORD_GEN_STATUS_SPEC)을 그대로 재사용한다. 기존 checkbox는 폐기. 마스터플랜 참고.
+export const RECORD_GEN_STATUS_SPEC: StatusSpec = {
+	statusProp: "학습기록 상태",
+	errorProp: PROP_LAST_ERROR,
+	startedAtProp: "학습기록 처리 시작 시각",
+}
 
 const GROUP_PROGRESS_TYPE = "그룹 진도"
 
@@ -67,13 +72,15 @@ async function createPage(parentDataSourceId: string, properties: JsonRecord): P
 	return (await sharedCreatePage(parentDataSourceId, properties)) as JsonRecord
 }
 
+// index.ts는 항상 running=true로만 호출한다(버튼 클릭 시 상태 표시 목적) — 시그니처는 이전과
+// 호환되도록 유지.
 export async function setRecordGenRunning(pageId: string, running: boolean): Promise<void> {
 	try {
-		const props: Record<string, unknown> = { [PROP_RECORD_GEN_RUNNING]: { checkbox: running } }
 		if (running) {
-			props[PROP_SHARED_LAST_ERROR] = { rich_text: [] }
+			await markRunning(pageId, RECORD_GEN_STATUS_SPEC)
+		} else {
+			await markDone(pageId, RECORD_GEN_STATUS_SPEC)
 		}
-		await updatePageProperties(pageId, props)
 	} catch (err) {
 		console.error(`setRecordGenRunning(${pageId}, ${running}) failed`, err)
 	}
@@ -81,11 +88,11 @@ export async function setRecordGenRunning(pageId: string, running: boolean): Pro
 
 async function setBookGenRunning(pageId: string, running: boolean): Promise<void> {
 	try {
-		const props: Record<string, unknown> = { [PROP_BOOK_GEN_RUNNING]: { checkbox: running } }
 		if (running) {
-			props[PROP_BOOK_LAST_ERROR] = { rich_text: [] }
+			await markRunning(pageId, RECORD_GEN_STATUS_SPEC)
+		} else {
+			await markDone(pageId, RECORD_GEN_STATUS_SPEC)
 		}
-		await updatePageProperties(pageId, props)
 	} catch (err) {
 		console.error(`setBookGenRunning(${pageId}, ${running}) failed`, err)
 	}
@@ -93,10 +100,7 @@ async function setBookGenRunning(pageId: string, running: boolean): Promise<void
 
 async function setBookGenDone(pageId: string): Promise<void> {
 	try {
-		await updatePageProperties(pageId, {
-			[PROP_BOOK_GEN_RUNNING]: { checkbox: false },
-			[PROP_BOOK_LAST_ERROR]: { rich_text: [] },
-		})
+		await markDone(pageId, RECORD_GEN_STATUS_SPEC)
 	} catch (err) {
 		console.error(`setBookGenDone(${pageId}) failed`, err)
 	}
@@ -104,10 +108,7 @@ async function setBookGenDone(pageId: string): Promise<void> {
 
 async function setBookGenError(pageId: string, message: string): Promise<void> {
 	try {
-		await updatePageProperties(pageId, {
-			[PROP_BOOK_GEN_RUNNING]: { checkbox: false },
-			[PROP_BOOK_LAST_ERROR]: { rich_text: [{ text: { content: message.slice(0, 1900) } }] },
-		})
+		await markError(pageId, RECORD_GEN_STATUS_SPEC, message)
 	} catch (err) {
 		console.error(`setBookGenError(${pageId}) failed`, err)
 	}
@@ -115,10 +116,7 @@ async function setBookGenError(pageId: string, message: string): Promise<void> {
 
 export async function setRecordGenDone(pageId: string): Promise<void> {
 	try {
-		await updatePageProperties(pageId, {
-			[PROP_RECORD_GEN_RUNNING]: { checkbox: false },
-			[PROP_SHARED_LAST_ERROR]: { rich_text: [] },
-		})
+		await markDone(pageId, RECORD_GEN_STATUS_SPEC)
 	} catch (err) {
 		console.error(`setRecordGenDone(${pageId}) failed`, err)
 	}
@@ -126,10 +124,7 @@ export async function setRecordGenDone(pageId: string): Promise<void> {
 
 export async function setRecordGenError(pageId: string, message: string): Promise<void> {
 	try {
-		await updatePageProperties(pageId, {
-			[PROP_RECORD_GEN_RUNNING]: { checkbox: false },
-			[PROP_SHARED_LAST_ERROR]: { rich_text: [{ text: { content: message.slice(0, 1900) } }] },
-		})
+		await markError(pageId, RECORD_GEN_STATUS_SPEC, message)
 	} catch (err) {
 		console.error(`setRecordGenError(${pageId}) failed`, err)
 	}
