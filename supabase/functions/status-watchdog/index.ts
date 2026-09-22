@@ -56,6 +56,11 @@ import { ASSIGNMENT_GEN_STATUS_SPEC } from "../_shared/createAssignmentTarget.ts
 // 새 환경변수를 추가하는 대신 데이터소스 id를 여기 직접 적었다 (변경 시 여기만 고치면 됨).
 const DS_MENU = "0dcba040-586b-83c8-9974-07588b9ab04d" // 메뉴(학원) DB
 
+// 알림톡 발송함(학원) DB도 메뉴 DB와 같은 이유로 전용 환경변수가 없다 (send-selected-notifications는
+// 페이지 id 단위로만 읽고 쓰지, 데이터소스 전체를 쿼리한 적이 없었다). 같은 관례로 데이터소스 id를
+// 여기 직접 적었다 (2026-09-22, Phase 3).
+const DS_NOTIFICATION_BATCH = "85dd8de2-ae55-4944-a751-288fc40171b5" // 알림톡 발송함(학원) DB
+
 const TIMETABLE_STATUS_SPEC: StatusSpec = {
 	statusProp: "상태",
 	errorProp: "마지막 오류",
@@ -88,6 +93,14 @@ const CLASS_TUITION_GEN_STATUS_SPEC: StatusSpec = {
 	statusProp: "수강료 생성 상태",
 	errorProp: "마지막 오류",
 	startedAtProp: "수강료 생성 처리 시작 시각",
+}
+
+// 알림톡 발송함(학원) DB의 "일괄 전송" 버튼(send-selected-notifications/index.ts)도 같은 관례로
+// 로컬에 정의돼 있다. 이 DB엔 다른 상태 플래그가 없어서 접두어 없는 범용 이름 "상태"를 쓴다.
+const BULK_SEND_STATUS_SPEC: StatusSpec = {
+	statusProp: "상태",
+	errorProp: "마지막 오류",
+	startedAtProp: "처리 시작 시각",
 }
 
 const TARGETS: Array<{ label: string; dataSourceId: string; spec: StatusSpec }> = [
@@ -130,6 +143,9 @@ const TARGETS: Array<{ label: string; dataSourceId: string; spec: StatusSpec }> 
 	// (2026-09-22, Phase 3) sync-textbook-distribution의 from-cart 라우트("진도교재 담기" 버튼)의
 	// "담기 처리중" checkbox -> 상태 전환.
 	{ label: "교재비(카트):담기", dataSourceId: DS_TEXTBOOK_CART, spec: CART_STATUS_SPEC },
+	// (2026-09-22, Phase 3) send-selected-notifications("일괄 전송" 버튼)의 "일괄전송중" checkbox ->
+	// 상태 전환. Phase 3의 마지막 항목.
+	{ label: "알림톡발송함:일괄전송", dataSourceId: DS_NOTIFICATION_BATCH, spec: BULK_SEND_STATUS_SPEC },
 ]
 
 Deno.serve(async (req) => {

@@ -27,6 +27,7 @@ import {
 import { getCurrentAdminKey, resolveAdminKeyFromRequest } from "../_shared/adminShared.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 import { DS_REPORT, DS_TUITION, PROP_NOTIFICATION_BATCH_RELATION, PROP_BATCH_TYPE } from "../_shared/generateShared.ts"
+import { isRunning, markRunning, markDone, markError, type StatusSpec } from "../_shared/statusTracking.ts"
 
 // (이식성 정리) 다른 파일들과 동일하게 SB_URL 환경변수로 조립한다. 특정 프로젝트 URL을 하드코딩하지 않는다.
 const FUNCTIONS_BASE = `${Deno.env.get("SB_URL") ?? ""}/functions/v1`
@@ -37,13 +38,25 @@ const corsHeaders = {
 	"Access-Control-Allow-Methods": "POST, OPTIONS",
 }
 
-const PROP_BATCH_RUNNING = "일괄전송중" // 알림톡 발송함(학원) DB
 const PROP_BATCH_LAST_ERROR = "마지막 오류" // 알림톡 발송함(학원) DB - "실시간 처리 상태" 수식이 이 값을 읽는다.
 const PROP_BATCH_EXECUTOR = "실행자" // 알림톡 발송함(학원) DB
 const PROP_BULK_SELECT = "일괄전송 선택" // 보고서(학원) DB / 수강료(학원) DB
 // "구분"/발송함 relation 속성명은 generate-report, generate-tuition과 공유하므로
 // _shared/generateShared.ts의 PROP_BATCH_TYPE / PROP_NOTIFICATION_BATCH_RELATION을 그대로
 // 쓴다 (2026-09-16, 속성명 중복 하드코딩 정리).
+
+// (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) 기존 "일괄전송중" checkbox(설명에는 "send-report
+// Edge Function이 처리 중"이라고 적혀 있었으나, 실제로 이 속성을 쓰고 읽는 함수는 이 파일
+// send-selected-notifications이다 -- send-report/send-tuition-notice는 이 함수가 대상 건별로
+// 호출하는 실제 발송 함수일 뿐, 발송함 페이지의 상태 속성은 건드리지 않는다. 체크리스트에 남아있던
+// "연결 함수 불일치" 의심은 여기서 해소됨) + "마지막 오류" 조합을 "상태"(select) +
+// "처리 시작 시각"(date)로 전환. 이 DB엔 다른 상태 플래그가 없어서(시간표/메뉴/시험범위 DB와 같은
+// 단일 플래그 케이스) 접두어 없는 범용 이름 "상태"를 그대로 썼다. 마스터플랜 참고.
+const BULK_SEND_STATUS_SPEC: StatusSpec = {
+	statusProp: "상태",
+	errorProp: PROP_BATCH_LAST_ERROR,
+	startedAtProp: "처리 시작 시각",
+}
 
 async function callFn(path: string, body: Record<string, unknown>, adminKey: string): Promise<Response> {
 	return fetch(`${FUNCTIONS_BASE}/${path}`, {
@@ -58,19 +71,19 @@ function nowKstLabel(): string {
 	return `${kst.toISOString().slice(0, 10)} ${String(kst.getUTCHours()).padStart(2, "0")}:${String(kst.getUTCMinutes()).padStart(2, "0")}`
 }
 
-async function setBatchRunning(batchId: string, running: boolean): Promise<void> {
-	await updatePageProperties(batchId, { [PROP_BATCH_RUNNING]: { checkbox: running } })
-}
-
-// 실패 시(또는 인증 실패 등 즉시 발생한 오류) "마지막 오류"에 메시지를 남긴다. null을 넘기면 비운다
-// (정상 처리됨을 의미). 이 기록 자체가 실패해도 원래 응답에는 영향을 주지 않는다.
-async function setBatchError(batchId: string, message: string | null): Promise<void> {
+// 처리 종료(성공/실패)를 한 번에 기록한다. message가 있으면 "⚠️ 오류"로, 없으면 "✅ 완료"로 남긴다.
+// 인증 실패/발송함 로드 실패처럼 markRunning을 거치지 않은 채 바로 실패하는 경로에서도 그대로
+// 쓸 수 있다 (markError는 이전 상태와 무관하게 상태를 덮어쓴다). 기록 자체가 실패해도 원래 응답에는
+// 영향을 주지 않는다.
+async function finishBatch(batchId: string, message: string | null): Promise<void> {
 	try {
-		await updatePageProperties(batchId, {
-			[PROP_BATCH_LAST_ERROR]: { rich_text: message ? [{ text: { content: message.slice(0, 1900) } }] : [] },
-		})
+		if (message) {
+			await markError(batchId, BULK_SEND_STATUS_SPEC, message)
+		} else {
+			await markDone(batchId, BULK_SEND_STATUS_SPEC)
+		}
 	} catch (err) {
-		console.error("발송함에 오류 메시지를 기록하지 못함:", batchId, (err as Error).message)
+		console.error("발송함 상태 기록 실패:", batchId, (err as Error).message)
 	}
 }
 
@@ -255,7 +268,7 @@ Deno.serve(async (req: Request) => {
 	const adminKey = resolveAdminKeyFromRequest(req, body as any)
 	const currentAdminKey = await getCurrentAdminKey()
 	if (!adminKey || adminKey !== currentAdminKey) {
-		await setBatchError(batchId, `${nowKstLabel()} - 인증 실패: x-admin-key가 올바르지 않습니다. Notion 자동화의 웹훅 헤더와 현재 관리자 키가 일치하는지 확인하세요.`)
+		await finishBatch(batchId, `${nowKstLabel()} - 인증 실패: x-admin-key가 올바르지 않습니다. Notion 자동화의 웹훅 헤더와 현재 관리자 키가 일치하는지 확인하세요.`)
 		return new Response(JSON.stringify({ error: "unauthorized" }), {
 			status: 401,
 			headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -267,13 +280,13 @@ Deno.serve(async (req: Request) => {
 	try {
 		batchPageForLock = await getPage(batchId)
 	} catch (err) {
-		await setBatchError(batchId, `${nowKstLabel()} - 발송함을 불러오지 못함: ${(err as Error).message}`)
+		await finishBatch(batchId, `${nowKstLabel()} - 발송함을 불러오지 못함: ${(err as Error).message}`)
 		return new Response(JSON.stringify({ ok: false, error: `발송함을 불러오지 못함: ${(err as Error).message}` }, null, 2), {
 			status: 500,
 			headers: { "Content-Type": "application/json", ...corsHeaders },
 		})
 	}
-	if (batchPageForLock.properties?.[PROP_BATCH_RUNNING]?.checkbox === true) {
+	if (isRunning(batchPageForLock, BULK_SEND_STATUS_SPEC)) {
 		return new Response(JSON.stringify({ ok: true, message: "already_processing", batchId }, null, 2), {
 			status: 200,
 			headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -281,9 +294,8 @@ Deno.serve(async (req: Request) => {
 	}
 
 	const log: string[] = []
-	// 새로 시작하므로 이전 오류 메시지를 지운다.
-	await setBatchError(batchId, null)
-	await setBatchRunning(batchId, true)
+	// markRunning이 상태를 "🔄 작업중"으로 바꾸면서 이전 오류 메시지도 함께 지운다.
+	await markRunning(batchId, BULK_SEND_STATUS_SPEC)
 
 	runInBackground(async () => {
 		let lockAcquired = false
@@ -297,8 +309,7 @@ Deno.serve(async (req: Request) => {
 			}
 			const { failed } = await processBatch(batchId, adminKey, log)
 			console.log("send-selected-notifications finished:", batchId, "\n", log.join("\n"))
-			await setBatchRunning(batchId, false)
-			await setBatchError(batchId, failed > 0 ? `${nowKstLabel()} - ${log[log.length - 1] ?? ""}` : null)
+			await finishBatch(batchId, failed > 0 ? `${nowKstLabel()} - ${log[log.length - 1] ?? ""}` : null)
 		} catch (err) {
 			console.error(
 				"send-selected-notifications failed:",
@@ -309,8 +320,7 @@ Deno.serve(async (req: Request) => {
 				(err as Error).stack,
 			)
 			const message = `${nowKstLabel()} - 오류: ${(err as Error).message}`
-			await setBatchRunning(batchId, false)
-			await setBatchError(batchId, message)
+			await finishBatch(batchId, message)
 		} finally {
 			if (lockAcquired) await releaseGlobalLock(lockUsingKv)
 		}
