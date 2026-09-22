@@ -6,10 +6,17 @@
 // 아니라 Notion 페이지의 "상태"(select) 속성을 대상으로 한다.
 // 마스터플랜: https://app.notion.com/p/903c90386c1d473494c5df6306c53517
 //
-// 지금은 Phase 2 대상(시간표 DB + 메뉴 DB)만 등록돼 있다. Phase 3에서 나머지 DB/함수들을
-// 상태(select) 방식으로 전환할 때마다 TARGETS 배열에 항목을 추가하면 된다. Phase 4에서
-// pg_cron이 이 엔드포인트를 주기적으로 호출하도록 등록할 예정이다(아직 미등록 — 지금은
-// 관리자가 필요할 때 수동으로 호출하거나, 이 파일을 배포한 김에 수동 검증만 마친 상태).
+// Phase 2 대상(시간표 DB + 메뉴 DB)에 이어, Phase 3에서 등록(학원) DB의 5개 상태(종료/시간표/
+// 수업/등록/교재)를 추가했다. 나머지 DB/함수들을 상태(select) 방식으로 전환할 때마다 TARGETS
+// 배열에 항목을 추가하면 된다. Phase 4에서 pg_cron이 이 엔드포인트를 주기적으로 호출하도록
+// 등록할 예정이다(아직 미등록 — 지금은 관리자가 필요할 때 수동으로 호출).
+//
+// [2026-09-22, Phase 3] 등록(학원) DB 5개 스펙 추가 직후, 마이그레이션 검증 과정에서 실제로
+// sync-registration-end가 테스트 페이지에서 5분 넘게 "🔄 작업중" 상태로 멈춰있는 상황이 실제로
+// 발생했다 (notionClient.ts의 fetchWithRetry에 타임아웃이 없다는, 애초에 이 리팩토링을 시작하게
+// 만든 Bug 1과 동일한 원인으로 추정). 이 워치독을 등록 DB에 연결해서 실제로 그 멈춘 페이지를
+// 회수(⏱️ 타임아웃 복구)할 수 있는지 바로 검증했다 — 아래 TARGETS에 등록 DB 5개를 추가한 커밋의
+// 검증 기록은 마스터플랜 문서 참고.
 //
 // 요청: POST, 헤더 x-admin-key 필요. 바디 { "staleMinutes": <number> } 로 기본 임계값(15분)을
 // 이번 호출에 한해 덮어쓸 수 있다(운영 중 급하게 회수해야 할 때 등). 대상별로 다른 임계값이
@@ -17,7 +24,12 @@
 
 import { requireAdminKey } from "../_shared/adminShared.ts"
 import { sweepStaleStatus, type StatusSpec } from "../_shared/statusTracking.ts"
-import { DS_TIMETABLE } from "../_shared/constants.ts"
+import { DS_TIMETABLE, DS_REGISTRATION } from "../_shared/constants.ts"
+import { END_STATUS_SPEC } from "../_shared/registrationEndTarget.ts"
+import { TIMETABLE_STATUS_SPEC as REG_TIMETABLE_STATUS_SPEC } from "../_shared/registrationTimetableTarget.ts"
+import { CLASS_SESSION_STATUS_SPEC } from "../_shared/registrationClassSessionTarget.ts"
+import { ENROLL_STATUS_SPEC } from "../_shared/registrationEnrollTarget.ts"
+import { TEXTBOOK_STATUS_SPEC } from "../_shared/registrationTextbookTarget.ts"
 
 // 메뉴(학원) DB는 다른 함수들이 DS.xxx 형태로 쿼리한 적이 없어서 전용 환경변수가 없다.
 // 이 워치독은 메뉴 DB 전체가 아니라 그 안의 "시간표" 단일 행 하나만 상태 관리 대상이므로,
@@ -33,6 +45,12 @@ const TIMETABLE_STATUS_SPEC: StatusSpec = {
 const TARGETS: Array<{ label: string; dataSourceId: string; spec: StatusSpec }> = [
 	{ label: "시간표", dataSourceId: DS_TIMETABLE, spec: TIMETABLE_STATUS_SPEC },
 	{ label: "메뉴", dataSourceId: DS_MENU, spec: TIMETABLE_STATUS_SPEC },
+	// (2026-09-22, Phase 3) 등록(학원) DB 5개 상태.
+	{ label: "등록:종료", dataSourceId: DS_REGISTRATION, spec: END_STATUS_SPEC },
+	{ label: "등록:시간표", dataSourceId: DS_REGISTRATION, spec: REG_TIMETABLE_STATUS_SPEC },
+	{ label: "등록:수업", dataSourceId: DS_REGISTRATION, spec: CLASS_SESSION_STATUS_SPEC },
+	{ label: "등록:등록", dataSourceId: DS_REGISTRATION, spec: ENROLL_STATUS_SPEC },
+	{ label: "등록:교재", dataSourceId: DS_REGISTRATION, spec: TEXTBOOK_STATUS_SPEC },
 ]
 
 Deno.serve(async (req) => {
