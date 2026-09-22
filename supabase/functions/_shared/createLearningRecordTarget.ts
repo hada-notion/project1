@@ -26,7 +26,7 @@ import {
 // (2026-09-21, 이식성 리팩토링) 위 4개도 constants.ts로 이동함 — 그 파일 상단 주석 참고.
 // DS_ATTENDANCE는 create-learning-record/index.ts가 여기서 다시 가져다 쓰고 있었는데, 그쪽도
 // constants.ts에서 바로 가져오도록 함께 고쳤다 (아래 참고).
-import { markRunning, markDone, markError, type StatusSpec } from "./statusTracking.ts"
+import { markQueued, markRunning, markDone, markError, type StatusSpec } from "./statusTracking.ts"
 
 const PROP_SESSION_REGISTRATION = "등록"
 const PROP_SESSION_ATTENDANCE = "출석"
@@ -70,6 +70,17 @@ type JsonRecord = Record<string, unknown>
 
 async function createPage(parentDataSourceId: string, properties: JsonRecord): Promise<JsonRecord> {
 	return (await sharedCreatePage(parentDataSourceId, properties)) as JsonRecord
+}
+
+// (2026-09-22, Phase 6) index.ts가 웹훅 접수 시점에 호출한다 -- 실제 처리는 아직 시작되지 않았고
+// sync_queue에 적재만 된 상태임을 나타낸다. 실제 markRunning은
+// processCreateLearningRecordQueueItem이 이 항목을 집어서 처리를 시작할 때 호출한다.
+export async function setRecordGenQueued(pageId: string): Promise<void> {
+	try {
+		await markQueued(pageId, RECORD_GEN_STATUS_SPEC)
+	} catch (err) {
+		console.error(`setRecordGenQueued(${pageId}) failed`, err)
+	}
 }
 
 // index.ts는 항상 running=true로만 호출한다(버튼 클릭 시 상태 표시 목적) — 시그니처는 이전과
@@ -295,12 +306,16 @@ export async function finishCreateLearningRecord(sessionId: string): Promise<unk
 }
 
 // process-sync-queue 워커가 target: "create-learning-record" 작업을 처리할 때 호출하는 진입점.
-// statusTargetIds는 index.ts가 이미 "처리중"으로 표시해 둔 페이지 id들(클릭된 페이지 + 실제 수업 페이지)이다.
+// statusTargetIds는 index.ts가 이미 "⏳ 대기열"로 표시해 둔 페이지 id들(클릭된 페이지 + 실제 수업
+// 페이지)이다. (2026-09-22, Phase 6) 실제로 이 항목을 집어서 처리를 시작하는 지금 여기서
+// markRunning("🔄 작업중")으로 갱신해야, 동시에 여러 건이 큐에 쌓여 있어도 실제 처리 중인 것만
+// "작업중"으로 구분되어 보인다.
 export async function processCreateLearningRecordQueueItem(payload: {
 	sessionId: string
 	statusTargetIds: string[]
 }): Promise<void> {
 	try {
+		await Promise.all(payload.statusTargetIds.map((id) => setRecordGenRunning(id, true)))
 		const created = await finishCreateLearningRecord(payload.sessionId)
 		await Promise.all(payload.statusTargetIds.map((id) => setRecordGenDone(id)))
 		console.log("create-learning-record (queue) finished", payload.sessionId, created)

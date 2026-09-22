@@ -37,6 +37,18 @@
 //   - sync-textbook-distribution:from-class-carts: 클래스(학원) DB "교재비 생성" 버튼 —
 //     명시적으로 반 전체(여러 등록)를 대상으로 하는 일괄 버튼.
 //   - sync-class-report-cache: 클래스 단위로 여러 등록의 보고서 캐시를 한 번에 재계산하는 일괄 작업.
+//
+// (2026-09-22, Phase 6: 동시성 제어) PART N-4/N-5 이후에도 "개별 트리거인데 사람이 여러 페이지를
+// 동시에(멀티 셀렉트 등으로) 클릭하는" 시나리오는 여전히 남아있었다 -- cascade-delete(여러 수업/
+// 출석 등을 한꺼번에 "삭제"), generate-report/generate-tuition(클래스 여러 개를 한꺼번에 "보고서
+// 생성"/"수강료 생성")가 실제로 이렇게 쓰였다. 이때 (a) Notion API 호출이 동시에 너무 많이 몰려
+// 하나가 응답 없이 멈추는 사고(이제 fetchWithRetry의 30초 타임아웃으로 완화)와 (b) 실제로는 몇 건만
+// 동시에 처리되는데도 화면에는 클릭한 전부가 "🔄 작업중"으로 보여 실제 진행 상황을 알 수 없는 문제가
+// 있었다. PART N-4가 지적한 지연 문제(당시엔 wakeSyncQueueWorker의 EdgeRuntime.waitUntil 누락
+// 버그로 즉시 트리거가 거의 항상 유실되고 있었음)는 PART N-3에서 이미 고쳤으므로, 이제 큐를 다시
+// 쓰더라도 부하가 없는 평소에는 지연이 거의 없다 -- 그래서 이 셋도 큐에 추가하고, 아래
+// CONCURRENCY만큼 동시에(순서 보장 없이) 처리하도록 바꿨다("생성된 순서대로 하나씩만"에서 "최대
+// CONCURRENCY개까지 동시에"로 전환). 마스터플랜: https://app.notion.com/p/903c90386c1d473494c5df6306c53517
 
 import {
   tryAcquireWorkerLock,
@@ -55,14 +67,29 @@ import { requireAdminKey } from "../_shared/adminShared.ts"
 import { processCreateLearningRecordQueueItem } from "../_shared/createLearningRecordTarget.ts"
 import { processFromClassCartsQueueItem } from "../_shared/textbookDistributionTarget.ts"
 import { processSyncClassReportCacheQueueItem } from "../_shared/classReportCacheTarget.ts"
+import { processCascadeDeleteQueueItem } from "../_shared/cascadeDeleteTarget.ts"
+import { processGenerateReportQueueItem } from "../_shared/generateReportTarget.ts"
+import { processGenerateTuitionQueueItem } from "../_shared/generateTuitionTarget.ts"
 
-// target별 실제 처리 함수. 앞으로 다른 "일괄(bulk)" 웹훅 함수가 추가되면 여기에 추가한다 (개별
-// 트리거 버튼은 큐를 쓰지 않는다 -- 위 2026-09-22 주석 참고).
+// target별 실제 처리 함수. 앞으로 다른 "일괄(bulk)" 웹훅 함수나, 사람이 여러 페이지를 동시에 클릭할
+// 수 있는 "개별" 웹훅 함수가 추가되면 여기에 추가한다 (위 2026-09-22 Phase 6 주석 참고).
 const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Promise<any>) => Promise<void>> = {
   "create-learning-record": processCreateLearningRecordQueueItem,
   "sync-textbook-distribution:from-class-carts": processFromClassCartsQueueItem,
   "sync-class-report-cache": processSyncClassReportCacheQueueItem,
+  "cascade-delete": processCascadeDeleteQueueItem,
+  "generate-report": processGenerateReportQueueItem,
+  "generate-tuition": processGenerateTuitionQueueItem,
 }
+
+// (2026-09-22, Phase 6) 이 워커 한 번의 실행(위 sync_queue_worker_lock으로 항상 한 번에 하나만
+// 돈다) 안에서, claim -> 처리 -> 다음 claim을 반복하는 "레인(lane)"을 이 숫자만큼 동시에 돌린다.
+// claimNextSyncQueueItem이 부르는 claim_next_sync_queue_item RPC는 FOR UPDATE SKIP LOCKED를 써서
+// 여러 레인이 동시에 호출해도 같은 항목을 두 번 집지 않는다(원래도 여러 워커 인스턴스가 동시에
+// 떠도 안전하게 설계되어 있었음 -- 이제 그 안전성을 한 인스턴스 안의 동시 레인에도 그대로 활용).
+// 값은 임의로 3으로 시작 -- Notion API 레이트리밋(초당 요청 수 제한)과 "화면에 동시에 몇 건까지
+// 작업중으로 보이는 게 자연스러운가"를 함께 고려한 보수적인 시작값이다.
+const CONCURRENCY = 3
 
 // Edge Function 자체의 실행 시간 한도보다 여유 있게 짧은 시간 예산 안에서만 계속 처리하고, 남으면
 // 스스로를 다시 깨운다 (한 번의 실행이 시간 제한에 걸려 강제 종료되는 것보다, 미리 멈추고 이어가는
@@ -122,34 +149,41 @@ Deno.serve(async (req: Request) => {
       console.log(`[process-sync-queue] 처리 중 상태로 멈춰있던 작업 ${recoveredCount}건을 복구함 (pending 또는 failed로 확정)`)
     }
 
-    while (Date.now() < deadline) {
-      const item: SyncQueueItem | null = await claimNextSyncQueueItem()
-      if (!item) break
+    // (2026-09-22, Phase 6) 한 항목을 claim -> 처리 -> 결과 반영까지 끝내는 레인 하나. deadline까지
+    // "더 이상 집을 게 없을 때"만 멈추므로, 항목이 남아있는 한 이 레인은 계속 다음 항목을 이어서
+    // 집는다 -- 아래에서 이 함수를 CONCURRENCY개 동시에 돌려서 동시 처리를 구현한다.
+    async function lane(): Promise<void> {
+      while (Date.now() < deadline) {
+        const item: SyncQueueItem | null = await claimNextSyncQueueItem()
+        if (!item) return
 
-      const handler = HANDLERS[item.target]
-      try {
-        if (!handler) throw new Error(`알 수 없는 target: ${item.target}`)
-        await handler(item.payload, cachedGetPage)
-        await markSyncQueueItemDone(item.id)
-        processed++
-      } catch (err) {
-        const message = String((err as Error)?.message ?? err)
-        const outcome = await markSyncQueueItemFailedOrRetry(item, message, MAX_ATTEMPTS)
-        if (outcome === "retrying") {
-          retried++
-          console.error(
-            `[process-sync-queue] #${item.id} (target=${item.target}) 처리 실패, 재시도 예정 (시도 ${item.attempts}/${MAX_ATTEMPTS}):`,
-            message,
-          )
-        } else {
-          failed++
-          console.error(
-            `[process-sync-queue] #${item.id} (target=${item.target}) 처리 실패, 재시도 한도(${MAX_ATTEMPTS}회) 초과로 최종 실패:`,
-            message,
-          )
+        const handler = HANDLERS[item.target]
+        try {
+          if (!handler) throw new Error(`알 수 없는 target: ${item.target}`)
+          await handler(item.payload, cachedGetPage)
+          await markSyncQueueItemDone(item.id)
+          processed++
+        } catch (err) {
+          const message = String((err as Error)?.message ?? err)
+          const outcome = await markSyncQueueItemFailedOrRetry(item, message, MAX_ATTEMPTS)
+          if (outcome === "retrying") {
+            retried++
+            console.error(
+              `[process-sync-queue] #${item.id} (target=${item.target}) 처리 실패, 재시도 예정 (시도 ${item.attempts}/${MAX_ATTEMPTS}):`,
+              message,
+            )
+          } else {
+            failed++
+            console.error(
+              `[process-sync-queue] #${item.id} (target=${item.target}) 처리 실패, 재시도 한도(${MAX_ATTEMPTS}회) 초과로 최종 실패:`,
+              message,
+            )
+          }
         }
       }
     }
+
+    await Promise.all(Array.from({ length: CONCURRENCY }, () => lane()))
   } finally {
     clearInterval(lockRenewalTimer)
     await releaseWorkerLock()

@@ -6,6 +6,15 @@
 //
 // (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환) processCascadeDeleteQueueItem
 // (process-sync-queue 전용 진입점)은 제거했다. index.ts가 cascadeDelete를 직접 호출한다.
+//
+// (2026-09-22, Phase 6: 동시성 제어) 여러 페이지에서 "삭제"를 동시에(멀티 셀렉트 등으로) 눌렀을 때
+// Notion API 호출이 한꺼번에 너무 많이 몰리는 문제와, 실제로는 일부만 동시에 처리되는데도 화면에는
+// 클릭한 전부가 "🔄 작업중"으로 보이는 문제를 해결하기 위해 processCascadeDeleteQueueItem을
+// 다시 추가했다. index.ts는 이제 markDeletingQueued로 "⏳ 대기열"만 표시하고 sync_queue에 적재하며,
+// process-sync-queue가 이 항목을 집어서(최대 process-sync-queue의 CONCURRENCY 개까지 동시에)
+// 실제로 처리를 시작할 때 아래 진입점이 호출된다. markRunning/markDone은 cascadeDelete 자신이
+// depth===0일 때 이미 호출하므로 여기서 다시 부를 필요는 없다. 마스터플랜:
+// https://app.notion.com/p/903c90386c1d473494c5df6306c53517
 
 import { getPage, queryAllPages, updatePageProperties, archivePage, mapWithConcurrency } from "./notionClient.ts"
 import {
@@ -19,7 +28,7 @@ import {
 	DS_TEXTBOOK_DISTRIBUTION,
 	DS_TEXTBOOK_PAYMENT,
 } from "./constants.ts"
-import { isRunning, markRunning, markDone, markError, type StatusSpec } from "./statusTracking.ts"
+import { isRunning, markQueued, markRunning, markDone, markError, type StatusSpec } from "./statusTracking.ts"
 // (2026-09-21, 이식성 리팩토링) 위 7개 데이터소스 ID는 이 파일에 직접 하드코딩돼 있었는데, 이제
 // constants.ts 한 곳에서 환경변수로 읽어와 공유한다 (constants.ts 상단 주석 참고). export하지 않아도
 // 되도록 이 파일 밖에서 이 이름들을 가져다 쓰는 곳이 없는지 확인했다.
@@ -98,6 +107,14 @@ function titleOf(page: any, titleProp: string): string {
 // index.ts의 프리체크(이미 처리중인지 판단)에서도 쓰므로 export한다.
 export function isDeletingFlagSet(page: any): boolean {
   return isRunning(page, CASCADE_DELETE_STATUS_SPEC)
+}
+
+export async function markDeletingQueued(pageId: string): Promise<void> {
+  try {
+    await markQueued(pageId, CASCADE_DELETE_STATUS_SPEC)
+  } catch (err) {
+    console.error(`markDeletingQueued(${pageId}) failed:`, (err as Error).message)
+  }
 }
 
 export async function markDeletingRunning(pageId: string): Promise<void> {
@@ -220,6 +237,26 @@ export async function cascadeDelete(
     log.push(`${indent}🗑️ [${name}] 삭제되어 휴지통으로 이동됨`)
   } catch (err) {
     await markDeletingError(pageId, (err as Error).message)
+    throw err
+  }
+}
+
+// process-sync-queue 워커가 target: "cascade-delete" 작업을 처리할 때 호출하는 진입점
+// (2026-09-22, Phase 6 재도입 — 위 주석 참고). markRunning/markDone/markError는 cascadeDelete가
+// depth===0 호출에 대해 이미 처리하므로 여기서 다시 호출하지 않는다. 실패하면 그대로 다시
+// throw해서 process-sync-queue가 재시도 여부(최대 3회)를 판단하게 한다.
+export async function processCascadeDeleteQueueItem(payload: { pageId: string }): Promise<void> {
+  const log: string[] = []
+  try {
+    await cascadeDelete(payload.pageId, log, new Set<string>(), 0)
+    console.log("cascade-delete (queue) finished:", payload.pageId, "\n", log.join("\n"))
+  } catch (err) {
+    console.error(
+      "cascade-delete (queue) failed:",
+      (err as Error).message,
+      "\nlog so far:",
+      log.join("\n"),
+    )
     throw err
   }
 }

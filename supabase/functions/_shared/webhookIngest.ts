@@ -64,7 +64,7 @@ import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "./adminShared.ts
 // (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) runSyncWebhookForPage/handleSyncWebhook에
 // statusSpec(상태 select 기반)을 선택적으로 지원하기 위해 추가. 마스터플랜:
 // https://app.notion.com/p/903c90386c1d473494c5df6306c53517
-import { isRunning, markRunning, markDone, markError, type StatusSpec } from "./statusTracking.ts"
+import { isRunning, markQueued, markRunning, markDone, markError, type StatusSpec } from "./statusTracking.ts"
 
 // 각 DB 전용 setter(makeSyncStatusSetter/makeClassStatusSetter 결과물)가 실제로 쓰는 리터럴 유니온
 // 타입과 정확히 맞춰야 한다 -- 여기를 그냥 string으로 넓혀두면 "이 함수는 '처리중'|'완료'|'오류'만
@@ -124,7 +124,12 @@ export async function runLockedQueueWebhookForPage(
       return jsonResponse({ ok: true, message: "already_processing", pageId }, 200)
     }
 
-    if (opts.statusSpec) await markRunning(pageId, opts.statusSpec)
+    // (2026-09-22, Phase 6: 동시성 제어) 여기(웹훅 접수 시점)에서는 markRunning이 아니라 markQueued를
+    // 쓴다 -- 실제로 Notion API를 두드리는 작업은 process-sync-queue 워커가 이 항목을 집어서 시작할
+    // 때(각 target 핸들러 진입점에서) 비로소 markRunning을 호출한다. 그래야 여러 페이지에서 동시에
+    // 버튼을 눌러도, 실제로 동시에 처리 중인 (최대 N개) 항목만 "🔄 작업중"으로 보이고 나머지는
+    // "⏳ 대기열"로 구분되어 보인다. 마스터플랜: https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+    if (opts.statusSpec) await markQueued(pageId, opts.statusSpec)
     else await opts.setStatus!(pageId, "처리중")
 
     const payload = opts.buildPayload ? opts.buildPayload(pageId) : { pageId }
@@ -292,6 +297,106 @@ export type LockedBackgroundWebhookOptions = {
   // 401을 반환하고 처리를 중단한다. 생략(기본값 false/undefined)하면 기존과 동일하게 인증을
   // 요구하지 않는다. (2026-09-21, PART N-2)
   requireAdminKey?: boolean
+}
+
+// (2026-09-22, Phase 6: 동시성 제어) generate-report/generate-tuition처럼 "클래스 여러 개를 한꺼번에
+// 대상으로 누를 수 있는" 버튼 웹훅을 위한 큐 기반 변형. handleLockedBackgroundWebhook과 뼈대는
+// 같지만(POST 확인 -> body 파싱 -> id 추출 -> 락 확인), "처리중 표시 -> 즉시 백그라운드 실행" 대신
+// "대기열 표시 -> sync_queue 적재 -> 즉시 202 응답"으로 끝낸다. 실제 markRunning/실행/markDone·Error는
+// process-sync-queue 워커가 makeQueuedBackgroundProcessor로 감싼 진입점을 통해 수행한다. 마스터플랜:
+// https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+export type QueuedBackgroundWebhookOptions = {
+  // 로그 접두사로 쓰는 함수 이름 (예: "generate-report").
+  functionName: string
+  // 상태(select) + 처리 시작 시각(date) 스펙.
+  statusSpec: StatusSpec
+  // sync_queue에 적재할 target 이름 (process-sync-queue의 HANDLERS 키와 일치해야 한다).
+  target: string
+  // id를 찾지 못했을 때의 오류 메시지.
+  missingIdError: string
+  // 응답 JSON 및 sync_queue payload에 id를 담을 필드 이름. 기본값 "pageId".
+  idField?: string
+  // true면 x-admin-key 헤더(또는 body.adminKey)가 유효하지 않으면 401을 반환한다.
+  requireAdminKey?: boolean
+}
+
+export async function handleQueuedBackgroundWebhook(
+  req: Request,
+  opts: QueuedBackgroundWebhookOptions,
+): Promise<Response> {
+  if (req.method !== "POST") {
+    return new Response("Use POST", { status: 405 })
+  }
+
+  let body: unknown
+  try {
+    body = await req.json()
+  } catch {
+    body = undefined
+  }
+
+  if (opts.requireAdminKey) {
+    const adminKey = resolveAdminKeyFromRequest(req, (body as Record<string, unknown>) ?? {})
+    const currentAdminKey = await getCurrentAdminKey()
+    if (!adminKey || adminKey !== currentAdminKey) {
+      return jsonResponse({ error: "unauthorized" }, 401)
+    }
+  }
+
+  const id = body ? extractPageId(body) : null
+  const idField = opts.idField ?? "pageId"
+  if (!id) {
+    return jsonResponse({ ok: false, error: opts.missingIdError, rawBody: body }, 400)
+  }
+
+  try {
+    const pageForLock = await getPage(id)
+    if (isRunning(pageForLock, opts.statusSpec)) {
+      return jsonResponse({ ok: true, message: "already_processing", [idField]: id }, 200)
+    }
+
+    await markQueued(id, opts.statusSpec)
+    await enqueueSync(opts.target, { [idField]: id })
+    wakeSyncQueueWorker()
+
+    return respondAccepted({ [idField]: id })
+  } catch (err) {
+    console.error(`[${opts.functionName}] ERROR:`, (err as Error).message, (err as Error).stack)
+    await markError(id, opts.statusSpec, (err as Error).message)
+    return jsonResponse({ ok: false, error: (err as Error).message }, 500)
+  }
+}
+
+// process-sync-queue의 HANDLERS에 등록할 진입점을 만들어주는 팩토리. run(id, log)만 각 함수가
+// 넘기면, "이 항목을 집는 시점에 markRunning -> run 실행 -> 성공하면 markDone, 실패하면 markError
+// 후 다시 throw(재시도 판단은 process-sync-queue가 함)"까지 공용으로 처리한다.
+export function makeQueuedBackgroundProcessor(
+  functionName: string,
+  statusSpec: StatusSpec,
+  idField: string,
+  run: (id: string, log: string[]) => Promise<void>,
+): (payload: Record<string, any>) => Promise<void> {
+  return async (payload: Record<string, any>) => {
+    const id = payload[idField]
+    await markRunning(id, statusSpec)
+    const log: string[] = []
+    try {
+      await run(id, log)
+      console.log(`[${functionName}] (queue) finished:`, id, "\n", log.join("\n"))
+      await markDone(id, statusSpec)
+    } catch (err) {
+      console.error(
+        `[${functionName}] (queue) failed:`,
+        (err as Error).message,
+        "\nlog so far:",
+        log.join("\n"),
+        "\nstack:",
+        (err as Error).stack,
+      )
+      await markError(id, statusSpec, (err as Error).message)
+      throw err
+    }
+  }
 }
 
 export async function handleLockedBackgroundWebhook(

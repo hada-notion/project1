@@ -38,7 +38,7 @@ import { respondAccepted } from "../_shared/backgroundTask.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 import { runSyncWebhookForPage } from "../_shared/webhookIngest.ts"
 import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
-import { isRunning, markRunning, markDone } from "../_shared/statusTracking.ts"
+import { isRunning, markQueued, markDone } from "../_shared/statusTracking.ts"
 import {
 	CLASS_CART_STATUS_SPEC,
 	CART_STATUS_SPEC,
@@ -117,7 +117,9 @@ Deno.serve(async (req: Request) => {
 			// 아직 누락이 있다: 체크박스가 켜져 있어도(진짜 처리 중이든 멈춘 것이든) 거부하지 않고
 			// 안전하게 새로 이어서 진행한다 -- ensureCartForRegistration은 이미 카트가 있는 학생은
 			// 건드리지 않는 멱등 작업이라 중복 생성 위험이 없다.
-			await markRunning(pageId, CLASS_CART_STATUS_SPEC)
+			// (2026-09-22, Phase 6) 여기서는 markQueued만 표시한다 -- 실제 markRunning은
+			// processFromClassCartsQueueItem이 이 항목을 집어서 처리를 시작할 때 호출한다.
+			await markQueued(pageId, CLASS_CART_STATUS_SPEC)
 
 			// 대상 등록 목록은 대기열에 쉬는 동안 바뀔 수 있으니, 워커가 실행 시점에 다시 조회한다
 			// (processFromClassCartsQueueItem 참고) -- 여기서 이미 계산한 activeRegistrations는

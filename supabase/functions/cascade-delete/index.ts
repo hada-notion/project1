@@ -1,4 +1,19 @@
-// Supabase Edge Function: cascade-delete (v12)
+// Supabase Edge Function: cascade-delete (v13)
+//
+// v13 변경 사항 (2026-09-22, Phase 6: 동시성 제어 -- 큐 재도입):
+//   - 여러 DB(수업/출석/학습기록 등)에서 "삭제"를 멀티 셀렉트 등으로 동시에 여러 건 누르면, v12
+//     방식(즉시 응답 + runInBackground로 각자 바로 실행)에서는 Notion API 호출이 한꺼번에 너무 많이
+//     몰릴 수 있고, 화면에는 클릭한 모든 페이지가 "🔄 작업중"으로 보여서 실제 몇 건이 동시에
+//     처리되고 있는지 알 수 없었다. sync_queue로 다시 옮기고(target: "cascade-delete",
+//     _shared/cascadeDeleteTarget.ts의 processCascadeDeleteQueueItem), process-sync-queue가 정한
+//     동시 처리 한도(현재 3)만큼만 실제로 처리하도록 바꿨다. 이 함수는 이제 "이미 처리 중(대기열
+//     포함)이면 즉시 반환 -> 아니면 markDeletingQueued로 '⏳ 대기열' 표시 -> sync_queue 적재 -> 즉시
+//     202 응답"까지만 하고, 실제 cascadeDelete 호출/완료·오류 반영은 큐 워커가 담당한다. 그래서
+//     v8~v12에 있던 STALE_LOCK_MS(3분)/last_edited_time 기반의 "응답 없이 멈춘 실행" 자체 감지
+//     로직은 더 이상 필요 없다 -- 큐에 쌓인 뒤로는 sync_queue 자체의 15분 기준
+//     recoverStaleSyncQueueItems와 Notion 쪽 15분 워치독(sweepStaleStatus) 두 겹이 이미 "멈춘 작업"
+//     회수를 담당하고 있고, "대기열에 오래 있음(=아직 처리를 시작 못함)"은 정상적인 대기이지 멈춤이
+//     아니므로 별도 감지가 필요 없다. 마스터플랜: https://app.notion.com/p/903c90386c1d473494c5df6306c53517
 //
 // v12 변경 사항 (2026-09-22, PART N-5: 동기 응답 -> 즉시 응답 + 백그라운드 처리로 전환):
 //   - v11(동기 처리)로 바꾼 뒤, 재귀가 깊은/하위 페이지가 많은 삭제에서 Notion "웹훅 보내기" 버튼이
@@ -41,13 +56,10 @@
 // https://app.notion.com/p/903c90386c1d473494c5df6306c53517
 
 import { getPage, extractPageId } from "../_shared/notionClient.ts"
-import { isDeletingFlagSet, markDeletingRunning, markDeletingError, cascadeDelete } from "../_shared/cascadeDeleteTarget.ts"
+import { isDeletingFlagSet, markDeletingQueued, markDeletingError } from "../_shared/cascadeDeleteTarget.ts"
 import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
-import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
-
-// "삭제 처리중" 상태가 켜진 채로 이 시간(ms) 이상 페이지가 갱신되지 않았으면, 실행 중인
-// 작업이 죽었다고 (서버 타임아웃/재시작 등) 판단하고 막아두지 않고 다시 진행한다.
-const STALE_LOCK_MS = 3 * 60 * 1000
+import { respondAccepted } from "../_shared/backgroundTask.ts"
+import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
@@ -85,44 +97,36 @@ Deno.serve(async (req: Request) => {
     )
   }
 
-  // 안전장치: 같은 페이지에 대해 캐스케이드가 이미 진행 중이면(버튼 더블클릭, 웹훅 재시도 등)
-  // 새 요청은 다시 실행하지 않고 바로 반환한다.
-  let resumeNote: string | undefined
+  // 안전장치: 같은 페이지에 대해 캐스케이드가 이미 접수되어 있으면(대기열이든 실제 처리 중이든,
+  // 버튼 더블클릭/웹훅 재시도 등) 새 요청은 다시 적재하지 않고 바로 반환한다. (2026-09-22, Phase 6)
+  // 큐로 옮기면서 "응답 없이 멈춘 실행"은 더 이상 여기서 last_edited_time으로 직접 감지하지 않는다
+  // -- sync_queue의 recoverStaleSyncQueueItems(15분)와 Notion 쪽 워치독(sweepStaleStatus, 15분)이
+  // 이미 그 역할을 한다 (위 v13 주석 참고).
   try {
     const existingPage = await getPage(pageId)
     if (isDeletingFlagSet(existingPage)) {
-      const lastEditedMs = existingPage.last_edited_time ? new Date(existingPage.last_edited_time).getTime() : 0
-      const ageMs = Date.now() - lastEditedMs
-      if (ageMs < STALE_LOCK_MS) {
-        return new Response(JSON.stringify({ ok: true, message: "already_processing", pageId }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        })
-      }
-      resumeNote = `⚠️ 이전 삭제 처리가 응답 없이 멈춰서(약 ${Math.round(ageMs / 1000)}초간 갱신이 없었음) 자동으로 재시작합니다.`
-      console.log(
-        `cascade-delete: stale "삭제 처리중" lock detected for ${pageId} (age ${Math.round(ageMs / 1000)}s) — retrying instead of blocking`,
-      )
+      return new Response(JSON.stringify({ ok: true, message: "already_processing", pageId }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
     }
   } catch (err) {
     console.error("cascade-delete: failed to pre-check status:", (err as Error).message)
   }
 
-  // (2026-09-22, PART N-5) "삭제 처리중" 표시까지는 응답 전에 동기로 끝내고, 실제 재귀 삭제는
-  // 백그라운드에서 계속 진행한다 — Notion의 "웹훅 보내기" 버튼이 깊은/큰 재귀 삭제를 기다리다
-  // 시간 초과로 실패 표시를 띄우는 문제를 피하기 위함 (실제 처리는 항상 정상 완료됐었음).
-  await markDeletingRunning(pageId)
-
-  runInBackground(async () => {
-    const log: string[] = []
-    try {
-      await cascadeDelete(pageId, log, new Set<string>(), 0, resumeNote)
-      console.log("cascade-delete finished:", pageId, "\n", log.join("\n"))
-    } catch (err) {
-      console.error("cascade-delete failed:", (err as Error).message)
-      await markDeletingError(pageId, (err as Error).message)
-    }
-  })
-
-  return respondAccepted({ pageId })
+  try {
+    // (2026-09-22, Phase 6) 실제 markRunning은 process-sync-queue가 이 항목을 집어서 처리를
+    // 시작할 때(cascadeDelete 자신이 depth===0에서) 호출한다 — 여기서는 "⏳ 대기열"만 표시한다.
+    await markDeletingQueued(pageId)
+    await enqueueSync("cascade-delete", { pageId })
+    wakeSyncQueueWorker()
+    return respondAccepted({ pageId })
+  } catch (err) {
+    console.error("cascade-delete: failed to enqueue:", (err as Error).message)
+    await markDeletingError(pageId, (err as Error).message)
+    return new Response(JSON.stringify({ ok: false, error: (err as Error).message, pageId }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    })
+  }
 })

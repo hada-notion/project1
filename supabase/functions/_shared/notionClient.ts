@@ -19,19 +19,52 @@ export function notionHeaders() {
 
 // Notion API가 429(레이트리밋)나 일시적 5xx를 반환하면 Retry-After 헤더(있으면) 또는 지수 백오프만큼
 // 대기 후 자동 재시도한다. cascade-delete/fix-attendance에서 검증된, 429 전용보다 더 안전한 버전 (로드맵 5-9).
+//
+// (2026-09-22, Phase 6: 동시성 제어) 기존에는 fetch() 자체에 타임아웃이 전혀 없어서, Notion API
+// 호출 하나가 응답 없이 멈추면(드물지만 실제로 generate-classes에서 재현됨, 2026-09-21) 그 위의
+// markRunning된 "작업중" 상태도 영원히 멈춰 있었다 -- sweepStaleStatus 워치독이 15분 뒤에 상태
+// 표시는 회수해도, 실제로 멈춘 fetch 자체는 회수하지 못했다(재클릭해야만 새 시도가 시작됨). 이제
+// AbortController로 요청마다 FETCH_TIMEOUT_MS(30초) 제한을 걸어서, 응답 없이 멈춘 호출도 타임아웃 ->
+// 기존 백오프 재시도 경로로 흘러들어가게 한다 -- 즉 "영원히 멈춤"이 최악의 경우에도 "몇 번의 30초
+// 타임아웃 + 백오프만큼 지연 후 자동 복구(또는 명확한 오류)"로 바뀐다. 마스터플랜:
+// https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+const FETCH_TIMEOUT_MS = 30_000
+
 export async function fetchWithRetry(url: string, init: RequestInit, maxRetries = 5): Promise<Response> {
 	let lastRes: Response | undefined
+	let lastErr: Error | undefined
 	for (let attempt = 0; attempt <= maxRetries; attempt++) {
-		const res = await fetch(url, init)
-		if (res.status !== 429 && res.status < 500) return res
-		lastRes = res
-		if (attempt === maxRetries) return res
-		const retryAfterHeader = res.headers.get("Retry-After")
-		const retryAfterMs = retryAfterHeader ? Number(retryAfterHeader) * 1000 : NaN
-		const backoffMs = Number.isFinite(retryAfterMs) ? retryAfterMs : 300 * Math.pow(2, attempt)
-		await new Promise((resolve) => setTimeout(resolve, backoffMs))
+		const controller = new AbortController()
+		const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+		try {
+			const res = await fetch(url, { ...init, signal: controller.signal })
+			if (res.status !== 429 && res.status < 500) return res
+			lastRes = res
+			lastErr = undefined
+			if (attempt === maxRetries) return res
+			const retryAfterHeader = res.headers.get("Retry-After")
+			const retryAfterMs = retryAfterHeader ? Number(retryAfterHeader) * 1000 : NaN
+			const backoffMs = Number.isFinite(retryAfterMs) ? retryAfterMs : 300 * Math.pow(2, attempt)
+			await new Promise((resolve) => setTimeout(resolve, backoffMs))
+		} catch (err) {
+			// fetch 자체가 타임아웃(AbortError)이나 네트워크 오류로 실패한 경우. 429/5xx와 동일한
+			// 백오프 스케줄로 재시도하고, 마지막 시도까지 전부 실패하면 원인을 알 수 있는 오류를 던진다
+			// (호출자는 이미 전부 이 예외를 자기 catch->markError 경로로 처리하도록 되어 있어 안전하다).
+			lastErr = err as Error
+			lastRes = undefined
+			if (attempt === maxRetries) {
+				throw new Error(
+					`Notion API 요청이 ${maxRetries + 1}번 시도 후에도 실패함 (마지막 원인: ${lastErr.message}): ${url}`,
+				)
+			}
+			const backoffMs = 300 * Math.pow(2, attempt)
+			await new Promise((resolve) => setTimeout(resolve, backoffMs))
+		} finally {
+			clearTimeout(timeoutId)
+		}
 	}
-	return lastRes!
+	if (lastRes) return lastRes
+	throw lastErr ?? new Error(`fetchWithRetry: 알 수 없는 오류로 응답을 받지 못함: ${url}`)
 }
 
 // 동시에 실행되는 작업 수를 concurrency로 제한하면서 배열을 병렬 처리한다

@@ -30,7 +30,7 @@ import {
 	anyTitleText,
 	todaySeoulDate,
 } from "./notionClient.ts"
-import { markDone, markError, type StatusSpec } from "./statusTracking.ts"
+import { markRunning, markDone, markError, type StatusSpec } from "./statusTracking.ts"
 import { getScheduleConfig } from "./adminShared.ts"
 
 const DATA_SOURCE_TEXTBOOK_CART = Deno.env.get("DATA_SOURCE_TEXTBOOK_CART_ID")! // 교재비(학원) DB
@@ -189,8 +189,12 @@ export async function distributeFromCartPage(cartId: string): Promise<void> {
 
 // process-sync-queue 워커가 target: "sync-textbook-distribution:from-class-carts" 작업을 처리할 때 호출하는 진입점.
 // 대상 등록 목록은 대기열에 쉬는 동안 바눐을 수 있으니 index.ts의 사전 확인에서 재사용하지 않고 실행 시점에 다시 조회한다.
+// (2026-09-22, Phase 6) index.ts는 이제 접수 시점에 markQueued만 호출한다 -- 이 항목을 실제로 집어서
+// 처리를 시작하는 지금 여기서 markRunning을 호출해야 "🔄 작업중"이 실제 동시 처리 중인 개수만큼만
+// 보인다.
 export async function processFromClassCartsQueueItem(payload: { classId: string }): Promise<void> {
 	try {
+		await markRunning(payload.classId, CLASS_CART_STATUS_SPEC)
 		const activeRegistrations = await getActiveRegistrationsForCarts(payload.classId)
 		let createdCount = 0
 		for (const reg of activeRegistrations) {

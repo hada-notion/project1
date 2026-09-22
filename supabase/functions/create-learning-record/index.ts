@@ -39,7 +39,7 @@ import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/admin
 import {
 	PROP_ATTENDANCE_SESSION,
 	dedupe,
-	setRecordGenRunning,
+	setRecordGenQueued,
 } from "../_shared/createLearningRecordTarget.ts"
 
 type JsonRecord = Record<string, unknown>
@@ -106,8 +106,10 @@ async function handleRequest(req: Request): Promise<Response> {
 
 	// 출석 페이지에서 버튼을 눌렀을 때도 그 출석 페이지 자신의 "학습기록 생성중" 체크박스가 갱신되도록,
 	// 클릭된 페이지와 (치환된) 수업 페이지 둘 다에 상태를 표시한다. 같은 페이지면 한 번만 호출된다.
+	// (2026-09-22, Phase 6) 여기서는 markQueued("⏳ 대기열")만 표시한다 -- 실제 markRunning은
+	// processCreateLearningRecordQueueItem이 이 항목을 집어서 처리를 시작할 때 호출한다.
 	const statusTargetIds = dedupe([clickedId, sessionId])
-	await Promise.all(statusTargetIds.map((id) => setRecordGenRunning(id, true)))
+	await Promise.all(statusTargetIds.map((id) => setRecordGenQueued(id)))
 
 	// Notion의 "웹훅 보내기" 버튼 액션은 이 응답을 동기적으로 기다린다. 실제 생성 작업은
 	// sync_queue에 적재해 process-sync-queue 워커가 순서대로 처리하게 하고, 이 함수는 즉시 202로 응답한다.

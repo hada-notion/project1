@@ -6,7 +6,7 @@
 import { getPage, queryAllPages, mapWithConcurrency } from "./notionClient.ts"
 import { makePageCache, upsertReportCacheRows, type ReportCacheRow } from "./reportCacheShared.ts"
 import { buildCacheRowForRegistration } from "./reportCacheBuilder.ts"
-import { markDone, markError, type StatusSpec } from "./statusTracking.ts"
+import { markRunning, markDone, markError, type StatusSpec } from "./statusTracking.ts"
 import { DS_REGISTRATION, PROP_LAST_ERROR } from "./constants.ts"
 // (2026-09-21, 이식성 리팩토링) 등록(학원) DB ID를 여기서도 하드코딩하지 않고 constants.ts에서
 // 가져온다 (다른 여러 파일과 동일한 값).
@@ -39,8 +39,13 @@ export async function processClass(classId: string): Promise<string> {
 }
 
 // process-sync-queue 워커가 target: "sync-class-report-cache" 작업을 처리할 때 호출하는 진입점.
+// (2026-09-22, Phase 6) index.ts(webhookIngest.ts의 runLockedQueueWebhookForPage)는 이제 접수
+// 시점에 markQueued만 호출한다 -- 실제로 이 항목을 집어서 처리를 시작하는 지금 이 시점에
+// markRunning을 호출해야 "🔄 작업중"이 실제 동시 처리 중인 항목 수(process-sync-queue의 동시
+// 처리 한도)만큼만 보인다.
 export async function processSyncClassReportCacheQueueItem(payload: { classId: string }): Promise<void> {
 	try {
+		await markRunning(payload.classId, CLASS_REPORT_SYNC_STATUS_SPEC)
 		const summary = await processClass(payload.classId)
 		console.log("sync-class-report-cache (queue) finished:", payload.classId, summary)
 		await markDone(payload.classId, CLASS_REPORT_SYNC_STATUS_SPEC)

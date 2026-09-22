@@ -169,16 +169,40 @@ function requireSupabaseEnv() {
   }
 }
 
+// (2026-09-22, Phase 6: 동시성 제어) notionClient.ts의 fetchWithRetry와 같은 이유로 타임아웃을
+// 추가했다 -- 이 함수는 sync_queue 적재/집기(claim)/완료표시 등 큐 메커니즘 자체가 의존하는
+// Supabase REST/RPC 호출에 쓰이므로, 이 fetch가 응답 없이 멈추면 큐 전체가 멈출 수 있다.
+// 마스터플랜: https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+const SUPABASE_FETCH_TIMEOUT_MS = 30_000
+
 export async function fetchSupabaseWithRetry(url: string, init: RequestInit, maxRetries = 3): Promise<Response> {
   let lastRes: Response | undefined
+  let lastErr: Error | undefined
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const res = await fetch(url, init)
-    if (res.ok || (res.status !== 401 && res.status < 500)) return res
-    lastRes = res
-    if (attempt === maxRetries) return res
-    await new Promise((resolve) => setTimeout(resolve, 300 * Math.pow(2, attempt)))
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), SUPABASE_FETCH_TIMEOUT_MS)
+    try {
+      const res = await fetch(url, { ...init, signal: controller.signal })
+      if (res.ok || (res.status !== 401 && res.status < 500)) return res
+      lastRes = res
+      lastErr = undefined
+      if (attempt === maxRetries) return res
+      await new Promise((resolve) => setTimeout(resolve, 300 * Math.pow(2, attempt)))
+    } catch (err) {
+      lastErr = err as Error
+      lastRes = undefined
+      if (attempt === maxRetries) {
+        throw new Error(
+          `Supabase 요청이 ${maxRetries + 1}번 시도 후에도 실패함 (마지막 원인: ${lastErr.message}): ${url}`,
+        )
+      }
+      await new Promise((resolve) => setTimeout(resolve, 300 * Math.pow(2, attempt)))
+    } finally {
+      clearTimeout(timeoutId)
+    }
   }
-  return lastRes!
+  if (lastRes) return lastRes
+  throw lastErr ?? new Error(`fetchSupabaseWithRetry: 알 수 없는 오류로 응답을 받지 못함: ${url}`)
 }
 
 export type ReportCacheRow = {
