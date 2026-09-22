@@ -61,6 +61,10 @@ import { getPage, extractPageId, checkboxValue } from "./notionClient.ts"
 import { runInBackground, respondAccepted } from "./backgroundTask.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "./syncQueue.ts"
 import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "./adminShared.ts"
+// (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) runSyncWebhookForPage/handleSyncWebhook에
+// statusSpec(상태 select 기반)을 선택적으로 지원하기 위해 추가. 마스터플랜:
+// https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+import { isRunning, markRunning, markDone, markError, type StatusSpec } from "./statusTracking.ts"
 
 // 각 DB 전용 setter(makeSyncStatusSetter/makeClassStatusSetter 결과물)가 실제로 쓰는 리터럴 유니온
 // 타입과 정확히 맞춰야 한다 -- 여기를 그냥 string으로 넓혀두면 "이 함수는 '처리중'|'완료'|'오류'만
@@ -171,10 +175,15 @@ export async function handleLockedQueueWebhook(
 export type SyncWebhookOptions = {
   // 로그 접두사로 쓰는 함수 이름 (예: "sync-registration-enroll").
   functionName: string
-  // 이 속성(체크박스)이 이미 true면 재클릭으로 보고 즉시 already_processing을 반환한다.
-  lockProp: string
+  // 옛 방식(체크박스 잠금 + setStatus 콜백). statusSpec을 주면 이 둘은 완전히 무시된다.
+  // (2026-09-22, Phase 3) 마이그레이션 대상마다 하나씩 statusSpec으로 옮기는 중이라, 당분간 두
+  // 방식이 공존한다 — 아직 옮기지 않은 호출부는 lockProp/setStatus를 그대로 쓴다.
+  lockProp?: string
   // "처리중"/"완료"/"오류" 표시에 쓰는 상태 setter. 각 DB/함수 전용 setter를 그대로 넘기면 된다.
-  setStatus: SetSyncStatus
+  setStatus?: SetSyncStatus
+  // 새 방식: 상태(select) + 처리 시작 시각(date) 기반. 주어지면 lockProp/setStatus 대신 이걸 쓴다.
+  // 마스터플랜: https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+  statusSpec?: StatusSpec
   // 실제 처리 로직. 예외를 던지면 자동으로 "오류" 상태로 이어진다 (백그라운드에서 실행되므로 HTTP
   // 응답 코드에는 더 이상 영향을 주지 않는다).
   process: (pageId: string) => Promise<void>
@@ -188,20 +197,26 @@ export async function runSyncWebhookForPage(
   opts: SyncWebhookOptions,
 ): Promise<Response> {
   const pageForLock = await getPage(pageId)
-  if (checkboxValue(pageForLock, opts.lockProp)) {
+  const currentlyRunning = opts.statusSpec
+    ? isRunning(pageForLock, opts.statusSpec)
+    : checkboxValue(pageForLock, opts.lockProp!)
+  if (currentlyRunning) {
     return jsonResponse({ ok: true, message: "already_processing", pageId }, 200)
   }
 
-  await opts.setStatus(pageId, "처리중")
+  if (opts.statusSpec) await markRunning(pageId, opts.statusSpec)
+  else await opts.setStatus!(pageId, "처리중")
 
   runInBackground(async () => {
     try {
       await opts.process(pageId)
-      await opts.setStatus(pageId, "완료")
+      if (opts.statusSpec) await markDone(pageId, opts.statusSpec)
+      else await opts.setStatus!(pageId, "완료")
       console.log(`[${opts.functionName}] finished:`, pageId)
     } catch (err) {
       console.error(`[${opts.functionName}] ERROR:`, (err as Error).message, (err as Error).stack)
-      await opts.setStatus(pageId, "오류", (err as Error).message)
+      if (opts.statusSpec) await markError(pageId, opts.statusSpec, (err as Error).message)
+      else await opts.setStatus!(pageId, "오류", (err as Error).message)
     }
   })
 

@@ -18,7 +18,7 @@ import {
   PROP_TIMETABLE,
   PROP_TITLE,
   STATUS_ENDED,
-  PROP_SYNC_TIMETABLE_RUNNING,
+  PROP_LAST_ERROR,
 } from "./constants.ts"
 import {
   queryDataSource,
@@ -29,19 +29,23 @@ import {
   mapWithConcurrency,
 } from "./notionClient.ts"
 import {
-  makeSyncStatusSetter,
   archiveAttendanceAfterEndDate,
   disconnectClassSessionsAfterEndDate as disconnectClassSessionsAfterEndDateShared,
   attachSessionsAndAttendance,
   callTextbookCleanup,
 } from "./registrationSync.ts"
+import { type StatusSpec } from "./statusTracking.ts"
 
-// 등록 페이지의 "동기화 상태"/"마지막 동기화"를 갱신해서, 노션 화면에서 자동화 진행 상태를
-// 바로 확인할 수 있게 한다. 실패해도 본 로직에는 영향이 없도록 조용히 무시한다.
-// "동기화 상태"는 이 함수와 sync-registration-textbook이 각각 처리 중인지 표시하는 체크박스
-// 두 개를 조합해서 계산한다 (setCombinedSyncStatus) — 둘 중 하나라도 처리 중이면 "처리 중",
-// 둘 다 끝나야 "완료"로 표시한다.
-export const setTimetableSyncStatus = makeSyncStatusSetter(PROP_SYNC_TIMETABLE_RUNNING)
+// (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) 예전엔 "시간표 처리중" 체크박스 + 공용 "마지막
+// 오류"로 표시했다(setCombinedSyncStatus/makeSyncStatusSetter). 이제 "시간표 상태"(select) +
+// "시간표 처리 시작 시각"(date)으로 바꿨다 — webhookIngest.ts의 runSyncWebhookForPage가 이
+// 스펙으로 isRunning/markRunning/markDone/markError를 직접 호출한다. 마스터플랜:
+// https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+export const TIMETABLE_STATUS_SPEC: StatusSpec = {
+  statusProp: "시간표 상태",
+  errorProp: PROP_LAST_ERROR,
+  startedAtProp: "시간표 처리 시작 시각",
+}
 
 // 참고: 클래스 기준 시간표 자동 연결은 이제 "등록" 버튼(sync-registration-enroll)에서만
 // 처리한다 — 클래스의 시간표가 학생 개개인에게 완전히 똑같이 적용되지 않을 수 있어서,

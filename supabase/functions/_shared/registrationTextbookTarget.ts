@@ -33,7 +33,7 @@
 
 import {
 	PROP_CLASS,
-	PROP_SYNC_TEXTBOOK_RUNNING,
+	PROP_LAST_ERROR,
 	DS_REGISTRATION,
 	PROP_STATUS,
 } from "./constants.ts"
@@ -51,14 +51,17 @@ import {
 	formulaString,
 	mapWithConcurrency,
 } from "./notionClient.ts"
-import { makeSyncStatusSetter } from "./registrationSync.ts"
 import { makeClassStatusSetter } from "./generateShared.ts"
+import { type StatusSpec } from "./statusTracking.ts"
 
-// (2026-09-21: 예전에는 여기서 다른 4개 sync-registration-* 함수와 다르게 "다른 처리중 플래그"
-// 목록에 PROP_SYNC_ENROLL_RUNNING이 빠져 있었다. registrationSync.ts에서 그 목록 자체(otherFlagProps)를
-// 완전히 제거했으니 — 애초에 setCombinedSyncStatus가 그 값을 전혀 읽지 않는 죽은 인자였다 —
-// 이 불일치도 함께 사라졌다. constants.ts 10-1 5번 참고.)
-export const setTextbookSyncStatus = makeSyncStatusSetter(PROP_SYNC_TEXTBOOK_RUNNING)
+// (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) "교재 처리중" 체크박스(등록 DB, create-individual
+// 라우트 전용) → "교재 상태"(select) + "교재 처리 시작 시각"(date). 마스터플랜:
+// https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+export const TEXTBOOK_STATUS_SPEC: StatusSpec = {
+	statusProp: "교재 상태",
+	errorProp: PROP_LAST_ERROR,
+	startedAtProp: "교재 처리 시작 시각",
+}
 
 // (2026-09-22, PART N-8) 클래스(학원) DB "교재 생성" 버튼 전용 잠금/상태. 클래스 DB의 "마지막 오류"는
 // 수강료 생성/보고서 생성 등과 공유하는 필드라 makeClassStatusSetter(generateShared.ts)를 그대로 쓴다.

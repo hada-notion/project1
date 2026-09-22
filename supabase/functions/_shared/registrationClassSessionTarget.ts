@@ -21,12 +21,19 @@ import {
 	PROP_STATUS,
 	PROP_TIMETABLE,
 	STATUS_ENDED,
-	PROP_SYNC_CLASS_SESSION_RUNNING,
+	PROP_LAST_ERROR,
 } from "./constants.ts"
 import { queryDataSource, relIds, titleText, mapWithConcurrency } from "./notionClient.ts"
-import { attachSessionsAndAttendance, makeSyncStatusSetter } from "./registrationSync.ts"
+import { attachSessionsAndAttendance } from "./registrationSync.ts"
+import { type StatusSpec } from "./statusTracking.ts"
 
-export const setClassSessionSyncStatus = makeSyncStatusSetter(PROP_SYNC_CLASS_SESSION_RUNNING)
+// (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) "수업 처리중" 체크박스 → "수업 상태"(select) +
+// "수업 처리 시작 시각"(date). 마스터플랜: https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+export const CLASS_SESSION_STATUS_SPEC: StatusSpec = {
+	statusProp: "수업 상태",
+	errorProp: PROP_LAST_ERROR,
+	startedAtProp: "수업 처리 시작 시각",
+}
 
 // 등록 1건에 대해, 연결된 시간표의 기존 수업들에 이 등록을 붙이고(roster) 출석을 생성한다.
 // 시간표는 "등록" 버튼(sync-registration-enroll)에서 클래스 기준으로 세팅하고, 필요하면

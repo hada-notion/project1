@@ -35,10 +35,9 @@
 // 상태"가 실제 완료 전에 사라져 보이던 문제). body 없는 cron 전체 스캔 경로(createSessionsForAllPending)는
 // 그대로 동기 유지한다(원래도 큐를 거치지 않았음).
 
-import { PROP_SYNC_CLASS_SESSION_RUNNING } from "../_shared/constants.ts"
 import { extractPageId, getPage } from "../_shared/notionClient.ts"
 import {
-	setClassSessionSyncStatus,
+	CLASS_SESSION_STATUS_SPEC,
 	createSessionsForAllPending,
 	createSessionsAndAttendanceForRegistration,
 } from "../_shared/registrationClassSessionTarget.ts"
@@ -84,8 +83,7 @@ Deno.serve(async (req: Request) => {
 		if (pageId) {
 			return await runSyncWebhookForPage(pageId, {
 				functionName: "sync-registration-class-session",
-				lockProp: PROP_SYNC_CLASS_SESSION_RUNNING,
-				setStatus: setClassSessionSyncStatus,
+				statusSpec: CLASS_SESSION_STATUS_SPEC,
 				process: processPage,
 			})
 		}

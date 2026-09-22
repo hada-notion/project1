@@ -40,11 +40,10 @@
 import {
   PROP_STATUS,
   PROP_TIMETABLE,
-  PROP_SYNC_TIMETABLE_RUNNING,
 } from "../_shared/constants.ts"
 import { extractPageId, getPage } from "../_shared/notionClient.ts"
 import {
-  setTimetableSyncStatus,
+  TIMETABLE_STATUS_SPEC,
   restoreAllPendingClassSessions,
   cleanupTextbooksForEndedOrInvalidRegistrations,
   cleanupAttendanceForAllEndedRegistrations,
@@ -109,8 +108,7 @@ Deno.serve(async (req: Request) => {
     if (pageId) {
       return await runSyncWebhookForPage(pageId, {
         functionName: "sync-registration-timetable",
-        lockProp: PROP_SYNC_TIMETABLE_RUNNING,
-        setStatus: setTimetableSyncStatus,
+        statusSpec: TIMETABLE_STATUS_SPEC,
         process: processPage,
       })
     }

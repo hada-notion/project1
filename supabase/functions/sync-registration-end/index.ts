@@ -27,9 +27,8 @@
 // 하는 개별 트리거라 sync_queue를 거칠 필요가 없다. handleSyncWebhook으로 바꿔서 버튼 클릭과
 // 동시에 끝나도록 한다 — 자세한 설명은 sync-registration-enroll/index.ts 참고.
 
-import { PROP_SYNC_END_RUNNING } from "../_shared/constants.ts"
 import { handleSyncWebhook } from "../_shared/webhookIngest.ts"
-import { setEndSyncStatus, processEndForRegistration } from "../_shared/registrationEndTarget.ts"
+import { END_STATUS_SPEC, processEndForRegistration } from "../_shared/registrationEndTarget.ts"
 
 async function processPage(pageId: string): Promise<void> {
 	const log: string[] = []
@@ -43,8 +42,7 @@ async function processPage(pageId: string): Promise<void> {
 Deno.serve((req: Request) =>
 	handleSyncWebhook(req, {
 		functionName: "sync-registration-end",
-		lockProp: PROP_SYNC_END_RUNNING,
-		setStatus: setEndSyncStatus,
+		statusSpec: END_STATUS_SPEC,
 		process: processPage,
 		requireAdminKey: true,
 	}),

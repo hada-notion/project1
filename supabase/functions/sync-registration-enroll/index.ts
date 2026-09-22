@@ -26,9 +26,8 @@
 // process-sync-queue 워커를 기다리지 않고 버튼 클릭과 동시에 끝나도록 바꿨다. target 이름은
 // 더 이상 쓰이지 않으므로 넘기지 않는다.
 
-import { PROP_SYNC_ENROLL_RUNNING } from "../_shared/constants.ts"
 import { handleSyncWebhook } from "../_shared/webhookIngest.ts"
-import { setEnrollSyncStatus, processEnrollForRegistration } from "../_shared/registrationEnrollTarget.ts"
+import { ENROLL_STATUS_SPEC, processEnrollForRegistration } from "../_shared/registrationEnrollTarget.ts"
 
 async function processPage(pageId: string): Promise<void> {
 	const log: string[] = []
@@ -42,8 +41,7 @@ async function processPage(pageId: string): Promise<void> {
 Deno.serve((req: Request) =>
 	handleSyncWebhook(req, {
 		functionName: "sync-registration-enroll",
-		lockProp: PROP_SYNC_ENROLL_RUNNING,
-		setStatus: setEnrollSyncStatus,
+		statusSpec: ENROLL_STATUS_SPEC,
 		process: processPage,
 		requireAdminKey: true,
 	}),

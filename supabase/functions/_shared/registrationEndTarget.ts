@@ -19,17 +19,23 @@ import {
 	PROP_END_DATE,
 	PROP_TITLE,
 	PROP_TIMETABLE,
-	PROP_SYNC_END_RUNNING,
+	PROP_LAST_ERROR,
 } from "./constants.ts"
 import { getPage, updatePageProperties, relIds, titleText, todaySeoulDate } from "./notionClient.ts"
 import {
 	archiveAttendanceAfterEndDate,
 	disconnectClassSessionsAfterEndDate as disconnectClassSessionsAfterEndDateShared,
 	callTextbookCleanup,
-	makeSyncStatusSetter,
 } from "./registrationSync.ts"
+import { type StatusSpec } from "./statusTracking.ts"
 
-export const setEndSyncStatus = makeSyncStatusSetter(PROP_SYNC_END_RUNNING)
+// (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) "종료 처리중" 체크박스 → "종료 상태"(select) +
+// "종료 처리 시작 시각"(date). 마스터플랜: https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+export const END_STATUS_SPEC: StatusSpec = {
+	statusProp: "종료 상태",
+	errorProp: PROP_LAST_ERROR,
+	startedAtProp: "종료 처리 시작 시각",
+}
 
 async function deleteAttendanceAfterEndDate(
 	registrationId: string,

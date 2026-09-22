@@ -61,10 +61,9 @@
 // 않는다), create-individual과 똑같이 runSyncWebhookForPage를 그대로 재사용한다 -- 잠금/상태 속성만
 // setClassTextbookStatus(클래스 DB의 "교재 생성중"/"마지막 오류")로 바뀔 뿐 흐름은 동일하다.
 
-import { PROP_SYNC_TEXTBOOK_RUNNING } from "../_shared/constants.ts"
 import { extractPageId } from "../_shared/notionClient.ts"
 import {
-	setTextbookSyncStatus,
+	TEXTBOOK_STATUS_SPEC,
 	cleanupUnusedBooksOnEnd,
 	createIndividualBooksForRegistration,
 	PROP_CLASS_TEXTBOOK_RUNNING,
@@ -115,8 +114,7 @@ Deno.serve(async (req: Request) => {
 		if (route === "create-individual") {
 			return await runSyncWebhookForPage(pageId, {
 				functionName: "sync-registration-textbook",
-				lockProp: PROP_SYNC_TEXTBOOK_RUNNING,
-				setStatus: setTextbookSyncStatus,
+				statusSpec: TEXTBOOK_STATUS_SPEC,
 				process: processPage,
 			})
 		} else if (route === "create-class") {

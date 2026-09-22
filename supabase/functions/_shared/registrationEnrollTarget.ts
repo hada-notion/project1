@@ -31,16 +31,22 @@ import {
 	PROP_END_DATE,
 	PROP_TITLE,
 	PROP_TIMETABLE,
-	PROP_SYNC_ENROLL_RUNNING,
+	PROP_LAST_ERROR,
 	PROP_TIMETABLE_CLASS_MODE,
 	TIMETABLE_MODE_INDIVIDUAL,
 } from "./constants.ts"
 import { getPage, updatePageProperties, relIds, titleText, todaySeoulDate, mapWithConcurrency } from "./notionClient.ts"
-import { makeSyncStatusSetter } from "./registrationSync.ts"
+import { type StatusSpec } from "./statusTracking.ts"
 
 const PROP_CLASS_TIMETABLE = "시간표" // 클래스(학원) DB의 시간표 relation
 
-export const setEnrollSyncStatus = makeSyncStatusSetter(PROP_SYNC_ENROLL_RUNNING)
+// (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) "등록 처리중" 체크박스 → "등록 상태"(select) +
+// "등록 처리 시작 시각"(date). 마스터플랜: https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+export const ENROLL_STATUS_SPEC: StatusSpec = {
+	statusProp: "등록 상태",
+	errorProp: PROP_LAST_ERROR,
+	startedAtProp: "등록 처리 시작 시각",
+}
 
 export async function processEnrollForRegistration(pageId: string, log: string[]) {
 	const reg = await getPage(pageId)
