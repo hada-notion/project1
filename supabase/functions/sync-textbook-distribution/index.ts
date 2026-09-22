@@ -40,9 +40,8 @@ import { runSyncWebhookForPage } from "../_shared/webhookIngest.ts"
 import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
 import { isRunning, markRunning, markDone } from "../_shared/statusTracking.ts"
 import {
-	PROP_CART_RUNNING,
 	CLASS_CART_STATUS_SPEC,
-	setCartStatus,
+	CART_STATUS_SPEC,
 	getActiveRegistrationsForCarts,
 	distributeFromCartPage,
 } from "../_shared/textbookDistributionTarget.ts"
@@ -84,8 +83,7 @@ Deno.serve(async (req: Request) => {
 			// 교재비 페이지 자신이 클릭 대상. 개별 트리거라 큐를 거치지 않고 바로 처리한다.
 			return await runSyncWebhookForPage(pageId, {
 				functionName: "sync-textbook-distribution:from-cart",
-				lockProp: PROP_CART_RUNNING,
-				setStatus: setCartStatus,
+				statusSpec: CART_STATUS_SPEC,
 				process: distributeFromCartPage,
 			})
 		} else if (route === "from-class-carts") {

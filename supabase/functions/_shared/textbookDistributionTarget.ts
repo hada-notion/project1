@@ -21,6 +21,7 @@ import { PROP_LAST_ERROR, PROP_SYNCED_AT, DS_REGISTRATION, PROP_CLASS, PROP_STAT
 import {
 	getPage,
 	createPage,
+	updatePageProperties,
 	queryAllPages,
 	relIds,
 	relationIds,
@@ -29,7 +30,6 @@ import {
 	anyTitleText,
 	todaySeoulDate,
 } from "./notionClient.ts"
-import { makeSyncStatusSetter } from "./registrationSync.ts"
 import { markDone, markError, type StatusSpec } from "./statusTracking.ts"
 import { getScheduleConfig } from "./adminShared.ts"
 
@@ -38,7 +38,6 @@ const DATA_SOURCE_TEXTBOOK_DISTRIBUTION = Deno.env.get("DATA_SOURCE_TEXTBOOK_DIS
 
 export const PROP_CART_TITLE = "이름"
 export const PROP_CART_REGISTRATION = "등록"
-export const PROP_CART_RUNNING = "담기 처리중"
 
 const PROP_DIST_TITLE = "이름"
 const PROP_DIST_REGISTRATION = "등록"
@@ -63,7 +62,20 @@ export const CLASS_CART_STATUS_SPEC: StatusSpec = {
 	startedAtProp: "교재비 생성 처리 시작 시각",
 }
 
-export const setCartStatus = makeSyncStatusSetter(PROP_CART_RUNNING)
+// (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) 기존 setCartStatus(makeSyncStatusSetter(PROP_CART_RUNNING),
+// 체크박스 잠금 + setStatus 콜백)를 상태(select)+처리 시작 시각 방식으로 전환했다. 이 DB에는 이미
+// "삭제 상태"/"교재비 생성 상태"(클래스 DB 쪽) 같은 접두사 붙은 상태 속성들이 있어서, sync-exam-scope
+// 처럼 접두사 없는 "상태"를 쓰면 헷갈릴 수 있다고 판단해 "담기 상태"/"담기 처리 시작 시각"으로 이름을
+// 정했다(cascade-delete의 "삭제 상태"와 같은 명명 관례). index.ts가 runSyncWebhookForPage에
+// statusSpec으로 이 값을 넘기면 markRunning/markDone/markError가 자동으로 처리해준다 — 더 이상 이
+// 파일에 별도 setter 함수가 필요하지 않다. "마지막 동기화"(성공 시각)만은 그 자동 처리 대상이
+// 아니라서, distributeFromCartPage 성공 경로 마지막에 직접 갱신한다(아래, sync-exam-scope와 동일한
+// 패턴). 마스터플랜: https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+export const CART_STATUS_SPEC: StatusSpec = {
+	statusProp: "담기 상태",
+	errorProp: PROP_LAST_ERROR,
+	startedAtProp: "담기 처리 시작 시각",
+}
 
 // 등록 하나에 대해 교재비(장바구니) 페이지를 확보한다: 이밀 있으맔 재사용, 없으맔 생성한다.
 export async function ensureCartForRegistration(
@@ -166,6 +178,13 @@ export async function distributeFromCartPage(cartId: string): Promise<void> {
 	if (registrationIds.length === 0) throw new Error("교재비 페이지에 연결된 등록이 없음")
 	const result = await distributeForRegistration(registrationIds[0])
 	console.log("[sync-textbook-distribution] from-cart finished:", cartId, result)
+
+	// (2026-09-22, Phase 3) 기존 setCartStatus("완료")가 함께 하던 "마지막 동기화" 갱신을 여기로
+	// 옮겼다. 이 줄 이전에 예외가 나면 index.ts 쪽에서 markError로 이어지고 이 줄은 실행되지
+	// 않으므로, 기존과 동일하게 "성공했을 때만" 마지막 동기화가 갱신된다.
+	await updatePageProperties(cartId, {
+		[PROP_SYNCED_AT]: { date: { start: new Date().toISOString() } },
+	})
 }
 
 // process-sync-queue 워커가 target: "sync-textbook-distribution:from-class-carts" 작업을 처리할 때 호출하는 진입점.

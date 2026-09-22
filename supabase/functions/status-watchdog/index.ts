@@ -46,7 +46,7 @@ import { TEXTBOOK_STATUS_SPEC, CLASS_TEXTBOOK_STATUS_SPEC } from "../_shared/reg
 import { ATTENDANCE_FIX_STATUS_SPEC } from "../_shared/fixAttendanceTarget.ts"
 import { RECORD_GEN_STATUS_SPEC } from "../_shared/createLearningRecordTarget.ts"
 import { CLASS_REPORT_SYNC_STATUS_SPEC } from "../_shared/classReportCacheTarget.ts"
-import { CLASS_CART_STATUS_SPEC } from "../_shared/textbookDistributionTarget.ts"
+import { CLASS_CART_STATUS_SPEC, CART_STATUS_SPEC } from "../_shared/textbookDistributionTarget.ts"
 import { EXAM_SCOPE_STATUS_SPEC } from "../_shared/examScopeTarget.ts"
 import { CASCADE_DELETE_STATUS_SPEC } from "../_shared/cascadeDeleteTarget.ts"
 import { ASSIGNMENT_GEN_STATUS_SPEC } from "../_shared/createAssignmentTarget.ts"
@@ -127,6 +127,9 @@ const TARGETS: Array<{ label: string; dataSourceId: string; spec: StatusSpec }> 
 	// 마스터플랜 표엔 "학습활동 DB 출제 처리중"으로 적혀 있었으나, 실제 버튼/속성은 학습기록 DB에
 	// 있다 (createAssignmentTarget.ts 상단 주석 참고).
 	{ label: "학습기록:출제", dataSourceId: DS_LEARNING_RECORD, spec: ASSIGNMENT_GEN_STATUS_SPEC },
+	// (2026-09-22, Phase 3) sync-textbook-distribution의 from-cart 라우트("진도교재 담기" 버튼)의
+	// "담기 처리중" checkbox -> 상태 전환.
+	{ label: "교재비(카트):담기", dataSourceId: DS_TEXTBOOK_CART, spec: CART_STATUS_SPEC },
 ]
 
 Deno.serve(async (req) => {
