@@ -49,6 +49,7 @@ import { CLASS_REPORT_SYNC_STATUS_SPEC } from "../_shared/classReportCacheTarget
 import { CLASS_CART_STATUS_SPEC } from "../_shared/textbookDistributionTarget.ts"
 import { EXAM_SCOPE_STATUS_SPEC } from "../_shared/examScopeTarget.ts"
 import { CASCADE_DELETE_STATUS_SPEC } from "../_shared/cascadeDeleteTarget.ts"
+import { ASSIGNMENT_GEN_STATUS_SPEC } from "../_shared/createAssignmentTarget.ts"
 
 // 메뉴(학원) DB는 다른 함수들이 DS.xxx 형태로 쿼리한 적이 없어서 전용 환경변수가 없다.
 // 이 워치독은 메뉴 DB 전체가 아니라 그 안의 "시간표" 단일 행 하나만 상태 관리 대상이므로,
@@ -122,6 +123,10 @@ const TARGETS: Array<{ label: string; dataSourceId: string; spec: StatusSpec }> 
 	{ label: "교재비(카트):삭제", dataSourceId: DS_TEXTBOOK_CART, spec: CASCADE_DELETE_STATUS_SPEC },
 	{ label: "교재배부:삭제", dataSourceId: DS_TEXTBOOK_DISTRIBUTION, spec: CASCADE_DELETE_STATUS_SPEC },
 	{ label: "교재결제:삭제", dataSourceId: DS_TEXTBOOK_PAYMENT, spec: CASCADE_DELETE_STATUS_SPEC },
+	// (2026-09-22, Phase 3) create-assignment("출제" 버튼)의 "출제 처리중" checkbox -> 상태 전환.
+	// 마스터플랜 표엔 "학습활동 DB 출제 처리중"으로 적혀 있었으나, 실제 버튼/속성은 학습기록 DB에
+	// 있다 (createAssignmentTarget.ts 상단 주석 참고).
+	{ label: "학습기록:출제", dataSourceId: DS_LEARNING_RECORD, spec: ASSIGNMENT_GEN_STATUS_SPEC },
 ]
 
 Deno.serve(async (req) => {

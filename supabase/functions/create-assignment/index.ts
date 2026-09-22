@@ -43,10 +43,11 @@
 import { getPage, relIds as relIdsFromProp, extractPageId } from "../_shared/notionClient.ts"
 import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
+import { isRunning } from "../_shared/statusTracking.ts"
 import {
 	CATEGORY_ASSIGNMENT,
 	CATEGORY_EVALUATION,
-	PROP_ASSIGNMENT_GEN_RUNNING,
+	ASSIGNMENT_GEN_STATUS_SPEC,
 	selectValue,
 	dedupe,
 	setAssignmentGenRunning,
@@ -62,12 +63,6 @@ const PROP_RECORD_REGISTRATION = "등록"
 
 function relIds(page: JsonRecord, propName: string): string[] {
 	return relIdsFromProp((page.properties as JsonRecord)?.[propName])
-}
-
-function checkboxValue(page: JsonRecord, propName: string): boolean {
-	return (page.properties as JsonRecord)?.[propName]
-		? ((page.properties as JsonRecord)[propName] as JsonRecord)?.checkbox === true
-		: false
 }
 
 async function handleRequest(req: Request): Promise<Response> {
@@ -116,13 +111,13 @@ async function handleRequest(req: Request): Promise<Response> {
 
 		// 같은 학습기록에 대해 버튼이 짧은 시간에 여러 번(더블클릭, 웹훅 타임아웃 후 재시도 등) 눌려도
 		// 학습활동이 중복 생성되지 않도록, 이미 처리 중이면 새 요청은 아무 것도 하지 않고 즉시 반환한다.
-		if (checkboxValue(recordPage, PROP_ASSIGNMENT_GEN_RUNNING)) {
+		if (isRunning(recordPage, ASSIGNMENT_GEN_STATUS_SPEC)) {
 			return new Response(
 				JSON.stringify({ message: "already_processing", recordId }),
 				{ status: 200 },
 			)
 		}
-		await setAssignmentGenRunning(recordId, true)
+		await setAssignmentGenRunning(recordId)
 
 		const registrationIds = dedupe(relIds(recordPage, PROP_RECORD_REGISTRATION))
 		if (registrationIds.length === 0) {
@@ -135,8 +130,9 @@ async function handleRequest(req: Request): Promise<Response> {
 
 		// (2026-09-22, PART N-5) 개별 트리거라 큐는 안 쓰지만, Notion의 "웹훅 보내기" 버튼이 응답을
 		// 기다리다 시간 초과로 실패 표시를 띄우는 걸 피하려고 응답은 즉시 돌려주고, 실제 처리는
-		// 백그라운드에서 계속한다. 진행 상황은 학습기록의 "출제 처리중"(이미 켜져 있음) 체크박스로
-		// 확인할 수 있다.
+		// 백그라운드에서 계속한다. 진행 상황은 학습기록의 "출제 상태"(select, 이미 🔄 작업중으로
+		// 바뀌어 있음)로 확인할 수 있다. (2026-09-22, 처리 상태 관리 리팩토링 Phase 3: 기존
+		// "출제 처리중" checkbox를 select+시작시각으로 전환, statusTracking.ts 공용 헬퍼 사용)
 		runInBackground(async () => {
 			try {
 				await finishCreateAssignment(recordId, category, registrationIds)

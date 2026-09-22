@@ -21,7 +21,6 @@ import {
 	mapWithConcurrency,
 	getPage,
 	createPage as sharedCreatePage,
-	updatePageProperties,
 	queryDataSource,
 	relIds as relIdsFromProp,
 	selectName,
@@ -36,6 +35,12 @@ import {
 	DS_REGISTRATION,
 } from "./constants.ts"
 // (2026-09-21, 이식성 리팩토링) 위 4개도 constants.ts로 이동함 — 그 파일 상단 주석 참고.
+import { markRunning, markDone, markError, type StatusSpec } from "./statusTracking.ts"
+// (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) "출제 처리중"(checkbox)을 출제 상태(select)+출제
+// 처리 시작 시각(date)으로 전환. 마스터플랜 표에는 이 항목이 "학습활동 DB 출제 처리중"으로 적혀
+// 있었지만, 실제로 "출제" 버튼과 이 체크박스는 학습기록(학원) DB에 있다(학습활동 DB는 출제 결과로
+// 생성되는 대상일 뿐, 버튼/플래그는 없음) — 마스터플랜에 이 오기 정정을 기록해 둔다.
+// 마스터플랜: https://app.notion.com/p/903c90386c1d473494c5df6306c53517
 
 const PROP_RECORD_REGISTRATION = "등록"
 const PROP_RECORD_ATTENDANCE = "출석"
@@ -58,7 +63,12 @@ export const CATEGORY_EVALUATION = "평가"
 const ASSIGNMENT_STATUS_NOT_SUBMITTED = "🔴 밌제출"
 
 const PROP_SHARED_LAST_ERROR = "마지막 오류"
-export const PROP_ASSIGNMENT_GEN_RUNNING = "출제 처리중"
+
+export const ASSIGNMENT_GEN_STATUS_SPEC: StatusSpec = {
+	statusProp: "출제 상태",
+	errorProp: PROP_SHARED_LAST_ERROR,
+	startedAtProp: "출제 처리 시작 시각",
+}
 
 const WEEKDAY_KO = ["일", "월", "화", "수", "목", "금", "토"]
 
@@ -68,24 +78,17 @@ async function createPage(parentDataSourceId: string, properties: JsonRecord): P
 	return (await sharedCreatePage(parentDataSourceId, properties)) as JsonRecord
 }
 
-export async function setAssignmentGenRunning(recordId: string, running: boolean): Promise<void> {
+export async function setAssignmentGenRunning(recordId: string): Promise<void> {
 	try {
-		const props: Record<string, unknown> = { [PROP_ASSIGNMENT_GEN_RUNNING]: { checkbox: running } }
-		if (running) {
-			props[PROP_SHARED_LAST_ERROR] = { rich_text: [] }
-		}
-		await updatePageProperties(recordId, props)
+		await markRunning(recordId, ASSIGNMENT_GEN_STATUS_SPEC)
 	} catch (err) {
-		console.error(`setAssignmentGenRunning(${recordId}, ${running}) failed`, err)
+		console.error(`setAssignmentGenRunning(${recordId}) failed`, err)
 	}
 }
 
 export async function setAssignmentGenDone(recordId: string): Promise<void> {
 	try {
-		await updatePageProperties(recordId, {
-			[PROP_ASSIGNMENT_GEN_RUNNING]: { checkbox: false },
-			[PROP_SHARED_LAST_ERROR]: { rich_text: [] },
-		})
+		await markDone(recordId, ASSIGNMENT_GEN_STATUS_SPEC)
 	} catch (err) {
 		console.error(`setAssignmentGenDone(${recordId}) failed`, err)
 	}
@@ -93,10 +96,7 @@ export async function setAssignmentGenDone(recordId: string): Promise<void> {
 
 export async function setAssignmentGenError(recordId: string, message: string): Promise<void> {
 	try {
-		await updatePageProperties(recordId, {
-			[PROP_ASSIGNMENT_GEN_RUNNING]: { checkbox: false },
-			[PROP_SHARED_LAST_ERROR]: { rich_text: [{ text: { content: message.slice(0, 1900) } }] },
-		})
+		await markError(recordId, ASSIGNMENT_GEN_STATUS_SPEC, message)
 	} catch (err) {
 		console.error(`setAssignmentGenError(${recordId}) failed`, err)
 	}
