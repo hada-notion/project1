@@ -38,7 +38,6 @@ import { DS_ATTENDANCE } from "../_shared/constants.ts"
 import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
 import {
 	PROP_ATTENDANCE_SESSION,
-	PROP_RECORD_GEN_RUNNING,
 	dedupe,
 	setRecordGenRunning,
 } from "../_shared/createLearningRecordTarget.ts"
