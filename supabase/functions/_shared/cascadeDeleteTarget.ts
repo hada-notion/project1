@@ -10,7 +10,6 @@
 import { getPage, queryAllPages, updatePageProperties, archivePage, mapWithConcurrency } from "./notionClient.ts"
 import {
 	PROP_DELETE_CHECKBOX,
-	PROP_DELETING_RUNNING,
 	PROP_LAST_ERROR,
 	DS_CLASS_SESSION,
 	DS_ATTENDANCE,
@@ -20,9 +19,23 @@ import {
 	DS_TEXTBOOK_DISTRIBUTION,
 	DS_TEXTBOOK_PAYMENT,
 } from "./constants.ts"
+import { isRunning, markRunning, markDone, markError, type StatusSpec } from "./statusTracking.ts"
 // (2026-09-21, 이식성 리팩토링) 위 7개 데이터소스 ID는 이 파일에 직접 하드코딩돼 있었는데, 이제
 // constants.ts 한 곳에서 환경변수로 읽어와 공유한다 (constants.ts 상단 주석 참고). export하지 않아도
 // 되도록 이 파일 밖에서 이 이름들을 가져다 쓰는 곳이 없는지 확인했다.
+//
+// (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) "삭제 처리중"(checkbox)을 상태(select)+처리 시작
+// 시각(date)으로 전환. 이 플래그는 cascade-delete가 처리하는 7개 DB(수업/출석/학습기록/학습활동/
+// 교재비(카트)/교재배부/교재결제)가 모두 같은 속성 이름을 공유한다 — 원래 마스터플랜 Phase 0 표에는
+// 수업/출석/학습기록/학습활동 4개만 적혀 있었는데, 실제 코드(바로 아래 CONFIG)를 보면 교재비 계열
+// 3개 DB도 같은 cascadeDelete/PROP_DELETING_RUNNING을 공유하고 있어 범위를 7개로 확장함(등록/수업 DB
+// 그룹에서 "학습기록 상태"를 3개 DB로 확장했던 것과 같은 이유의 범위 확장). 마스터플랜:
+// https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+export const CASCADE_DELETE_STATUS_SPEC: StatusSpec = {
+	statusProp: "상태",
+	errorProp: PROP_LAST_ERROR,
+	startedAtProp: "처리 시작 시각",
+}
 
 const PROP_STUDY_RECORD_TEXTBOOK = "진도교재"
 const PROP_PROGRESS_TYPE = "진도방식"
@@ -81,15 +94,12 @@ function titleOf(page: any, titleProp: string): string {
 
 // index.ts의 프리체크(이미 처리중인지 판단)에서도 쓰므로 export한다.
 export function isDeletingFlagSet(page: any): boolean {
-  return page.properties?.[PROP_DELETING_RUNNING]?.checkbox === true
+  return isRunning(page, CASCADE_DELETE_STATUS_SPEC)
 }
 
 export async function markDeletingRunning(pageId: string): Promise<void> {
   try {
-    await updatePageProperties(pageId, {
-      [PROP_DELETING_RUNNING]: { checkbox: true },
-      [PROP_LAST_ERROR]: { rich_text: [] },
-    })
+    await markRunning(pageId, CASCADE_DELETE_STATUS_SPEC)
   } catch (err) {
     console.error(`markDeletingRunning(${pageId}) failed:`, (err as Error).message)
   }
@@ -97,10 +107,7 @@ export async function markDeletingRunning(pageId: string): Promise<void> {
 
 export async function markDeletingDone(pageId: string): Promise<void> {
   try {
-    await updatePageProperties(pageId, {
-      [PROP_DELETING_RUNNING]: { checkbox: false },
-      [PROP_LAST_ERROR]: { rich_text: [] },
-    })
+    await markDone(pageId, CASCADE_DELETE_STATUS_SPEC)
   } catch (err) {
     console.error(`markDeletingDone(${pageId}) failed:`, (err as Error).message)
   }
@@ -108,10 +115,7 @@ export async function markDeletingDone(pageId: string): Promise<void> {
 
 export async function markDeletingError(pageId: string, message: string): Promise<void> {
   try {
-    await updatePageProperties(pageId, {
-      [PROP_DELETING_RUNNING]: { checkbox: false },
-      [PROP_LAST_ERROR]: { rich_text: [{ text: { content: message.slice(0, 1900) } }] },
-    })
+    await markError(pageId, CASCADE_DELETE_STATUS_SPEC, message)
   } catch (err) {
     console.error(`markDeletingError(${pageId}) failed:`, (err as Error).message)
   }
@@ -165,9 +169,12 @@ export async function cascadeDelete(
   const indent = "  ".repeat(depth)
 
   if (depth === 0 && resumeNote) {
+    // markRunning은 상태/시작시각을 갱신하며 마지막 오류를 비우므로, 재시작 사실을 보여주는
+    // resumeNote는 그 다음에 별도로 마지막 오류 칸에 덧붙인다("작업중"이면서 정보성 메세지가
+    // 함께 보이는 상태 — 기존 checkbox 방식과 동일한 최종 결과).
+    await markDeletingRunning(pageId)
     try {
       await updatePageProperties(pageId, {
-        [PROP_DELETING_RUNNING]: { checkbox: true },
         [PROP_LAST_ERROR]: { rich_text: [{ text: { content: resumeNote.slice(0, 1900) } }] },
       })
     } catch (err) {

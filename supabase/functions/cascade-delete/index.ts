@@ -31,13 +31,21 @@
 //
 // v5~v7 변경 사항(재귀 깊이/방문 페이지 안전장치, 삭제 체크박스 게이트 제거, 교재비 3단계 캐스케이드 추가 등)은
 // _shared/cascadeDeleteTarget.ts 상단 주석에 그대로 옮겨 놓았다.
+//
+// (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) "삭제 처리중" 체크박스를 상태(select)+처리 시작
+// 시각(date)으로 전환했다(cascadeDeleteTarget.ts 참고). isDeletingFlagSet/markDeletingRunning/
+// markDeletingError 이름과 시그니처는 그대로라 이 파일은 바뀌지 않는다 — 아래 STALE_LOCK_MS
+// 프리체크는 last_edited_time 기반이라(체크박스든 select든 상관없이 페이지가 갱신될 때마다
+// 바뀌는 값) 그대로 유지했다. 별도로 status-watchdog에도 이 7개 DB 조합을 타겟으로 추가해서
+// (아래 참고) last_edited_time 방식이 놓치는 경우까지 이중으로 커버한다. 마스터플랜:
+// https://app.notion.com/p/903c90386c1d473494c5df6306c53517
 
 import { getPage, extractPageId } from "../_shared/notionClient.ts"
 import { isDeletingFlagSet, markDeletingRunning, markDeletingError, cascadeDelete } from "../_shared/cascadeDeleteTarget.ts"
 import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 
-// "삭제 처리중" 체크박스가 켜진 채로 이 시간(ms) 이상 페이지가 갱신되지 않았으면, 실행 중인
+// "삭제 처리중" 상태가 켜진 채로 이 시간(ms) 이상 페이지가 갱신되지 않았으면, 실행 중인
 // 작업이 죽었다고 (서버 타임아웃/재시작 등) 판단하고 막아두지 않고 다시 진행한다.
 const STALE_LOCK_MS = 3 * 60 * 1000
 

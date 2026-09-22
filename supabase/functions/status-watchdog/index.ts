@@ -24,7 +24,20 @@
 
 import { requireAdminKey } from "../_shared/adminShared.ts"
 import { sweepStaleStatus, type StatusSpec } from "../_shared/statusTracking.ts"
-import { DS_TIMETABLE, DS_REGISTRATION, DS_CLASS_SESSION, DS_ATTENDANCE, DS_PROGRESS_BOOK, DS_CLASS, DS_EXAM_SCOPE } from "../_shared/constants.ts"
+import {
+	DS_TIMETABLE,
+	DS_REGISTRATION,
+	DS_CLASS_SESSION,
+	DS_ATTENDANCE,
+	DS_PROGRESS_BOOK,
+	DS_CLASS,
+	DS_EXAM_SCOPE,
+	DS_LEARNING_RECORD,
+	DS_STUDY_ACTIVITY,
+	DS_TEXTBOOK_CART,
+	DS_TEXTBOOK_DISTRIBUTION,
+	DS_TEXTBOOK_PAYMENT,
+} from "../_shared/constants.ts"
 import { END_STATUS_SPEC } from "../_shared/registrationEndTarget.ts"
 import { TIMETABLE_STATUS_SPEC as REG_TIMETABLE_STATUS_SPEC } from "../_shared/registrationTimetableTarget.ts"
 import { CLASS_SESSION_STATUS_SPEC } from "../_shared/registrationClassSessionTarget.ts"
@@ -35,6 +48,7 @@ import { RECORD_GEN_STATUS_SPEC } from "../_shared/createLearningRecordTarget.ts
 import { CLASS_REPORT_SYNC_STATUS_SPEC } from "../_shared/classReportCacheTarget.ts"
 import { CLASS_CART_STATUS_SPEC } from "../_shared/textbookDistributionTarget.ts"
 import { EXAM_SCOPE_STATUS_SPEC } from "../_shared/examScopeTarget.ts"
+import { CASCADE_DELETE_STATUS_SPEC } from "../_shared/cascadeDeleteTarget.ts"
 
 // 메뉴(학원) DB는 다른 함수들이 DS.xxx 형태로 쿼리한 적이 없어서 전용 환경변수가 없다.
 // 이 워치독은 메뉴 DB 전체가 아니라 그 안의 "시간표" 단일 행 하나만 상태 관리 대상이므로,
@@ -99,6 +113,15 @@ const TARGETS: Array<{ label: string; dataSourceId: string; spec: StatusSpec }> 
 	{ label: "클래스:교재생성", dataSourceId: DS_CLASS, spec: CLASS_TEXTBOOK_STATUS_SPEC },
 	// (2026-09-22, Phase 3) 시험범위(학원) DB 1개 상태.
 	{ label: "시험범위:처리", dataSourceId: DS_EXAM_SCOPE, spec: EXAM_SCOPE_STATUS_SPEC },
+	// (2026-09-22, Phase 3) cascade-delete가 공유하는 "삭제 처리중" 상태 — 7개 DB(원래 마스터플랜
+	// 표엔 4개만 있었으나 코드 확인 후 교재비 계열 3개까지 범위 확장, cascadeDeleteTarget.ts 참고).
+	{ label: "수업:삭제", dataSourceId: DS_CLASS_SESSION, spec: CASCADE_DELETE_STATUS_SPEC },
+	{ label: "출석:삭제", dataSourceId: DS_ATTENDANCE, spec: CASCADE_DELETE_STATUS_SPEC },
+	{ label: "학습기록:삭제", dataSourceId: DS_LEARNING_RECORD, spec: CASCADE_DELETE_STATUS_SPEC },
+	{ label: "학습활동:삭제", dataSourceId: DS_STUDY_ACTIVITY, spec: CASCADE_DELETE_STATUS_SPEC },
+	{ label: "교재비(카트):삭제", dataSourceId: DS_TEXTBOOK_CART, spec: CASCADE_DELETE_STATUS_SPEC },
+	{ label: "교재배부:삭제", dataSourceId: DS_TEXTBOOK_DISTRIBUTION, spec: CASCADE_DELETE_STATUS_SPEC },
+	{ label: "교재결제:삭제", dataSourceId: DS_TEXTBOOK_PAYMENT, spec: CASCADE_DELETE_STATUS_SPEC },
 ]
 
 Deno.serve(async (req) => {
