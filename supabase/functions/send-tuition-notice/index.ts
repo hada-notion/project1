@@ -19,9 +19,13 @@
 //   로그 추가 (실제로 solapi에 보내는 variables 전체와 notice 길이를 로그로 남김). 기능 변경 없음.
 // - [v6, 2026-09-20] send-textbook-notice와 100% 중복이던 getRollupText/extractRollupItemText를
 //   _shared/alimtalkShared.ts로 옮기고 이 파일에서는 가져다 쓴다 (웹훅 코드 정리 4단계). 동작은 동일.
+// - [v7, 2026-09-22] 발송 성공 후 "일괄전송 선택" 체크박스를 자동으로 해제한다. 개별 "수강료 안내
+//   발송" 버튼으로 이미 보낸 건이 나중에 클래스/발송함의 "일괄 전송"에 다시 걸려 중복 발송되는 것을
+//   막기 위함(사용자 요청). send-report와 동일한 패턴 적용.
 
 import {
   notionGetPage,
+  notionPatchPageProperties,
   createSendLogEntry,
   getAlimtalkConfig,
   getCurrentAdminKey,
@@ -46,6 +50,10 @@ const SOLAPI_SENDER_NUMBER_FALLBACK = Deno.env.get("SOLAPI_SENDER_NUMBER") ?? ""
 const SOLAPI_PF_ID_FALLBACK = Deno.env.get("SOLAPI_PF_ID") ?? ""
 const SOLAPI_TEMPLATE_ID_TUITION_FALLBACK = Deno.env.get("SOLAPI_TEMPLATE_ID_TUITION") ?? ""
 
+// 보고서(학원) DB / 수강료(학원) DB에 공통으로 있는 체크박스. send-selected-notifications가
+// 일괄전송 대상을 고르는 필터이기도 하다 (_shared/PROP_BULK_SELECT와 이름을 동일하게 유지).
+const PROP_BULK_SELECT = "일괄전송 선택"
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-admin-key",
@@ -54,6 +62,17 @@ const corsHeaders = {
 
 function getRichText(page: any, name: string): string {
   return (page.properties?.[name]?.rich_text ?? []).map((t: any) => t.plain_text).join("")
+}
+
+// [NEW, v7] 발송 성공 후 "일괄전송 선택"을 꺼서, 이 수강료 건이 다음 "일괄 전송" 클릭에서 다시
+// 골라지지 않도록 한다(중복 발송 방지). 이미 꺼져 있어도 그대로 false를 써서 문제없다.
+// 실패해도 로그만 남기고 응답에는 영향을 주지 않는다 (발송 자체는 이미 끝난 뒤).
+async function clearBulkSelectFlag(tuitionId: string): Promise<void> {
+  try {
+    await notionPatchPageProperties(tuitionId, { [PROP_BULK_SELECT]: { checkbox: false } })
+  } catch (err) {
+    console.error("일괄전송 선택 해제 실패:", tuitionId, (err as Error).message)
+  }
 }
 
 async function sendAlimtalk(
@@ -193,6 +212,8 @@ Deno.serve(async (req) => {
         periodEnd: period.end || undefined,
       })
     }
+
+    await clearBulkSelectFlag(tuitionId)
 
     return new Response(JSON.stringify({ sendResult }), {
       status: 200,
