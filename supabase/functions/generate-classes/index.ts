@@ -29,11 +29,24 @@ import {
 } from "../_shared/notionClient.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 import {
-	PROP_TIMETABLE_GEN_RUNNING,
 	PROP_TIMETABLE_LAST_ERROR,
 	PROP_SESSION_GEN_RUNNING,
 	PROP_LAST_ERROR,
 } from "../_shared/constants.ts"
+// (2026-09-21, 처리 상태 관리 리팩토링 Phase 2) 시간표/메뉴 DB의 "생성중" 체크박스+마지막 오류
+// 조합을 "상태"(select, 대기/작업중/완료/오류/타임아웃복구) + "처리 시작 시각"으로 교체. 마스터플랜:
+// https://app.notion.com/p/903c90386c1d473494c5df6306c53517 — 수업(학원) DB 레벨의
+// PROP_SESSION_GEN_RUNNING(아래 markSessionDone/Error)은 이번 Phase 대상이 아니라 그대로 둔다
+// (Phase 3에서 전환).
+import { markRunning, markDone, markError, isRunning, type StatusSpec } from "../_shared/statusTracking.ts"
+
+// 시간표(학원) DB와 메뉴(학원) DB 모두 "상태"/"마지막 오류"/"처리 시작 시각" 속성 이름이 동일하므로
+// 하나의 스펙을 공유해서 쓴다 (버튼 단일/일괄/크론 세 경로 + 메뉴 페이지 모두 이 스펙 사용).
+const TIMETABLE_STATUS_SPEC: StatusSpec = {
+	statusProp: "상태",
+	errorProp: PROP_TIMETABLE_LAST_ERROR,
+	startedAtProp: "처리 시작 시각",
+}
 // 대시보드(학원) DB 자동 연결: 이 함수가 Notion API로 직접 만드는 수업/출석 페이지는 페이지
 // 자동화가 트리거되지 않으므로, 생성 직후 여기서 직접 큐에 적재한다 (2026-09-20, 대시보드 기능 추가).
 import { enqueueDashboardLink } from "../_shared/dashboardLinkTarget.ts"
@@ -382,48 +395,14 @@ type ProcessMode =
   //   behind ones never catch up (2026-09-11).
   | { type: "until"; horizonDate: string }
 
-// 시간표 DB에 처리 상태 표시 (버튼 모드에서만 사용; 크론 모드는 DB 전체를 순회하므로 굳이
-// 개별 표시하지 않는다 — 매번 다 순회해서 만들거나 안 만들거나 끝나기 때문에 사용자가 지켜볼
-// 대상이 아님). 실패해도 캐스케이드 전체를 막지 않도록 조��히 무시한다.
-// (2026-09-11 마이그레��션: 공유 select "생성 상태"에서 체크박스 + "실시간 처리 상태" 수식으로 전환).
-async function markGenRunning(timetableId: string, running: boolean): Promise<void> {
-  try {
-    const props: Record<string, unknown> = { [PROP_TIMETABLE_GEN_RUNNING]: { checkbox: running } }
-    // Clear any previous error the moment a new run starts (not when it finishes), so the
-    // "실시간 처리 상태" formula (which shows 마지막 오류 ahead of 생성중) doesn't keep displaying a
-    // stale error from a prior run for the whole duration of this new run (2026-09-11 fix).
-    if (running) {
-      props[PROP_TIMETABLE_LAST_ERROR] = { rich_text: [] }
-    }
-    await updatePageProperties(timetableId, props)
-  } catch (err) {
-    console.error(`markGenRunning(${timetableId}, ${running}) failed:`, (err as Error).message)
-  }
-}
+// 시간표/메뉴 DB에 처리 상태 표시 (버튼 단일/일괄 모드 + 크론 모드 공용).
+// (2026-09-21, 처리 상태 관리 리팩토링 Phase 2) 예전엔 이 파일 안에 markGenRunning/markGenDone/
+// markGenError 3개 함수가 체크박스+텍스트를 직접 썼는데, 이제 _shared/statusTracking.ts의
+// markRunning/markDone/markError(TIMETABLE_STATUS_SPEC 사용)로 대체했다 — 동작은 동일하되
+// "작업중"으로 바뀐 시각도 함께 기록해서, 워치독이 오래 멈춘 항목을 자동으로 회수할 수 있게 됐다.
 
-async function markGenDone(timetableId: string): Promise<void> {
-  try {
-    await updatePageProperties(timetableId, {
-      [PROP_TIMETABLE_GEN_RUNNING]: { checkbox: false },
-      [PROP_TIMETABLE_LAST_ERROR]: { rich_text: [] },
-    })
-  } catch (err) {
-    console.error(`markGenDone(${timetableId}) failed:`, (err as Error).message)
-  }
-}
-
-async function markGenError(timetableId: string, message: string): Promise<void> {
-  try {
-    await updatePageProperties(timetableId, {
-      [PROP_TIMETABLE_GEN_RUNNING]: { checkbox: false },
-      [PROP_TIMETABLE_LAST_ERROR]: { rich_text: [{ text: { content: message.slice(0, 1900) } }] },
-    })
-  } catch (err) {
-    console.error(`markGenError(${timetableId}) failed:`, (err as Error).message)
-  }
-}
-
-// 수업(학원) DB 개별 행에 처리 상태 표시 (2026-09-11 추가). 시간표 DB의 markGenRunning과 달리
+// 수업(학원) DB 개별 행에 처리 상태 표시 (2026-09-11 추가). 이 레벨(세션 단위)은 아직 기존
+// 체크박스 방식 그대로다 -- Phase 3에서 전환 예정 (마스터플랜 참고). 시간표 DB의 markGenRunning과 달리
 // "생성중"은 세션 생성 시점에 이미 true로 함께 만들어지므로(아래 createPage 호출부 참고),
 // 여기서는 "끝났을 때" 끄는 markSessionDone/markSessionError만 필요하다. 실패해도 전체 캐스케이드를
 // 막지 않도록 조용히 무시한다.
@@ -614,7 +593,7 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
       )
     } catch (err) {
       // 출석 생성 중 하나라도 실패하면 이 수업 행의 "생성중"을 끄고 오류를 남긴 뒤 그대로 다시 던진다
-      // (이 예외는 위쪽 호출부의 catch에서 markGenError로 시간표 쪽에도 기록된다 — 기존 동작 유지).
+      // (이 예외는 위쪽 호출부의 catch에서 markError(TIMETABLE_STATUS_SPEC)로 시간표 쪽에도 기록된다 — 기존 동작 유지).
       await markSessionError(classPage.id, (err as Error).message)
       throw err
     }
@@ -718,14 +697,14 @@ Deno.serve(async (req: Request) => {
       }
       // 안전장치: 짧은 시간 안에 이 버튼이 여러 번 눌려도(더블클릭, 웹훅 재시도 등) 전체 스캔이
       // 중복으로 돌지 않도록, 이미 처리 중이면 새 요청은 즉시 반환한다 (단일 버튼 모드와 동일 로직).
-      const currentlyRunning = menuPage.properties?.[PROP_TIMETABLE_GEN_RUNNING]?.checkbox === true
+      const currentlyRunning = isRunning(menuPage, TIMETABLE_STATUS_SPEC)
       if (currentlyRunning) {
         return new Response(JSON.stringify({ ok: true, message: "already_processing", mode: "bulk" }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         })
       }
-      await markGenRunning(menuPageId, true)
+      await markRunning(menuPageId, TIMETABLE_STATUS_SPEC)
     }
 
     runInBackground(async () => {
@@ -758,23 +737,23 @@ Deno.serve(async (req: Request) => {
           await mapWithConcurrency(timetables.results as any[], TIMETABLE_CONCURRENCY, async (timetable) => {
             const tId = timetable.id
             // 안전장치: 크론/버튼이 이미 처리 중인 시간표는 건너뛴다 (중복 생성 방지).
-            const alreadyRunning = timetable.properties?.[PROP_TIMETABLE_GEN_RUNNING]?.checkbox === true
+            const alreadyRunning = isRunning(timetable, TIMETABLE_STATUS_SPEC)
             if (alreadyRunning) {
               log.push(`[skip] ${tId}: already processing (생성중)`)
               return
             }
-            await markGenRunning(tId, true)
+            await markRunning(tId, TIMETABLE_STATUS_SPEC)
             try {
               await processTimetable(timetable, log, { type: "until", horizonDate })
-              await markGenDone(tId)
+              await markDone(tId, TIMETABLE_STATUS_SPEC)
             } catch (err) {
               log.push(`[error] ${tId}: ${(err as Error).message}`)
-              await markGenError(tId, (err as Error)?.message ?? String(err))
+              await markError(tId, TIMETABLE_STATUS_SPEC, (err as Error)?.message ?? String(err))
             }
           })
         }
         console.log("generate-classes (bulk button) finished:\n", log.join("\n"))
-        if (menuPageId) await markGenDone(menuPageId)
+        if (menuPageId) await markDone(menuPageId, TIMETABLE_STATUS_SPEC)
       } catch (err) {
         console.error(
           "generate-classes (bulk button) failed:",
@@ -782,7 +761,7 @@ Deno.serve(async (req: Request) => {
           "\nlog so far:",
           log.join("\n"),
         )
-        if (menuPageId) await markGenError(menuPageId, (err as Error)?.message ?? String(err))
+        if (menuPageId) await markError(menuPageId, TIMETABLE_STATUS_SPEC, (err as Error)?.message ?? String(err))
       }
     })
 
@@ -808,20 +787,20 @@ Deno.serve(async (req: Request) => {
 
     // 안전장치: 같은 시간표에 대해 버튼이 짧은 시간 안에 여러 번(더블클릭, 웹훅 재시도 등) 눌려도
     // 수업/출석이 중복 생성되지 않도록, 이미 처리 중이면 새 요청은 즉시 반환한다.
-    const currentlyRunning = timetable.properties?.[PROP_TIMETABLE_GEN_RUNNING]?.checkbox === true
+    const currentlyRunning = isRunning(timetable, TIMETABLE_STATUS_SPEC)
     if (currentlyRunning) {
       return new Response(JSON.stringify({ ok: true, message: "already_processing", timetableId }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       })
     }
-    await markGenRunning(timetableId, true)
+    await markRunning(timetableId, TIMETABLE_STATUS_SPEC)
 
     runInBackground(async () => {
       try {
         await processTimetable(timetable, log, { type: "single" })
         console.log("generate-classes (button) finished:", timetableId, "\n", log.join("\n"))
-        await markGenDone(timetableId)
+        await markDone(timetableId, TIMETABLE_STATUS_SPEC)
       } catch (err) {
         console.error(
           "generate-classes (button) failed:",
@@ -831,7 +810,7 @@ Deno.serve(async (req: Request) => {
           "\nstack:",
           (err as Error).stack,
         )
-        await markGenError(timetableId, (err as Error)?.message ?? String(err))
+        await markError(timetableId, TIMETABLE_STATUS_SPEC, (err as Error)?.message ?? String(err))
       }
     })
 
@@ -850,18 +829,18 @@ Deno.serve(async (req: Request) => {
     // Perf (2026-09-11): same concurrency treatment as the bulk-button path above.
     await mapWithConcurrency(timetables.results as any[], TIMETABLE_CONCURRENCY, async (timetable) => {
       const tId = timetable.id
-      const alreadyRunning = timetable.properties?.[PROP_TIMETABLE_GEN_RUNNING]?.checkbox === true
+      const alreadyRunning = isRunning(timetable, TIMETABLE_STATUS_SPEC)
       if (alreadyRunning) {
         log.push(`[skip] ${tId}: already processing (생성중)`)
         return
       }
-      await markGenRunning(tId, true)
+      await markRunning(tId, TIMETABLE_STATUS_SPEC)
       try {
         await processTimetable(timetable, log, { type: "until", horizonDate })
-        await markGenDone(tId)
+        await markDone(tId, TIMETABLE_STATUS_SPEC)
       } catch (err) {
         log.push(`[error] ${tId}: ${(err as Error).message}`)
-        await markGenError(tId, (err as Error)?.message ?? String(err))
+        await markError(tId, TIMETABLE_STATUS_SPEC, (err as Error)?.message ?? String(err))
       }
     })
     return new Response(JSON.stringify({ ok: true, log }, null, 2), {
