@@ -12,7 +12,6 @@ import {
 	PROP_SCOPE_TITLE,
 	PROP_SCOPE_GRADE_LEVEL,
 	PROP_SCOPE_SCHOOL,
-	PROP_SCOPE_RUNNING,
 	PROP_SCOPE_LAST_ERROR,
 	PROP_SCOPE_SYNCED_AT,
 	PROP_GRADE_TITLE,
@@ -27,33 +26,19 @@ import {
 	STUDENT_STATUS_ENROLLED,
 } from "./constants.ts"
 import { getPage, updatePageProperties, createPage, queryAllPages, relIds, relationIds, titleText } from "./notionClient.ts"
+import { type StatusSpec } from "./statusTracking.ts"
 
-export async function setExamScopeStatus(pageId: string, status: "처리중" | "완료" | "오류", errorMessage?: string) {
-	try {
-		if (status === "처리중") {
-			await updatePageProperties(pageId, {
-				[PROP_SCOPE_RUNNING]: { checkbox: true },
-				[PROP_SCOPE_LAST_ERROR]: { rich_text: [] },
-			})
-			return
-		}
-		if (status === "오류") {
-			await updatePageProperties(pageId, {
-				[PROP_SCOPE_RUNNING]: { checkbox: false },
-				[PROP_SCOPE_LAST_ERROR]: {
-					rich_text: [{ text: { content: (errorMessage ?? "알 수 없는 오류").slice(0, 1900) } }],
-				},
-			})
-			return
-		}
-		await updatePageProperties(pageId, {
-			[PROP_SCOPE_RUNNING]: { checkbox: false },
-			[PROP_SCOPE_LAST_ERROR]: { rich_text: [] },
-			[PROP_SCOPE_SYNCED_AT]: { date: { start: new Date().toISOString() } },
-		})
-	} catch {
-		// 상태 표시 실패는 무시
-	}
+// (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) 기존 setExamScopeStatus(체크박스 잠금 + setStatus
+// 콜백)를 상태(select)+처리 시작 시각 방식으로 전환했다. 이 DB는 플래그가 하나뿐이라 시간표(학원)
+// DB와 같은 관례로 속성 이름을 "상태"/"처리 시작 시각"으로 뒀다. index.ts가 handleSyncWebhook에
+// statusSpec으로 이 값을 넘기면 markRunning/markDone/markError가 자동으로 처리해준다 — 더 이상
+// 이 파일에 별도 setter 함수가 필요하지 않다. "마지막 동기화"(성공 시각)만은 그 자동 처리 대상이
+// 아니라서, processExamScope 성공 경로 마지막에 직접 갱신한다(아래).
+// 마스터플랜: https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+export const EXAM_SCOPE_STATUS_SPEC: StatusSpec = {
+	statusProp: "상태",
+	errorProp: PROP_SCOPE_LAST_ERROR,
+	startedAtProp: "처리 시작 시각",
 }
 
 async function findEligibleStudents(gradeId: string, schoolId: string | null) {
@@ -111,4 +96,11 @@ export async function processExamScope(pageId: string, log: string[]) {
 	} else {
 		log.push(`⏭️ [${scopeName}] 학년이 비어있어 응시학생 등록을 건너뜀`)
 	}
+
+	// (2026-09-22, Phase 3) 기존 setExamScopeStatus("완료")가 함께 하던 "마지막 동기화" 갱신을
+	// 여기로 옮겼다. 이 줄 이전에 예외가 나면 index.ts 쪽에서 markError로 이어지고 이 줄은
+	// 실행되지 않으므로, 기존과 동일하게 "성공했을 때만" 마지막 동기화가 갱신된다.
+	await updatePageProperties(pageId, {
+		[PROP_SCOPE_SYNCED_AT]: { date: { start: new Date().toISOString() } },
+	})
 }

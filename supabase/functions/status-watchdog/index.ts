@@ -24,7 +24,7 @@
 
 import { requireAdminKey } from "../_shared/adminShared.ts"
 import { sweepStaleStatus, type StatusSpec } from "../_shared/statusTracking.ts"
-import { DS_TIMETABLE, DS_REGISTRATION, DS_CLASS_SESSION, DS_ATTENDANCE, DS_PROGRESS_BOOK, DS_CLASS } from "../_shared/constants.ts"
+import { DS_TIMETABLE, DS_REGISTRATION, DS_CLASS_SESSION, DS_ATTENDANCE, DS_PROGRESS_BOOK, DS_CLASS, DS_EXAM_SCOPE } from "../_shared/constants.ts"
 import { END_STATUS_SPEC } from "../_shared/registrationEndTarget.ts"
 import { TIMETABLE_STATUS_SPEC as REG_TIMETABLE_STATUS_SPEC } from "../_shared/registrationTimetableTarget.ts"
 import { CLASS_SESSION_STATUS_SPEC } from "../_shared/registrationClassSessionTarget.ts"
@@ -34,6 +34,7 @@ import { ATTENDANCE_FIX_STATUS_SPEC } from "../_shared/fixAttendanceTarget.ts"
 import { RECORD_GEN_STATUS_SPEC } from "../_shared/createLearningRecordTarget.ts"
 import { CLASS_REPORT_SYNC_STATUS_SPEC } from "../_shared/classReportCacheTarget.ts"
 import { CLASS_CART_STATUS_SPEC } from "../_shared/textbookDistributionTarget.ts"
+import { EXAM_SCOPE_STATUS_SPEC } from "../_shared/examScopeTarget.ts"
 
 // 메뉴(학원) DB는 다른 함수들이 DS.xxx 형태로 쿼리한 적이 없어서 전용 환경변수가 없다.
 // 이 워치독은 메뉴 DB 전체가 아니라 그 안의 "시간표" 단일 행 하나만 상태 관리 대상이므로,
@@ -96,6 +97,8 @@ const TARGETS: Array<{ label: string; dataSourceId: string; spec: StatusSpec }> 
 	{ label: "클래스:학생페이지동기화", dataSourceId: DS_CLASS, spec: CLASS_REPORT_SYNC_STATUS_SPEC },
 	{ label: "클래스:교재비생성", dataSourceId: DS_CLASS, spec: CLASS_CART_STATUS_SPEC },
 	{ label: "클래스:교재생성", dataSourceId: DS_CLASS, spec: CLASS_TEXTBOOK_STATUS_SPEC },
+	// (2026-09-22, Phase 3) 시험범위(학원) DB 1개 상태.
+	{ label: "시험범위:처리", dataSourceId: DS_EXAM_SCOPE, spec: EXAM_SCOPE_STATUS_SPEC },
 ]
 
 Deno.serve(async (req) => {

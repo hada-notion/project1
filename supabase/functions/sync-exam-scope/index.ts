@@ -26,10 +26,14 @@
 // (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환) "응시학생 등록"은 시험범위 1건만 대상으로
 // 하는 개별 트리거라 sync_queue를 거칠 필요가 없다. handleLockedQueueWebhook(큐 적재) 대신
 // handleSyncWebhook을 써서 버튼 클릭과 동시에 끝나도록 바꿨다.
+//
+// (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) "처리중" 체크박스를 상태(select)+처리 시작 시각으로
+// 전환했다. lockProp/setStatus 대신 statusSpec(EXAM_SCOPE_STATUS_SPEC)을 넘기면 handleSyncWebhook이
+// 자동으로 markRunning/markDone/markError를 호출한다. 마스터플랜:
+// https://app.notion.com/p/903c90386c1d473494c5df6306c53517
 
-import { PROP_SCOPE_RUNNING } from "../_shared/constants.ts"
 import { handleSyncWebhook } from "../_shared/webhookIngest.ts"
-import { setExamScopeStatus, processExamScope } from "../_shared/examScopeTarget.ts"
+import { EXAM_SCOPE_STATUS_SPEC, processExamScope } from "../_shared/examScopeTarget.ts"
 
 async function processPage(pageId: string): Promise<void> {
 	const log: string[] = []
@@ -43,8 +47,7 @@ async function processPage(pageId: string): Promise<void> {
 Deno.serve((req: Request) =>
 	handleSyncWebhook(req, {
 		functionName: "sync-exam-scope",
-		lockProp: PROP_SCOPE_RUNNING,
-		setStatus: setExamScopeStatus,
+		statusSpec: EXAM_SCOPE_STATUS_SPEC,
 		process: processPage,
 		requireAdminKey: true,
 	}),
