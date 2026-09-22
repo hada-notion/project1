@@ -80,9 +80,44 @@ async function findOrCreateDashboard(dateStr: string): Promise<string> {
   return created.id
 }
 
+// [NEW, 2026-09-23] cascade-delete가 같은 페이지를 archive(휴지통 이동)하는 것과 이 함수가 그 페이지를
+// 갱신하려는 것이 거의 동시에 일어나면(예: 수업 삭제 -> 그 하위 출석까지 캐스케이드 삭제되는 도중,
+// 이 페이지를 대시보드에 연결하려는 웹훅/큐 처리가 겹치는 경우), Notion이 400
+// "Can't edit block that is archived"를 반환한다. 이 오류가 그대로 던져지면 sync-dashboard-link/
+// index.ts가 HTTP 500을 응답하고, 그러면 Notion이 해당 페이지 자동화("페이지가 생성되면 → 웹훅
+// 보내기")를 비활성화해버리는 문제가 있었다 (사용자가 관찰한 "대시보드 웹훅 오류 -> 자동화 꺼짐"
+// 증상의 원인). cascadeDelete()(cascadeDeleteTarget.ts)는 이미 getPage 직후 이 검사를 하고 있는데,
+// 이 파일의 세 함수는 하지 않고 있었다 -- 동일한 방어 로직을 추가한다.
+function isArchivedOrTrashed(page: any): boolean {
+  return Boolean(page?.archived || page?.in_trash)
+}
+
+// updatePageProperties를 호출하되, 그 사이(getPage 이후) 페이지가 archive되어 이제 와서 편집이
+// 거부되는 race condition은 목표(대시보드 연결 정보 갱신)가 더 이상 의미 없어진 것뿐이므로 오류로
+// 취급하지 않고 조용히 스킵한다 (notionClient.ts의 archivePage()가 "이미 archived된 페이지를 다시
+// archive"할 때 쓰는 것과 동일한 패턴).
+// 반환값: 실제로 갱신에 성공했는지 여부 (false면 호출부가 그 뒤의 "연결됨" 로그를 남기지 않도록 함).
+async function updateIfNotArchived(pageId: string, properties: Record<string, unknown>, log: string[]): Promise<boolean> {
+  try {
+    await updatePageProperties(pageId, properties)
+    return true
+  } catch (err) {
+    const message = (err as Error)?.message ?? String(err)
+    if (message.includes("Can't edit block that is archived")) {
+      log.push(`⏭️ 갱신 도중 페이지가 삭제(archive)되어 대시보드 연결을 건너뜀: ${pageId}`)
+      return false
+    }
+    throw err
+  }
+}
+
 // 수업(학원)/출석(학원) 페이지 1건을, 자신의 "수업일시" 날짜에 해당하는 대시보드 하나에 연결한다.
 export async function linkSessionOrAttendanceToDashboard(pageId: string, log: string[]): Promise<void> {
   const page = await getPage(pageId)
+  if (isArchivedOrTrashed(page)) {
+    log.push(`⏭️ 이미 삭제된 페이지라 대시보드 연결을 건너뜀: ${pageId}`)
+    return
+  }
   const iso = dateStart(page, PROP_SESSION_DATETIME)
   if (!iso) {
     log.push(`⏭️ ${PROP_SESSION_DATETIME}가 비어있어 대시보드 연결을 건너뜀: ${pageId}`)
@@ -90,16 +125,22 @@ export async function linkSessionOrAttendanceToDashboard(pageId: string, log: st
   }
   const dateStr = kstDateOnly(iso)
   const dashboardId = await findOrCreateDashboard(dateStr)
-  await updatePageProperties(pageId, {
-    [PROP_DASHBOARD_RELATION_ON_CHILD]: { relation: [{ id: dashboardId }] },
-  })
-  log.push(`🔗 ${pageId} -> 대시보드(${dateStr}) 연결`)
+  const updated = await updateIfNotArchived(
+    pageId,
+    { [PROP_DASHBOARD_RELATION_ON_CHILD]: { relation: [{ id: dashboardId }] } },
+    log,
+  )
+  if (updated) log.push(`🔗 ${pageId} -> 대시보드(${dateStr}) 연결`)
 }
 
 // 일정(학원) 페이지 1건을, 그 날짜(기간 가능)가 걸치는 모든 날의 대시보드에 전부 연결한다
 // (여러 날짜 걸치는 일정은 일정 DB의 "대시보드" relation의 1개 제한을 해제해뒀어야 함).
 export async function linkScheduleToDashboards(pageId: string, log: string[]): Promise<void> {
   const page = await getPage(pageId)
+  if (isArchivedOrTrashed(page)) {
+    log.push(`⏭️ 이미 삭제된 페이지라 대시보드 연결을 건너뜀: ${pageId}`)
+    return
+  }
   const prop = page.properties?.[PROP_SCHEDULE_DATE]
   const startIso: string | null = prop?.date?.start ?? null
   if (!startIso) {
@@ -121,16 +162,22 @@ export async function linkScheduleToDashboards(pageId: string, log: string[]): P
     log.push(`⚠️ ${pageId}: 일정 기간이 ${MAX_SCHEDULE_SPAN_DAYS}일을 초과해 일부만 연결함`)
   }
 
-  await updatePageProperties(pageId, {
-    [PROP_DASHBOARD_RELATION_ON_CHILD]: { relation: dashboardIds.map((id) => ({ id })) },
-  })
-  log.push(`🔗 ${pageId} -> 대시보드 ${dashboardIds.length}건 연결 (${startDate}~${endDate})`)
+  const updated = await updateIfNotArchived(
+    pageId,
+    { [PROP_DASHBOARD_RELATION_ON_CHILD]: { relation: dashboardIds.map((id) => ({ id })) } },
+    log,
+  )
+  if (updated) log.push(`🔗 ${pageId} -> 대시보드 ${dashboardIds.length}건 연결 (${startDate}~${endDate})`)
 }
 
 // 대시보드(학원) 페이지 1건이 생성/갱신됐을 때, 그 날짜에 해당하는 수업/출석/일정을 전부 다시
 // 모아 대시보드 자신의 관계를 재구성한다 (멱등: 항상 그 시점 기준 전체 목록으로 덮어씀).
 export async function linkDashboardToChildren(dashboardPageId: string, log: string[]): Promise<void> {
   const dashboard = await getPage(dashboardPageId)
+  if (isArchivedOrTrashed(dashboard)) {
+    log.push(`⏭️ 이미 삭제된 대시보드 페이지라 하위 항목 연결을 건너뜀: ${dashboardPageId}`)
+    return
+  }
   const dateStr: string | null = dashboard.properties?.[PROP_DASHBOARD_DATE]?.date?.start?.slice(0, 10) ?? null
   if (!dateStr) {
     log.push(`⏭️ ${PROP_DASHBOARD_DATE}가 비어있어 하위 항목 연결을 건너뜀: ${dashboardPageId}`)
@@ -170,14 +217,20 @@ export async function linkDashboardToChildren(dashboardPageId: string, log: stri
     return endDate >= dateStr
   })
 
-  await updatePageProperties(dashboardPageId, {
-    [PROP_DASHBOARD_CLASS_SESSION]: { relation: sessions.map((p: any) => ({ id: p.id })) },
-    [PROP_DASHBOARD_ATTENDANCE]: { relation: attendances.map((p: any) => ({ id: p.id })) },
-    [PROP_DASHBOARD_SCHEDULE]: { relation: schedules.map((p: any) => ({ id: p.id })) },
-  })
-  log.push(
-    `🔗 대시보드(${dateStr}) <- 수업 ${sessions.length}건, 출석 ${attendances.length}건, 일정 ${schedules.length}건 연결`,
+  const updated = await updateIfNotArchived(
+    dashboardPageId,
+    {
+      [PROP_DASHBOARD_CLASS_SESSION]: { relation: sessions.map((p: any) => ({ id: p.id })) },
+      [PROP_DASHBOARD_ATTENDANCE]: { relation: attendances.map((p: any) => ({ id: p.id })) },
+      [PROP_DASHBOARD_SCHEDULE]: { relation: schedules.map((p: any) => ({ id: p.id })) },
+    },
+    log,
   )
+  if (updated) {
+    log.push(
+      `🔗 대시보드(${dateStr}) <- 수업 ${sessions.length}건, 출석 ${attendances.length}건, 일정 ${schedules.length}건 연결`,
+    )
+  }
 }
 
 // process-sync-queue 워커가 target: "sync-dashboard-link" 작업을 처리할 때 호출하는 진입점.
