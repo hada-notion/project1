@@ -106,56 +106,32 @@ export const TEXTBOOK_CLEANUP_URL = `${Deno.env.get("SB_URL") ?? ""}/functions/v
 export const PROP_TIMETABLE_CLASS_MODE = "수업 방식" // 시간표(학원) DB
 export const TIMETABLE_MODE_INDIVIDUAL = "개별 수업"
 
-// 등록 DB: 시간표/교재 두 Edge Function이 각각 처리 중인지 표시하는 내부용 체크박스.
-// "동기화 상태"(사용자에게 보이는 select)는 이 둘을 조합해서 계산한다 —
-// 둘 중 하나라도 처리 중이면 "처리 중", 둘 다 끝나야 "완료"로 표시한다.
-export const PROP_SYNC_TIMETABLE_RUNNING = "시간표 처리중"
-export const PROP_SYNC_TEXTBOOK_RUNNING = "교재 처리중"
-// "수업 생성"/"종료 처리" 버튼 전용 함수도 같은 방식으로 처리 중 여부를 표시한다 (2026-09-10 추가).
-export const PROP_SYNC_CLASS_SESSION_RUNNING = "수업 처리중"
-export const PROP_SYNC_END_RUNNING = "종료 처리중"
-// "등록" 버튼(종료 버튼의 반대) 전용 함수도 같은 방식으로 처리 중 여부를 표시한다.
-export const PROP_SYNC_ENROLL_RUNNING = "등록 처리중"
 export const PROP_SYNCED_AT = "마지막 동기화" // 등록(학원) DB: 마지막으로 동기화 완료된 시각
 // 등록(학원) DB: 자동화 실패 시 에러 메시지를 남기는 공유 텍스트 필드. 다음 성공 시 자동으로 비워짐.
-// "실시간 처리 상태" 수식이 이 값과 각 "처리중" 체크박스를 조합해서 화면에 표시한다 (2026-09-11).
+// "실시간 처리 상태" 수식이 이 값과 각 처리 상태(select)를 조합해서 화면에 표시한다 (2026-09-11).
+// (2026-09-22, 처리 상태 관리 리팩토링 Phase 5) 등록 DB의 시간표/교재/수업/종료/등록 각각
+// 처리중 여부를 표시하던 PROP_SYNC_TIMETABLE_RUNNING/PROP_SYNC_TEXTBOOK_RUNNING/
+// PROP_SYNC_CLASS_SESSION_RUNNING/PROP_SYNC_END_RUNNING/PROP_SYNC_ENROLL_RUNNING 체크박스
+// 상수와 이들을 모아둔 ALL_SYNC_RUNNING_FLAGS는, Phase 3에서 각 DB가 select 기반
+// StatusSpec(statusTracking.ts)으로 전환되며 죽은 코드가 되어 여기서 함께 제거했다. 노션
+// 쪽 해당 체크박스 속성도 동일 시점에 스키마에서 삭제됨. 마스터플랜:
+// https://app.notion.com/p/903c90386c1d473494c5df6306c53517
 export const PROP_LAST_ERROR = "마지막 오류"
 
-// 삭제 캐스케이드(cascade-delete) 대상 4개 DB(수업/출석/학습기록/학습활동) 공통 속성.
-// (2026-09-10 추가 → 같은 날 재검토 후 변경) 처음엔 "삭제 상태"를 별도 속성으로 분리했었지만,
-// 삭제와 다른 동기화 작업(학습기록 생성/출제 등)이 동시에 겹치는 경우가 드물다는 판단에 따라
-// (2026-09-11 마이그레이션) 이 4개 DB도 등록/클래스 DB와 같은 체크박스+"실시간 처리 상태" 수식 패턴으로 통일했다 (PROP_SYNC_STATUS는 삭제됨).
-// 안에서 기존 처리중/완료/오류 옵션을 그대로 재사용한다.
-// 체크박스 이름이 DB마다 "삭제체크"/"삭제 체크"로 제각각이던 것도 "삭제 체크"로 통일했다.
-// 참고: 이 체크박스는 더 이상 cascade-delete 실행에 필수적인 게이트가 아니다 — "삭제" 버튼이
-// 웹훅을 직접 호출하는 것 자체가 삭제 의도의 트리거이며, 체크박스는 캐스케이드되는 하위 항목들에
-// 남기는 시각적 표시(감사 추적용)로만 쓰인다.
+// 삭제 캐스케이드(cascade-delete) 대상 7개 DB(수업/출석/학습기록/학습활동/교재비(카트)/
+// 교재배부/교재결제) 공통 속성. "삭제 체크"는 캐스케이드되는 하위 항목들에 남기는 시각적
+// 표시(감사 추적용)로만 쓰이며, cascade-delete 실행 자체의 게이트는 아니다 — "삭제" 버튼이
+// 웹훅을 직접 호출하는 것 자체가 삭제 의도의 트리거다.
 export const PROP_DELETE_CHECKBOX = "삭제 체크"
-// cascade-delete가 삭제 진행 중인 페이지에 표시하는 체크박스 이름 (수업/출석/학습기록/학습활동 4개 DB 공통).
-export const PROP_DELETING_RUNNING = "삭제 처리중"
+// (2026-09-22, Phase 5) 이 7개 DB가 삭제 처리 중임을 표시하던 PROP_DELETING_RUNNING 체크박스
+// 상수는, Phase 3에서 각 DB가 CASCADE_DELETE_STATUS_SPEC(select 기반, statusTracking.ts)으로
+// 전환되며 죽은 코드가 되어 여기서 제거했다(노션 쪽 체크박스 속성도 동일 시점에 삭제됨).
 
-// 시간표 DB: generate-classes(수업/출석 생성) 처리 상태 표시용 (2026-09-10 추가 →
-// 2026-09-11 마이그레이션: 공유 select "생성 상태"에서 체크박스 + "실시간 처리 상태" 수식으로 전환).
-export const PROP_TIMETABLE_GEN_RUNNING = "생성중"
+// (2026-09-22, Phase 5) 시간표(학원) DB의 generate-classes 처리 중 여부를 표시하던
+// PROP_TIMETABLE_GEN_RUNNING 체크박스 상수는, 2026-09-21 리팩토링에서 이미 시간표 DB의
+// "상태" select(TIMETABLE_STATUS_SPEC)로 대체되어 죽은 코드였고 여기서 제거했다(노션 쪽
+// "생성중" 체크박스 속성도 동일 시점에 삭제됨).
 export const PROP_TIMETABLE_LAST_ERROR = "마지막 오류"
-
-// 참고: 아래 5개 "처리중" 체크박스는 서로 배타적이지 않고 동시에 여러 개가 true일 수 있다.
-// "하나라도 처리중이면 전체 상태를 처리중으로" 보여주는 실제 계산은 등록(학원) DB의 "실시간 처리
-// 상태" 노션 수식이 이 체크박스들을 직접 실시간으로 조합해서 담당한다.
-// (2026-09-21 정리: 예전에는 각 함수가 setSyncStatus 호출 시 "자기 자신을 뺀 나머지" 목록을
-// otherFlagProps라는 인자로 넘기게 돼 있었는데, setCombinedSyncStatus 구현이 이 값을 전혀 읽지
-// 않는 완전한 죽은 인자였다. sync-registration-textbook만 그 목록에서 PROP_SYNC_ENROLL_RUNNING을
-// 빠뜨리고 있었지만, 애초에 아무 데도 쓰이지 않으니 실제 동작에는 아무 영향이 없었다. 혼동을
-// 줄이기 위해 otherFlagProps 인자 자체를 registrationSync.ts/generateShared.ts와 모든 호출부에서
-// 제거했다 — 이제 이 목록은 아래 ALL_SYNC_RUNNING_FLAGS 참고용으로만 남아 있고, 코드 어디에서도
-// 참조하지 않는다.)
-export const ALL_SYNC_RUNNING_FLAGS = [
-	PROP_SYNC_TIMETABLE_RUNNING,
-	PROP_SYNC_TEXTBOOK_RUNNING,
-	PROP_SYNC_CLASS_SESSION_RUNNING,
-	PROP_SYNC_END_RUNNING,
-	PROP_SYNC_ENROLL_RUNNING,
-]
 
 // ---------- 성적관리(시험범위/성적/시험/학생) ----------
 // sync-exam-scope, sync-exam-score 두 함수가 공통으로 참조한다 (로드맵 4-5, 2026-09-16).
