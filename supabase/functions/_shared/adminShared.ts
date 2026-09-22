@@ -248,6 +248,11 @@ export async function createSendLogEntry(args: {
   attendanceId?: string
   reportId?: string
   tuitionId?: string
+  // [NEW, 2026-09-23] 교재비(카트) 페이지 id. 있으면 전송로그의 "교재비" 관계를 채워서, 그 교재비
+  // 페이지의 "전송 내역"/"발송 횟수" 수식이 이 로그를 찾을 수 있게 한다. 예전에는 이 파라미터가
+  // 없어서 send-textbook-notice가 로그를 만들어도 교재비 페이지 쪽에는 항상 빈 관계로 남아,
+  // "전송 내역"이 계속 비어 보이는 버그가 있었다.
+  textbookCartId?: string
   senderUserId?: string
   title: string
   category: SendLogCategory
@@ -277,6 +282,10 @@ export async function createSendLogEntry(args: {
     }
     if (args.tuitionId) {
       properties["수강료"] = { relation: [{ id: args.tuitionId }] }
+    }
+    // [NEW, 2026-09-23] 위 보고서/수강료와 동일한 패턴으로 교재비도 전송로그에 연결한다.
+    if (args.textbookCartId) {
+      properties["교재비"] = { relation: [{ id: args.textbookCartId }] }
     }
     if (args.senderUserId) {
       properties["발송자"] = { people: [{ id: args.senderUserId }] }
