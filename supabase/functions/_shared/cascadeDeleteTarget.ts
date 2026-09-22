@@ -24,17 +24,20 @@ import { isRunning, markRunning, markDone, markError, type StatusSpec } from "./
 // constants.ts 한 곳에서 환경변수로 읽어와 공유한다 (constants.ts 상단 주석 참고). export하지 않아도
 // 되도록 이 파일 밖에서 이 이름들을 가져다 쓰는 곳이 없는지 확인했다.
 //
-// (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) "삭제 처리중"(checkbox)을 상태(select)+처리 시작
-// 시각(date)으로 전환. 이 플래그는 cascade-delete가 처리하는 7개 DB(수업/출석/학습기록/학습활동/
+// (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) "삭제 처리중"(checkbox)을 삭제 상태(select)+삭제
+// 처리 시작 시각(date)으로 전환. (일반 이름 "상태"/"처리 시작 시각" 대신 "삭제 " 접두사를 붙인 이유:
+// 수업/출석/교재비(카트) DB에는 이미 "생성 상태"/"출석조정 상태"/"학습기록 상태"/"담기 처리중" 같은
+// 다른 상태 속성들이 있어서, 접두사 없는 "상태"만 있으면 그 사이에서 무엇을 가리키는지 헷갈림.)
+// 이 플래그는 cascade-delete가 처리하는 7개 DB(수업/출석/학습기록/학습활동/
 // 교재비(카트)/교재배부/교재결제)가 모두 같은 속성 이름을 공유한다 — 원래 마스터플랜 Phase 0 표에는
 // 수업/출석/학습기록/학습활동 4개만 적혀 있었는데, 실제 코드(바로 아래 CONFIG)를 보면 교재비 계열
 // 3개 DB도 같은 cascadeDelete/PROP_DELETING_RUNNING을 공유하고 있어 범위를 7개로 확장함(등록/수업 DB
 // 그룹에서 "학습기록 상태"를 3개 DB로 확장했던 것과 같은 이유의 범위 확장). 마스터플랜:
 // https://app.notion.com/p/903c90386c1d473494c5df6306c53517
 export const CASCADE_DELETE_STATUS_SPEC: StatusSpec = {
-	statusProp: "상태",
+	statusProp: "삭제 상태",
 	errorProp: PROP_LAST_ERROR,
-	startedAtProp: "처리 시작 시각",
+	startedAtProp: "삭제 처리 시작 시각",
 }
 
 const PROP_STUDY_RECORD_TEXTBOOK = "진도교재"
