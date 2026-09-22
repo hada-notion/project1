@@ -46,9 +46,10 @@
 // 동시에 처리되는데도 화면에는 클릭한 전부가 "🔄 작업중"으로 보여 실제 진행 상황을 알 수 없는 문제가
 // 있었다. PART N-4가 지적한 지연 문제(당시엔 wakeSyncQueueWorker의 EdgeRuntime.waitUntil 누락
 // 버그로 즉시 트리거가 거의 항상 유실되고 있었음)는 PART N-3에서 이미 고쳤으므로, 이제 큐를 다시
-// 쓰더라도 부하가 없는 평소에는 지연이 거의 없다 -- 그래서 이 셋도 큐에 추가하고, 아래
-// CONCURRENCY만큼 동시에(순서 보장 없이) 처리하도록 바꿨다("생성된 순서대로 하나씩만"에서 "최대
-// CONCURRENCY개까지 동시에"로 전환). 마스터플랜: https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+// 쓰더라도 부하가 없는 평소에는 지연이 거의 없다 -- 그래서 이 셋도 큐에 추가했다(처음엔 아래
+// CONCURRENCY를 3으로 두고 동시에(순서 보장 없이) 처리하도록 했으나, 실제 운영 중 문제가 드러나
+// 다시 1로 되돌렸다 -- 아래 CONCURRENCY 선언부 주석 참고). 마스터플랜:
+// https://app.notion.com/p/903c90386c1d473494c5df6306c53517
 
 import {
   tryAcquireWorkerLock,
@@ -87,9 +88,19 @@ const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Pro
 // claimNextSyncQueueItem이 부르는 claim_next_sync_queue_item RPC는 FOR UPDATE SKIP LOCKED를 써서
 // 여러 레인이 동시에 호출해도 같은 항목을 두 번 집지 않는다(원래도 여러 워커 인스턴스가 동시에
 // 떠도 안전하게 설계되어 있었음 -- 이제 그 안전성을 한 인스턴스 안의 동시 레인에도 그대로 활용).
-// 값은 임의로 3으로 시작 -- Notion API 레이트리밋(초당 요청 수 제한)과 "화면에 동시에 몇 건까지
-// 작업중으로 보이는 게 자연스러운가"를 함께 고려한 보수적인 시작값이다.
-const CONCURRENCY = 3
+//
+// (2026-09-22, Phase 6 후속: 3 -> 1로 되돌림) 실제 운영에서 N=3으로 돌려보니 두 가지 문제가
+// 드러났다: (1) 학생 수가 많은 클래스(보고서/수강료 생성)의 등록별 처리가 당시 순차 for 루프였던
+// 탓에 한 항목이 몇 분씩 걸렸고, 그동안 레인 하나가 계속 묶여 있었다. (2) 더 심각하게는, 그렇게
+// 오래 걸리는 항목을 처리하던 함수 실행이 Supabase Edge Function의 실행시간 한도에 걸려 도중에
+// 강제 종료되면 sync_queue_worker_lock까지 함께 유실되어(정상적으로 release되지 못함), 다음 pg_cron
+// 주기가 새로 락을 잡고 또 3개를 새로 집으면서 화면에 "작업중"이 3개 한도를 넘어 계속 쌓이는
+// 현상(사용자 보고, 2026-09-22)으로 이어졌다. 사용자 요청에 따라 (a) 등록별 처리는 병렬화해서
+// 항목 하나의 처리 시간 자체를 줄이고(generateReportTarget.ts/generateTuitionTarget.ts의
+// REG_CONCURRENCY 참고), (b) 큐 처리 자체는 다시 완전히 하나씩(요청이 들어온 시간순, 즉 큐에 쌓인
+// created_at 순서 그대로) 처리하도록 되돌려서, 화면에는 항상 최대 1건만 "🔄 작업중"으로 보이고
+// 순서도 항상 예측 가능하게 만든다. 마스터플랜: https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+const CONCURRENCY = 1
 
 // Edge Function 자체의 실행 시간 한도보다 여유 있게 짧은 시간 예산 안에서만 계속 처리하고, 남으면
 // 스스로를 다시 깨운다 (한 번의 실행이 시간 제한에 걸려 강제 종료되는 것보다, 미리 멈추고 이어가는

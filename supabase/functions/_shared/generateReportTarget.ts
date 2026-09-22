@@ -50,6 +50,10 @@ export const CLASS_REPORT_STATUS_SPEC: StatusSpec = {
 const PROP_CLASS_REPORT_TARGET = "보고서 생성 대상" // 클래스(학원) DB → 알림톡 발송함(학원) DB
 const REPORT_TYPE_WEEKLY = "주간 보고서"
 
+// (2026-09-22, Phase 6 후속: 속도 개선) generate-classes의 TIMETABLE_CONCURRENCY와 같은 값 -- Notion
+// API 레이트리밋과 처리 속도를 함께 고려한 값.
+const REG_CONCURRENCY = 4
+
 // dateProp이 일반 date 속성이면 "date", 롤업(rollup)/수식(formula)으로 계산되는 날짜 속성이면
 // 그에 맞는 필터 형태를 써야 한다 (Notion API는 속성 타입마다 필터 모양이 다르다).
 type DatePropKind = "date" | "rollup_date"
@@ -123,18 +127,23 @@ export async function processClass(classId: string, log: string[]): Promise<void
 	let created = 0
 	let skipped = 0
 	let dedupCleaned = 0
-	for (const reg of registrations) {
+	// (2026-09-22, Phase 6 후속: 속도 개선) 등록별 처리를 순차 for 루프 대신 generate-classes/
+	// cascade-delete/sync-class-report-cache와 동일한 REG_CONCURRENCY 병렬 처리로 바꿨다. 학생 수가
+	// 많은 클래스(15명 이상)에서 순차 처리 시 큐 항목 하나가 몇 분씩 걸려 process-sync-queue의 동시
+	// 처리 레인을 오래 붙잡고 있던 문제(사용자 보고, 마스터플랜 Phase 6 참고)를 해결한다. 등록끼리는
+	// 서로 독립적인 페이지라 병렬 처리해도 안전하다(같은 페이지를 두 번 건드리지 않음).
+	await mapWithConcurrency(registrations, REG_CONCURRENCY, async (reg) => {
 		const existingIds = await findReportForPeriod(reg.id, reportType, periodStart)
 		if (existingIds.length > 1) {
 			const extras = existingIds.slice(1)
 			await mapWithConcurrency(extras, 4, (id) => archivePage(id))
 			dedupCleaned += extras.length
 			skipped++
-			continue
+			return
 		}
 		if (existingIds.length === 1) {
 			skipped++
-			continue
+			return
 		}
 		const [attendanceIds, recordIds, activityIds] = await Promise.all([
 			findIdsInRange(DS_ATTENDANCE, "수업일시", reg.id, periodStart, periodEnd),
@@ -156,7 +165,7 @@ export async function processClass(classId: string, log: string[]): Promise<void
 			"일괄전송 선택": { checkbox: true },
 		})
 		created++
-	}
+	})
 	log.push(
 		`[done] ${className}: 생성 ${created}건, 중복스킵 ${skipped}건, 중복정리 ${dedupCleaned}건 (총 대상 ${registrations.length}건)`,
 	)

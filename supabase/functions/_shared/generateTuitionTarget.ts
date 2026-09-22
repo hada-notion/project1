@@ -54,6 +54,10 @@ export const CLASS_TUITION_STATUS_SPEC: StatusSpec = {
 // _shared/generateShared.ts의 상수를 그대로 쓴다 (2026-09-16, 속성명 중복 하드코딩 정리).
 const PROP_CLASS_TUITION_TARGET = "수강료 생성 대상" // 클래스(학원) DB → 알림톡 발송함(학원) DB
 
+// (2026-09-22, Phase 6 후속: 속도 개선) generate-classes의 TIMETABLE_CONCURRENCY와 같은 값 -- Notion
+// API 레이트리밋과 처리 속도를 함께 고려한 값.
+const REG_CONCURRENCY = 4
+
 export async function processClass(classId: string, log: string[]): Promise<void> {
 	const classPage = await getPage(classId)
 	const className = classPage.properties?.["클래스명"]?.title?.[0]?.plain_text ?? classId
@@ -100,7 +104,9 @@ export async function processClass(classId: string, log: string[]): Promise<void
 	let created = 0
 	let skipped = 0
 	let dedupCleaned = 0
-	for (const reg of registrations) {
+	// (2026-09-22, Phase 6 후속: 속도 개선) generateReportTarget.ts와 동일한 이유로 순차 for 루프 대신
+	// REG_CONCURRENCY 병렬 처리로 바꿨다. 등록끼리는 서로 독립적인 페이지라 병렬 처리해도 안전하다.
+	await mapWithConcurrency(registrations, REG_CONCURRENCY, async (reg) => {
 		const existingIds = await findTuitionForMonth(reg.id, monthStart, monthEnd)
 		if (existingIds.length > 1) {
 			// 처리 중에 버튼이 다시 눌려서 생긴 중복: 가장 먼저 생성된 한 건만 남기고 나머지는 삭제한다.
@@ -108,11 +114,11 @@ export async function processClass(classId: string, log: string[]): Promise<void
 			await mapWithConcurrency(extras, 4, (id) => archivePage(id))
 			dedupCleaned += extras.length
 			skipped++
-			continue
+			return
 		}
 		if (existingIds.length === 1) {
 			skipped++
-			continue
+			return
 		}
 		const title = `${reg.studentLabel} ${monthStart.slice(0, 7)} 수강료`
 		await createPage(DS_TUITION, {
@@ -131,7 +137,7 @@ export async function processClass(classId: string, log: string[]): Promise<void
 			"일괄전송 선택": { checkbox: true },
 		})
 		created++
-	}
+	})
 	log.push(
 		`[done] ${className}: 생성 ${created}건, 중복스킵 ${skipped}건, 중복정리 ${dedupCleaned}건 (총 대상 ${registrations.length}건)`,
 	)
