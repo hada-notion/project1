@@ -85,12 +85,16 @@ function jsonResponse(body: unknown, status: number): Response {
 export type LockedQueueWebhookOptions = {
   // 로그 접두사로 쓰는 함수 이름 (예: "sync-registration-enroll").
   functionName: string
-  // 이 속성(체크박스)이 이미 true면 재클릭으로 보고 즉시 already_processing을 반환한다.
-  lockProp: string
+  // 옛 방식(체크박스 잠금 + setStatus 콜백). statusSpec을 주면 이 둘은 완전히 무시된다.
+  // (2026-09-22, Phase 3) 클래스(학원) DB "학생 페이지 동기화중" 전환 시 추가.
+  lockProp?: string
   // sync_queue에 적재할 target 이름 (process-sync-queue의 HANDLERS 키와 일치해야 한다).
   target: string
   // "처리중"/"오류" 표시에 쓰는 상태 setter. 각 DB/함수 전용 setter를 그대로 넘기면 된다.
-  setStatus: SetSyncStatus
+  setStatus?: SetSyncStatus
+  // 새 방식: 상태(select) + 처리 시작 시각(date) 기반. 주어지면 lockProp/setStatus 대신 이걸 쓴다.
+  // 마스터플랜: https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+  statusSpec?: StatusSpec
   // 큐에 적재할 payload를 pageId 외의 모양으로 만들어야 할 때(예: { classId: pageId }) 사용.
   // 생략하면 기본값 { pageId }를 그대로 적재한다.
   buildPayload?: (pageId: string) => Record<string, unknown>
@@ -113,11 +117,15 @@ export async function runLockedQueueWebhookForPage(
 ): Promise<Response> {
   try {
     const pageForLock = await getPage(pageId)
-    if (checkboxValue(pageForLock, opts.lockProp)) {
+    const currentlyRunning = opts.statusSpec
+      ? isRunning(pageForLock, opts.statusSpec)
+      : checkboxValue(pageForLock, opts.lockProp!)
+    if (currentlyRunning) {
       return jsonResponse({ ok: true, message: "already_processing", pageId }, 200)
     }
 
-    await opts.setStatus(pageId, "처리중")
+    if (opts.statusSpec) await markRunning(pageId, opts.statusSpec)
+    else await opts.setStatus!(pageId, "처리중")
 
     const payload = opts.buildPayload ? opts.buildPayload(pageId) : { pageId }
     await enqueueSync(opts.target, payload)
@@ -127,7 +135,8 @@ export async function runLockedQueueWebhookForPage(
   } catch (err) {
     console.error(`[${opts.functionName}] ERROR:`, (err as Error).message, (err as Error).stack)
     if (pageId) {
-      await opts.setStatus(pageId, "오류", (err as Error).message)
+      if (opts.statusSpec) await markError(pageId, opts.statusSpec, (err as Error).message)
+      else await opts.setStatus!(pageId, "오류", (err as Error).message)
     }
     return jsonResponse({ ok: false, error: (err as Error).message }, 500)
   }
@@ -267,10 +276,14 @@ export async function handleSyncWebhook(
 export type LockedBackgroundWebhookOptions = {
   // 로그 접두사로 쓰는 함수 이름 (예: "generate-report").
   functionName: string
-  // 이 속성(체크박스)이 이미 true면 재클릭으로 보고 즉시 already_processing을 반환한다.
-  lockProp: string
+  // 옛 방식(체크박스 잠금 + setStatus 콜백). statusSpec을 주면 이 둘은 완전히 무시된다.
+  // (2026-09-22, Phase 3) 클래스(학원) DB "보고서 생성중"/"수강료 생성중" 전환 시 추가.
+  lockProp?: string
   // "처리중"/"완료"/"오류" 표시에 쓰는 상태 setter. 각 DB/함수 전용 setter를 그대로 넘기면 된다.
-  setStatus: SetSyncStatus
+  setStatus?: SetSyncStatus
+  // 새 방식: 상태(select) + 처리 시작 시각(date) 기반. 주어지면 lockProp/setStatus 대신 이걸 쓴다.
+  // 마스터플랜: https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+  statusSpec?: StatusSpec
   // pageId를 찾지 못했을 때의 오류 메시지 (기존 함수마다 "classId를 찾지 못함" 등 문구가 달랐다).
   missingIdError: string
   // 응답 JSON에 pageId를 담을 필드 이름 (기존 함수들은 "classId"를 그대로 썼다). 기본값 "pageId".
@@ -312,18 +325,23 @@ export async function handleLockedBackgroundWebhook(
   }
 
   const pageForLock = await getPage(id)
-  if (checkboxValue(pageForLock, opts.lockProp)) {
+  const currentlyRunning = opts.statusSpec
+    ? isRunning(pageForLock, opts.statusSpec)
+    : checkboxValue(pageForLock, opts.lockProp!)
+  if (currentlyRunning) {
     return jsonResponse({ ok: true, message: "already_processing", [idField]: id }, 200)
   }
 
   const log: string[] = []
-  await opts.setStatus(id, "처리중")
+  if (opts.statusSpec) await markRunning(id, opts.statusSpec)
+  else await opts.setStatus!(id, "처리중")
 
   runInBackground(async () => {
     try {
       await run(id, log)
       console.log(`${opts.functionName} finished:`, id, "\n", log.join("\n"))
-      await opts.setStatus(id, "완료")
+      if (opts.statusSpec) await markDone(id, opts.statusSpec)
+      else await opts.setStatus!(id, "완료")
     } catch (err) {
       console.error(
         `${opts.functionName} failed:`,
@@ -333,7 +351,8 @@ export async function handleLockedBackgroundWebhook(
         "\nstack:",
         (err as Error).stack,
       )
-      await opts.setStatus(id, "오류", (err as Error).message)
+      if (opts.statusSpec) await markError(id, opts.statusSpec, (err as Error).message)
+      else await opts.setStatus!(id, "오류", (err as Error).message)
     }
   })
 

@@ -24,14 +24,16 @@
 
 import { requireAdminKey } from "../_shared/adminShared.ts"
 import { sweepStaleStatus, type StatusSpec } from "../_shared/statusTracking.ts"
-import { DS_TIMETABLE, DS_REGISTRATION, DS_CLASS_SESSION, DS_ATTENDANCE, DS_PROGRESS_BOOK } from "../_shared/constants.ts"
+import { DS_TIMETABLE, DS_REGISTRATION, DS_CLASS_SESSION, DS_ATTENDANCE, DS_PROGRESS_BOOK, DS_CLASS } from "../_shared/constants.ts"
 import { END_STATUS_SPEC } from "../_shared/registrationEndTarget.ts"
 import { TIMETABLE_STATUS_SPEC as REG_TIMETABLE_STATUS_SPEC } from "../_shared/registrationTimetableTarget.ts"
 import { CLASS_SESSION_STATUS_SPEC } from "../_shared/registrationClassSessionTarget.ts"
 import { ENROLL_STATUS_SPEC } from "../_shared/registrationEnrollTarget.ts"
-import { TEXTBOOK_STATUS_SPEC } from "../_shared/registrationTextbookTarget.ts"
+import { TEXTBOOK_STATUS_SPEC, CLASS_TEXTBOOK_STATUS_SPEC } from "../_shared/registrationTextbookTarget.ts"
 import { ATTENDANCE_FIX_STATUS_SPEC } from "../_shared/fixAttendanceTarget.ts"
 import { RECORD_GEN_STATUS_SPEC } from "../_shared/createLearningRecordTarget.ts"
+import { CLASS_REPORT_SYNC_STATUS_SPEC } from "../_shared/classReportCacheTarget.ts"
+import { CLASS_CART_STATUS_SPEC } from "../_shared/textbookDistributionTarget.ts"
 
 // 메뉴(학원) DB는 다른 함수들이 DS.xxx 형태로 쿼리한 적이 없어서 전용 환경변수가 없다.
 // 이 워치독은 메뉴 DB 전체가 아니라 그 안의 "시간표" 단일 행 하나만 상태 관리 대상이므로,
@@ -58,6 +60,20 @@ const CLASS_BULK_SEND_STATUS_SPEC: StatusSpec = {
 	startedAtProp: "보고서 일괄전송 처리 시작 시각",
 }
 
+// 클래스(학원) DB 자체 레벨 2개(보고서 생성/수강료 생성)는 각각 generate-report/index.ts,
+// generate-tuition/index.ts 안에 로컬로 정의돼 있다 (TIMETABLE_STATUS_SPEC/SESSION_GEN_STATUS_SPEC과
+// 동일한 관례). 여기서는 같은 속성 이름 literal을 그대로 복제한다.
+const CLASS_REPORT_GEN_STATUS_SPEC: StatusSpec = {
+	statusProp: "보고서 생성 상태",
+	errorProp: "마지막 오류",
+	startedAtProp: "보고서 생성 처리 시작 시각",
+}
+const CLASS_TUITION_GEN_STATUS_SPEC: StatusSpec = {
+	statusProp: "수강료 생성 상태",
+	errorProp: "마지막 오류",
+	startedAtProp: "수강료 생성 처리 시작 시각",
+}
+
 const TARGETS: Array<{ label: string; dataSourceId: string; spec: StatusSpec }> = [
 	{ label: "시간표", dataSourceId: DS_TIMETABLE, spec: TIMETABLE_STATUS_SPEC },
 	{ label: "메뉴", dataSourceId: DS_MENU, spec: TIMETABLE_STATUS_SPEC },
@@ -74,6 +90,12 @@ const TARGETS: Array<{ label: string; dataSourceId: string; spec: StatusSpec }> 
 	{ label: "수업:보고서일괄전송", dataSourceId: DS_CLASS_SESSION, spec: CLASS_BULK_SEND_STATUS_SPEC },
 	{ label: "출석:학습기록", dataSourceId: DS_ATTENDANCE, spec: RECORD_GEN_STATUS_SPEC },
 	{ label: "진도교재:학습기록", dataSourceId: DS_PROGRESS_BOOK, spec: RECORD_GEN_STATUS_SPEC },
+	// (2026-09-22, Phase 3) 클래스(학원) DB 5개 상태.
+	{ label: "클래스:보고서생성", dataSourceId: DS_CLASS, spec: CLASS_REPORT_GEN_STATUS_SPEC },
+	{ label: "클래스:수강료생성", dataSourceId: DS_CLASS, spec: CLASS_TUITION_GEN_STATUS_SPEC },
+	{ label: "클래스:학생페이지동기화", dataSourceId: DS_CLASS, spec: CLASS_REPORT_SYNC_STATUS_SPEC },
+	{ label: "클래스:교재비생성", dataSourceId: DS_CLASS, spec: CLASS_CART_STATUS_SPEC },
+	{ label: "클래스:교재생성", dataSourceId: DS_CLASS, spec: CLASS_TEXTBOOK_STATUS_SPEC },
 ]
 
 Deno.serve(async (req) => {

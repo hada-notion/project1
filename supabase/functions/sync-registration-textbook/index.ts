@@ -66,8 +66,7 @@ import {
 	TEXTBOOK_STATUS_SPEC,
 	cleanupUnusedBooksOnEnd,
 	createIndividualBooksForRegistration,
-	PROP_CLASS_TEXTBOOK_RUNNING,
-	setClassTextbookStatus,
+	CLASS_TEXTBOOK_STATUS_SPEC,
 	createBooksForClass,
 } from "../_shared/registrationTextbookTarget.ts"
 import { runSyncWebhookForPage } from "../_shared/webhookIngest.ts"
@@ -121,8 +120,7 @@ Deno.serve(async (req: Request) => {
 			// 클래스(학원) DB "교재 생성" 버튼 -- 클릭 대상(pageId)이 클래스 페이지 자신이다.
 			return await runSyncWebhookForPage(pageId, {
 				functionName: "sync-registration-textbook:create-class",
-				lockProp: PROP_CLASS_TEXTBOOK_RUNNING,
-				setStatus: setClassTextbookStatus,
+				statusSpec: CLASS_TEXTBOOK_STATUS_SPEC,
 				process: processClassPage,
 			})
 		} else if (route === "cleanup-on-end") {

@@ -30,7 +30,7 @@ import {
 	todaySeoulDate,
 } from "./notionClient.ts"
 import { makeSyncStatusSetter } from "./registrationSync.ts"
-import { makeClassStatusSetter } from "./generateShared.ts"
+import { markDone, markError, type StatusSpec } from "./statusTracking.ts"
 import { getScheduleConfig } from "./adminShared.ts"
 
 const DATA_SOURCE_TEXTBOOK_CART = Deno.env.get("DATA_SOURCE_TEXTBOOK_CART_ID")! // 교재비(학원) DB
@@ -54,10 +54,16 @@ const PROP_REGISTRATION_BOOKS = "진도교재"
 const PROP_REGISTRATION_CART = "교재비"
 const STATUS_ACTIVE = "🟢 수강 중"
 
-export const PROP_CLASS_CART_RUNNING = "교재비 생성중"
+// (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) "교재비 생성중" 체크박스 -> "교재비 생성 상태"(select)
+// + "교재비 생성 처리 시작 시각"(date). index.ts(락 확인+시작)와 이 파일(완료/오류 반영) 양쪽에서
+// 써서 export한다. 마스터플랜: https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+export const CLASS_CART_STATUS_SPEC: StatusSpec = {
+	statusProp: "교재비 생성 상태",
+	errorProp: PROP_LAST_ERROR,
+	startedAtProp: "교재비 생성 처리 시작 시각",
+}
 
 export const setCartStatus = makeSyncStatusSetter(PROP_CART_RUNNING)
-export const setClassCartStatus = makeClassStatusSetter(PROP_CLASS_CART_RUNNING)
 
 // 등록 하나에 대해 교재비(장바구니) 페이지를 확보한다: 이밀 있으맔 재사용, 없으맔 생성한다.
 export async function ensureCartForRegistration(
@@ -172,14 +178,14 @@ export async function processFromClassCartsQueueItem(payload: { classId: string 
 			const result = await ensureCartForRegistration(reg.id, reg)
 			if (result.cartCreated) createdCount++
 		}
-		await setClassCartStatus(payload.classId, "완료")
+		await markDone(payload.classId, CLASS_CART_STATUS_SPEC)
 		console.log("[sync-textbook-distribution] (queue) from-class-carts finished:", payload.classId, {
 			activeCount: activeRegistrations.length,
 			createdCount,
 		})
 	} catch (err) {
 		console.error("[sync-textbook-distribution] (queue) from-class-carts ERROR:", err)
-		await setClassCartStatus(payload.classId, "오류", (err as Error)?.message ?? String(err))
+		await markError(payload.classId, CLASS_CART_STATUS_SPEC, (err as Error)?.message ?? String(err))
 		throw err
 	}
 }

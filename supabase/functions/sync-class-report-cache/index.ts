@@ -39,14 +39,13 @@
 // 오타("찾지 목함" -> "찾지 못함")도 함께 고쳤다.
 
 import { handleLockedQueueWebhook } from "../_shared/webhookIngest.ts"
-import { CLASS_REPORT_SYNC_RUNNING, setClassStatus } from "../_shared/classReportCacheTarget.ts"
+import { CLASS_REPORT_SYNC_STATUS_SPEC } from "../_shared/classReportCacheTarget.ts"
 
 Deno.serve((req: Request) =>
 	handleLockedQueueWebhook(req, {
 		functionName: "sync-class-report-cache",
-		lockProp: CLASS_REPORT_SYNC_RUNNING,
+		statusSpec: CLASS_REPORT_SYNC_STATUS_SPEC,
 		target: "sync-class-report-cache",
-		setStatus: setClassStatus,
 		buildPayload: (pageId) => ({ classId: pageId }),
 		requireAdminKey: true,
 	}),

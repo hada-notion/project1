@@ -42,21 +42,24 @@ import {
 } from "../_shared/notionClient.ts"
 import { handleLockedBackgroundWebhook } from "../_shared/webhookIngest.ts"
 import { getScheduleConfig } from "../_shared/adminShared.ts"
+import { PROP_LAST_ERROR } from "../_shared/constants.ts"
+import { type StatusSpec } from "../_shared/statusTracking.ts"
 import {
 	DS_TUITION,
 	getActiveRegistrationsForClass,
 	findTuitionForMonth,
 	monthRange,
-	makeClassStatusSetter,
 	PROP_NOTIFICATION_BATCH_RELATION,
 	PROP_BATCH_PERIOD,
 } from "../_shared/generateShared.ts"
 
-// 이 체크박스가 이미 true면(백그라운드 처리가 아직 안 끝남) 버튼이 다시 눌려도 새로 시작하지
-// 않고 즉시 반환한다 -- 처리 중 재클릭 시 두 실행이 동시에 "이미 있나?" 체크를 통과해버려서
-// 같은 등록에 수강료가 2건 생성되는 문제(사용자 리포트, 2026-09-11)가 있었다.
-const CLASS_TUITION_RUNNING = "수강료 생성중"
-const setClassStatus = makeClassStatusSetter(CLASS_TUITION_RUNNING)
+// (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) "수강료 생성중" 체크박스 -> "수강료 생성 상태"(select)
+// + "수강료 생성 처리 시작 시각"(date). 마스터플랜: https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+const CLASS_TUITION_STATUS_SPEC: StatusSpec = {
+	statusProp: "수강료 생성 상태",
+	errorProp: PROP_LAST_ERROR,
+	startedAtProp: "수강료 생성 처리 시작 시각",
+}
 
 // "수강료 생성 대상" 관계(limit 1)로 연결된 "알림톡 발송함(학원) DB" 페이지의 "기간"을 기준으로 생성한다.
 // "기간"/발송함 relation 속성명은 generate-report, send-selected-notifications와 공유하므로
@@ -154,8 +157,7 @@ Deno.serve((req: Request) =>
 		req,
 		{
 			functionName: "generate-tuition",
-			lockProp: CLASS_TUITION_RUNNING,
-			setStatus: setClassStatus,
+			statusSpec: CLASS_TUITION_STATUS_SPEC,
 			missingIdError: "classId를 찾지 못함",
 			idField: "classId",
 			requireAdminKey: true,

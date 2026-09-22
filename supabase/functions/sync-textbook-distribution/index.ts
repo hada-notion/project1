@@ -33,16 +33,16 @@
 //   POST /sync-textbook-distribution/from-cart         <- 교재비(학원) DB "진도교재 담기" 버튼 (학생 1명, 담기까지 수행)
 //   POST /sync-textbook-distribution/from-class-carts   <- 클래스(학원) DB "교재비 생성" 버튼 (반 전체, 교재비 페이지만 일괄 생성 - 교재 배부는 하지 않음)
 
-import { getPage, extractPageId, checkboxValue, relationIds } from "../_shared/notionClient.ts"
+import { getPage, extractPageId, relationIds } from "../_shared/notionClient.ts"
 import { respondAccepted } from "../_shared/backgroundTask.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 import { runSyncWebhookForPage } from "../_shared/webhookIngest.ts"
 import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
+import { isRunning, markRunning, markDone } from "../_shared/statusTracking.ts"
 import {
 	PROP_CART_RUNNING,
-	PROP_CLASS_CART_RUNNING,
+	CLASS_CART_STATUS_SPEC,
 	setCartStatus,
-	setClassCartStatus,
 	getActiveRegistrationsForCarts,
 	distributeFromCartPage,
 } from "../_shared/textbookDistributionTarget.ts"
@@ -103,8 +103,8 @@ Deno.serve(async (req: Request) => {
 				// 이전 실행이 실제로는 다 끝났는데 체크박스만 고착된 경우다. 큐에 전혀 적재하지 않고
 				// 이 요청 자체에서 바로 응답한다: 켜져 있었으면 그 자리에서 꺼주고, 이미 꺼져
 				// 있었으면 아무 쓰기도 하지 않고 즉시 반환한다 (고착될 여지 자체가 없다).
-				if (checkboxValue(classForLock, PROP_CLASS_CART_RUNNING)) {
-					await setClassCartStatus(pageId, "완료")
+				if (isRunning(classForLock, CLASS_CART_STATUS_SPEC)) {
+					await markDone(pageId, CLASS_CART_STATUS_SPEC)
 					return new Response(
 						JSON.stringify({ ok: true, message: "recovered_already_completed", pageId, route }),
 						{ status: 200, headers: { "Content-Type": "application/json" } },
@@ -119,7 +119,7 @@ Deno.serve(async (req: Request) => {
 			// 아직 누락이 있다: 체크박스가 켜져 있어도(진짜 처리 중이든 멈춘 것이든) 거부하지 않고
 			// 안전하게 새로 이어서 진행한다 -- ensureCartForRegistration은 이미 카트가 있는 학생은
 			// 건드리지 않는 멱등 작업이라 중복 생성 위험이 없다.
-			await setClassCartStatus(pageId, "처리중")
+			await markRunning(pageId, CLASS_CART_STATUS_SPEC)
 
 			// 대상 등록 목록은 대기열에 쉬는 동안 바뀔 수 있으니, 워커가 실행 시점에 다시 조회한다
 			// (processFromClassCartsQueueItem 참고) -- 여기서 이미 계산한 activeRegistrations는

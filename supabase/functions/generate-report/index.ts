@@ -24,6 +24,8 @@
 
 import { getPage, createPage, queryAllPages, archivePage, mapWithConcurrency } from "../_shared/notionClient.ts"
 import { handleLockedBackgroundWebhook } from "../_shared/webhookIngest.ts"
+import { PROP_LAST_ERROR } from "../_shared/constants.ts"
+import { type StatusSpec } from "../_shared/statusTracking.ts"
 import {
 	DS_REPORT,
 	DS_ATTENDANCE,
@@ -32,16 +34,18 @@ import {
 	getActiveRegistrationsForClass,
 	monthRange,
 	weekRange,
-	makeClassStatusSetter,
 	PROP_NOTIFICATION_BATCH_RELATION,
 	PROP_BATCH_PERIOD,
 	PROP_BATCH_TYPE,
 } from "../_shared/generateShared.ts"
 
-// 이미 처리 중이면 재클릭으로 중복 생성되는 문제(사용자 리포트, 2026-09-11)를 막기 위한
-// 락 체크에 이 상수를 사용한다.
-const CLASS_REPORT_RUNNING = "보고서 생성중"
-const setClassStatus = makeClassStatusSetter(CLASS_REPORT_RUNNING)
+// (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) "보고서 생성중" 체크박스 -> "보고서 생성 상태"(select)
+// + "보고서 생성 처리 시작 시각"(date). 마스터플랜: https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+const CLASS_REPORT_STATUS_SPEC: StatusSpec = {
+	statusProp: "보고서 생성 상태",
+	errorProp: PROP_LAST_ERROR,
+	startedAtProp: "보고서 생성 처리 시작 시각",
+}
 
 // "보고서 생성 대상" 관계(limit 1)로 연결된 "알림톡 발송함(학원) DB" 페이지의 "기간"/"구분"을 기준으로 생성한다.
 // "기간"/"구분"/발송함 relation 속성명은 generate-tuition, send-selected-notifications와 공유하므로
@@ -170,8 +174,7 @@ Deno.serve((req: Request) =>
 		req,
 		{
 			functionName: "generate-report",
-			lockProp: CLASS_REPORT_RUNNING,
-			setStatus: setClassStatus,
+			statusSpec: CLASS_REPORT_STATUS_SPEC,
 			missingIdError: "classId를 찾지 못함",
 			idField: "classId",
 			requireAdminKey: true,

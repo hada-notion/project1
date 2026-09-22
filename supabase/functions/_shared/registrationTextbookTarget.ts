@@ -51,7 +51,6 @@ import {
 	formulaString,
 	mapWithConcurrency,
 } from "./notionClient.ts"
-import { makeClassStatusSetter } from "./generateShared.ts"
 import { type StatusSpec } from "./statusTracking.ts"
 
 // (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) "교재 처리중" 체크박스(등록 DB, create-individual
@@ -63,10 +62,15 @@ export const TEXTBOOK_STATUS_SPEC: StatusSpec = {
 	startedAtProp: "교재 처리 시작 시각",
 }
 
-// (2026-09-22, PART N-8) 클래스(학원) DB "교재 생성" 버튼 전용 잠금/상태. 클래스 DB의 "마지막 오류"는
-// 수강료 생성/보고서 생성 등과 공유하는 필드라 makeClassStatusSetter(generateShared.ts)를 그대로 쓴다.
-export const PROP_CLASS_TEXTBOOK_RUNNING = "교재 생성중"
-export const setClassTextbookStatus = makeClassStatusSetter(PROP_CLASS_TEXTBOOK_RUNNING)
+// (2026-09-22, PART N-8 -> Phase 3 전환) 클래스(학원) DB "교재 생성" 버튼 전용 상태. "교재 생성중"
+// 체크박스 -> "교재 생성 상태"(select) + "교재 생성 처리 시작 시각"(date). 클래스 DB의 "마지막
+// 오류"는 수강료 생성/보고서 생성 등과 공유하는 필드다(PROP_LAST_ERROR, 값 동일). 마스터플랜:
+// https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+export const CLASS_TEXTBOOK_STATUS_SPEC: StatusSpec = {
+	statusProp: "교재 생성 상태",
+	errorProp: PROP_LAST_ERROR,
+	startedAtProp: "교재 생성 처리 시작 시각",
+}
 
 const DATA_SOURCE_PROGRESS_BOOK = Deno.env.get("DATA_SOURCE_PROGRESS_BOOK_ID")! // 진도교재(학원) DB
 

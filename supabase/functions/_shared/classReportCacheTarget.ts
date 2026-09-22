@@ -6,13 +6,20 @@
 import { getPage, queryAllPages, mapWithConcurrency } from "./notionClient.ts"
 import { makePageCache, upsertReportCacheRows, type ReportCacheRow } from "./reportCacheShared.ts"
 import { buildCacheRowForRegistration } from "./reportCacheBuilder.ts"
-import { makeClassStatusSetter } from "./generateShared.ts"
-import { DS_REGISTRATION } from "./constants.ts"
+import { markDone, markError, type StatusSpec } from "./statusTracking.ts"
+import { DS_REGISTRATION, PROP_LAST_ERROR } from "./constants.ts"
 // (2026-09-21, 이식성 리팩토링) 등록(학원) DB ID를 여기서도 하드코딩하지 않고 constants.ts에서
 // 가져온다 (다른 여러 파일과 동일한 값).
 
-export const CLASS_REPORT_SYNC_RUNNING = "학생 페이지 동기화중"
-export const setClassStatus = makeClassStatusSetter(CLASS_REPORT_SYNC_RUNNING)
+// (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) "학생 페이지 동기화중" 체크박스 -> "학생 페이지
+// 동기화 상태"(select) + "학생 페이지 동기화 처리 시작 시각"(date). index.ts(락 확인+시작)와 이
+// 파일(완료/오류 반영, 큐 워커에서 직접 호출) 양쪽에서 써서 export한다. 마스터플랜:
+// https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+export const CLASS_REPORT_SYNC_STATUS_SPEC: StatusSpec = {
+	statusProp: "학생 페이지 동기화 상태",
+	errorProp: PROP_LAST_ERROR,
+	startedAtProp: "학생 페이지 동기화 처리 시작 시각",
+}
 
 // 이 클래스에 속하고 리포트 토큰이 발급된(=학보 리포트 링크가 생성된) 등록만 대상으로 한다.
 export async function processClass(classId: string): Promise<string> {
@@ -36,10 +43,10 @@ export async function processSyncClassReportCacheQueueItem(payload: { classId: s
 	try {
 		const summary = await processClass(payload.classId)
 		console.log("sync-class-report-cache (queue) finished:", payload.classId, summary)
-		await setClassStatus(payload.classId, "완료")
+		await markDone(payload.classId, CLASS_REPORT_SYNC_STATUS_SPEC)
 	} catch (err) {
 		console.error("sync-class-report-cache (queue) failed:", (err as Error).message, "\nstack:", (err as Error).stack)
-		await setClassStatus(payload.classId, "오류", (err as Error).message)
+		await markError(payload.classId, CLASS_REPORT_SYNC_STATUS_SPEC, (err as Error).message)
 		throw err
 	}
 }

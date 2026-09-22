@@ -13,7 +13,6 @@ import {
 	dateStart,
 	selectName,
 	queryDataSource,
-	setCombinedSyncStatus,
 } from "./notionClient.ts"
 import {
 	DS_REGISTRATION,
@@ -42,26 +41,15 @@ export const PROP_BATCH_PERIOD = "기간" // 알림톡 발송함(학원) DB
 export const PROP_BATCH_TYPE = "구분" // 알림톡 발송함(학원) DB
 
 // 클래스(학원) DB: 자동화 실패 시 에러 메시지를 남기는 공유 텍스트 필드 (등록 DB의 "마지막 오류"와
-// 이름/역할 동일). "실시간 처리 상태" 수식이 이 값과 각 "...생성중" 체크박스를 조합해서 표시한다.
-export const PROP_CLASS_LAST_ERROR = "마지막 오류"
-
-// generate-tuition("수강료 생성중")/generate-report("보고서 생성중") 등 클래스 DB를 건드리는
-// 함수마다 자기 체크박스 이름만 다르게 넘겨서 쓰는 상태 표시 헬퍼. 등록 DB의 makeSyncStatusSetter와
-// 동일한 패턴 (2026-09-11, "동기화 상태" select → 체크박스 + 실시간 수식 전환).
-export function makeClassStatusSetter(selfFlagProp: string) {
-	return async function setClassStatus(
-		classId: string,
-		status: "처리중" | "완료" | "오류",
-		errorMessage?: string,
-	): Promise<void> {
-		await setCombinedSyncStatus(classId, {
-			selfFlagProp,
-			errorProp: PROP_CLASS_LAST_ERROR,
-			phase: status === "처리중" ? "start" : status === "완료" ? "success" : "error",
-			errorMessage,
-		})
-	}
-}
+// 이름/역할 동일). "실시간 처리 상태" 수식이 이 값과 각 상태(select) 속성을 조합해서 표시한다.
+//
+// (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) 클래스(학원) DB 5개 "...생성중"/"...동기화중"
+// 체크박스를 상태(select)로 전환하면서, 이 체크박스들을 공통으로 다루던 makeClassStatusSetter
+// 헬퍼(setCombinedSyncStatus 기반)는 제거했다. 각 호출부는 이제 _shared/statusTracking.ts의
+// isRunning/markRunning/markDone/markError를 StatusSpec과 함께 직접 쓴다 (수업(학원) DB 그룹에서
+// 이미 쓰던 패턴과 동일). PROP_CLASS_LAST_ERROR도 함께 정리했다 — 각 StatusSpec은 이제
+// constants.ts의 PROP_LAST_ERROR("마지막 오류", 값은 동일)를 errorProp으로 쓴다. 마스터플랜:
+// https://app.notion.com/p/903c90386c1d473494c5df6306c53517
 
 export function toDateOnly(iso: string): string {
 	return iso.slice(0, 10)
