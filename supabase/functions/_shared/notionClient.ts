@@ -115,6 +115,24 @@ export async function queryAllPages(dataSourceId: string, filter?: Record<string
 	return all
 }
 
+// [NEW, 2026-09-23, PART N-8: 일괄전송 고정 청크 재설계] 한 번에 최대 limit개까지만, 지정한
+// 정렬 순서로 가져온다. queryAllPages와 달리 커서를 따라가며 끝까지 모으지 않고 첫 페이지만 본다 --
+// send-selected-notifications가 "이름순 10건만" 처리하고 나머지는 스스로 이어달리기하도록 바뀌면서
+// 필요해졌다. limit이 100을 넘으면 Notion API 한 페이지 한도(100)로 잘린다(현재 호출부는 항상
+// 100 이하만 쓴다).
+export async function queryPagesLimited(
+	dataSourceId: string,
+	filter: Record<string, unknown> | undefined,
+	sorts: Record<string, unknown>[] | undefined,
+	limit: number,
+): Promise<any[]> {
+	const body: Record<string, unknown> = { page_size: Math.min(limit, 100) }
+	if (filter) body.filter = filter
+	if (sorts) body.sorts = sorts
+	const data = (await queryDataSource(dataSourceId, body)) as any
+	return (data.results ?? []).slice(0, limit)
+}
+
 export async function getPage(pageId: string) {
 	const res = await fetchWithRetry(`${NOTION_API}/pages/${pageId}`, { headers: notionHeaders() })
 	if (!res.ok) {

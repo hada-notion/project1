@@ -27,6 +27,15 @@
 //   위함(사용자 요청). send-selected-notifications는 이미 자체적으로 성공 후 이 체크박스를 끄고
 //   있었으므로, 개별 발송 경로에도 동일하게 적용해 두 경로의 동작을 통일한다. 이 갱신이 실패해도
 //   (예: 일시적 Notion API 오류) 발송 자체는 이미 끝난 뒤이므로 응답에는 영향을 주지 않고 로그만 남긴다.
+// - [v5, 2026-09-23, PART N-8: 일괄전송 고정 청크 재설계] send-selected-notifications가 호출할 때
+//   (SYNC_WAIT_FLAG=true) 발송이 실패해도 "일괄전송 선택"을 해제한다. 예전에는 실패 시 체크박스를
+//   그대로 켜둬서 "다음 일괄전송에서 재시도"를 노렸지만, 데이터 문제로 항상 실패하는 건이 있으면
+//   매 이어달리기(자기 자신 재호출)마다 똑같이 다시 걸려 무한 반복될 위험이 있었다. 이제 일괄전송
+//   경로는 "1건당 1회 시도 -> 결과와 무관하게 체크 해제"로 단순화하고, 실패 이력은 전송로그(자동화
+//   로그)에 남기고 배치 완료 메시지에도 이름+사유를 나열해 사용자가 직접 확인/재처리하게 한다. 개별
+//   "보고서 전송" 버튼 클릭(SYNC_WAIT_FLAG 없음)은 이 변경의 영향을 받지 않는다 -- 사람이 직접 누른
+//   시도가 실패했다고 대상에서 자동으로 빠지면 오히려 혼란스러울 수 있어서, 그 경로는 기존 동작
+//   (체크박스 유지)을 그대로 둔다.
 
 import {
   notionGetPage,
@@ -259,6 +268,10 @@ Deno.serve(async (req) => {
             periodEnd: period.end || undefined,
             failReason: extractErrorMessage(sendErr),
           })
+          // [v5, PART N-8] 일괄전송 경로에서는 실패해도 1회 시도로 끝낸다 (위 파일 상단 주석 참고).
+          if (body?.[SYNC_WAIT_FLAG] === true) {
+            await clearBulkSelectFlag(reportId)
+          }
           throw sendErr
         }
       }, { skipMinVisibleDelay: body?.[SYNC_WAIT_FLAG] === true })
