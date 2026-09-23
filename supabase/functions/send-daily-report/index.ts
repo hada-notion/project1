@@ -24,6 +24,7 @@ import {
   setAttendanceReportLastError,
   setAttendanceReportCompleteFlag,
 } from "../_shared/alimtalkShared.ts"
+import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -49,88 +50,95 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } })
   }
 
-  let attendanceId: string | null = null
-  try {
-    attendanceId = body?.data?.id ?? body?.attendanceId ?? null
-    const registrationId = body?.data?.properties?.["등록"]?.relation?.[0]?.id ?? body?.registrationId ?? null
-    if (!registrationId || !attendanceId) {
-      return new Response(JSON.stringify({ error: "registrationId, attendanceId required" }), { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } })
-    }
+  const attendanceId: string | null = body?.data?.id ?? body?.attendanceId ?? null
+  const registrationId: string | null = body?.data?.properties?.["등록"]?.relation?.[0]?.id ?? body?.registrationId ?? null
+  if (!registrationId || !attendanceId) {
+    return new Response(JSON.stringify({ error: "registrationId, attendanceId required" }), { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } })
+  }
 
-    await setAttendanceReportSendingFlag(attendanceId, true)
+  await setAttendanceReportSendingFlag(attendanceId, true)
 
-    const { access_token, reportUrl } = await syncStudentReport(registrationId)
-
-    const attendancePage = await notionGetPage(attendanceId)
-    const studentName = getFormulaText(attendancePage, "학생이름(보고서)")
-
-    const alreadySent = attendancePage.properties?.["전송완료 체크"]?.checkbox === true
-    if (alreadySent) {
-      await setAttendanceReportLastError(attendanceId, "이미 전송 완료된 건입니다. 다시 보내려면 '전송완료 체크'를 해제한 뒤 버튼을 눌러주세요.")
-      await setAttendanceReportSendingFlag(attendanceId, false)
-      return new Response(JSON.stringify({ skipped: true, message: "already sent" }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } })
-    }
-
-    const className = getFormulaText(attendancePage, "클래스(보고서)")
-    const classDate = getFormulaText(attendancePage, "수업일(보고서)")
-    const attendanceStatus = getFormulaText(attendancePage, "출석상태(보고서)")
-    const studyContent = getFormulaText(attendancePage, "학습 내용(보고서)")
-
-    const parentPhone = await resolveParentPhone(attendancePage, registrationId)
-
-    const REPORT_PATH = Deno.env.get("REPORT_PATH") ?? "/project1/student_report.html"
-    const tokenQueryString = REPORT_PATH + "?token=" + access_token
-    const variables: Record<string, string> = {
-      "#{학생이름}": studentName,
-      "#{클래스}": className,
-      "#{수업일}": classDate,
-      "#{출석상태}": attendanceStatus,
-      "#{학습내용}": studyContent,
-      "#{페이지ID}": tokenQueryString,
-    }
-
-    const clickerUserId =
-      body?.data?.properties?.["실행자"]?.people?.[0]?.id ??
-      attendancePage.properties?.["실행자"]?.people?.[0]?.id ??
-      null
-    const botUserId = clickerUserId ?? (await getBotUserId().catch(() => null))
-
-    let sendResult: unknown
+  // [NEW, 2026-09-23, PART N-7: 개별 버튼 응답 지연 해소] Notion "웹훅 보내기" 버튼이 아래 전체
+  // 동기 처리(보고서 캐시 동기화 + 알림톡 발송 + 로그 기록)를 기다리다 시간 초과로 "실행 실패" 토스트를
+  // 띄우는 사례가 있었다 (실제로는 끝까지 정상 완료되어 카카오 메시지가 도착함 -- fix-attendance/종료
+  // 처리와 동일한 원인). 이 함수는 다른 함수가 HTTP로 호출하는 경우가 없어(개별 "보고서 전송" 버튼
+  // 전용) send-report처럼 동기/비동기 분기를 둘 필요 없이 전부 백그라운드로 옮긴다. "전송중" 표시는
+  // 응답 전에 이미 동기로 켜 두었으므로 그대로 진행 상황을 보여준다.
+  runInBackground(async () => {
     try {
-      sendResult = await sendDailyReportAlimtalk({ to: parentPhone, variables })
-    } catch (sendErr) {
+      const { access_token, reportUrl } = await syncStudentReport(registrationId)
+
+      const attendancePage = await notionGetPage(attendanceId)
+      const studentName = getFormulaText(attendancePage, "학생이름(보고서)")
+
+      const alreadySent = attendancePage.properties?.["전송완료 체크"]?.checkbox === true
+      if (alreadySent) {
+        await setAttendanceReportLastError(attendanceId, "이미 전송 완료된 건입니다. 다시 보내려면 '전송완료 체크'를 해제한 뒤 버튼을 눌러주세요.")
+        await setAttendanceReportSendingFlag(attendanceId, false)
+        return
+      }
+
+      const className = getFormulaText(attendancePage, "클래스(보고서)")
+      const classDate = getFormulaText(attendancePage, "수업일(보고서)")
+      const attendanceStatus = getFormulaText(attendancePage, "출석상태(보고서)")
+      const studyContent = getFormulaText(attendancePage, "학습 내용(보고서)")
+
+      const parentPhone = await resolveParentPhone(attendancePage, registrationId)
+
+      const REPORT_PATH = Deno.env.get("REPORT_PATH") ?? "/project1/student_report.html"
+      const tokenQueryString = REPORT_PATH + "?token=" + access_token
+      const variables: Record<string, string> = {
+        "#{학생이름}": studentName,
+        "#{클래스}": className,
+        "#{수업일}": classDate,
+        "#{출석상태}": attendanceStatus,
+        "#{학습내용}": studyContent,
+        "#{페이지ID}": tokenQueryString,
+      }
+
+      const clickerUserId =
+        body?.data?.properties?.["실행자"]?.people?.[0]?.id ??
+        attendancePage.properties?.["실행자"]?.people?.[0]?.id ??
+        null
+      const botUserId = clickerUserId ?? (await getBotUserId().catch(() => null))
+
+      let sendResult: unknown
+      try {
+        sendResult = await sendDailyReportAlimtalk({ to: parentPhone, variables })
+      } catch (sendErr) {
+        await createSendLogEntry({
+          registrationId,
+          attendanceId,
+          senderUserId: botUserId ?? undefined,
+          title: studentName || "일일 보고서",
+          category: "일일 보고서",
+          status: "실패",
+          failReason: String((sendErr as any)?.message ?? sendErr),
+        })
+        throw sendErr
+      }
+
+      await appendSendLog(attendancePage)
       await createSendLogEntry({
         registrationId,
         attendanceId,
         senderUserId: botUserId ?? undefined,
         title: studentName || "일일 보고서",
         category: "일일 보고서",
-        status: "실패",
-        failReason: String((sendErr as any)?.message ?? sendErr),
+        status: "성공",
       })
-      throw sendErr
-    }
 
-    await appendSendLog(attendancePage)
-    await createSendLogEntry({
-      registrationId,
-      attendanceId,
-      senderUserId: botUserId ?? undefined,
-      title: studentName || "일일 보고서",
-      category: "일일 보고서",
-      status: "성공",
-    })
+      await setAttendanceReportLastError(attendanceId, null)
+      await setAttendanceReportCompleteFlag(attendanceId, true)
+      await setAttendanceReportSendingFlag(attendanceId, false)
 
-    await setAttendanceReportLastError(attendanceId, null)
-    await setAttendanceReportCompleteFlag(attendanceId, true)
-    await setAttendanceReportSendingFlag(attendanceId, false)
-
-    return new Response(JSON.stringify({ access_token, reportUrl, sendResult }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } })
-  } catch (err) {
-    if (attendanceId) {
+      console.log("send-daily-report finished:", attendanceId, JSON.stringify({ access_token, reportUrl, sendResult }))
+    } catch (err) {
+      console.error("send-daily-report background 처리 실패:", attendanceId, (err as Error).message)
       await setAttendanceReportLastError(attendanceId, String((err as any)?.message ?? err))
       await setAttendanceReportSendingFlag(attendanceId, false)
     }
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } })
-  }
+  })
+
+  return respondAccepted({ attendanceId })
 })
