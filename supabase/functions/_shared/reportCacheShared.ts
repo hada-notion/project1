@@ -227,22 +227,37 @@ export type ReportCacheRow = {
 // 검증 과정에서 발견). on_conflict을 registration_id로 바꾸면 등록 기준으로 기존 행을 찾아
 // access_token을 포함한 나머지 컬럼 전체를 갱신(merge-duplicates)하므로, 다음 동기화 때 옛 토큰
 // 행이 새 토큰으로 자동 갱신되며 자가 복구된다.
+// [FIX, 2026-09-23] registration_id UNIQUE 충돌(23505/409)이 드물게 계속 발생했다 (실측:
+// sync_queue 실패 기록에 "report_cache upsert 실패: 409 ... Key (registration_id)..." 80건).
+// 위 2026-09-22 FIX가 on_conflict을 registration_id로 맞춰서 "옛 토큰 행이 남아있어서" 나던 경우는
+// 없앴지만, 서로 다른 웹훅/배치가 같은 등록을 거의 동시에(별도 트랜잭션으로) upsert하려는 순수
+// 경합까지는 막을 수 없다 -- 두 트랜잭션이 동시에 같은(아직 존재하지 않는) 새 행을 넣으려 하면
+// Postgres가 드물게 23505를 낸다. fetchSupabaseWithRetry는 4xx를 재시도하지 않으므로(대부분의
+// 4xx는 재시도해도 소용없는 요청 자체의 문제라서 의도적으로 그렇게 만들었다), 409만 예외로 짧게
+// 쉬었다가 다시 시도한다 -- 재시도 시점에는 먼저 커밋된 트랜잭션이 보여서 정상적으로 merge된다.
 export async function upsertReportCacheRows(rows: ReportCacheRow[]): Promise<void> {
   if (rows.length === 0) return
   requireSupabaseEnv()
   const payload = rows.map((r) => ({ ...r, updated_at: new Date().toISOString() }))
-  const res = await fetchSupabaseWithRetry(`${SB_URL}/rest/v1/report_cache?on_conflict=registration_id`, {
-    method: "POST",
-    headers: {
-      apikey: SB_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${SB_SERVICE_ROLE_KEY}`,
-      "Content-Type": "application/json",
-      Prefer: "resolution=merge-duplicates,return=minimal",
-    },
-    body: JSON.stringify(payload),
-  })
-  if (!res.ok) {
-    throw new Error(`report_cache upsert 실패: ${res.status} ${await res.text()}`)
+  const maxAttempts = 3
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const res = await fetchSupabaseWithRetry(`${SB_URL}/rest/v1/report_cache?on_conflict=registration_id`, {
+      method: "POST",
+      headers: {
+        apikey: SB_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SB_SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify(payload),
+    })
+    if (res.ok) return
+    const bodyText = await res.text()
+    if (res.status === 409 && attempt < maxAttempts - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)))
+      continue
+    }
+    throw new Error(`report_cache upsert 실패: ${res.status} ${bodyText}`)
   }
 }
 
