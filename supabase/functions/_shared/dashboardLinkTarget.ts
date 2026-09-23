@@ -17,6 +17,7 @@
 
 import { getPage, updatePageProperties, createPage, queryAllPages, dateStart } from "./notionClient.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "./syncQueue.ts"
+import { withDashboardDateLock } from "./dashboardDateLock.ts"
 import { DS_DASHBOARD, DS_CLASS_SESSION, DS_ATTENDANCE, DS_SCHEDULE_EVENT } from "./constants.ts"
 // (2026-09-21, 이식성 리팩토링) 위 4개도 constants.ts로 이동함 — 그 파일 상단 주석 참고.
 // nightly-dashboard-link-audit/index.ts가 이 중 3개를 여기서 다시 가져다 쓰고 있었는데, 그쪽도
@@ -66,18 +67,26 @@ function dayRangeIsoKst(dateStr: string): { start: string; end: string } {
 
 // 지정한 날짜의 대시보드(학원) 페이지를 찾고, 없으면 만든다. 제목은 "MM.DD 대시보드", 날짜는
 // 날짜만(시간 없이) 저장한다.
+//
+// [FIX, 2026-09-23] "조회 -> 없으면 생성"이 원자적이지 않아서, 같은 날짜를 동시에 처리하는 호출이
+// 여러 개 있으면(nightly-dashboard-link-audit의 mapWithConcurrency(..., 3, ...) 등) 모두 "없음"을
+// 보고 각자 대시보드를 만들어 같은 날짜에 중복 페이지가 생기는 문제가 있었다. withDashboardDateLock
+// 으로 같은 날짜에 대해서는 이 조회+생성 전체가 한 번에 하나만 실행되도록 감싼다
+// (dashboardDateLock.ts 참고).
 async function findOrCreateDashboard(dateStr: string): Promise<string> {
-  const existing = await queryAllPages(DS_DASHBOARD, {
-    property: PROP_DASHBOARD_DATE,
-    date: { equals: dateStr },
-  })
-  if (existing.length > 0) return existing[0].id
+  return withDashboardDateLock(dateStr, async () => {
+    const existing = await queryAllPages(DS_DASHBOARD, {
+      property: PROP_DASHBOARD_DATE,
+      date: { equals: dateStr },
+    })
+    if (existing.length > 0) return existing[0].id
 
-  const created = await createPage(DS_DASHBOARD, {
-    [PROP_DASHBOARD_TITLE]: { title: [{ text: { content: dashboardTitleOf(dateStr) } }] },
-    [PROP_DASHBOARD_DATE]: { date: { start: dateStr } },
+    const created = await createPage(DS_DASHBOARD, {
+      [PROP_DASHBOARD_TITLE]: { title: [{ text: { content: dashboardTitleOf(dateStr) } }] },
+      [PROP_DASHBOARD_DATE]: { date: { start: dateStr } },
+    })
+    return created.id
   })
-  return created.id
 }
 
 // [NEW, 2026-09-23] cascade-delete가 같은 페이지를 archive(휴지통 이동)하는 것과 이 함수가 그 페이지를
