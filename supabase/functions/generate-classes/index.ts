@@ -37,7 +37,7 @@ import {
 // https://app.notion.com/p/903c90386c1d473494c5df6306c53517
 // (2026-09-22, Phase 3) 수업(학원) DB 레벨(세션 단위)의 "생성중" 체크박스도 같은 방식(SESSION_GEN_STATUS_SPEC,
 // 아래)으로 전환했다 — 이전엔 이 파일 자체에서 checkbox를 직접 썼다 (markSessionDone/Error).
-import { markRunning, markDone, markError, isRunning, STATUS_RUNNING, type StatusSpec } from "../_shared/statusTracking.ts"
+import { markRunning, markDone, markError, isRunningFresh, STATUS_RUNNING, type StatusSpec } from "../_shared/statusTracking.ts"
 
 // 시간표(학원) DB와 메뉴(학원) DB 모두 "상태"/"마지막 오류"/"처리 시작 시각" 속성 이름이 동일하므로
 // 하나의 스펙을 공유해서 쓴다 (버튼 단일/일괄/크론 세 경로 + 메뉴 페이지 모두 이 스펙 사용).
@@ -131,6 +131,13 @@ const AUTO_HORIZON_DAYS = 7
 // Notion's rate limit (existing 429/5xx retry logic in notionClient.ts covers any overshoot)
 // (2026-09-11 perf fix).
 const TIMETABLE_CONCURRENCY = 4
+// (2026-09-23) Supabase Edge Function의 실행시간 한도(약 150초)로 인해, 어떤 실행이 응답/오류
+// 표시를 남기지 못한 채 조용히 죽으면 그 시간표/메뉴는 "🔄 작업중"에 영원히 멈춰있는 것처럼
+// 보인다 -- 원래는 워치독(기본 15분)이 나중에 회수해줄 때까지 기다려야 했다. 사용자가 버튼을
+// 다시 눌렀을 때 그 대기 없이 즉시 재시도되도록, 아래 세 곳의 "이미 처리 중?" 판정에
+// isRunningFresh를 쓴다 -- 플랫폼 한도보다 넉넉히 큰 값이라, 아직 살아서 정상 처리 중인 항목을
+// 오판해 중복 처리할 위험 없이 "죽은 지 오래된" 항목만 다시 처리 대상으로 인정한다.
+const RUNNING_STALE_MINUTES = 3
 
 // notionHeaders / queryDataSource / getPage / createPage / updatePageProperties / dateStart / relIds
 // 는 이제 _shared/notionClient.ts에서 가져온다 (429/5xx 재시도가 자동으로 추가됨, 로드맵 5-9).
@@ -699,7 +706,7 @@ Deno.serve(async (req: Request) => {
       }
       // 안전장치: 짧은 시간 안에 이 버튼이 여러 번 눌려도(더블클릭, 웹훅 재시도 등) 전체 스캔이
       // 중복으로 돌지 않도록, 이미 처리 중이면 새 요청은 즉시 반환한다 (단일 버튼 모드와 동일 로직).
-      const currentlyRunning = isRunning(menuPage, TIMETABLE_STATUS_SPEC)
+      const currentlyRunning = isRunningFresh(menuPage, TIMETABLE_STATUS_SPEC, RUNNING_STALE_MINUTES)
       if (currentlyRunning) {
         return new Response(JSON.stringify({ ok: true, message: "already_processing", mode: "bulk" }), {
           status: 200,
@@ -733,13 +740,30 @@ Deno.serve(async (req: Request) => {
           const horizonDate = addDays(targetWeekMonday, 6) // Sunday of the earliest incomplete week
           log.push(`[debug] bulk: earliest incomplete week starts ${targetWeekMonday}, filling through ${horizonDate}`)
 
+          // Perf (2026-09-23): the loop below used to run over EVERY timetable, even ones the
+          // peek pass just proved already have nothing to do (nextNeeded === null) — each such
+          // no-op pass still cost a markRunning write + processTimetable's 4 read calls
+          // (getLatestClassDate/getClosurePeriods/getClassInfo/getTimetableRegistrations) + a
+          // markDone write, purely wasted. In steady state most timetables ARE already caught
+          // up, so this wasted majority of the total run time and was the main reason a full
+          // "다음주 수업 일괄 생성" click could run long enough to hit the platform's ~150초
+          // execution-time limit (observed repeatedly: the last few timetables get stuck at
+          // "🔄 작업중" forever because the whole invocation gets killed mid-flight). Skipping
+          // straight to only the timetables the peek pass already flagged as needing work fixes
+          // this at the root, with no change to TIMETABLE_CONCURRENCY needed.
+          const neededIds = new Set(needed.map((p) => p.id))
+          const timetablesToProcess = (timetables.results as any[]).filter((t) => neededIds.has(t.id))
+          log.push(
+            `[debug] bulk: ${timetablesToProcess.length}/${(timetables.results as any[]).length} timetables actually need work this round (rest already caught up, skipped)`,
+          )
+
           // Perf (2026-09-11): process several timetables concurrently instead of strictly
           // one-at-a-time — this was the main reason a full-week bulk backfill across every
           // timetable took a long time.
-          await mapWithConcurrency(timetables.results as any[], TIMETABLE_CONCURRENCY, async (timetable) => {
+          await mapWithConcurrency(timetablesToProcess, TIMETABLE_CONCURRENCY, async (timetable) => {
             const tId = timetable.id
             // 안전장치: 크론/버튼이 이미 처리 중인 시간표는 건너뛴다 (중복 생성 방지).
-            const alreadyRunning = isRunning(timetable, TIMETABLE_STATUS_SPEC)
+            const alreadyRunning = isRunningFresh(timetable, TIMETABLE_STATUS_SPEC, RUNNING_STALE_MINUTES)
             if (alreadyRunning) {
               log.push(`[skip] ${tId}: already processing (생성중)`)
               return
@@ -789,7 +813,7 @@ Deno.serve(async (req: Request) => {
 
     // 안전장치: 같은 시간표에 대해 버튼이 짧은 시간 안에 여러 번(더블클릭, 웹훅 재시도 등) 눌려도
     // 수업/출석이 중복 생성되지 않도록, 이미 처리 중이면 새 요청은 즉시 반환한다.
-    const currentlyRunning = isRunning(timetable, TIMETABLE_STATUS_SPEC)
+    const currentlyRunning = isRunningFresh(timetable, TIMETABLE_STATUS_SPEC, RUNNING_STALE_MINUTES)
     if (currentlyRunning) {
       return new Response(JSON.stringify({ ok: true, message: "already_processing", timetableId }), {
         status: 200,
@@ -831,7 +855,7 @@ Deno.serve(async (req: Request) => {
     // Perf (2026-09-11): same concurrency treatment as the bulk-button path above.
     await mapWithConcurrency(timetables.results as any[], TIMETABLE_CONCURRENCY, async (timetable) => {
       const tId = timetable.id
-      const alreadyRunning = isRunning(timetable, TIMETABLE_STATUS_SPEC)
+      const alreadyRunning = isRunningFresh(timetable, TIMETABLE_STATUS_SPEC, RUNNING_STALE_MINUTES)
       if (alreadyRunning) {
         log.push(`[skip] ${tId}: already processing (생성중)`)
         return

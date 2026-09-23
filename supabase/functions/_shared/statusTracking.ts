@@ -62,6 +62,23 @@ export function isActivelyRunning(page: any, spec: StatusSpec): boolean {
 	return selectName(page, spec.statusProp) === STATUS_RUNNING
 }
 
+// (2026-09-23) isRunning과 같지만, "작업중/대기열"로 바뀐 지 staleMinutes분이 넘었으면 이미 죽은
+// 실행(플랫폼 실행시간 한도로 조용히 죽어서 완료/오류 표시를 못 남긴 경우)일 가능성이 높다고 보고
+// false(=이제 다시 처리해도 됨)를 돌려준다. generate-classes처럼 사용자가 버튼을 다시 눌렀을 때
+// 워치독(기본 15분)까지 기다리지 않고 바로 재시도되길 원하는 곳에서 옵트인으로 쓴다 — 다른 곳에
+// 영향 없도록 isRunning 자체는 그대로 두고 새 함수로 분리했다. staleMinutes는 호출부가 그 작업의
+// 플랫폼 실행시간 한도(Supabase Edge Function은 약 150초)보다 넉넉히 크게 잡아야, 아직 살아서
+// 정상적으로 처리 중인 항목을 오판해 중복 처리하는 일이 없다.
+export function isRunningFresh(page: any, spec: StatusSpec, staleMinutes: number): boolean {
+	const v = selectName(page, spec.statusProp)
+	if (v !== STATUS_RUNNING && v !== STATUS_QUEUED) return false
+	const startedAtIso: string | undefined = page?.properties?.[spec.startedAtProp]?.date?.start
+	if (!startedAtIso) return true // 시작 시각을 못 읽으면 안전하게 "아직 실행 중"으로 취급
+	const startedAtMs = new Date(startedAtIso).getTime()
+	if (Number.isNaN(startedAtMs)) return true
+	return Date.now() - startedAtMs < staleMinutes * 60_000
+}
+
 // (2026-09-22, Phase 6) 큐에 접수만 되고 아직 실제 처리가 시작되지 않은 상태로 표시한다.
 // "처리 시작 시각"은 아직 기록하지 않는다 — 실제로 작업이 시작될 때 markRunning이 기록해야
 // 워치독이 "대기열에 오래 있었을 뿐인 항목"을 "멈춘 작업"으로 오판하지 않는다.
