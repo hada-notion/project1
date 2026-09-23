@@ -48,6 +48,7 @@ import {
   isSendingLockActive,
   withSendingLock,
 } from "../_shared/alimtalkShared.ts"
+import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 
 const SOLAPI_API_KEY = Deno.env.get("SOLAPI_API_KEY")!
 const SOLAPI_API_SECRET = Deno.env.get("SOLAPI_API_SECRET")!
@@ -130,72 +131,83 @@ Deno.serve(async (req) => {
       })
     }
 
-    // [v3] 카카오 템플릿의 #{교재비안내}/#{클래스}에 그대로 대응하는 값들.
-    const textbookNotice = getFormulaText(cartPage, "미납교재")
-    const className = getRollupText(cartPage, "클래스명(표시)")
-    const registrationId = getRelationFirstId(cartPage, "등록")
-    if (!registrationId) {
-      throw new Error("교재비 페이지에 연결된 등록이 없습니다.")
-    }
-
-    const registrationPage = await notionGetPage(registrationId)
-    // [v2.1] 등록 페이지 제목("강인희 고1 A반")이 아니라, 학생 실제 이름만 담긴 롤업을 사용한다.
-    const studentName = getRollupText(registrationPage, "학생이름(등록)") || "학생"
-    const parentPhone = getRollupText(registrationPage, "학부모 연락처")
-
-    const clickerUserId =
-      body?.data?.properties?.["실행자"]?.people?.[0]?.id ??
-      cartPage.properties?.["실행자"]?.people?.[0]?.id ??
-      null
-    const senderUserId = clickerUserId ?? (await getBotUserId().catch(() => null)) ?? undefined
-
-    const config = await getAlimtalkConfig("교재비 안내", {
-      pfId: SOLAPI_PF_ID_FALLBACK,
-      templateId: SOLAPI_TEMPLATE_ID_TEXTBOOK_FALLBACK,
-      senderNumber: SOLAPI_SENDER_NUMBER_FALLBACK,
-    })
-
-    // [v3] 실제 승인된 템플릿 변수(#{학생이름}/#{클래스}/#{교재비안내}/#{안내멘트})에 정확히 맞춘다.
-    // config.notice는 getAlimtalkConfig가 "알림톡 설정(학원) DB"의 "교재비 안내" 행 "안내멘트"를
-    // 그대로 읽어온 값이라(adminShared.ts 참고) 별도 getScheduleConfig 호출이 필요 없다.
-    const variables: Record<string, string> = {
-      "#{학생이름}": studentName,
-      "#{클래스}": className,
-      "#{교재비안내}": textbookNotice,
-      "#{안내멘트}": config.notice,
-    }
-
-    const sendResult = await withSendingLock(cartId, "안내문 발송중", async () => {
+    // [NEW, 2026-09-23, PART N-7: 개별 버튼 응답 지연 해소] 여기까지(요청 검증 + "발송중" 락 확인)는
+    // 빠른 단일 조회라 동기로 유지한다. 나머지(등록 조회 + 알림톡 발송 + 로그 기록)는 Notion "웹훅
+    // 보내기" 버튼이 응답을 기다리다 시간 초과로 실패 표시를 띄우는 사례가 있어(실제로는 끝까지 정상
+    // 완료됨 -- fix-attendance/send-daily-report와 동일한 원인) 백그라운드로 옮긴다. 이 함수는 다른
+    // 함수가 HTTP로 호출하는 경우가 없어(개별 "안내문 전송" 버튼 전용) send-report처럼 동기/비동기
+    // 분기를 둘 필요가 없다.
+    runInBackground(async () => {
       try {
-        assertValidPhone(parentPhone)
-        return await sendAlimtalk(parentPhone, variables, config)
-      } catch (sendErr) {
+        // [v3] 카카오 템플릿의 #{교재비안내}/#{클래스}에 그대로 대응하는 값들.
+        const textbookNotice = getFormulaText(cartPage, "미납교재")
+        const className = getRollupText(cartPage, "클래스명(표시)")
+        const registrationId = getRelationFirstId(cartPage, "등록")
+        if (!registrationId) {
+          throw new Error("교재비 페이지에 연결된 등록이 없습니다.")
+        }
+
+        const registrationPage = await notionGetPage(registrationId)
+        // [v2.1] 등록 페이지 제목("강인희 고1 A반")이 아니라, 학생 실제 이름만 담긴 롤업을 사용한다.
+        const studentName = getRollupText(registrationPage, "학생이름(등록)") || "학생"
+        const parentPhone = getRollupText(registrationPage, "학부모 연락처")
+
+        const clickerUserId =
+          body?.data?.properties?.["실행자"]?.people?.[0]?.id ??
+          cartPage.properties?.["실행자"]?.people?.[0]?.id ??
+          null
+        const senderUserId = clickerUserId ?? (await getBotUserId().catch(() => null)) ?? undefined
+
+        const config = await getAlimtalkConfig("교재비 안내", {
+          pfId: SOLAPI_PF_ID_FALLBACK,
+          templateId: SOLAPI_TEMPLATE_ID_TEXTBOOK_FALLBACK,
+          senderNumber: SOLAPI_SENDER_NUMBER_FALLBACK,
+        })
+
+        // [v3] 실제 승인된 템플릿 변수(#{학생이름}/#{클래스}/#{교재비안내}/#{안내멘트})에 정확히 맞춘다.
+        // config.notice는 getAlimtalkConfig가 "알림톡 설정(학원) DB"의 "교재비 안내" 행 "안내멘트"를
+        // 그대로 읽어온 값이라(adminShared.ts 참고) 별도 getScheduleConfig 호출이 필요 없다.
+        const variables: Record<string, string> = {
+          "#{학생이름}": studentName,
+          "#{클래스}": className,
+          "#{교재비안내}": textbookNotice,
+          "#{안내멘트}": config.notice,
+        }
+
+        const sendResult = await withSendingLock(cartId, "안내문 발송중", async () => {
+          try {
+            assertValidPhone(parentPhone)
+            return await sendAlimtalk(parentPhone, variables, config)
+          } catch (sendErr) {
+            await createSendLogEntry({
+              registrationId,
+              textbookCartId: cartId,
+              senderUserId,
+              title: studentName || "교재비 안내",
+              category: "교재비 안내",
+              status: "실패",
+              failReason: extractErrorMessage(sendErr),
+            })
+            throw sendErr
+          }
+        })
+
         await createSendLogEntry({
           registrationId,
           textbookCartId: cartId,
           senderUserId,
           title: studentName || "교재비 안내",
           category: "교재비 안내",
-          status: "실패",
-          failReason: extractErrorMessage(sendErr),
+          status: "성공",
         })
-        throw sendErr
+
+        console.log("send-textbook-notice finished:", cartId, JSON.stringify({ sendResult }))
+      } catch (err) {
+        console.error("send-textbook-notice background 처리 실패:", cartId, (err as Error).message)
       }
     })
 
-    await createSendLogEntry({
-      registrationId,
-      textbookCartId: cartId,
-      senderUserId,
-      title: studentName || "교재비 안내",
-      category: "교재비 안내",
-      status: "성공",
-    })
-
-    return new Response(JSON.stringify({ sendResult }), {
-      status: 200,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
-    })
+    return respondAccepted({ cartId })
   } catch (err) {
     return new Response(JSON.stringify({ error: String((err as any)?.message ?? err) }), {
       status: 500,
