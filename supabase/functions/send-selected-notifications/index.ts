@@ -98,7 +98,14 @@ const LOCK_WAIT_TIMEOUT_MS = 10 * 60 * 1000 // 10분 넘게 기다리면 포기�
 const LOCK_POLL_INTERVAL_MS = 2000
 // 대상 건수가 많아 Edge Function 실행 시간 제한에 걸릴 것 같으면, 중간에 강제로 끊기는 대신
 // 스스로 먼저 멈춰서 지금까지 결과를 정확히 기록하고 잠금을 정상적으로 반환한다.
-const PROCESSING_TIME_BUDGET_MS = 3 * 60 * 1000
+// [FIX, 2026-09-23] 이전 값(3분/180초)이 Supabase Edge Function의 실제 플랫폼 실행시간 한도인
+// 150초(WallClockTime)보다 길어서, 이 자체 안전장치가 작동하기도 전에 플랫폼이 먼저 함수를 강제
+// 종료시켰다 (Supabase 로그에서 "reason": "WallClockTime"으로 두 번 확인됨 — 처리 시작 후 정확히
+// 150초 뒤 종료). 그 결과 "완료"/"오류" 상태 기록도, 에러 로그도 전혀 남기지 못한 채 배치의
+// "상태"가 "🔄 작업중"에 영원히 멈춰버렸고(15분 뒤 워치독이 회수하기 전까지 재클릭도 무의미했음),
+// 사용자에게는 "일괄 전송이 중간에 멈췄다"로 보였다. 150초보다 충분히 여유 있게 90초로 낮춰서,
+// 플랫폼이 강제 종료하기 전에 항상 스스로 먼저 멈추고 정상적으로 finishBatch()까지 도달하도록 한다.
+const PROCESSING_TIME_BUDGET_MS = 90 * 1000
 
 // deno-lint-ignore no-explicit-any
 type AnyKv = any
