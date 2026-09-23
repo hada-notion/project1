@@ -258,15 +258,29 @@ export function isSendingLockActive(page: any, lockPropName: string): boolean {
   return ageMs < STALE_LOCK_MS
 }
 
-export async function withSendingLock<T>(pageId: string, lockPropName: string, fn: () => Promise<T>): Promise<T> {
+// [FIX, 2026-09-23, PART N-8: 일괄 전송 처리량 개선] SENDING_MIN_VISIBLE_MS(1.2초)는 사람이 개별
+// 버튼을 눌렀을 때 "발송중" 체크박스가 너무 순식간에 사라지지 않도록 최소 노출 시간을 주기 위한
+// 화면용 장치다. 그런데 send-selected-notifications(일괄 전송)가 건별로 이 함수를 호출할 때는
+// 그 체크박스를 실시간으로 보고 있는 사람이 없는데도 매 건마다 이 지연이 그대로 적용되고 있었다
+// (89건 × 1.2초 = 그것만으로 100초 이상 — 아래 PROCESSING_TIME_BUDGET_MS 예산을 대부분 잡아먹는
+// 주범이었다). opts.skipMinVisibleDelay=true를 넘기면(일괄 전송 경로에서만 사용) 이 지연을
+// 건너뛴다. 개별 버튼 클릭 경로는 옵션을 넘기지 않으므로 동작이 그대로 유지된다.
+export async function withSendingLock<T>(
+  pageId: string,
+  lockPropName: string,
+  fn: () => Promise<T>,
+  opts?: { skipMinVisibleDelay?: boolean },
+): Promise<T> {
   const startedAt = Date.now()
   await notionPatchPageProperties(pageId, { [lockPropName]: { checkbox: true } }).catch(() => {})
   try {
     return await fn()
   } finally {
-    const elapsedMs = Date.now() - startedAt
-    if (elapsedMs < SENDING_MIN_VISIBLE_MS) {
-      await sleep(SENDING_MIN_VISIBLE_MS - elapsedMs)
+    if (!opts?.skipMinVisibleDelay) {
+      const elapsedMs = Date.now() - startedAt
+      if (elapsedMs < SENDING_MIN_VISIBLE_MS) {
+        await sleep(SENDING_MIN_VISIBLE_MS - elapsedMs)
+      }
     }
     await notionPatchPageProperties(pageId, { [lockPropName]: { checkbox: false } }).catch(() => {})
   }
