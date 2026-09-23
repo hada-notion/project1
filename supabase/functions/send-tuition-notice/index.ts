@@ -42,7 +42,9 @@ import {
   normalizePhone,
   isSendingLockActive,
   withSendingLock,
+  SYNC_WAIT_FLAG,
 } from "../_shared/alimtalkShared.ts"
+import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 
 const SOLAPI_API_KEY = Deno.env.get("SOLAPI_API_KEY")!
 const SOLAPI_API_SECRET = Deno.env.get("SOLAPI_API_SECRET")!
@@ -149,76 +151,99 @@ Deno.serve(async (req) => {
     const billingMonth = getFormulaText(tuitionPage, "청구년월(보고서)")
     const registrationId = getRelationFirstId(tuitionPage, "등록")
 
-    const clickerUserId =
-      body?.data?.properties?.["실행자"]?.people?.[0]?.id ??
-      tuitionPage.properties?.["실행자"]?.people?.[0]?.id ??
-      null
-    const senderUserId = clickerUserId ?? (await getBotUserId().catch(() => null)) ?? undefined
+    // [NEW, 2026-09-23, PART N-7: 개별 버튼 응답 지연 해소] send-report와 동일한 이유로, 개별
+    // "수강료 안내 발송" 버튼 클릭 경로는 즉시 응답 + 백그라운드 처리로 전환한다. 다만
+    // send-selected-notifications(일괄 전송)는 이 함수의 최종 성공/실패로 "일괄전송 선택" 체크박스를
+    // 끄거나 재시도용으로 남겨두므로, body에 SYNC_WAIT_FLAG(=true)가 있으면 예전과 동일하게 끝까지
+    // 동기로 기다린다 (send-selected-notifications만 이 플래그를 보낸다).
+    const performSend = async (): Promise<{ sendResult: unknown }> => {
+      const clickerUserId =
+        body?.data?.properties?.["실행자"]?.people?.[0]?.id ??
+        tuitionPage.properties?.["실행자"]?.people?.[0]?.id ??
+        null
+      const senderUserId = clickerUserId ?? (await getBotUserId().catch(() => null)) ?? undefined
 
-    const config = await getAlimtalkConfig("수강료 안내", {
-      pfId: SOLAPI_PF_ID_FALLBACK,
-      templateId: SOLAPI_TEMPLATE_ID_TUITION_FALLBACK,
-      senderNumber: SOLAPI_SENDER_NUMBER_FALLBACK,
-    })
-    // [FIX, 2026-09-17] "안내멘트"는 수강료(학원) DB에 없는 롤업이 아니라, "알림톡 설정(학원) DB"의
-    // "수강료 안내" 행 안내멘트를 그대로 쓴다 (예전 getRollupText(tuitionPage, "안내멘트")는 항상 빈 값이었음).
-    const notice = config.notice
+      const config = await getAlimtalkConfig("수강료 안내", {
+        pfId: SOLAPI_PF_ID_FALLBACK,
+        templateId: SOLAPI_TEMPLATE_ID_TUITION_FALLBACK,
+        senderNumber: SOLAPI_SENDER_NUMBER_FALLBACK,
+      })
+      // [FIX, 2026-09-17] "안내멘트"는 수강료(학원) DB에 없는 롤업이 아니라, "알림톡 설정(학원) DB"의
+      // "수강료 안내" 행 안내멘트를 그대로 쓴다 (예전 getRollupText(tuitionPage, "안내멘트")는 항상 빈 값이었음).
+      const notice = config.notice
 
-    const variables: Record<string, string> = {
-      "#{청구년월}": billingMonth,
-      "#{청구기간}": periodDisplay,
-      "#{학생이름}": studentName,
-      "#{클래스}": className,
-      "#{청구금액}": amountDisplay,
-      "#{안내멘트}": notice,
+      const variables: Record<string, string> = {
+        "#{청구년월}": billingMonth,
+        "#{청구기간}": periodDisplay,
+        "#{학생이름}": studentName,
+        "#{클래스}": className,
+        "#{청구금액}": amountDisplay,
+        "#{안내멘트}": notice,
+      }
+
+      // [DEBUG, 2026-09-17] 안내멘트 누락 원인 추적용 임시 로그. 원인 파악 후 제거 예정.
+      console.log(
+        `[send-tuition-notice][debug] tuitionId=${tuitionId}, noticeLength=${notice.length}, templateId=${config.templateId}, pfId=${config.pfId}, variables=${JSON.stringify(variables)}`,
+      )
+
+      const sendResult = await withSendingLock(tuitionId, "발송중", async () => {
+        try {
+          assertValidPhone(parentPhone)
+          return await sendAlimtalk(parentPhone, variables, config)
+        } catch (sendErr) {
+          if (registrationId) {
+            await createSendLogEntry({
+              registrationId,
+              tuitionId,
+              senderUserId,
+              title: studentName || "수강료 안내",
+              category: "수강료 안내",
+              status: "실패",
+              periodStart: period.start || undefined,
+              periodEnd: period.end || undefined,
+              failReason: extractErrorMessage(sendErr),
+            })
+          }
+          throw sendErr
+        }
+      })
+
+      if (registrationId) {
+        await createSendLogEntry({
+          registrationId,
+          tuitionId,
+          senderUserId,
+          title: studentName || "수강료 안내",
+          category: "수강료 안내",
+          status: "성공",
+          periodStart: period.start || undefined,
+          periodEnd: period.end || undefined,
+        })
+      }
+
+      await clearBulkSelectFlag(tuitionId)
+
+      return { sendResult }
     }
 
-    // [DEBUG, 2026-09-17] 안내멘트 누락 원인 추적용 임시 로그. 원인 파악 후 제거 예정.
-    console.log(
-      `[send-tuition-notice][debug] tuitionId=${tuitionId}, noticeLength=${notice.length}, templateId=${config.templateId}, pfId=${config.pfId}, variables=${JSON.stringify(variables)}`,
-    )
-
-    const sendResult = await withSendingLock(tuitionId, "발송중", async () => {
-      try {
-        assertValidPhone(parentPhone)
-        return await sendAlimtalk(parentPhone, variables, config)
-      } catch (sendErr) {
-        if (registrationId) {
-          await createSendLogEntry({
-            registrationId,
-            tuitionId,
-            senderUserId,
-            title: studentName || "수강료 안내",
-            category: "수강료 안내",
-            status: "실패",
-            periodStart: period.start || undefined,
-            periodEnd: period.end || undefined,
-            failReason: extractErrorMessage(sendErr),
-          })
-        }
-        throw sendErr
-      }
-    })
-
-    if (registrationId) {
-      await createSendLogEntry({
-        registrationId,
-        tuitionId,
-        senderUserId,
-        title: studentName || "수강료 안내",
-        category: "수강료 안내",
-        status: "성공",
-        periodStart: period.start || undefined,
-        periodEnd: period.end || undefined,
+    const waitForCompletion = body?.[SYNC_WAIT_FLAG] === true
+    if (waitForCompletion) {
+      const result = await performSend()
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
       })
     }
 
-    await clearBulkSelectFlag(tuitionId)
-
-    return new Response(JSON.stringify({ sendResult }), {
-      status: 200,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
+    runInBackground(async () => {
+      try {
+        await performSend()
+      } catch (err) {
+        console.error("send-tuition-notice background 처리 실패:", tuitionId, (err as Error).message)
+      }
     })
+
+    return respondAccepted({ tuitionId })
   } catch (err) {
     return new Response(JSON.stringify({ error: String((err as any)?.message ?? err) }), {
       status: 500,
