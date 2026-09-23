@@ -98,6 +98,28 @@ export async function mapWithConcurrency<T, R>(
 	return results
 }
 
+// (2026-09-23, PART N-11 후속 2차) fetchWithRetry의 타임아웃을 30초->12초로 줄였는데도
+// backfill-attendance가 여전히 WallClockTime(150초)으로 죽는 사례가 재현됐다 -- 원인: 세션 하나를
+// 조정하는 fixAttendanceForClassSession 안에서 등록 수만큼 Notion API 호출을 "여러 번 순서대로"
+// 하는데, fetchWithRetry는 그 호출 하나하나에 대해서만 시간을 제한할 뿐, 세션 전체(여러 호출의
+// 합)에는 아무 제한이 없었다. 즉 호출 2~3개가 각자 자기 한도 안에서 "정상적으로" 재시도하며
+// 시간을 쓰더라도, 합치면 여전히 150초를 넘길 수 있다. withTimeout은 임의의 프로미스(여러 개의
+// 순차 호출을 포함하는 더 큰 작업 단위)에 "이 시간 안에 안 끝나면 포기" 규칙을 걸어서, 그 큰
+// 작업 단위가 통째로 150초 예산을 넘기지 않도록 상위(호출부)에서 보장하게 한다. 시간 안에 끝나지
+// 못한 내부 fetch 자체는 계속 백그라운드에서 흐르다 결국 버려지지만(취소는 안 됨), 호출부는 그걸
+// 기다리지 않고 바로 다음 작업으로 넘어갈 수 있어 전체 체인이 죽지 않는다.
+export async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+	let timeoutId: ReturnType<typeof setTimeout>
+	const timeoutPromise = new Promise<never>((_, reject) => {
+		timeoutId = setTimeout(() => reject(new Error(`${label}: 시간 제한(${Math.round(ms / 1000)}초) 초과`)), ms)
+	})
+	try {
+		return await Promise.race([promise, timeoutPromise])
+	} finally {
+		clearTimeout(timeoutId!)
+	}
+}
+
 export async function queryDataSource(dataSourceId: string, body: Record<string, unknown>) {
 	const res = await fetchWithRetry(`${NOTION_API}/data_sources/${dataSourceId}/query`, {
 		method: "POST",

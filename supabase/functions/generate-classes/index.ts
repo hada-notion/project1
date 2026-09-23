@@ -26,6 +26,7 @@ import {
 	updatePageProperties,
 	dateStart,
 	relIds,
+	withTimeout,
 } from "../_shared/notionClient.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 import {
@@ -153,7 +154,21 @@ const RUNNING_STALE_MINUTES = 3
 //      그대로 재사용해 10건씩 처리. 별도 함수 backfill-attendance/index.ts로 분리했다.
 // 단일 버튼(시간표 1개 생성)과 크론(오늘+7일까지 자동 유지) 경로는 원래도 가벼워서 그대로 둔다.
 const BULK_CHUNK_SIZE = 10
-const BULK_CHUNK_TIME_BUDGET_MS = 100_000
+// (2026-09-23, PART N-11 후속 2차) 100초 -> 60초로 줄였다 -- 이유는 backfill-attendance의
+// CHUNK_TIME_BUDGET_MS 주석과 동일: 이 체크는 "다음 항목을 시작하기 전"에만 일어나므로, 항목 하나
+// 처리에 TIMETABLE_ITEM_TIMEOUT_MS(45초)까지 걸릴 수 있는 상황에서 100초로 두면 동시성 워커 하나가
+// 이미 2~3개를 연달아 처리해 135초까지 갈 수 있어(150초 한도에 너무 가까움) 여유가 부족했다.
+const BULK_CHUNK_TIME_BUDGET_MS = 60_000
+// (2026-09-23, PART N-11 후속 2차) backfill-attendance가 fetchWithRetry의 호출별 12초 제한만으로는
+// 부족해서 WallClockTime(150초)으로 죽는 사례가 실제로 재현됐다 (세션 하나 안에서 여러 번 순서대로
+// Notion API를 호출하다보면 합산 시간이 호출 하나의 제한을 훨씬 넘어설 수 있음). processTimetable도
+// 같은 fetchWithRetry를 여러 번 순서대로 호출하므로 같은 위험이 있어, 시간표 하나 처리에도 상위
+// 시간 제한을 둔다 -- 못 끝나면 그 시간표는 이번 라운드에서 실패로 처리하고(마지막 오류에 기록)
+// 다음 라운드에서 다시 시도한다(대기열에서 완전히 사라지지 않음, catch에서 return하기 전에 이미
+// requeue 여부를 판단하지만 이 타임아웃 케이스는 catch에서 처리되어 이번 체인에서는 재시도하지
+// 않음 -- 사람이 "마지막 오류"를 보고 재클릭하면 다시 스캔됨. 세션 생성만 하는 가벼운 작업이라
+// 실제로 여기 걸릴 일은 드물 것으로 예상하지만, backfill-attendance와 동일한 안전망을 둔다).
+const TIMETABLE_ITEM_TIMEOUT_MS = 45_000
 const BULK_TOTAL_CHAIN_BUDGET_MS = 30 * 60 * 1000
 const BULK_CONTINUATION_FLAG = "isContinuation"
 const FUNCTIONS_BASE = `${Deno.env.get("SB_URL") ?? ""}/functions/v1`
@@ -237,7 +252,11 @@ async function runBulkSessionChain(opts: {
     }
     await markRunning(tId, TIMETABLE_STATUS_SPEC)
     try {
-      await processTimetable(timetable, log, { type: "until", horizonDate, maxSessions: 1, skipAttendance: true })
+      await withTimeout(
+        processTimetable(timetable, log, { type: "until", horizonDate, maxSessions: 1, skipAttendance: true }),
+        TIMETABLE_ITEM_TIMEOUT_MS,
+        `시간표 ${tId} 세션 생성`,
+      )
       await markDone(tId, TIMETABLE_STATUS_SPEC)
     } catch (err) {
       log.push(`[error] ${tId}: ${(err as Error).message}`)
