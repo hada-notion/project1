@@ -232,6 +232,16 @@ export async function setAttendanceReportCompleteFlag(attendanceId: string, comp
   }
 }
 
+// ---------- 동기 처리 요청 플래그 (send-selected-notifications 전용) ----------
+// (2026-09-23, PART N-7: 개별 버튼 응답 지연 해소) send-report/send-tuition-notice는 개별 "보고서
+// 전송"/"수강료 안내 발송" 버튼 클릭에서는 즉시 응답 + 백그라운드 처리로 바뀌지만,
+// send-selected-notifications(일괄 전송)는 각 건의 실제 성공/실패를 res.ok로 판단해 "일괄전송
+// 선택" 체크박스를 끄거나 재시도용으로 남겨둬야 하므로 예전과 동일하게 발송이 끝날 때까지 동기로
+// 기다려야 한다. 호출부(send-selected-notifications)가 요청 바디에 이 필드를 true로 넣으면, 두
+// 함수는 기존과 동일한 완전 동기 동작을 그대로 유지한다. 이름을 여기 한 곳에서만 정의해 호출부/
+// 수신부가 서로 다른 문자열을 쓰는 실수를 막는다.
+export const SYNC_WAIT_FLAG = "waitForCompletion"
+
 // ---------- 발송중 락 (send-tuition-notice / send-report 공용) ----------
 
 export const STALE_LOCK_MS = 3 * 60 * 1000
