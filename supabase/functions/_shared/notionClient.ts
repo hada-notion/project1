@@ -24,11 +24,21 @@ export function notionHeaders() {
 // 호출 하나가 응답 없이 멈추면(드물지만 실제로 generate-classes에서 재현됨, 2026-09-21) 그 위의
 // markRunning된 "작업중" 상태도 영원히 멈춰 있었다 -- sweepStaleStatus 워치독이 15분 뒤에 상태
 // 표시는 회수해도, 실제로 멈춘 fetch 자체는 회수하지 못했다(재클릭해야만 새 시도가 시작됨). 이제
-// AbortController로 요청마다 FETCH_TIMEOUT_MS(30초) 제한을 걸어서, 응답 없이 멈춘 호출도 타임아웃 ->
-// 기존 백오프 재시도 경로로 흘러들어가게 한다 -- 즉 "영원히 멈춤"이 최악의 경우에도 "몇 번의 30초
+// AbortController로 요청마다 FETCH_TIMEOUT_MS 제한을 걸어서, 응답 없이 멈춘 호출도 타임아웃 ->
+// 기존 백오프 재시도 경로로 흘러들어가게 한다 -- 즉 "영원히 멈춤"이 최악의 경우에도 "몇 번의
 // 타임아웃 + 백오프만큼 지연 후 자동 복구(또는 명확한 오류)"로 바뀐다. 마스터플랜:
 // https://app.notion.com/p/903c90386c1d473494c5df6306c53517
-const FETCH_TIMEOUT_MS = 30_000
+//
+// (2026-09-23, PART N-11 후속) 처음엔 30초로 뒀는데, 이게 오히려 Supabase 플랫폼 자체의
+// WallClockTime 한도(150초)보다 재시도 로직이 더 오래 걸리게 만드는 원인이었다: 요청이 응답 없이
+// 계속 멈추면 maxRetries=5(총 6번 시도) x 30초 타임아웃 + 백오프 대기 ≈ 189초가 걸려야 이 함수가
+// 스스로 포기하고 에러를 던지는데, 그 전에 플랫폼이 150초에서 먼저 강제 종료시켜버린다 (실제로
+// backfill-attendance에서 cpu_time_used=92ms, wall clock 정확히 150초로 재현됨 -- 거의 전부
+// "응답 대기"만 하다가 죽었다는 뜻). 30초 -> 12초로 줄이면 최악의 경우도 6번 x 12초 + 백오프
+// ≈ 81초로 끝나서, 150초 한도보다 훨씬 먼저 스스로 포기하고 명확한 에러를 던지게 된다 -- 그래야
+// 위쪽의 청크+체인 로직이 그 에러를 잡아서 로그를 남기고 다음 라운드로 넘어갈 수 있다. 정상적인
+// Notion API 응답은 보통 수 초 안에 오므로, 12초는 여전히 넉넉한 여유다.
+const FETCH_TIMEOUT_MS = 12_000
 
 export async function fetchWithRetry(url: string, init: RequestInit, maxRetries = 5): Promise<Response> {
 	let lastRes: Response | undefined

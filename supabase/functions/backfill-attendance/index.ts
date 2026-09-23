@@ -24,7 +24,12 @@ import { queryAllPages, relIds } from "../_shared/notionClient.ts"
 import { DS_CLASS_SESSION } from "../_shared/constants.ts"
 import { getCurrentAdminKey, resolveAdminKeyFromRequest, CORS_HEADERS } from "../_shared/adminShared.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
-import { fixAttendanceForClassSession } from "../_shared/fixAttendanceTarget.ts"
+import {
+  fixAttendanceForClassSession,
+  markAttendanceFixRunning,
+  markAttendanceFixDone,
+  markAttendanceFixError,
+} from "../_shared/fixAttendanceTarget.ts"
 
 // send-selected-notifications(PART N-8)와 동일한 상수 선택 이유: 이미 실전에서 두 번 검증된 값.
 const CHUNK_SIZE = 10
@@ -138,11 +143,18 @@ Deno.serve(async (req: Request) => {
           break
         }
         try {
+          // [2026-09-23 후속] 개별 "출석 조정" 버튼(fix-attendance/index.ts)과 똑같이 처리 시작
+          // 시점에 "출석조정 상태"를 진행중으로 표시한다 -- 원래는 이걸 안 해서, 일괄 생성 뒤에
+          // backfill-attendance가 출석을 채우는 동안 캘린더 카드에 아무 진행 표시도 안 보인다는
+          // 피드백이 있었다 (사용자가 보기엔 "그냥 멈춘 것"과 구분이 안 됨).
+          await markAttendanceFixRunning(sessionId)
           await fixAttendanceForClassSession(sessionId, log)
+          await markAttendanceFixDone(sessionId)
           accFixed++
         } catch (err) {
           accErrors.push(`${sessionId}: ${(err as Error).message}`)
           log.push(`[error] ${sessionId}: ${(err as Error).message}`)
+          await markAttendanceFixError(sessionId, (err as Error).message)
         }
         processedCount++
       }
