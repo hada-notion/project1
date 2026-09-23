@@ -145,7 +145,11 @@ async function linkPendingAssignmentDeadlines(regId: string, log: string[]) {
   }
 }
 
-export async function fixAttendanceForClassSession(classSessionId: string, log: string[]) {
+export async function fixAttendanceForClassSession(
+  classSessionId: string,
+  log: string[],
+  opts?: { trustFrozenRegistrationsIfBare?: boolean },
+) {
   const classSession = await getPage(classSessionId)
   const props = classSession.properties
   const sessionName = props["이름"]?.title?.[0]?.plain_text ?? classSessionId
@@ -167,50 +171,65 @@ export async function fixAttendanceForClassSession(classSessionId: string, log: 
   // 연결하는 출석에도 함께 채운다.
   const teacherIds = relIds(props["담당강사"])
 
+  // Existing attendance pages already linked to this specific class session. Moved up (was
+  // originally queried after the 등록 재동기화 block below) so we can decide, before paying for
+  // the 등록 재동기화 query, whether this session is a bare shell with zero attendance at all.
+  const existingAttendance = await queryAllPages(DS_ATTENDANCE, {
+    property: "수업",
+    relation: { contains: classSessionId },
+  })
+
   // Registrations active as of THIS SESSION'S OWN DATE (not "now"): 등록일 <= 수업일시 and
   // (종료일 empty or 종료일 >= 수업일시, inclusive of the 종료일 calendar day). This matches the
   // "생성 오류" formula's session-bound activeRegistrations definition on 수업(학원) DB.
   // Using current-time status here would incorrectly retroactively flag already-correct past
   // attendance as "extra"/"missing" once a registration later ends or before it starts.
-  const activeRegs = await queryAllPages(DS_REGISTRATION, {
-    and: [
-      { property: "시간표", relation: { contains: timetableId } },
-      {
-        or: [
-          { property: "등록일", date: { on_or_before: dateStr } },
-          { property: "등록일", date: { is_empty: true } },
-        ],
-      },
-      {
-        or: [
-          { property: "종료일", date: { on_or_after: dateStr } },
-          { property: "종료일", date: { is_empty: true } },
-        ],
-      },
-    ],
-  })
-  const activeRegIds = new Set(activeRegs.map((r: any) => r.id))
-
-  // Re-sync the class session's own frozen "등록" relation to match the session-date-bound
-  // active set. Handles cases where a registration's 등록일/종료일 was edited AFTER this class
-  // session's "등록" relation was already set (e.g. 종료일 backdated, or 등록일 corrected),
-  // which would otherwise leave a stale registration connected (or missing one that should
-  // now be included).
-  const currentRegIds = new Set(relIds(props["등록"]))
-  const regIdsMatch =
-    currentRegIds.size === activeRegIds.size && [...currentRegIds].every((id) => activeRegIds.has(id))
-  if (!regIdsMatch) {
-    await updatePageProperties(classSessionId, {
-      등록: { relation: [...activeRegIds].map((id) => ({ id })) },
+  //
+  // [PART N-11, 2026-09-23 후속 3차] opts.trustFrozenRegistrationsIfBare: backfill-attendance가
+  // 방금 generate-classes 체인1이 만든 "출석이 하나도 없는" 새 세션을 처리할 때 쓴다. 그 세션의
+  // "등록" relation은 체인1이 만든 지 얼마 안 됐고 이 함수와 완전히 동일한 활성-등록 계산으로
+  // 방금 채운 것이므로, 다시 Notion에 물어볼 필요가 없다(요청 1번 절약). 출석이 이미 하나라도
+  // 있는 세션(과거에 이미 조정된 적 있음 -> 등록일/종료일이 나중에 수정돼 진짜로 어긋났을 가능성이
+  // 있는 세션)에는 이 지름길을 쓰지 않고 항상 원래대로 다시 물어봐서 정확하게 재동기화한다.
+  let activeRegIds: Set<string>
+  if (opts?.trustFrozenRegistrationsIfBare && existingAttendance.length === 0) {
+    activeRegIds = new Set(relIds(props["등록"]))
+    log.push(`[관계 신뢰] ${sessionName}: 출석 0건 + 방금 생성된 세션으로 보아 등록 관계를 재조회 없이 그대로 신뢰 (${activeRegIds.size}명)`)
+  } else {
+    const activeRegs = await queryAllPages(DS_REGISTRATION, {
+      and: [
+        { property: "시간표", relation: { contains: timetableId } },
+        {
+          or: [
+            { property: "등록일", date: { on_or_before: dateStr } },
+            { property: "등록일", date: { is_empty: true } },
+          ],
+        },
+        {
+          or: [
+            { property: "종료일", date: { on_or_after: dateStr } },
+            { property: "종료일", date: { is_empty: true } },
+          ],
+        },
+      ],
     })
-    log.push(`[관계 재동기화] ${sessionName}: 등록 관계를 날짜 기준으로 재조정 (${activeRegIds.size}명)`)
-  }
+    activeRegIds = new Set(activeRegs.map((r: any) => r.id))
 
-  // Existing attendance pages already linked to this specific class session.
-  const existingAttendance = await queryAllPages(DS_ATTENDANCE, {
-    property: "수업",
-    relation: { contains: classSessionId },
-  })
+    // Re-sync the class session's own frozen "등록" relation to match the session-date-bound
+    // active set. Handles cases where a registration's 등록일/종료일 was edited AFTER this class
+    // session's "등록" relation was already set (e.g. 종료일 backdated, or 등록일 corrected),
+    // which would otherwise leave a stale registration connected (or missing one that should
+    // now be included).
+    const currentRegIds = new Set(relIds(props["등록"]))
+    const regIdsMatch =
+      currentRegIds.size === activeRegIds.size && [...currentRegIds].every((id) => activeRegIds.has(id))
+    if (!regIdsMatch) {
+      await updatePageProperties(classSessionId, {
+        등록: { relation: [...activeRegIds].map((id) => ({ id })) },
+      })
+      log.push(`[관계 재동기화] ${sessionName}: 등록 관계를 날짜 기준으로 재조정 (${activeRegIds.size}명)`)
+    }
+  }
 
   const attendanceByRegId = new Map<string, any[]>()
   for (const att of existingAttendance) {

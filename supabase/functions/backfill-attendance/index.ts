@@ -8,8 +8,9 @@
 // (즉 출석이 덜 채워졌거나 초과/중복된) 수업만 골라내고 — 이미 맞는 건 추가 쿼리 없이 페이지
 // 속성만으로 공짜로 스킵한다 — 그 후보만 이미 있는 "출석 조정" 로직
 // (fixAttendanceForClassSession, _shared/fixAttendanceTarget.ts, "출석 조정" 버튼과 동일 코드)을
-// 그대로 재사용해서 10건씩 처리한다. send-selected-notifications(PART N-8)와 동일한 고정 청크
-// (10건) + 이어달리기(자기 자신 재호출) 패턴.
+// 그대로 재사용해서 5건씩(동시성 3) 처리한다. send-selected-notifications(PART N-8)와 동일한
+// 고정 청크 + 이어달리기(자기 자신 재호출) 패턴 — 청크 크기/동시성 값은 이 함수의 실제 무게에
+// 맞게 조정했다 (아래 CHUNK_SIZE/CANDIDATE_CONCURRENCY 선언부 주석 참고).
 //
 // 전체 히스토리를 매번 다시 스캔하는 이유: 실제로는 거의 항상 이미 맞아있을 것이므로(개수 비교가
 // 공짜라서) 데이터가 계속 늘어나도 이 스캔 자체의 비용은 낮게 유지된다 — 실제로 무거운 조정
@@ -20,7 +21,7 @@
 // Supabase 함수 로그(console.log)로만 남기고, 별도의 Notion 상태 필드는 두지 않았다 (기존
 // status-watchdog/개별 버튼과 중복되는 새 필드를 늘리지 않기 위함).
 
-import { queryAllPages, relIds, withTimeout } from "../_shared/notionClient.ts"
+import { queryAllPages, relIds, withTimeout, mapWithConcurrency } from "../_shared/notionClient.ts"
 import { DS_CLASS_SESSION } from "../_shared/constants.ts"
 import { getCurrentAdminKey, resolveAdminKeyFromRequest, CORS_HEADERS } from "../_shared/adminShared.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
@@ -31,8 +32,13 @@ import {
   markAttendanceFixError,
 } from "../_shared/fixAttendanceTarget.ts"
 
-// send-selected-notifications(PART N-8)와 동일한 상수 선택 이유: 이미 실전에서 두 번 검증된 값.
-const CHUNK_SIZE = 10
+// send-selected-notifications(PART N-8)의 청크+체인 뼈대는 그대로 가져왔지만, 세션 하나 조정 비용이
+// 훨씬 무거워서(등록 수만큼 Notion API 반복 호출) 청크 크기(10->5)와 처리 방식(순차->동시성)은
+// 실제 재현된 실패를 보고 이 함수에 맞게 다시 조정했다 (PART N-11 후속 3차, 2026-09-23).
+const CHUNK_SIZE = 5
+// generate-classes 체인1의 TIMETABLE_CONCURRENCY=4와 같은 이유(Notion 레이트리밋 안에서 처리량을
+// 늘림)로 두되, 세션 하나가 더 무거우므로 조금 더 낮춰서 3으로 뒀다.
+const CANDIDATE_CONCURRENCY = 3
 // (2026-09-23, PART N-11 후속 2차) 100초 -> 60초로 줄였다. 세션 하나(fixAttendanceForClassSession)
 // 처리에 ITEM_TIMEOUT_MS(아래)만큼 걸릴 수 있는데, 이 경계 체크는 "다음 항목을 시작하기 전"에만
 // 일어나므로, 항목 하나가 끝나자마자 걸리는 시점의 경과 시간이 이미 CHUNK_TIME_BUDGET_MS를 넘어
@@ -147,12 +153,19 @@ Deno.serve(async (req: Request) => {
   runInBackground(async () => {
     try {
       const chunk = pendingIds.slice(0, CHUNK_SIZE)
+      const rest = pendingIds.slice(CHUNK_SIZE)
+      const untouched: string[] = [] // 이번 라운드 보조 시간 제한에 걸려 시작도 못한 항목
       const chunkStartedAt = Date.now()
-      let processedCount = 0
-      for (const sessionId of chunk) {
+
+      // [2026-09-23 후속 3차] 원래는 순차 for 루프였는데, 세션 하나(fixAttendanceForClassSession)가
+      // 등록 수만큼 Notion API를 여러 번 순서대로 호출하는 무거운 작업이라 5개만 순차로 처리해도
+      // 150초를 넘기기 쉬웠다(실제로 재현됨). generate-classes 체인1(runBulkSessionChain)과 동일한
+      // 패턴으로 동시성(CANDIDATE_CONCURRENCY)을 주고, 시간 예산 체크도 그 패턴을 그대로 따라
+      // "항목 시작 전에 확인 -> 넘으면 손대지 않고 untouched에 넣기"로 바꿨다.
+      await mapWithConcurrency(chunk, CANDIDATE_CONCURRENCY, async (sessionId) => {
         if (Date.now() - chunkStartedAt > CHUNK_TIME_BUDGET_MS) {
-          log.push(`청크 처리 중 보조 시간 제한(${Math.round(CHUNK_TIME_BUDGET_MS / 1000)}초)에 도달, 나머지는 다음 이어달리기에서 처리`)
-          break
+          untouched.push(sessionId)
+          return
         }
         console.log(`backfill-attendance: 세션 처리 시작 ${sessionId}`)
         try {
@@ -164,7 +177,13 @@ Deno.serve(async (req: Request) => {
           // [2026-09-23 후속 2차] withTimeout으로 세션 하나 전체에 상위 시간 제한을 건다 (이유는
           // ITEM_TIMEOUT_MS 선언부 주석 참고) -- fetchWithRetry 자체의 호출별 제한만으로는
           // 부족했다(실제로 재현됨: 12초로 줄인 뒤에도 WallClockTime으로 죽는 사례 발생).
-          await withTimeout(fixAttendanceForClassSession(sessionId, log), ITEM_TIMEOUT_MS, `세션 ${sessionId} 출석 조정`)
+          // trustFrozenRegistrationsIfBare: 출석이 하나도 없는(방금 체인1이 막 만든) 세션이면
+          // 등록 관계 재조회를 건너뛴다 (사용자 제안, PART N-11 후속 3차 -- 세션당 쿼리 1번 절약).
+          await withTimeout(
+            fixAttendanceForClassSession(sessionId, log, { trustFrozenRegistrationsIfBare: true }),
+            ITEM_TIMEOUT_MS,
+            `세션 ${sessionId} 출석 조정`,
+          )
           await markAttendanceFixDone(sessionId)
           accFixed++
           console.log(`backfill-attendance: 세션 처리 완료 ${sessionId}`)
@@ -174,10 +193,10 @@ Deno.serve(async (req: Request) => {
           console.error(`backfill-attendance: 세션 처리 실패 ${sessionId}: ${(err as Error).message}`)
           await markAttendanceFixError(sessionId, (err as Error).message)
         }
-        processedCount++
-      }
+      })
 
-      const newPending = [...chunk.slice(processedCount), ...pendingIds.slice(CHUNK_SIZE)]
+      const processedCount = chunk.length - untouched.length
+      const newPending = [...untouched, ...rest]
       console.log(
         `backfill-attendance chunk finished: 이번 청크 ${processedCount}건 처리, 누적 처리 ${accFixed}/${accScanned}건, 남음 ${newPending.length}건\n`,
         log.join("\n"),
