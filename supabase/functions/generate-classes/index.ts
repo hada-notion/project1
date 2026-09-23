@@ -214,39 +214,42 @@ async function runBulkSessionChain(opts: {
   const untouched: string[] = [] // ran out of this round's time budget before even starting these
 
   const chunkStartedAt = Date.now()
-  for (const tId of chunk) {
+  // [PART N-11, 2026-09-23] 세션 생성만 하도록(skipAttendance:true) 가벼워졌으니, 청크 안
+  // 10개는 순차가 아니라 기존과 동일하게 동시성(TIMETABLE_CONCURRENCY=4)으로 처리한다 -- 완전히
+  // 순차로 돌렸더니(첫 배포판) 한 시간표당 체감 수십 초씩 걸려 전체 체인이 너무 느렸다.
+  await mapWithConcurrency(chunk, TIMETABLE_CONCURRENCY, async (tId) => {
     if (Date.now() - chunkStartedAt > BULK_CHUNK_TIME_BUDGET_MS) {
       untouched.push(tId)
-      continue
+      return
     }
     let timetable: any
     try {
       timetable = await getPage(tId)
     } catch (err) {
       log.push(`[error] ${tId}: failed to load timetable: ${(err as Error).message}`)
-      continue
+      return
     }
     // 안전장치: 크론/다른 버튼이 이미 처리 중인 시간표는 건너뛴다 (중복 생성 방지).
     const alreadyRunning = isRunningFresh(timetable, TIMETABLE_STATUS_SPEC, RUNNING_STALE_MINUTES)
     if (alreadyRunning) {
       log.push(`[skip] ${tId}: already processing (생성중)`)
-      continue
+      return
     }
     await markRunning(tId, TIMETABLE_STATUS_SPEC)
     try {
-      await processTimetable(timetable, log, { type: "until", horizonDate, maxSessions: 1 })
+      await processTimetable(timetable, log, { type: "until", horizonDate, maxSessions: 1, skipAttendance: true })
       await markDone(tId, TIMETABLE_STATUS_SPEC)
     } catch (err) {
       log.push(`[error] ${tId}: ${(err as Error).message}`)
       await markError(tId, TIMETABLE_STATUS_SPEC, (err as Error)?.message ?? String(err))
-      continue // 이번 체인에서는 재시도하지 않음 -- "마지막 오류"에 남아 사람이 확인할 수 있음
+      return // 이번 체인에서는 재시도하지 않음 -- "마지막 오류"에 남아 사람이 확인할 수 있음
     }
     // 이번 라운드에서 1세션 만들고도 여전히 horizon에 못 미치면 대기열 뒤로 다시 넣는다.
     const stillNeeded = await peekNextNeededDate(timetable)
     if (stillNeeded !== null && stillNeeded <= horizonDate) {
       requeue.push(tId)
     }
-  }
+  })
 
   const newPending = [...untouched, ...rest, ...requeue]
   log.push(`[debug] bulk chain1 round finished: processed ${chunk.length - untouched.length}, remaining ${newPending.length}`)
@@ -562,6 +565,12 @@ type ProcessMode =
       // 이 값을 지정하면(1) 그렇게 강제되고, 지정하지 않으면(크론 경로) horizonDate까지 원래처럼
       // 몰아서 캐치업한다 (기존 동작 그대로 유지).
       maxSessions?: number
+      // [PART N-11, 2026-09-23] 사용자 요청: 일괄 생성 체인은 "수업 페이지를 먼저 쭉 만들고, 그
+      // 다음에 출석을 쭉 채우는" 두 단계로 완전히 분리한다. true면 이 세션의 출석 생성/과제 마감
+      // 백필을 건너뛰고 세션 페이지만 만든다 -- 출석은 나중에 backfill-attendance(체인 2)가
+      // 기존 "출석 조정" 로직(fixAttendanceForClassSession)으로 채운다. 단일 버튼/크론 경로는
+      // 이 옵션을 안 써서 기존 동작(세션+출석 한 번에) 그대로 유지한다.
+      skipAttendance?: boolean
     }
 
 // 시간표/메뉴 DB에 처리 상태 표시 (버튼 단일/일괄 모드 + 크론 모드 공용).
@@ -698,70 +707,80 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
     log.push(`[created] ${timetableName}: class session created (${nextDate}), 등록 ${registrationIds.length}건 연결`)
     await enqueueDashboardLink(classPage.id, log, { skipWake: true })
 
-    // Perf (2026-09-11): attendance creation + pending-assignment-deadline linking for each
-    // registration are independent of each other, so run them concurrently instead of
-    // one-at-a-time — this matters most for classes with many students.
-    try {
-      await Promise.all(
-        registrationIds.map(async (regId) => {
-          // 학부모 요청 등으로 이 날짜의 수업이 생기기 전에 등록 페이지의 캘린더 탭에서 미리
-          // 출석을 만들어둔 경우(결석 표시, 메모 등을 이미 적어둔 상태)가 있을 수 있다. 그런
-          // 페이지가 있으면 새로 만들지 않고, 수업/클래스/수업일시(정확한 시간으로 보정)만 채워
-          // 연결한다 -- fix-attendance(출석 조정 버튼)의 동일한 로직과 맞춤. 제목/출석 상태/메모
-          // 등 사용자가 미리 적어둔 값은 그대로 보존한다.
-          const { start, end } = dayRangeIso(nextDate)
-          const unlinkedCandidates = await queryAllPages(DS.attendance, {
-            and: [
-              { property: "등록", relation: { contains: regId } },
-              { property: "수업", relation: { is_empty: true } },
-              { property: "수업일시", date: { on_or_after: start } },
-              { property: "수업일시", date: { before: end } },
-            ],
-          })
-
-          let attendanceId: string
-          if (unlinkedCandidates.length > 0) {
-            const candidate = unlinkedCandidates[0]
-            await updatePageProperties(candidate.id, {
-              수업: { relation: [{ id: classPage.id }] },
-              클래스: { relation: [{ id: classId }] },
-              수업일시: { date: { start: startIso, end: endIso } },
-              // 2026-09-16 버그 수정: 시간표 -> 수업까지만 복사되던 담당강사가 출석에는
-              // 전달되지 않고 있었음. 기존 미연결 출석을 새로 연결할 때도 담당강사를 채운다.
-              ...(teacherIds.length ? { 담당강사: { relation: teacherIds.map((id) => ({ id })) } } : {}),
+    // [PART N-11, 2026-09-23] Bulk chain mode (skipAttendance) creates ONLY the session page
+    // here -- no attendance yet. backfill-attendance (체인 2) fills it in afterward via the
+    // existing fix-attendance logic, once ALL timetables have finished their session-creation
+    // round. This is what makes each round of the bulk chain light (session-only), instead of
+    // also fanning out into N attendance creations per session inline.
+    if (mode.type === "until" && mode.skipAttendance) {
+      await markSessionDone(classPage.id)
+      log.push(`  -> attendance creation deferred to backfill-attendance (bulk chain 2)`)
+    } else {
+      // Perf (2026-09-11): attendance creation + pending-assignment-deadline linking for each
+      // registration are independent of each other, so run them concurrently instead of
+      // one-at-a-time — this matters most for classes with many students.
+      try {
+        await Promise.all(
+          registrationIds.map(async (regId) => {
+            // 학부모 요청 등으로 이 날짜의 수업이 생기기 전에 등록 페이지의 캘린더 탭에서 미리
+            // 출석을 만들어둔 경우(결석 표시, 메모 등을 이미 적어둔 상태)가 있을 수 있다. 그런
+            // 페이지가 있으면 새로 만들지 않고, 수업/클래스/수업일시(정확한 시간으로 보정)만 채워
+            // 연결한다 -- fix-attendance(출석 조정 버튼)의 동일한 로직과 맞춤. 제목/출석 상태/메모
+            // 등 사용자가 미리 적어둔 값은 그대로 보존한다.
+            const { start, end } = dayRangeIso(nextDate)
+            const unlinkedCandidates = await queryAllPages(DS.attendance, {
+              and: [
+                { property: "등록", relation: { contains: regId } },
+                { property: "수업", relation: { is_empty: true } },
+                { property: "수업일시", date: { on_or_after: start } },
+                { property: "수업일시", date: { before: end } },
+              ],
             })
-            log.push(`[linked] ${timetableName}: existing unlinked attendance ${candidate.id} -> reg ${regId} (${nextDate})`)
-            attendanceId = candidate.id
-          } else {
-            const attendancePage = await createPage(DS.attendance, {
-              출석: { title: [{ text: { content: `${nextDate} 출석` } }] },
-              수업일시: { date: { start: startIso, end: endIso } },
-              수업: { relation: [{ id: classPage.id }] },
-              클래스: { relation: [{ id: classId }] },
-              등록: { relation: [{ id: regId }] },
-              // 2026-09-16 버그 수정: 시간표의 담당강사를 출석 생성 시에도 함께 복사한다.
-              ...(teacherIds.length ? { 담당강사: { relation: teacherIds.map((id) => ({ id })) } } : {}),
-            })
-            attendanceId = attendancePage.id
-          }
 
-          await enqueueDashboardLink(attendanceId, log, { skipWake: true })
+            let attendanceId: string
+            if (unlinkedCandidates.length > 0) {
+              const candidate = unlinkedCandidates[0]
+              await updatePageProperties(candidate.id, {
+                수업: { relation: [{ id: classPage.id }] },
+                클래스: { relation: [{ id: classId }] },
+                수업일시: { date: { start: startIso, end: endIso } },
+                // 2026-09-16 버그 수정: 시간표 -> 수업까지만 복사되던 담당강사가 출석에는
+                // 전달되지 않고 있었음. 기존 미연결 출석을 새로 연결할 때도 담당강사를 채운다.
+                ...(teacherIds.length ? { 담당강사: { relation: teacherIds.map((id) => ({ id })) } } : {}),
+              })
+              log.push(`[linked] ${timetableName}: existing unlinked attendance ${candidate.id} -> reg ${regId} (${nextDate})`)
+              attendanceId = candidate.id
+            } else {
+              const attendancePage = await createPage(DS.attendance, {
+                출석: { title: [{ text: { content: `${nextDate} 출석` } }] },
+                수업일시: { date: { start: startIso, end: endIso } },
+                수업: { relation: [{ id: classPage.id }] },
+                클래스: { relation: [{ id: classId }] },
+                등록: { relation: [{ id: regId }] },
+                // 2026-09-16 버그 수정: 시간표의 담당강사를 출석 생성 시에도 함께 복사한다.
+                ...(teacherIds.length ? { 담당강사: { relation: teacherIds.map((id) => ({ id })) } } : {}),
+              })
+              attendanceId = attendancePage.id
+            }
 
-          try {
-            await linkPendingAssignmentDeadlines(regId, log)
-          } catch (err) {
-            log.push(`[error] linkPendingAssignmentDeadlines(${regId}): ${(err as Error).message}`)
-          }
-        }),
-      )
-    } catch (err) {
-      // 출석 생성 중 하나라도 실패하면 이 수업 행의 "생성중"을 끄고 오류를 남긴 뒤 그대로 다시 던진다
-      // (이 예외는 위쪽 호출부의 catch에서 markError(TIMETABLE_STATUS_SPEC)로 시간표 쪽에도 기록된다 — 기존 동작 유지).
-      await markSessionError(classPage.id, (err as Error).message)
-      throw err
+            await enqueueDashboardLink(attendanceId, log, { skipWake: true })
+
+            try {
+              await linkPendingAssignmentDeadlines(regId, log)
+            } catch (err) {
+              log.push(`[error] linkPendingAssignmentDeadlines(${regId}): ${(err as Error).message}`)
+            }
+          }),
+        )
+      } catch (err) {
+        // 출석 생성 중 하나라도 실패하면 이 수업 행의 "생성중"을 끄고 오류를 남긴 뒤 그대로 다시 던진다
+        // (이 예외는 위쪽 호출부의 catch에서 markError(TIMETABLE_STATUS_SPEC)로 시간표 쪽에도 기록된다 — 기존 동작 유지).
+        await markSessionError(classPage.id, (err as Error).message)
+        throw err
+      }
+      await markSessionDone(classPage.id)
+      log.push(`  -> ${registrationIds.length} attendance record(s) created`)
     }
-    await markSessionDone(classPage.id)
-    log.push(`  -> ${registrationIds.length} attendance record(s) created`)
 
     latestDate = nextDate
     createdCount++

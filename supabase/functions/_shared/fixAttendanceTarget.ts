@@ -8,8 +8,15 @@
 // (process-sync-queue 전용 진입점)은 제거했다. index.ts가 fixAttendanceForClassSession을 직접
 // 호출한다.
 
-import { getPage, queryAllPages, createPage, updatePageProperties, relIds } from "./notionClient.ts"
-import { DS_TIMETABLE, DS_CLASS_SESSION, DS_ATTENDANCE, DS_REGISTRATION, PROP_LAST_ERROR } from "./constants.ts"
+import { getPage, queryAllPages, queryDataSource, createPage, updatePageProperties, relIds, dateStart } from "./notionClient.ts"
+import {
+  DS_TIMETABLE,
+  DS_CLASS_SESSION,
+  DS_ATTENDANCE,
+  DS_REGISTRATION,
+  DS_STUDY_ACTIVITY,
+  PROP_LAST_ERROR,
+} from "./constants.ts"
 // (2026-09-21, 이식성 리팩토링) 아래 4개 데이터소스 ID는 constants.ts로 이동함 — 그 파일 상단 주석 참고.
 import { markRunning, markDone, markError, type StatusSpec } from "./statusTracking.ts"
 
@@ -64,6 +71,78 @@ function addDays(dateStr: string, days: number): string {
   const d = new Date(dateStr + "T00:00:00Z")
   d.setUTCDate(d.getUTCDate() + days)
   return d.toISOString().slice(0, 10)
+}
+
+// ---- 학습활동(학원) DB: 대기 중인 과제 마감 백필 ----
+// [PART N-11, 2026-09-23] generate-classes/index.ts에 있던 linkPendingAssignmentDeadlines를
+// 여기로 가져왔다. 배경: generate-classes의 일괄 생성 체인이 "수업 생성"과 "출석 생성"을 완전히
+// 분리하면서(사용자 요청), 수업 생성 시점에는 출석이 아직 없어서 이 로직이 그때는 못 돈다 -- 대신
+// 출석이 실제로 만들어지는 이 시점(fixAttendanceForClassSession, 아래)에서 함께 처리해야
+// 맞다. 개별 "출석 조정" 버튼에도 이 안전망이 함께 적용되는 효과가 있다(기존엔 없었음, 개선).
+const PROP_ACTIVITY_CATEGORY = "구분"
+const PROP_ACTIVITY_REGISTRATION = "등록"
+const PROP_ACTIVITY_ATTENDANCE = "출석"
+const PROP_ACTIVITY_RECORD = "학습기록"
+const PROP_ACTIVITY_DEADLINE = "과제 마감"
+const CATEGORY_ASSIGNMENT = "과제"
+const PROP_RECORD_DATE = "수업일" // 학습기록(학원) DB
+const PROP_ATTENDANCE_REGISTRATION = "등록" // 출석(학원) DB
+const PROP_ATTENDANCE_CLASS_DATETIME = "수업일시" // 출석(학원) DB
+
+// 등록 1건에 대해, "과제 마감"이 아직 비어있는 과제 학습활동들을 찾아서 그 학생의 다음 수업(출석)이
+// 새로 생겨났는지 확인하고 있으면 연결한다. 출제 당시엔 다음 수업이 없어서 마감을 못 잡았던 경우,
+// 나중에 출석이 생성될 때(이 함수가 호출될 때) 자동으로 채워지도록 하는 안전망이다.
+async function linkPendingAssignmentDeadlines(regId: string, log: string[]) {
+  const pending = await queryDataSource(DS_STUDY_ACTIVITY, {
+    filter: {
+      and: [
+        { property: PROP_ACTIVITY_REGISTRATION, relation: { contains: regId } },
+        { property: PROP_ACTIVITY_CATEGORY, select: { equals: CATEGORY_ASSIGNMENT } },
+        { property: PROP_ACTIVITY_DEADLINE, relation: { is_empty: true } },
+      ],
+    },
+    page_size: 100,
+  })
+  if (pending.results.length === 0) return
+
+  let linked = 0
+  for (const activity of pending.results as any[]) {
+    let issueDate: string | null = null
+    const attendanceIds = relIds(activity.properties[PROP_ACTIVITY_ATTENDANCE])
+    if (attendanceIds.length > 0) {
+      const attendancePage = await getPage(attendanceIds[0])
+      issueDate = dateStart(attendancePage, PROP_ATTENDANCE_CLASS_DATETIME)
+    }
+    if (!issueDate) {
+      const recordIds = relIds(activity.properties[PROP_ACTIVITY_RECORD])
+      if (recordIds.length > 0) {
+        const recordPage = await getPage(recordIds[0])
+        issueDate = dateStart(recordPage, PROP_RECORD_DATE)
+      }
+    }
+    if (!issueDate) continue
+
+    const nextAttendance = await queryDataSource(DS_ATTENDANCE, {
+      filter: {
+        and: [
+          { property: PROP_ATTENDANCE_REGISTRATION, relation: { contains: regId } },
+          { property: PROP_ATTENDANCE_CLASS_DATETIME, date: { after: issueDate } },
+        ],
+      },
+      sorts: [{ property: PROP_ATTENDANCE_CLASS_DATETIME, direction: "ascending" }],
+      page_size: 1,
+    })
+    const nextId = nextAttendance.results[0]?.id
+    if (!nextId) continue
+
+    await updatePageProperties(activity.id, {
+      [PROP_ACTIVITY_DEADLINE]: { relation: [{ id: nextId }] },
+    })
+    linked++
+  }
+  if (linked > 0) {
+    log.push(`📌 대기 중이던 과제 마감 ${linked}건을 새로 생긴 수업에 연결함 (등록 ${regId})`)
+  }
 }
 
 export async function fixAttendanceForClassSession(classSessionId: string, log: string[]) {
@@ -185,6 +264,15 @@ export async function fixAttendanceForClassSession(classSessionId: string, log: 
       })
       createdCount++
       log.push(`[created] ${sessionName}: new attendance ${newAttendance.id} for reg ${regId}`)
+    }
+
+    // [PART N-11, 2026-09-23] 출석이 실제로 (링크 또는 생성으로) 채워진 시점에, 그 학생의 대기 중인
+    // 과제 마감을 이 출석에 연결할 수 있는지 확인한다 (예전엔 generate-classes 자신의 세션 생성
+    // 루프에서 이 일을 했는데, 수업 생성과 출석 생성을 분리하면서 이 시점으로 옮겨왔다).
+    try {
+      await linkPendingAssignmentDeadlines(regId, log)
+    } catch (err) {
+      log.push(`[error] linkPendingAssignmentDeadlines(${regId}): ${(err as Error).message}`)
     }
   }
 
