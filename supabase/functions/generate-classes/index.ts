@@ -62,7 +62,7 @@ import { wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 // (2026-09-21, 인증 정책 추가) 이 함수는 지금까지 아무 인증도 없이 POST만 확인하면 누구나 호출할 수 있었다.
 // 다른 어드민 함수들과 동일하게 x-admin-key 헤더를 요구해서, URL만 알면 전체 시간표를 강제로
 // 재생성시킬 수 있었던 구멍을 막는다.
-import { requireAdminKey } from "../_shared/adminShared.ts"
+import { requireAdminKey, getCurrentAdminKey } from "../_shared/adminShared.ts"
 import {
 	DS_TIMETABLE,
 	DS_CLASS_SESSION,
@@ -139,6 +139,149 @@ const TIMETABLE_CONCURRENCY = 4
 // isRunningFresh를 쓴다 -- 플랫폼 한도보다 넉넉히 큰 값이라, 아직 살아서 정상 처리 중인 항목을
 // 오판해 중복 처리할 위험 없이 "죽은 지 오래된" 항목만 다시 처리 대상으로 인정한다.
 const RUNNING_STALE_MINUTES = 3
+
+// [PART N-11, 2026-09-23, 일괄 생성 청크+체인 재설계] 일괄 버튼("다음주 수업 일괄 생성")이 한 번의
+// 함수 실행 안에서 시간표 여러 개(각각 여러 주 몰아서)를 처리하던 방식은 Supabase Edge Function의
+// 실행시간 한도(약 150초)에 계속 걸렸다 (PART N-9/N-10 참고). send-selected-notifications(PART
+// N-8)에서 검증된 "고정 청크(10건) + 이어달리기(자기 자신 재호출)" 패턴을 그대로 가져와서, 아래
+// 두 단계로 나눈다:
+//   1) 수업 생성 체인: 시간표 10개씩 스캔 -> 각 시간표당 딱 1세션만 생성(몰아서 만들지 않음) ->
+//      아직 horizon(이번 클릭의 목표 날짜)에 못 미친 시간표는 대기열 뒤에 다시 넣고 이어감.
+//   2) 출석 생성 체인: 1단계가 다 끝나면 수업(학원) DB 전체를 스캔해서(등록/출석 relation 개수가
+//      다른 건만 골라 - 이미 맞는 건 추가 쿼리 없이 공짜로 스킵) 실제 조정이 필요한 수업만
+//      기존 "출석 조정" 로직(fixAttendanceForClassSession, _shared/fixAttendanceTarget.ts)을
+//      그대로 재사용해 10건씩 처리. 별도 함수 backfill-attendance/index.ts로 분리했다.
+// 단일 버튼(시간표 1개 생성)과 크론(오늘+7일까지 자동 유지) 경로는 원래도 가벼워서 그대로 둔다.
+const BULK_CHUNK_SIZE = 10
+const BULK_CHUNK_TIME_BUDGET_MS = 100_000
+const BULK_TOTAL_CHAIN_BUDGET_MS = 30 * 60 * 1000
+const BULK_CONTINUATION_FLAG = "isContinuation"
+const FUNCTIONS_BASE = `${Deno.env.get("SB_URL") ?? ""}/functions/v1`
+const SELF_CALL_TIMEOUT_MS = 60_000
+
+// generate-classes 자기 자신(다음 청크) 또는 backfill-attendance(출석 생성 체인 시작)를 호출한다.
+// send-selected-notifications의 callFn과 동일한 목적: 호출된 쪽의 빠른 202 응답만 기다리고, 실제
+// 처리는 그 호출 자신의 백그라운드에서 계속되므로 이 fetch 자체는 항상 빨리 끝나야 한다 -- 혹시
+// 응답 없이 멈추는 경우에 대비해 타임아웃을 걸어둔다.
+async function callFn(path: string, body: Record<string, unknown>, adminKey: string): Promise<Response> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), SELF_CALL_TIMEOUT_MS)
+  try {
+    return await fetch(`${FUNCTIONS_BASE}/${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-admin-key": adminKey },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    })
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+// 출석 생성 체인(backfill-attendance)을 한 번 트리거한다 (fire-and-forget: 그 함수의 빠른 202
+// 응답만 기다리고, 실제 스캔+처리는 그 함수 자신의 체인에서 독립적으로 진행된다).
+async function triggerAttendanceBackfill(adminKey: string, log: string[]): Promise<void> {
+  try {
+    const res = await callFn("backfill-attendance", {}, adminKey)
+    if (!res.ok) {
+      const text = await res.text().catch(() => "")
+      log.push(`[warn] backfill-attendance 트리거 실패: ${res.status} ${text}`)
+    } else {
+      log.push(`[ok] backfill-attendance(출석 생성 체인) 트리거함`)
+    }
+  } catch (err) {
+    log.push(`[warn] backfill-attendance 트리거 오류: ${(err as Error).message}`)
+  }
+}
+
+// [PART N-11, 2026-09-23] 일괄 버튼의 "수업 생성" 체인 한 라운드(=이 함수 호출 1번). pendingIds
+// 앞에서 최대 BULK_CHUNK_SIZE(10)개를 꺼내 각각 딱 1세션만 만들고, 그래도 이번 클릭의 horizon에
+// 못 미치면 대기열 뒤에 다시 넣는다. 모든 시간표가 horizon에 도달하면 체인 2(출석 생성)를 트리거하고
+// 메뉴 페이지를 markDone한다. 아직 남았으면 자기 자신을 재호출해서 다음 라운드로 이어간다.
+async function runBulkSessionChain(opts: {
+  menuPageId: string | null
+  horizonDate: string
+  pendingIds: string[]
+  chainStartedAt: number
+  adminKey: string
+  log: string[]
+}): Promise<void> {
+  const { menuPageId, horizonDate, chainStartedAt, adminKey, log } = opts
+
+  const chunk = opts.pendingIds.slice(0, BULK_CHUNK_SIZE)
+  const rest = opts.pendingIds.slice(BULK_CHUNK_SIZE)
+  const requeue: string[] = []
+  const untouched: string[] = [] // ran out of this round's time budget before even starting these
+
+  const chunkStartedAt = Date.now()
+  for (const tId of chunk) {
+    if (Date.now() - chunkStartedAt > BULK_CHUNK_TIME_BUDGET_MS) {
+      untouched.push(tId)
+      continue
+    }
+    let timetable: any
+    try {
+      timetable = await getPage(tId)
+    } catch (err) {
+      log.push(`[error] ${tId}: failed to load timetable: ${(err as Error).message}`)
+      continue
+    }
+    // 안전장치: 크론/다른 버튼이 이미 처리 중인 시간표는 건너뛴다 (중복 생성 방지).
+    const alreadyRunning = isRunningFresh(timetable, TIMETABLE_STATUS_SPEC, RUNNING_STALE_MINUTES)
+    if (alreadyRunning) {
+      log.push(`[skip] ${tId}: already processing (생성중)`)
+      continue
+    }
+    await markRunning(tId, TIMETABLE_STATUS_SPEC)
+    try {
+      await processTimetable(timetable, log, { type: "until", horizonDate, maxSessions: 1 })
+      await markDone(tId, TIMETABLE_STATUS_SPEC)
+    } catch (err) {
+      log.push(`[error] ${tId}: ${(err as Error).message}`)
+      await markError(tId, TIMETABLE_STATUS_SPEC, (err as Error)?.message ?? String(err))
+      continue // 이번 체인에서는 재시도하지 않음 -- "마지막 오류"에 남아 사람이 확인할 수 있음
+    }
+    // 이번 라운드에서 1세션 만들고도 여전히 horizon에 못 미치면 대기열 뒤로 다시 넣는다.
+    const stillNeeded = await peekNextNeededDate(timetable)
+    if (stillNeeded !== null && stillNeeded <= horizonDate) {
+      requeue.push(tId)
+    }
+  }
+
+  const newPending = [...untouched, ...rest, ...requeue]
+  log.push(`[debug] bulk chain1 round finished: processed ${chunk.length - untouched.length}, remaining ${newPending.length}`)
+
+  if (newPending.length === 0) {
+    console.log("generate-classes (bulk chain1) finished all timetables:\n", log.join("\n"))
+    wakeSyncQueueWorker()
+    await triggerAttendanceBackfill(adminKey, log)
+    if (menuPageId) await markDone(menuPageId, TIMETABLE_STATUS_SPEC)
+    return
+  }
+
+  const elapsedChain = Date.now() - chainStartedAt
+  if (elapsedChain > BULK_TOTAL_CHAIN_BUDGET_MS) {
+    const message = `전체 처리 한도(${Math.round(BULK_TOTAL_CHAIN_BUDGET_MS / 60000)}분) 초과로 중단됨. 남은 시간표 ${newPending.length}개는 버튼을 다시 눌러 이어서 처리하세요.`
+    console.error("generate-classes (bulk chain1) chain budget exceeded:", message, "\nlog so far:\n", log.join("\n"))
+    wakeSyncQueueWorker()
+    if (menuPageId) await markError(menuPageId, TIMETABLE_STATUS_SPEC, message)
+    return
+  }
+
+  // 아직 남은 시간표가 있고 체인 한도도 안 넘었으면, 다음 라운드로 이어간다. 워치독이 오래 멈춘
+  // 것으로 오판하지 않도록 "처리 시작 시각"을 매 라운드마다 새로 갱신한다 (체인 전체 경과 시간은
+  // chainStartedAt으로 별도 추적).
+  if (menuPageId) await markRunning(menuPageId, TIMETABLE_STATUS_SPEC)
+  const continueRes = await callFn(
+    "generate-classes?mode=bulk",
+    { [BULK_CONTINUATION_FLAG]: true, menuPageId, horizonDate, pendingIds: newPending, chainStartedAt },
+    adminKey,
+  )
+  if (!continueRes.ok) {
+    const text = await continueRes.text().catch(() => "")
+    throw new Error(`다음 이어달리기 호출 실패: ${continueRes.status} ${text}`)
+  }
+}
 
 // notionHeaders / queryDataSource / getPage / createPage / updatePageProperties / dateStart / relIds
 // 는 이제 _shared/notionClient.ts에서 가져온다 (429/5xx 재시도가 자동으로 추가됨, 로드맵 5-9).
@@ -283,13 +426,15 @@ async function getLatestClassDate(timetableId: string): Promise<string | null> {
   return date ? date.start.slice(0, 10) : null
 }
 
-// Monday (YYYY-MM-DD) of the calendar week containing dateStr. Used by the bulk button's
-// week-completeness pre-pass (2026-09-11) to group each timetable's "next needed" date into a
-// shared calendar week, regardless of which weekday that particular timetable's class falls on.
-function mondayOfWeek(dateStr: string): string {
-  const w = weekdayOf(dateStr) // 0=Sun..6=Sat
-  const daysSinceMonday = w === 0 ? 6 : w - 1
-  return addDays(dateStr, -daysSinceMonday)
+// Sunday (YYYY-MM-DD) of the calendar week containing dateStr. Used by the bulk button's
+// week-completeness pre-pass to group each timetable's "next needed" date into a shared
+// calendar week (일-토), regardless of which weekday that particular timetable's class falls
+// on. [PART N-11, 2026-09-23] Changed from Mon-Sun to Sun-Sat per user request -- the first
+// click's target range then naturally becomes "오늘 ~ 이번주 토요일" instead of possibly
+// including already-past Mon-Sat days.
+function sundayOfWeek(dateStr: string): string {
+  const w = weekdayOf(dateStr) // 0=Sun..6=Sat, already days-since-Sunday
+  return addDays(dateStr, -w)
 }
 
 // Read-only "peek": this timetable's next MISSING class date, without creating anything.
@@ -409,7 +554,15 @@ type ProcessMode =
   //   timetables still missing that week get filled up to it. This keeps every timetable's
   //   length converging together instead of already-ahead ones running further ahead while
   //   behind ones never catch up (2026-09-11).
-  | { type: "until"; horizonDate: string }
+  | {
+      type: "until"
+      horizonDate: string
+      // [PART N-11, 2026-09-23] 일괄 버튼의 새 청크+체인 설계는 시간표 하나가 여러 주 밀려있어도
+      // 한 라운드(호출)에서 몰아서 다 만들지 않고, 딱 1세션만 만든 뒤 다음 라운드로 넘긴다 --
+      // 이 값을 지정하면(1) 그렇게 강제되고, 지정하지 않으면(크론 경로) horizonDate까지 원래처럼
+      // 몰아서 캐치업한다 (기존 동작 그대로 유지).
+      maxSessions?: number
+    }
 
 // 시간표/메뉴 DB에 처리 상태 표시 (버튼 단일/일괄 모드 + 크론 모드 공용).
 // (2026-09-21, 처리 상태 관리 리팩토링 Phase 2) 예전엔 이 파일 안에 markGenRunning/markGenDone/
@@ -616,6 +769,10 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
     // Button (single) mode always creates exactly one session, then stops.
     if (mode.type === "single") break
 
+    // [PART N-11, 2026-09-23] Bulk chain mode passes maxSessions=1 so this timetable is
+    // revisited in a later round instead of catching up multiple missed weeks in one call.
+    if (mode.type === "until" && mode.maxSessions !== undefined && createdCount >= mode.maxSessions) break
+
     if (createdCount > 20) {
       // Safety valve to avoid a runaway loop.
       log.push(`[warn] ${timetableName}: stopped after creating 20 sessions in one call (check closures/data)`)
@@ -658,8 +815,13 @@ Deno.serve(async (req: Request) => {
   // place Notion is known to put it, plus the raw "웹훅ID" formula value as a fallback.
   let timetableId: string | undefined
   let rawBodyForLog: unknown
+  // [PART N-11, 2026-09-23] 일괄 버튼의 이어달리기(체인) 호출은 이 body에 자체 상태(pendingIds
+  // 등)를 실어서 자기 자신을 재호출한다 -- 아래 candidates 탐색과 별개로 그 필드들을 읽어야 해서
+  // try 블록 밖에서도 참조할 수 있게 hoist한다.
+  let parsedBody: any = undefined
   try {
     const body = await req.json()
+    parsedBody = body
     rawBodyForLog = body
     const candidates: unknown[] = [
       body?.timetableId,
@@ -682,17 +844,41 @@ Deno.serve(async (req: Request) => {
   log.push(`[debug] parsed timetableId=${timetableId ?? "(none)"} rawBody=${JSON.stringify(rawBodyForLog)}`)
 
   if (isBulkButton) {
-    // (0) 메뉴 DB "다음주 수업 일괄 생성" 버튼 call: scan ALL timetables and backfill sessions
-    // through next week's same weekday (same horizon the daily cron keeps topped up), but
-    // triggered manually. Respond immediately and do the real work in the background, since
-    // Notion's button automation waits synchronously for the response and scanning every
-    // timetable can easily exceed that wait limit.
-    log.push(`[debug] bulk button call (mode=bulk) — ignoring any timetableId candidate from body`)
+    // (0) 메뉴 DB "다음주 수업 일괄 생성" 버튼 call.
+    // [PART N-11, 2026-09-23, 청크+체인 재설계] 더 이상 한 실행 안에서 모든 시간표를 동시성 4로
+    // 몰아서 처리하지 않는다. 대신:
+    //   체인 1(수업 생성): 아래 runBulkSessionChain -- 시간표 10개씩, 시간표당 딱 1세션만 만들고
+    //   자기 자신을 재호출해서 이어간다 (send-selected-notifications, PART N-8과 동일한 패턴).
+    //   체인 1이 다 끝나면(모든 시간표가 이번 클릭의 horizon에 도달) -> 체인 2(출석 생성,
+    //   backfill-attendance) 를 트리거한다.
+    const isContinuation = parsedBody?.[BULK_CONTINUATION_FLAG] === true
+    const adminKey = await getCurrentAdminKey()
 
-    // 이 버튼을 누른 메뉴(학원) DB 페이지의 id. Notion이 트리거 페이지 id를 넣는 위치는 시간표
-    // 버튼과 동일하므로(위 candidates 탐색 결과), 여기서는 "시간표 id"가 아니라 "메뉴 페이지 id"로 재해석해서
-    // 메뉴 DB 쪼에 새로 추가한 "생성중"/"마지막 오류" 진행상태 속성에 반영한다 (시간표 DB와 동일한 로직).
+    if (isContinuation) {
+      // 이어달리기 호출: 사용자가 새로 누른 게 아니라 이 함수 스스로 만든 요청이므로 중복 실행
+      // 검사 없이 바로 이어간다. 상태는 모두 body로 이어받는다.
+      const menuPageId: string | null = parsedBody?.menuPageId ?? null
+      const horizonDate: string = parsedBody?.horizonDate
+      const pendingIds: string[] = Array.isArray(parsedBody?.pendingIds) ? parsedBody.pendingIds : []
+      const chainStartedAt: number = typeof parsedBody?.chainStartedAt === "number" ? parsedBody.chainStartedAt : Date.now()
+      log.push(`[debug] bulk chain1 continuation: menuPageId=${menuPageId ?? "(none)"} horizon=${horizonDate} pending=${pendingIds.length}`)
+
+      runInBackground(async () => {
+        try {
+          await runBulkSessionChain({ menuPageId, horizonDate, pendingIds, chainStartedAt, adminKey, log })
+        } catch (err) {
+          console.error("generate-classes (bulk chain1 continuation) failed:", (err as Error).message, "\nlog so far:", log.join("\n"))
+          if (menuPageId) await markError(menuPageId, TIMETABLE_STATUS_SPEC, (err as Error)?.message ?? String(err))
+        }
+      })
+      return respondAccepted({ mode: "bulk", isContinuation: true })
+    }
+
+    // 최초 클릭: 이 버튼을 누른 메뉴(학원) DB 페이지의 id. Notion이 트리거 페이지 id를 넣는 위치는
+    // 시간표 버튼과 동일하므로(위 candidates 탐색 결과), 여기서는 "시간표 id"가 아니라 "메뉴 페이지
+    // id"로 재해석해서 메뉴 DB 쪽 "상태"/"마지막 오류" 진행상태 속성에 반영한다.
     const menuPageId = timetableId
+    log.push(`[debug] bulk button call (mode=bulk) — ignoring any timetableId candidate from body`)
 
     if (menuPageId) {
       let menuPage: any
@@ -721,71 +907,37 @@ Deno.serve(async (req: Request) => {
       try {
         const timetables = await queryDataSource(DS.timetable, { page_size: 100 })
 
-        // Week-completeness pre-pass (2026-09-11): find the earliest calendar week (Mon-Sun)
-        // that at least one timetable is still missing a session for. This becomes the SHARED
-        // horizon for this click, so timetables that already have extra weeks pre-made ahead
-        // (for whatever reason) are left untouched this round -- while timetables still missing
-        // that week get filled up to it. This makes every timetable's length converge together
-        // instead of already-ahead ones running further ahead while behind ones never catch up.
+        // Week-completeness pre-pass: find the earliest calendar week (일-토) that at least one
+        // timetable is still missing a session for. This becomes the SHARED horizon for this
+        // click/chain, so timetables that already have extra weeks pre-made ahead are left
+        // untouched this round -- while timetables still missing that week get filled up to it.
         const peeked = await Promise.all(
           (timetables.results as any[]).map(async (t) => ({ id: t.id, nextNeeded: await peekNextNeededDate(t) })),
         )
         const needed = peeked.filter((p) => p.nextNeeded !== null) as Array<{ id: string; nextNeeded: string }>
 
         if (needed.length === 0) {
-          log.push(`[ok] bulk: every timetable is already fully caught up, nothing to do`)
-        } else {
-          const targetWeekMonday = needed
-            .map((p) => mondayOfWeek(p.nextNeeded))
-            .reduce((min, cur) => (cur < min ? cur : min))
-          const horizonDate = addDays(targetWeekMonday, 6) // Sunday of the earliest incomplete week
-          log.push(`[debug] bulk: earliest incomplete week starts ${targetWeekMonday}, filling through ${horizonDate}`)
-
-          // Perf (2026-09-23): the loop below used to run over EVERY timetable, even ones the
-          // peek pass just proved already have nothing to do (nextNeeded === null) — each such
-          // no-op pass still cost a markRunning write + processTimetable's 4 read calls
-          // (getLatestClassDate/getClosurePeriods/getClassInfo/getTimetableRegistrations) + a
-          // markDone write, purely wasted. In steady state most timetables ARE already caught
-          // up, so this wasted majority of the total run time and was the main reason a full
-          // "다음주 수업 일괄 생성" click could run long enough to hit the platform's ~150초
-          // execution-time limit (observed repeatedly: the last few timetables get stuck at
-          // "🔄 작업중" forever because the whole invocation gets killed mid-flight). Skipping
-          // straight to only the timetables the peek pass already flagged as needing work fixes
-          // this at the root, with no change to TIMETABLE_CONCURRENCY needed.
-          const neededIds = new Set(needed.map((p) => p.id))
-          const timetablesToProcess = (timetables.results as any[]).filter((t) => neededIds.has(t.id))
-          log.push(
-            `[debug] bulk: ${timetablesToProcess.length}/${(timetables.results as any[]).length} timetables actually need work this round (rest already caught up, skipped)`,
-          )
-
-          // Perf (2026-09-11): process several timetables concurrently instead of strictly
-          // one-at-a-time — this was the main reason a full-week bulk backfill across every
-          // timetable took a long time.
-          await mapWithConcurrency(timetablesToProcess, TIMETABLE_CONCURRENCY, async (timetable) => {
-            const tId = timetable.id
-            // 안전장치: 크론/버튼이 이미 처리 중인 시간표는 건너뛴다 (중복 생성 방지).
-            const alreadyRunning = isRunningFresh(timetable, TIMETABLE_STATUS_SPEC, RUNNING_STALE_MINUTES)
-            if (alreadyRunning) {
-              log.push(`[skip] ${tId}: already processing (생성중)`)
-              return
-            }
-            await markRunning(tId, TIMETABLE_STATUS_SPEC)
-            try {
-              await processTimetable(timetable, log, { type: "until", horizonDate })
-              await markDone(tId, TIMETABLE_STATUS_SPEC)
-            } catch (err) {
-              log.push(`[error] ${tId}: ${(err as Error).message}`)
-              await markError(tId, TIMETABLE_STATUS_SPEC, (err as Error)?.message ?? String(err))
-            }
-          })
+          log.push(`[ok] bulk: every timetable is already fully caught up, nothing to create`)
+          console.log("generate-classes (bulk chain1) nothing to create:\n", log.join("\n"))
+          await triggerAttendanceBackfill(adminKey, log)
+          if (menuPageId) await markDone(menuPageId, TIMETABLE_STATUS_SPEC)
+          return
         }
-        // (2026-09-23) 위 timetablesToProcess 루프 안에서 만들어진 수업/출석 페이지들의 대시보드
-        // 연결 큐 적재는 모두 skipWake:true로 넘겼으니(각 페이지마다 워커를 깨우면 배경 HTTP 호출이
-        // 수십 건씩 겹쳐 몰리는 문제 — 위 enqueueDashboardLink 주석 참고), 이 실행 전체가 끝난 뒤
-        // 딱 한 번만 깨운다.
-        wakeSyncQueueWorker()
-        console.log("generate-classes (bulk button) finished:\n", log.join("\n"))
-        if (menuPageId) await markDone(menuPageId, TIMETABLE_STATUS_SPEC)
+
+        const earliestNextNeeded = needed.map((p) => p.nextNeeded).reduce((min, cur) => (cur < min ? cur : min))
+        const horizonDate = addDays(sundayOfWeek(earliestNextNeeded), 6) // Saturday of the earliest incomplete week (일-토)
+        log.push(
+          `[debug] bulk: earliest incomplete week starts (일) ${sundayOfWeek(earliestNextNeeded)}, filling through (토) ${horizonDate}; ${needed.length}/${(timetables.results as any[]).length} timetables need work`,
+        )
+
+        await runBulkSessionChain({
+          menuPageId: menuPageId ?? null,
+          horizonDate,
+          pendingIds: needed.map((p) => p.id),
+          chainStartedAt: Date.now(),
+          adminKey,
+          log,
+        })
       } catch (err) {
         console.error(
           "generate-classes (bulk button) failed:",
