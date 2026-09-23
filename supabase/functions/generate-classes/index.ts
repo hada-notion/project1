@@ -366,6 +366,24 @@ function filterRegistrationsForDate(
     .map((r) => r.id)
 }
 
+// Perf helper: runs fn over items with at most `concurrency` in flight at once, instead of
+// either fully sequential (slow) or unbounded Promise.all (risks Notion rate limits). Used to
+// process several timetables in parallel (2026-09-11 perf fix).
+async function mapWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<void>,
+): Promise<void> {
+  let nextIndex = 0
+  async function worker() {
+    while (nextIndex < items.length) {
+      const current = items[nextIndex++]
+      await fn(current)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()))
+}
+
 type ProcessMode =
   // Button (manual, single) mode: always creates exactly ONE new session right after the
   // latest existing one, regardless of whether that latest session is already in the future.
@@ -602,243 +620,6 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
   }
 }
 
-// [PART N-9, 2026-09-23] 시간표 일괄 처리(메뉴 "다음주 수업 일괄 생성" 버튼 + 크론)도
-// PART N-8(send-selected-notifications)과 같은 "고정 청크 + 자기호출 이어달리기" 방식으로
-// 바꾼다. 기존에는 전체 시간표를 mapWithConcurrency(concurrency=4)로 한 번에 다 돌렸는데,
-// 시간표가 많거나 밀린 세션이 많으면 Supabase Edge Function의 플랫폼 실행시간 한도(150초,
-// WallClockTime)를 넘겨 조용히 멈추는 사고가 실제로 있었다(2026-09-21, 그때는 fetch 타임아웃만
-// 추가해서 임시 봉합했었음). 이제는 시간표 CHUNK_SIZE(10)개씩(내부적으로는 여전히
-// TIMETABLE_CONCURRENCY=4로 병렬) 처리하고, 남은 시간표가 있으면 자기 자신을 다시 호출해
-// 이어서 처리한다. "시간표 1개 처리"를 더 이상 쪼개지 않는 최소 단위로 둔다(processTimetable
-// 자체가 이미 그 범위로 설계돼 있음 -- 백필 세션 여러 개 + 그 출석까지 한 번에 처리).
-// 단일 시간표 버튼 호출(아래 (1))은 원래도 시간표 1개만 처리해서 안전하므로 그대로 둔다.
-const FUNCTIONS_BASE = `${Deno.env.get("SB_URL") ?? ""}/functions/v1`
-const CHUNK_SIZE = 10
-// 보조 안전장치: 청크 처리가 유난히 느려지더라도 150초 강제종료보다 항상 먼저 스스로 멈추기 위한
-// 청크 내부 시간 한도 (PART N-8과 동일한 값).
-const CHUNK_TIME_BUDGET_MS = 100 * 1000
-// 체인 전체(여러 번의 이어달리기 합산) 시간 한도 (PART N-8과 동일한 값/취지).
-const TOTAL_CHAIN_BUDGET_MS = 30 * 60 * 1000
-// 이 함수가 스스로를 다시 호출할 때 붙이는 표시. true면 사용자/크론이 새로 부른 게 아니라 체인의
-// 다음 청크임을 뜻한다 (중복 실행 검사를 건너뛰고, 누적 진행 상황을 body로 이어받는다).
-const CONTINUATION_FLAG = "isContinuation"
-// 자기 자신 호출(callSelf)에 타임아웃이 전혀 없었다 -- 이 내부 fetch 하나가 응답 없이 멈추면
-// 체인 전체가 영원히 멈출 수 있다. AbortController로 60초 제한을 건다 (PART N-8과 동일).
-const FETCH_TIMEOUT_MS = 60_000
-// [FIX, 2026-09-23] 실제로 재현된 문제: CHUNK_TIME_BUDGET_MS는 "다음 항목을 새로 시작하기 전"에만
-// 확인해서, 이미 시작한 시간표 1개(processTimetable) 처리 자체가 오래 걸리면(노션 API가 느려져
-// fetchWithRetry가 재시도를 반복하는 경우 이론상 한 번의 호출도 최대 3분 가까이 걸릴 수 있음)
-// 그 청크 전체가 150초 강제종료에 걸려 조용히 죽고, 진행 중이던 시간표는 "작업중"에 영원히
-// 멈춰버린다(이어달리기 자체가 일어날 기회조차 없음). 이제 시간표 1개당 대기 시간에도 자체
-// 한도를 두고(남은 청크 예산을 넘지 않는 한도까지), 넘으면 그 시간표는 그냥 넘어가서 나머지
-// 항목들과 청크 마무리(이어달리기 호출)가 반드시 150초 안에 끝나도록 만든다.
-const PER_ITEM_TIMEOUT_MS = 45_000
-
-// Promise.race 기반 타임아웃 래퍼로 실패(타임아웃)와 원래 오류를 구분한다. 주의: 실제로 이
-// promise를 취소하지는 못한다(Notion API 호출 자체는 백그라운드에서 계속 진행될 수 있음) --
-// 다만 그 결과를 더 이상 기다리지 않고 호출부(worker 루프)가 제어권을 돌려받게 해서, 청크가
-// 정해진 시간 안에 반드시 마무리(이어달리기 또는 완료 처리)되도록 하는 데에만 쓴다.
-class TimeoutError extends Error {}
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new TimeoutError(`${label}: ${ms}ms 안에 끝나지 않음`)), ms)
-    promise.then(
-      (value) => {
-        clearTimeout(timer)
-        resolve(value)
-      },
-      (err) => {
-        clearTimeout(timer)
-        reject(err)
-      },
-    )
-  })
-}
-
-async function callSelf(body: Record<string, unknown>, adminKey: string, bulkMode: boolean): Promise<Response> {
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-  try {
-    // isBulkButton은 URL의 "?mode=bulk" 쿼리로만 판별하므로(아래 Deno.serve 참고), bulk 체인의
-    // 이어달리기 호출도 같은 쿼리를 그대로 붙여야 다시 bulk 경로로 들어간다.
-    const url = `${FUNCTIONS_BASE}/generate-classes${bulkMode ? "?mode=bulk" : ""}`
-    return await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-admin-key": adminKey },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    })
-  } finally {
-    clearTimeout(timeoutId)
-  }
-}
-
-// 시간표 id 목록(최대 CHUNK_SIZE개) 하나를 TIMETABLE_CONCURRENCY만큼 동시에 처리한다. 도중에
-// budgetMs를 넘기면, 아직 시작하지 못한 나머지는 처리하지 않고 그대로 돌려줘서(deferredIds)
-// 다음 이어달리기가 이어서 처리하게 한다 (150초 강제종료보다 항상 먼저 멈추기 위함).
-async function processTimetablesChunk(
-  ids: string[],
-  timetableById: Map<string, any>,
-  mode: ProcessMode,
-  concurrency: number,
-  budgetMs: number,
-  log: string[],
-): Promise<{ okCount: number; errorCount: number; timeoutCount: number; deferredIds: string[] }> {
-  const startedAt = Date.now()
-  let nextIndex = 0
-  let okCount = 0
-  let errorCount = 0
-  let timeoutCount = 0
-  const deferredIds: string[] = []
-
-  async function worker() {
-    while (true) {
-      const remaining = budgetMs - (Date.now() - startedAt)
-      if (remaining <= 0) {
-        // JS는 단일 스레드라 이 while 루프 안에 await가 없으므로, 먼저 이 분기에 들어온 워커가
-        // 나머지를 전부 deferredIds로 옮길 때까지 다른 워커가 끼어들 수 없다 (중복/누락 없음).
-        while (nextIndex < ids.length) deferredIds.push(ids[nextIndex++])
-        return
-      }
-      if (nextIndex >= ids.length) return
-      const id = ids[nextIndex++]
-      const timetable = timetableById.get(id)
-      if (!timetable) {
-        log.push(`[skip] ${id}: 시간표를 찾지 못함(삭제됐거나 목록에서 빠짐)`)
-        continue
-      }
-      const alreadyRunning = isRunning(timetable, TIMETABLE_STATUS_SPEC)
-      if (alreadyRunning) {
-        log.push(`[skip] ${id}: already processing (생성중)`)
-        continue
-      }
-      await markRunning(id, TIMETABLE_STATUS_SPEC)
-      // [FIX, 2026-09-23] 남은 청크 예산을 넘지 않는 한도까지만 이 시간표 하나를 기다린다 (자세한
-      // 배경은 PER_ITEM_TIMEOUT_MS 주석 참고).
-      const perItemTimeoutMs = Math.min(PER_ITEM_TIMEOUT_MS, remaining)
-      try {
-        await withTimeout(processTimetable(timetable, log, mode), perItemTimeoutMs, `${id} 처리`)
-        await markDone(id, TIMETABLE_STATUS_SPEC)
-        okCount++
-      } catch (err) {
-        if (err instanceof TimeoutError) {
-          // 타임아웃이면 상태를 일부러 그대로 "작업중"으로 남겨둔다 -- markDone/markError로 바꿔
-          // 버리면, 실제로는 아직 백그라운드에서 계속 진행 중일 수 있는 원래 처리와 동시에 다음
-          // 시도가 같은 시간표를 다시 집어서 중복 생성을 시도할 위험이 있다(원래 처리는 정말로
-          // 취소된 게 아니라 "더 기다리지 않기"만 한 것이므로). "작업중"으로 남아있으면 다음
-          // 시도는 isRunning() 검사에서 건너뛰고, 15분 워치독이 결국 회수해서 다시 시도할 수
-          // 있게 해준다.
-          timeoutCount++
-          log.push(`[timeout] ${id}: ${perItemTimeoutMs}ms 안에 끝나지 않아 다음 항목으로 넘어감 (상태는 작업중으로 유지, 워치독이 나중에 회수)`)
-        } else {
-          errorCount++
-          log.push(`[error] ${id}: ${(err as Error).message}`)
-          await markError(id, TIMETABLE_STATUS_SPEC, (err as Error)?.message ?? String(err))
-        }
-      }
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(concurrency, ids.length) }, () => worker()))
-  return { okCount, errorCount, timeoutCount, deferredIds }
-}
-
-type ChainState = {
-  runMode: "bulk" | "cron"
-  horizonDate: string
-  remainingIds: string[]
-  chainStartedAt: number
-  okCountAcc: number
-  errorCountAcc: number
-  timeoutCountAcc: number
-  menuPageId: string | null
-}
-
-// 한 청크(최대 CHUNK_SIZE개)를 처리하고, 남았으면 자기 자신을 다시 호출해 이어간다. bulk/cron
-// 양쪽 경로가 이 함수 하나를 공유한다 (초기 horizonDate/remainingIds 계산 방식만 서로 다르고,
-// 그 이후 "청크 처리 -> 남았으면 이어달리기" 로직은 완전히 동일하다).
-async function runChainStep(state: ChainState, adminKey: string, log: string[]): Promise<void> {
-  // 매 청크(최초 호출 + 모든 이어달리기)마다 최신 시간표 목록을 다시 조회한다 (100건 이하 소규모
-  // 쿼리라 비용이 크지 않고, isRunning 등 상태를 항상 최신으로 보게 된다 -- PART N-8이
-  // queryPagesLimited로 매 청크 다시 조회하는 것과 같은 취지).
-  const timetables = await queryDataSource(DS.timetable, { page_size: 100 })
-  const timetableById = new Map<string, any>((timetables.results as any[]).map((t) => [t.id, t]))
-
-  const chunkIds = state.remainingIds.slice(0, CHUNK_SIZE)
-  const restIds = state.remainingIds.slice(CHUNK_SIZE)
-
-  const { okCount, errorCount, timeoutCount, deferredIds } = await processTimetablesChunk(
-    chunkIds,
-    timetableById,
-    { type: "until", horizonDate: state.horizonDate },
-    TIMETABLE_CONCURRENCY,
-    CHUNK_TIME_BUDGET_MS,
-    log,
-  )
-
-  const newRemainingIds = [...deferredIds, ...restIds]
-  const newOkAcc = state.okCountAcc + okCount
-  const newErrorAcc = state.errorCountAcc + errorCount
-  const newTimeoutAcc = state.timeoutCountAcc + timeoutCount
-
-  console.log(
-    `generate-classes (${state.runMode}) chunk finished (남은 ${newRemainingIds.length}건):\n`,
-    log.join("\n"),
-  )
-
-  if (newRemainingIds.length === 0) {
-    if (state.menuPageId) await markDone(state.menuPageId, TIMETABLE_STATUS_SPEC)
-    console.log(
-      `generate-classes (${state.runMode}) ALL finished. 처리 ${newOkAcc}건, 오류 ${newErrorAcc}건, 타임아웃(재시도 대기) ${newTimeoutAcc}건.`,
-    )
-    return
-  }
-
-  const elapsedChain = Date.now() - state.chainStartedAt
-  if (elapsedChain > TOTAL_CHAIN_BUDGET_MS) {
-    const message = `전체 처리 한도(${Math.round(TOTAL_CHAIN_BUDGET_MS / 60000)}분) 초과로 중단됨. 처리 ${newOkAcc}건, 오류 ${newErrorAcc}건, 타임아웃 ${newTimeoutAcc}건, 남은 시간표 ${newRemainingIds.length}건. ${state.runMode === "bulk" ? "버튼을 다시 눌러 이어서 진행하세요." : "다음 크론 호출에서 이어서 진행됩니다."}`
-    console.error(`generate-classes (${state.runMode}): ${message}`)
-    if (state.menuPageId) await markError(state.menuPageId, TIMETABLE_STATUS_SPEC, message)
-    return
-  }
-
-  if (state.menuPageId) {
-    await updatePageProperties(state.menuPageId, {
-      [PROP_TIMETABLE_LAST_ERROR]: {
-        rich_text: [
-          {
-            text: {
-              content: `🔄 진행 중... (남은 시간표 ${newRemainingIds.length}건, 처리 ${newOkAcc}·오류 ${newErrorAcc}·타임아웃 ${newTimeoutAcc})`,
-            },
-          },
-        ],
-      },
-    }).catch(() => {})
-  }
-
-  // 자기 자신을 다시 호출해 다음 청크를 이어서 처리한다. 이 fetch는 호출된 쪽의 빠른 202 응답까지만
-  // 기다린다 -- 실제 다음 청크 처리는 그 호출 자신의 백그라운드에서 진행되므로 오래 걸리지 않는다
-  // (callSelf의 60초 타임아웃은 그래도 안전망으로 남겨둔다).
-  const continueRes = await callSelf(
-    {
-      [CONTINUATION_FLAG]: true,
-      runMode: state.runMode,
-      horizonDate: state.horizonDate,
-      remainingIds: newRemainingIds,
-      chainStartedAt: state.chainStartedAt,
-      okCountAcc: newOkAcc,
-      errorCountAcc: newErrorAcc,
-      timeoutCountAcc: newTimeoutAcc,
-      menuPageId: state.menuPageId,
-    },
-    adminKey,
-    state.runMode === "bulk",
-  )
-  if (!continueRes.ok) {
-    const text = await continueRes.text().catch(() => "")
-    throw new Error(`다음 이어달리기 호출 실패: ${continueRes.status} ${text}`)
-  }
-}
-
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
     return new Response("Use POST", { status: 405 })
@@ -868,10 +649,10 @@ Deno.serve(async (req: Request) => {
   // `{ "timetableId": ... }` shape; instead we look for the triggering page's id in every
   // place Notion is known to put it, plus the raw "웹훅ID" formula value as a fallback.
   let timetableId: string | undefined
-  let parsedBody: any
+  let rawBodyForLog: unknown
   try {
     const body = await req.json()
-    parsedBody = body
+    rawBodyForLog = body
     const candidates: unknown[] = [
       body?.timetableId,
       body?.data?.id,
@@ -887,65 +668,23 @@ Deno.serve(async (req: Request) => {
     // no JSON body -> treat as a cron call
   }
 
-  // [PART N-9] 이 함수가 스스로를 다시 호출한 이어달리기 요청인지 여부. bulk/cron 두 체인 모두
-  // 이 플래그로 판별한다 (아래 isBulkButton 분기에서는 URL의 "?mode=bulk"도 함께 확인한다).
-  const isContinuation = parsedBody?.[CONTINUATION_FLAG] === true
-  // 이어달리기 자기호출에 그대로 재사용할 관리자 키. requireAdminKey가 이미 이 값을 검증했다.
-  const adminKeyForChain = req.headers.get("x-admin-key") ?? ""
-
   const log: string[] = []
   // Always record what we received, so the response log makes it easy to see the exact
   // payload shape Notion's webhook action sent (helpful for debugging button wiring).
-  log.push(
-    `[debug] parsed timetableId=${timetableId ?? "(none)"} isContinuation=${isContinuation} rawBody=${JSON.stringify(parsedBody)}`,
-  )
+  log.push(`[debug] parsed timetableId=${timetableId ?? "(none)"} rawBody=${JSON.stringify(rawBodyForLog)}`)
 
   if (isBulkButton) {
-    // (0) 메뉴 DB "다음주 수업 일괄 생성" 버튼 call.
+    // (0) 메뉴 DB "다음주 수업 일괄 생성" 버튼 call: scan ALL timetables and backfill sessions
+    // through next week's same weekday (same horizon the daily cron keeps topped up), but
+    // triggered manually. Respond immediately and do the real work in the background, since
+    // Notion's button automation waits synchronously for the response and scanning every
+    // timetable can easily exceed that wait limit.
     log.push(`[debug] bulk button call (mode=bulk) — ignoring any timetableId candidate from body`)
-
-    if (isContinuation) {
-      // 이어달리기 호출은 사용자가 새로 누른 게 아니므로, 중복 실행 검사 없이 body로 이어받은
-      // 상태 그대로 다음 청크를 처리한다.
-      const menuPageId = parsedBody?.menuPageId ?? null
-      // [FIX, 2026-09-23] 이 이어달리기 호출에서도 메뉴 페이지의 "처리 시작 시각"을 갱신해야
-      // 한다 -- PART N-8과 동일한 이유(체인이 15분 워치독 한도보다 길어질 수 있는데, 최초
-      // 호출에서만 markRunning을 부르면 워치독이 멀쩍이 진행 중인 체인을 죽은 것으로 착각해
-      // "⏱️ 타임아웃 복구"로 되돌려버릴 수 있음). 원래 이 이어달리기 분기에서 빠져있었다.
-      if (menuPageId) await markRunning(menuPageId, TIMETABLE_STATUS_SPEC)
-      runInBackground(async () => {
-        try {
-          await runChainStep(
-            {
-              runMode: "bulk",
-              horizonDate: String(parsedBody?.horizonDate ?? ""),
-              remainingIds: Array.isArray(parsedBody?.remainingIds) ? parsedBody.remainingIds : [],
-              chainStartedAt: typeof parsedBody?.chainStartedAt === "number" ? parsedBody.chainStartedAt : Date.now(),
-              okCountAcc: typeof parsedBody?.okCountAcc === "number" ? parsedBody.okCountAcc : 0,
-              errorCountAcc: typeof parsedBody?.errorCountAcc === "number" ? parsedBody.errorCountAcc : 0,
-              timeoutCountAcc: typeof parsedBody?.timeoutCountAcc === "number" ? parsedBody.timeoutCountAcc : 0,
-              menuPageId,
-            },
-            adminKeyForChain,
-            log,
-          )
-        } catch (err) {
-          console.error(
-            "generate-classes (bulk button, continuation) failed:",
-            (err as Error).message,
-            "\nlog so far:",
-            log.join("\n"),
-          )
-          if (menuPageId) await markError(menuPageId, TIMETABLE_STATUS_SPEC, (err as Error)?.message ?? String(err))
-        }
-      })
-      return respondAccepted({ mode: "bulk", isContinuation: true })
-    }
 
     // 이 버튼을 누른 메뉴(학원) DB 페이지의 id. Notion이 트리거 페이지 id를 넣는 위치는 시간표
     // 버튼과 동일하므로(위 candidates 탐색 결과), 여기서는 "시간표 id"가 아니라 "메뉴 페이지 id"로 재해석해서
     // 메뉴 DB 쪼에 새로 추가한 "생성중"/"마지막 오류" 진행상태 속성에 반영한다 (시간표 DB와 동일한 로직).
-    const menuPageId = timetableId ?? null
+    const menuPageId = timetableId
 
     if (menuPageId) {
       let menuPage: any
@@ -987,35 +726,36 @@ Deno.serve(async (req: Request) => {
 
         if (needed.length === 0) {
           log.push(`[ok] bulk: every timetable is already fully caught up, nothing to do`)
-          console.log("generate-classes (bulk button) finished:\n", log.join("\n"))
-          if (menuPageId) await markDone(menuPageId, TIMETABLE_STATUS_SPEC)
-          return
+        } else {
+          const targetWeekMonday = needed
+            .map((p) => mondayOfWeek(p.nextNeeded))
+            .reduce((min, cur) => (cur < min ? cur : min))
+          const horizonDate = addDays(targetWeekMonday, 6) // Sunday of the earliest incomplete week
+          log.push(`[debug] bulk: earliest incomplete week starts ${targetWeekMonday}, filling through ${horizonDate}`)
+
+          // Perf (2026-09-11): process several timetables concurrently instead of strictly
+          // one-at-a-time — this was the main reason a full-week bulk backfill across every
+          // timetable took a long time.
+          await mapWithConcurrency(timetables.results as any[], TIMETABLE_CONCURRENCY, async (timetable) => {
+            const tId = timetable.id
+            // 안전장치: 크론/버튼이 이미 처리 중인 시간표는 건너뛴다 (중복 생성 방지).
+            const alreadyRunning = isRunning(timetable, TIMETABLE_STATUS_SPEC)
+            if (alreadyRunning) {
+              log.push(`[skip] ${tId}: already processing (생성중)`)
+              return
+            }
+            await markRunning(tId, TIMETABLE_STATUS_SPEC)
+            try {
+              await processTimetable(timetable, log, { type: "until", horizonDate })
+              await markDone(tId, TIMETABLE_STATUS_SPEC)
+            } catch (err) {
+              log.push(`[error] ${tId}: ${(err as Error).message}`)
+              await markError(tId, TIMETABLE_STATUS_SPEC, (err as Error)?.message ?? String(err))
+            }
+          })
         }
-
-        const targetWeekMonday = needed
-          .map((p) => mondayOfWeek(p.nextNeeded))
-          .reduce((min, cur) => (cur < min ? cur : min))
-        const horizonDate = addDays(targetWeekMonday, 6) // Sunday of the earliest incomplete week
-        log.push(`[debug] bulk: earliest incomplete week starts ${targetWeekMonday}, filling through ${horizonDate}`)
-
-        // [PART N-9] 여기서부터는 10개씩 청크로 나눠 처리하고, 남으면 자기 자신을 다시 호출해
-        // 이어간다 (기존의 "전체를 한 번에 mapWithConcurrency" 방식은 시간표/밀린 세션이 많을 때
-        // 150초 플랫폼 한도를 넘겨 조용히 멈추는 사고가 있었다).
-        const allIds = (timetables.results as any[]).map((t) => t.id)
-        await runChainStep(
-          {
-            runMode: "bulk",
-            horizonDate,
-            remainingIds: allIds,
-            chainStartedAt: Date.now(),
-            okCountAcc: 0,
-            errorCountAcc: 0,
-            timeoutCountAcc: 0,
-            menuPageId,
-          },
-          adminKeyForChain,
-          log,
-        )
+        console.log("generate-classes (bulk button) finished:\n", log.join("\n"))
+        if (menuPageId) await markDone(menuPageId, TIMETABLE_STATUS_SPEC)
       } catch (err) {
         console.error(
           "generate-classes (bulk button) failed:",
@@ -1079,66 +819,40 @@ Deno.serve(async (req: Request) => {
     return respondAccepted({ timetableId })
   }
 
-  // (2) Cron call: all timetables, backfilled through next week's same weekday.
-  // [PART N-9, 2026-09-23] 예전엔 이 경로가 동기(응답을 끝까지 기다림)였다 -- 이 함수를 부르는
-  // 예약 호출이 Notion 버튼처럼 응답을 기다리는 대상이 아니라고 판단했기 때문. 하지만 시간표가
-  // 많거나 밀린 세션이 많으면 이 동기 처리 자체가 Supabase Edge Function의 플랫폼 실행시간
-  // 한도(150초, WallClockTime)를 넘겨 조용히 멈추는 사고가 실제로 있었다(2026-09-21). 이제는
-  // 버튼/bulk 경로와 동일하게 즉시 202로 응답하고, 실제 처리는 백그라운드의 청크+이어달리기로
-  // 진행한다. (이 저장소 안에서는 이 함수를 자동으로 호출하는 예약 작업을 찾지 못했다 -- Supabase
-  // 대시보드에만 설정된 숨은 호출일 가능성이 있다. 그 호출이 응답 본문의 log를 읽고 있었다면 이제는
-  // 더 이상 유효하지 않으니 확인이 필요하다.)
-  if (isContinuation) {
-    runInBackground(async () => {
+  try {
+    // (2) Cron call: all timetables, backfilled through next week's same weekday. This path is
+    // not triggered by a Notion button waiting on the response, so it stays synchronous.
+    // Mark each timetable's "생성중"/"마지막 오류" the same way the button/bulk-button paths
+    // already do, so the "실시간 처리 상태" formula shows "🔄 생성 중" while a scheduled (cron)
+    // run is in progress too — previously only the button paths updated this status, so a plain
+    // automatic cron call never showed any live progress at all (2026-09-11 fix).
+    const horizonDate = addDays(todayKstDateStr(), AUTO_HORIZON_DAYS)
+    const timetables = await queryDataSource(DS.timetable, { page_size: 100 })
+    // Perf (2026-09-11): same concurrency treatment as the bulk-button path above.
+    await mapWithConcurrency(timetables.results as any[], TIMETABLE_CONCURRENCY, async (timetable) => {
+      const tId = timetable.id
+      const alreadyRunning = isRunning(timetable, TIMETABLE_STATUS_SPEC)
+      if (alreadyRunning) {
+        log.push(`[skip] ${tId}: already processing (생성중)`)
+        return
+      }
+      await markRunning(tId, TIMETABLE_STATUS_SPEC)
       try {
-        await runChainStep(
-          {
-            runMode: "cron",
-            horizonDate: String(parsedBody?.horizonDate ?? ""),
-            remainingIds: Array.isArray(parsedBody?.remainingIds) ? parsedBody.remainingIds : [],
-            chainStartedAt: typeof parsedBody?.chainStartedAt === "number" ? parsedBody.chainStartedAt : Date.now(),
-            okCountAcc: typeof parsedBody?.okCountAcc === "number" ? parsedBody.okCountAcc : 0,
-            errorCountAcc: typeof parsedBody?.errorCountAcc === "number" ? parsedBody.errorCountAcc : 0,
-            timeoutCountAcc: typeof parsedBody?.timeoutCountAcc === "number" ? parsedBody.timeoutCountAcc : 0,
-            menuPageId: null,
-          },
-          adminKeyForChain,
-          log,
-        )
+        await processTimetable(timetable, log, { type: "until", horizonDate })
+        await markDone(tId, TIMETABLE_STATUS_SPEC)
       } catch (err) {
-        console.error(
-          "generate-classes (cron, continuation) failed:",
-          (err as Error).message,
-          "\nlog so far:",
-          log.join("\n"),
-        )
+        log.push(`[error] ${tId}: ${(err as Error).message}`)
+        await markError(tId, TIMETABLE_STATUS_SPEC, (err as Error)?.message ?? String(err))
       }
     })
-    return respondAccepted({ mode: "cron", isContinuation: true })
+    return new Response(JSON.stringify({ ok: true, log }, null, 2), {
+      headers: { "Content-Type": "application/json" },
+    })
+  } catch (err) {
+    console.error("generate-classes failed:", (err as Error).message, "\nlog so far:", log.join("\n"), "\nstack:", (err as Error).stack)
+    return new Response(JSON.stringify({ ok: false, error: (err as Error).message, log }, null, 2), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    })
   }
-
-  const horizonDate = addDays(todayKstDateStr(), AUTO_HORIZON_DAYS)
-  runInBackground(async () => {
-    try {
-      const timetables = await queryDataSource(DS.timetable, { page_size: 100 })
-      const allIds = (timetables.results as any[]).map((t) => t.id)
-      await runChainStep(
-        {
-          runMode: "cron",
-          horizonDate,
-          remainingIds: allIds,
-          chainStartedAt: Date.now(),
-          okCountAcc: 0,
-          errorCountAcc: 0,
-          timeoutCountAcc: 0,
-          menuPageId: null,
-        },
-        adminKeyForChain,
-        log,
-      )
-    } catch (err) {
-      console.error("generate-classes (cron) failed:", (err as Error).message, "\nlog so far:", log.join("\n"), "\nstack:", (err as Error).stack)
-    }
-  })
-  return respondAccepted({ mode: "cron" })
 })
