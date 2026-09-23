@@ -270,10 +270,19 @@ export async function processDashboardLinkQueueItem(payload: { pageId: string })
 // generate-classes/kiosk-checkin처럼 Notion API를 직접 호출해서 수업/출석 페이지를 만드는
 // 함수들이, 페이지 생성/갱신 직후 이 큐에 바로 적재하기 위한 편의 함수 (Notion 자동화(웹훅)를
 // 거치지 않고 코드에서 직접 호출 -- 이 두 함수로 만들어진 페이지는 자동화가 트리거되지 않기 때문).
-export async function enqueueDashboardLink(pageId: string, log?: string[]): Promise<void> {
+//
+// [FIX, 2026-09-23] opts.skipWake: generate-classes가 시간표 하나를 처리하면서 여러 수업/출석
+// 페이지를 만들 때마다(학생 수만큼) 이 함수를 반복 호출하는데, 매번 wakeSyncQueueWorker()까지
+// 같이 부르면 짧은 시간에 배경(EdgeRuntime.waitUntil) HTTP 호출이 수십 건씩 겹쳐 몰린다.
+// 실측 결과 전부 "Rate limit exceeded"로 실패하고 있었고, 이 배경 호출들도 같은 함수 호출의
+// 전체 실행시간(플랫폼 WallClockTime 한도) 안에 포함되어 일괄 생성이 시간 초과로 죽는 문제를
+// 거들고 있었을 가능성이 있다. 대시보드 연결은 지연에 관대하므로(위 HANDLERS 등록 주석 참고),
+// 여러 건을 한꺼번에 큐에 넣는 호출자는 skipWake:true로 큐 적재만 반복하고, 전부 끝난 뒤 딱 한
+// 번만 깨우면 충분하다 (아니면 최악의 경우에도 process-sync-queue-every-1-minute cron이 처리).
+export async function enqueueDashboardLink(pageId: string, log?: string[], opts?: { skipWake?: boolean }): Promise<void> {
   try {
     await enqueueSync("sync-dashboard-link", { pageId })
-    wakeSyncQueueWorker()
+    if (!opts?.skipWake) wakeSyncQueueWorker()
   } catch (err) {
     const message = (err as Error)?.message ?? String(err)
     console.error(`[enqueueDashboardLink] 큐 적재 실패 (pageId=${pageId}):`, message)

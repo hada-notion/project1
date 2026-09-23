@@ -58,6 +58,7 @@ const SESSION_GEN_STATUS_SPEC: StatusSpec = {
 // 대시보드(학원) DB 자동 연결: 이 함수가 Notion API로 직접 만드는 수업/출석 페이지는 페이지
 // 자동화가 트리거되지 않으므로, 생성 직후 여기서 직접 큐에 적재한다 (2026-09-20, 대시보드 기능 추가).
 import { enqueueDashboardLink } from "../_shared/dashboardLinkTarget.ts"
+import { wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 // (2026-09-21, 인증 정책 추가) 이 함수는 지금까지 아무 인증도 없이 POST만 확인하면 누구나 호출할 수 있었다.
 // 다른 어드민 함수들과 동일하게 x-admin-key 헤더를 요구해서, URL만 알면 전체 시간표를 강제로
 // 재생성시킬 수 있었던 구멍을 막는다.
@@ -542,7 +543,7 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
     })
 
     log.push(`[created] ${timetableName}: class session created (${nextDate}), 등록 ${registrationIds.length}건 연결`)
-    await enqueueDashboardLink(classPage.id, log)
+    await enqueueDashboardLink(classPage.id, log, { skipWake: true })
 
     // Perf (2026-09-11): attendance creation + pending-assignment-deadline linking for each
     // registration are independent of each other, so run them concurrently instead of
@@ -591,7 +592,7 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
             attendanceId = attendancePage.id
           }
 
-          await enqueueDashboardLink(attendanceId, log)
+          await enqueueDashboardLink(attendanceId, log, { skipWake: true })
 
           try {
             await linkPendingAssignmentDeadlines(regId, log)
@@ -778,6 +779,11 @@ Deno.serve(async (req: Request) => {
             }
           })
         }
+        // (2026-09-23) 위 timetablesToProcess 루프 안에서 만들어진 수업/출석 페이지들의 대시보드
+        // 연결 큐 적재는 모두 skipWake:true로 넘겼으니(각 페이지마다 워커를 깨우면 배경 HTTP 호출이
+        // 수십 건씩 겹쳐 몰리는 문제 — 위 enqueueDashboardLink 주석 참고), 이 실행 전체가 끝난 뒤
+        // 딱 한 번만 깨운다.
+        wakeSyncQueueWorker()
         console.log("generate-classes (bulk button) finished:\n", log.join("\n"))
         if (menuPageId) await markDone(menuPageId, TIMETABLE_STATUS_SPEC)
       } catch (err) {
@@ -825,6 +831,8 @@ Deno.serve(async (req: Request) => {
     runInBackground(async () => {
       try {
         await processTimetable(timetable, log, { type: "single" })
+        // (2026-09-23) 단일 버튼 경로도 동일하게 한 번만 깨운다 (위 bulk button 경로 주석 참고).
+        wakeSyncQueueWorker()
         console.log("generate-classes (button) finished:", timetableId, "\n", log.join("\n"))
         await markDone(timetableId, TIMETABLE_STATUS_SPEC)
       } catch (err) {
@@ -869,6 +877,8 @@ Deno.serve(async (req: Request) => {
         await markError(tId, TIMETABLE_STATUS_SPEC, (err as Error)?.message ?? String(err))
       }
     })
+    // (2026-09-23) 크론 경로도 동일하게 한 번만 깨운다 (위 bulk button 경로 주석 참고).
+    wakeSyncQueueWorker()
     return new Response(JSON.stringify({ ok: true, log }, null, 2), {
       headers: { "Content-Type": "application/json" },
     })
