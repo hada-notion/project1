@@ -215,3 +215,39 @@ export async function hasPendingSyncQueueItems(): Promise<boolean> {
   const rows = await res.json()
   return Array.isArray(rows) && rows.length > 0
 }
+
+// (2026-09-23, 🚨 동기화 실패 알림(학원) DB 통합) sync-failure-audit이 아직 보고하지 않은
+// (audited_at is null) 영구 실패(status='failed') 항목을 가져온다. 20260923010000 마이그레이션의
+// audited_at 컬럼/인덱스를 사용한다.
+export type UnauditedFailedItem = {
+  id: number
+  target: string
+  last_error: string | null
+  created_at: string
+}
+
+export async function getUnauditedFailedSyncQueueItems(limit = 200): Promise<UnauditedFailedItem[]> {
+  requireEnv()
+  const res = await fetchSupabaseWithRetry(
+    `${SB_URL}/rest/v1/sync_queue?status=eq.failed&audited_at=is.null&select=id,target,last_error,created_at&order=created_at.asc&limit=${limit}`,
+    { headers: authHeaders() },
+  )
+  if (!res.ok) throw new Error(`실패 항목 조회 실패: ${res.status} ${await res.text()}`)
+  return await res.json()
+}
+
+// 위에서 가져온 항목들을 "이미 자동화 로그에 보고함"으로 표시해서, 다음 주기 스캔에서 중복
+// 보고되지 않게 한다.
+export async function markSyncQueueItemsAudited(ids: number[]): Promise<void> {
+  if (ids.length === 0) return
+  requireEnv()
+  const idList = ids.join(",")
+  const res = await fetchSupabaseWithRetry(`${SB_URL}/rest/v1/sync_queue?id=in.(${idList})`, {
+    method: "PATCH",
+    headers: { ...authHeaders(), Prefer: "return=minimal" },
+    body: JSON.stringify({ audited_at: new Date().toISOString() }),
+  })
+  if (!res.ok) {
+    console.error(`sync_queue audited_at 표시 실패 (다음 주기에 중복 보고될 수 있음): ${res.status} ${await res.text()}`)
+  }
+}
