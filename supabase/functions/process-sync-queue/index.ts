@@ -71,9 +71,21 @@ import { processSyncClassReportCacheQueueItem } from "../_shared/classReportCach
 import { processCascadeDeleteQueueItem } from "../_shared/cascadeDeleteTarget.ts"
 import { processGenerateReportQueueItem } from "../_shared/generateReportTarget.ts"
 import { processGenerateTuitionQueueItem } from "../_shared/generateTuitionTarget.ts"
+import { processDashboardLinkQueueItem } from "../_shared/dashboardLinkTarget.ts"
 
 // target별 실제 처리 함수. 앞으로 다른 "일괄(bulk)" 웹훅 함수나, 사람이 여러 페이지를 동시에 클릭할
 // 수 있는 "개별" 웹훅 함수가 추가되면 여기에 추가한다 (위 2026-09-22 Phase 6 주석 참고).
+//
+// [FIX, 2026-09-23] PART N-4가 대부분의 target을 이 워커에서 빼면서 sync-dashboard-link도 함께
+// 빠졌는데, generate-classes/kiosk-checkin의 enqueueDashboardLink()(_shared/dashboardLinkTarget.ts)
+// 는 그 이후로도 계속 target: "sync-dashboard-link"로 sync_queue에 적재하고 있었다. 그 결과 그
+// 항목들은 claim된 뒤 항상 "알 수 없는 target"으로 실패해(3회 재시도 후 영구 실패) 대시보드 연결이
+// 전혀 되지 않고, 오직 다음날 새벽 nightly-dashboard-link-audit(대시보드 relation이 비어있는 건을
+// 다시 찾아 연결)에만 의존하고 있었다. 그런데 그 audit은 mapWithConcurrency(..., 3, ...)으로 여러
+// 건을 동시에 처리해서, findOrCreateDashboard()의 레이스(대시보드 중복 생성, dashboardLinkTarget.ts
+// 참고)를 오히려 자주 유발하는 쪽이었다. 대시보드 연결은 사람이 지켜보는 "실시간 처리 상태"가 없어
+// 지연에 관대하고, 오히려 이 워커의 CONCURRENCY=1 순차 처리에 맡기는 쪽이 동시성 문제를 줄여주므로
+// 다시 등록한다 (findOrCreateDashboard 자체의 날짜별 잠금과 함께 이중 방어).
 const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Promise<any>) => Promise<void>> = {
   "create-learning-record": processCreateLearningRecordQueueItem,
   "sync-textbook-distribution:from-class-carts": processFromClassCartsQueueItem,
@@ -81,6 +93,7 @@ const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Pro
   "cascade-delete": processCascadeDeleteQueueItem,
   "generate-report": processGenerateReportQueueItem,
   "generate-tuition": processGenerateTuitionQueueItem,
+  "sync-dashboard-link": processDashboardLinkQueueItem,
 }
 
 // (2026-09-22, Phase 6) 이 워커 한 번의 실행(위 sync_queue_worker_lock으로 항상 한 번에 하나만
