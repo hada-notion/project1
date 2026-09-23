@@ -206,7 +206,7 @@ Deno.serve(async (req) => {
           }
           throw sendErr
         }
-      })
+      }, { skipMinVisibleDelay: body?.[SYNC_WAIT_FLAG] === true })
 
       if (registrationId) {
         await createSendLogEntry({
