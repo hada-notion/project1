@@ -318,6 +318,44 @@ export async function createSendLogEntry(args: {
   }
 }
 
+// (2026-09-23, 🚨 동기화 실패 알림(학원) DB 통합) sync_queue에서 재시도를 모두 소진하고 영구
+// 실패(status='failed')로 확정된 항목들을 주기적으로 집계해서, 기존 "전송로그(학원) DB"(이번에
+// "자동화 로그(학원) DB"로 이름을 바꾸고 스키마를 확장함)에 요약 1건을 기록한다. createSendLogEntry
+// 와 같은 DB를 쓰지만 registrationId 등 알림톡 전용 필드가 전혀 필요 없어서(오히려 강제로 요구하면
+// 이 용도에 맞지 않음) 별도의 작고 단순한 함수로 둔다 — 기존 createSendLogEntry의 타입/동작은
+// 그대로 유지되어 다른 발송 코드에 영향이 없다.
+export async function createSyncFailureLogEntry(args: {
+  failCount: number
+  detail: string
+}): Promise<void> {
+  if (!SEND_LOG_DB_ID) return
+  try {
+    const kstDate = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const title = `[동기화 실패] sync_queue 실패 ${args.failCount}건 (${kstDate})`
+    const properties: Record<string, unknown> = {
+      "이름": { title: [{ text: { content: title.slice(0, 200) } }] },
+      "발송 구분": { select: { name: "동기화 실패" } },
+      "발송 상태": { select: { name: "실패" } },
+      "발송일시": { date: { start: new Date().toISOString() } },
+      "발송 채널": { select: { name: "시스템" } },
+      "실패 사유": { rich_text: [{ text: { content: args.detail.slice(0, 1900) } }] },
+    }
+    const res = await fetchWithRetry(NOTION_API_BASE + "/pages", {
+      method: "POST",
+      headers: notionHeaders(),
+      body: JSON.stringify({
+        parent: { database_id: SEND_LOG_DB_ID },
+        properties,
+      }),
+    })
+    if (!res.ok) {
+      console.error("자동화 로그(동기화 실패) 기록 실패:", res.status, await res.text())
+    }
+  } catch (e) {
+    console.error("자동화 로그(동기화 실패) 기록 중 오류:", e)
+  }
+}
+
 // [NEW] "알림톡 설정(학원) DB"에서 발송 구분별 pfId/템플릿ID/발신번호를 가져옵니다.
 // 카카오 채널이나 템플릿이 바뀌면 코드 수정 없이 이 Notion DB의 값만 바꾸면 됩니다.
 // 설정 DB에 해당 행이 없거나 "활성 여부"가 꺼져 있거나 조회가 실패하면 fallback(Secrets 기본값)을 사용합니다.
