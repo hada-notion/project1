@@ -625,6 +625,35 @@ const CONTINUATION_FLAG = "isContinuation"
 // 자기 자신 호출(callSelf)에 타임아웃이 전혀 없었다 -- 이 내부 fetch 하나가 응답 없이 멈추면
 // 체인 전체가 영원히 멈출 수 있다. AbortController로 60초 제한을 건다 (PART N-8과 동일).
 const FETCH_TIMEOUT_MS = 60_000
+// [FIX, 2026-09-23] 실제로 재현된 문제: CHUNK_TIME_BUDGET_MS는 "다음 항목을 새로 시작하기 전"에만
+// 확인해서, 이미 시작한 시간표 1개(processTimetable) 처리 자체가 오래 걸리면(노션 API가 느려져
+// fetchWithRetry가 재시도를 반복하는 경우 이론상 한 번의 호출도 최대 3분 가까이 걸릴 수 있음)
+// 그 청크 전체가 150초 강제종료에 걸려 조용히 죽고, 진행 중이던 시간표는 "작업중"에 영원히
+// 멈춰버린다(이어달리기 자체가 일어날 기회조차 없음). 이제 시간표 1개당 대기 시간에도 자체
+// 한도를 두고(남은 청크 예산을 넘지 않는 한도까지), 넘으면 그 시간표는 그냥 넘어가서 나머지
+// 항목들과 청크 마무리(이어달리기 호출)가 반드시 150초 안에 끝나도록 만든다.
+const PER_ITEM_TIMEOUT_MS = 45_000
+
+// Promise.race 기반 타임아웃 래퍼로 실패(타임아웃)와 원래 오류를 구분한다. 주의: 실제로 이
+// promise를 취소하지는 못한다(Notion API 호출 자체는 백그라운드에서 계속 진행될 수 있음) --
+// 다만 그 결과를 더 이상 기다리지 않고 호출부(worker 루프)가 제어권을 돌려받게 해서, 청크가
+// 정해진 시간 안에 반드시 마무리(이어달리기 또는 완료 처리)되도록 하는 데에만 쓴다.
+class TimeoutError extends Error {}
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new TimeoutError(`${label}: ${ms}ms 안에 끝나지 않음`)), ms)
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (err) => {
+        clearTimeout(timer)
+        reject(err)
+      },
+    )
+  })
+}
 
 async function callSelf(body: Record<string, unknown>, adminKey: string, bulkMode: boolean): Promise<Response> {
   const controller = new AbortController()
@@ -654,16 +683,18 @@ async function processTimetablesChunk(
   concurrency: number,
   budgetMs: number,
   log: string[],
-): Promise<{ okCount: number; errorCount: number; deferredIds: string[] }> {
+): Promise<{ okCount: number; errorCount: number; timeoutCount: number; deferredIds: string[] }> {
   const startedAt = Date.now()
   let nextIndex = 0
   let okCount = 0
   let errorCount = 0
+  let timeoutCount = 0
   const deferredIds: string[] = []
 
   async function worker() {
     while (true) {
-      if (Date.now() - startedAt > budgetMs) {
+      const remaining = budgetMs - (Date.now() - startedAt)
+      if (remaining <= 0) {
         // JS는 단일 스레드라 이 while 루프 안에 await가 없으므로, 먼저 이 분기에 들어온 워커가
         // 나머지를 전부 deferredIds로 옮길 때까지 다른 워커가 끼어들 수 없다 (중복/누락 없음).
         while (nextIndex < ids.length) deferredIds.push(ids[nextIndex++])
@@ -682,19 +713,33 @@ async function processTimetablesChunk(
         continue
       }
       await markRunning(id, TIMETABLE_STATUS_SPEC)
+      // [FIX, 2026-09-23] 남은 청크 예산을 넘지 않는 한도까지만 이 시간표 하나를 기다린다 (자세한
+      // 배경은 PER_ITEM_TIMEOUT_MS 주석 참고).
+      const perItemTimeoutMs = Math.min(PER_ITEM_TIMEOUT_MS, remaining)
       try {
-        await processTimetable(timetable, log, mode)
+        await withTimeout(processTimetable(timetable, log, mode), perItemTimeoutMs, `${id} 처리`)
         await markDone(id, TIMETABLE_STATUS_SPEC)
         okCount++
       } catch (err) {
-        errorCount++
-        log.push(`[error] ${id}: ${(err as Error).message}`)
-        await markError(id, TIMETABLE_STATUS_SPEC, (err as Error)?.message ?? String(err))
+        if (err instanceof TimeoutError) {
+          // 타임아웃이면 상태를 일부러 그대로 "작업중"으로 남겨둔다 -- markDone/markError로 바꿔
+          // 버리면, 실제로는 아직 백그라운드에서 계속 진행 중일 수 있는 원래 처리와 동시에 다음
+          // 시도가 같은 시간표를 다시 집어서 중복 생성을 시도할 위험이 있다(원래 처리는 정말로
+          // 취소된 게 아니라 "더 기다리지 않기"만 한 것이므로). "작업중"으로 남아있으면 다음
+          // 시도는 isRunning() 검사에서 건너뛰고, 15분 워치독이 결국 회수해서 다시 시도할 수
+          // 있게 해준다.
+          timeoutCount++
+          log.push(`[timeout] ${id}: ${perItemTimeoutMs}ms 안에 끝나지 않아 다음 항목으로 넘어감 (상태는 작업중으로 유지, 워치독이 나중에 회수)`)
+        } else {
+          errorCount++
+          log.push(`[error] ${id}: ${(err as Error).message}`)
+          await markError(id, TIMETABLE_STATUS_SPEC, (err as Error)?.message ?? String(err))
+        }
       }
     }
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, ids.length) }, () => worker()))
-  return { okCount, errorCount, deferredIds }
+  return { okCount, errorCount, timeoutCount, deferredIds }
 }
 
 type ChainState = {
@@ -704,6 +749,7 @@ type ChainState = {
   chainStartedAt: number
   okCountAcc: number
   errorCountAcc: number
+  timeoutCountAcc: number
   menuPageId: string | null
 }
 
@@ -720,7 +766,7 @@ async function runChainStep(state: ChainState, adminKey: string, log: string[]):
   const chunkIds = state.remainingIds.slice(0, CHUNK_SIZE)
   const restIds = state.remainingIds.slice(CHUNK_SIZE)
 
-  const { okCount, errorCount, deferredIds } = await processTimetablesChunk(
+  const { okCount, errorCount, timeoutCount, deferredIds } = await processTimetablesChunk(
     chunkIds,
     timetableById,
     { type: "until", horizonDate: state.horizonDate },
@@ -732,6 +778,7 @@ async function runChainStep(state: ChainState, adminKey: string, log: string[]):
   const newRemainingIds = [...deferredIds, ...restIds]
   const newOkAcc = state.okCountAcc + okCount
   const newErrorAcc = state.errorCountAcc + errorCount
+  const newTimeoutAcc = state.timeoutCountAcc + timeoutCount
 
   console.log(
     `generate-classes (${state.runMode}) chunk finished (남은 ${newRemainingIds.length}건):\n`,
@@ -740,13 +787,15 @@ async function runChainStep(state: ChainState, adminKey: string, log: string[]):
 
   if (newRemainingIds.length === 0) {
     if (state.menuPageId) await markDone(state.menuPageId, TIMETABLE_STATUS_SPEC)
-    console.log(`generate-classes (${state.runMode}) ALL finished. 처리 ${newOkAcc}건, 오류 ${newErrorAcc}건.`)
+    console.log(
+      `generate-classes (${state.runMode}) ALL finished. 처리 ${newOkAcc}건, 오류 ${newErrorAcc}건, 타임아웃(재시도 대기) ${newTimeoutAcc}건.`,
+    )
     return
   }
 
   const elapsedChain = Date.now() - state.chainStartedAt
   if (elapsedChain > TOTAL_CHAIN_BUDGET_MS) {
-    const message = `전체 처리 한도(${Math.round(TOTAL_CHAIN_BUDGET_MS / 60000)}분) 초과로 중단됨. 처리 ${newOkAcc}건, 오류 ${newErrorAcc}건, 남은 시간표 ${newRemainingIds.length}건. ${state.runMode === "bulk" ? "버튼을 다시 눌러 이어서 진행하세요." : "다음 크론 호출에서 이어서 진행됩니다."}`
+    const message = `전체 처리 한도(${Math.round(TOTAL_CHAIN_BUDGET_MS / 60000)}분) 초과로 중단됨. 처리 ${newOkAcc}건, 오류 ${newErrorAcc}건, 타임아웃 ${newTimeoutAcc}건, 남은 시간표 ${newRemainingIds.length}건. ${state.runMode === "bulk" ? "버튼을 다시 눌러 이어서 진행하세요." : "다음 크론 호출에서 이어서 진행됩니다."}`
     console.error(`generate-classes (${state.runMode}): ${message}`)
     if (state.menuPageId) await markError(state.menuPageId, TIMETABLE_STATUS_SPEC, message)
     return
@@ -758,7 +807,7 @@ async function runChainStep(state: ChainState, adminKey: string, log: string[]):
         rich_text: [
           {
             text: {
-              content: `🔄 진행 중... (남은 시간표 ${newRemainingIds.length}건, 처리 ${newOkAcc}·오류 ${newErrorAcc})`,
+              content: `🔄 진행 중... (남은 시간표 ${newRemainingIds.length}건, 처리 ${newOkAcc}·오류 ${newErrorAcc}·타임아웃 ${newTimeoutAcc})`,
             },
           },
         ],
@@ -778,6 +827,7 @@ async function runChainStep(state: ChainState, adminKey: string, log: string[]):
       chainStartedAt: state.chainStartedAt,
       okCountAcc: newOkAcc,
       errorCountAcc: newErrorAcc,
+      timeoutCountAcc: newTimeoutAcc,
       menuPageId: state.menuPageId,
     },
     adminKey,
@@ -858,6 +908,11 @@ Deno.serve(async (req: Request) => {
       // 이어달리기 호출은 사용자가 새로 누른 게 아니므로, 중복 실행 검사 없이 body로 이어받은
       // 상태 그대로 다음 청크를 처리한다.
       const menuPageId = parsedBody?.menuPageId ?? null
+      // [FIX, 2026-09-23] 이 이어달리기 호출에서도 메뉴 페이지의 "처리 시작 시각"을 갱신해야
+      // 한다 -- PART N-8과 동일한 이유(체인이 15분 워치독 한도보다 길어질 수 있는데, 최초
+      // 호출에서만 markRunning을 부르면 워치독이 멀쩍이 진행 중인 체인을 죽은 것으로 착각해
+      // "⏱️ 타임아웃 복구"로 되돌려버릴 수 있음). 원래 이 이어달리기 분기에서 빠져있었다.
+      if (menuPageId) await markRunning(menuPageId, TIMETABLE_STATUS_SPEC)
       runInBackground(async () => {
         try {
           await runChainStep(
@@ -868,6 +923,7 @@ Deno.serve(async (req: Request) => {
               chainStartedAt: typeof parsedBody?.chainStartedAt === "number" ? parsedBody.chainStartedAt : Date.now(),
               okCountAcc: typeof parsedBody?.okCountAcc === "number" ? parsedBody.okCountAcc : 0,
               errorCountAcc: typeof parsedBody?.errorCountAcc === "number" ? parsedBody.errorCountAcc : 0,
+              timeoutCountAcc: typeof parsedBody?.timeoutCountAcc === "number" ? parsedBody.timeoutCountAcc : 0,
               menuPageId,
             },
             adminKeyForChain,
@@ -954,6 +1010,7 @@ Deno.serve(async (req: Request) => {
             chainStartedAt: Date.now(),
             okCountAcc: 0,
             errorCountAcc: 0,
+            timeoutCountAcc: 0,
             menuPageId,
           },
           adminKeyForChain,
@@ -1042,6 +1099,7 @@ Deno.serve(async (req: Request) => {
             chainStartedAt: typeof parsedBody?.chainStartedAt === "number" ? parsedBody.chainStartedAt : Date.now(),
             okCountAcc: typeof parsedBody?.okCountAcc === "number" ? parsedBody.okCountAcc : 0,
             errorCountAcc: typeof parsedBody?.errorCountAcc === "number" ? parsedBody.errorCountAcc : 0,
+            timeoutCountAcc: typeof parsedBody?.timeoutCountAcc === "number" ? parsedBody.timeoutCountAcc : 0,
             menuPageId: null,
           },
           adminKeyForChain,
@@ -1072,6 +1130,7 @@ Deno.serve(async (req: Request) => {
           chainStartedAt: Date.now(),
           okCountAcc: 0,
           errorCountAcc: 0,
+          timeoutCountAcc: 0,
           menuPageId: null,
         },
         adminKeyForChain,
