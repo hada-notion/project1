@@ -49,10 +49,12 @@ import {
   normalizePhone,
   isSendingLockActive,
   withSendingLock,
+  SYNC_WAIT_FLAG,
 } from "../_shared/alimtalkShared.ts"
 import { syncAttendanceForRegistration } from "../_shared/attendanceSyncShared.ts"
 import { makePageCache } from "../_shared/reportCacheShared.ts"
 import { syncReportCacheForRegistration } from "../_shared/reportCacheBuilder.ts"
+import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 
 const ALIMTALK_CONFIG_CATEGORY = "보고서" as const
 
@@ -207,69 +209,94 @@ Deno.serve(async (req) => {
       throw new Error("이 보고서에 연결된 '등록'이 없습니다.")
     }
 
-    await ensureFreshReportCache(registrationId)
+    // [NEW, 2026-09-23, PART N-7: 개별 버튼 응답 지연 해소] 개별 "보고서 전송" 버튼 클릭(웹훅
+    // 보내기)이 아래 무거운 처리(캐시 재계산 + 알림톡 발송 + 로그 기록)를 끝까지 기다리다 시간
+    // 초과로 실패 표시를 띄우는 사례가 있었다 (실제로는 끝까지 정상 완료됨 -- fix-attendance/종료
+    // 처리와 동일한 원인). 반면 send-selected-notifications(일괄 전송)는 이 함수의 최종 성공/실패를
+    // res.ok로 판단해 "일괄전송 선택" 체크박스를 끄거나 재시도용으로 남겨두므로, 그 경로는 예전과
+    // 동일하게 끝까지 동기로 기다려야 한다. body에 SYNC_WAIT_FLAG(=true)가 있는지로 두 경로를
+    // 구분한다 (send-selected-notifications만 이 플래그를 보낸다).
+    const performSend = async (): Promise<{ sendResult: unknown; reportType: string }> => {
+      await ensureFreshReportCache(registrationId)
 
-    const { tokenQueryString } = await syncStudentReport(registrationId)
+      const { tokenQueryString } = await syncStudentReport(registrationId)
 
-    const clickerUserId =
-      body?.data?.properties?.["실행자"]?.people?.[0]?.id ??
-      reportPage.properties?.["실행자"]?.people?.[0]?.id ??
-      null
-    const senderUserId = clickerUserId ?? (await getBotUserId().catch(() => null)) ?? undefined
+      const clickerUserId =
+        body?.data?.properties?.["실행자"]?.people?.[0]?.id ??
+        reportPage.properties?.["실행자"]?.people?.[0]?.id ??
+        null
+      const senderUserId = clickerUserId ?? (await getBotUserId().catch(() => null)) ?? undefined
 
-    const config = await getAlimtalkConfig(ALIMTALK_CONFIG_CATEGORY, {
-      pfId: SOLAPI_PF_ID_FALLBACK,
-      templateId: templateFallbackFor(reportType),
-      senderNumber: SOLAPI_SENDER_NUMBER_FALLBACK,
-    })
+      const config = await getAlimtalkConfig(ALIMTALK_CONFIG_CATEGORY, {
+        pfId: SOLAPI_PF_ID_FALLBACK,
+        templateId: templateFallbackFor(reportType),
+        senderNumber: SOLAPI_SENDER_NUMBER_FALLBACK,
+      })
 
-    const variables: Record<string, string> = {
-      "#{보고서기간}": reportPeriodLabel,
-      "#{보고서구분}": reportType,
-      "#{학생이름}": studentName,
-      "#{클래스}": className,
-      "#{학습기간}": studyPeriod,
-      "#{보고서요약}": reportSummary,
-      "#{페이지ID}": tokenQueryString,
+      const variables: Record<string, string> = {
+        "#{보고서기간}": reportPeriodLabel,
+        "#{보고서구분}": reportType,
+        "#{학생이름}": studentName,
+        "#{클래스}": className,
+        "#{학습기간}": studyPeriod,
+        "#{보고서요약}": reportSummary,
+        "#{페이지ID}": tokenQueryString,
+      }
+
+      const sendResult = await withSendingLock(reportId, "발송중", async () => {
+        try {
+          assertValidPhone(parentPhone)
+          return await sendAlimtalk(parentPhone, variables, config, reportType)
+        } catch (sendErr) {
+          await createSendLogEntry({
+            registrationId,
+            reportId,
+            senderUserId,
+            title: studentName || reportType,
+            category: reportType as SendLogCategory,
+            status: "실패",
+            periodStart: period.start || undefined,
+            periodEnd: period.end || undefined,
+            failReason: extractErrorMessage(sendErr),
+          })
+          throw sendErr
+        }
+      })
+
+      await createSendLogEntry({
+        registrationId,
+        reportId,
+        senderUserId,
+        title: studentName || reportType,
+        category: reportType as SendLogCategory,
+        status: "성공",
+        periodStart: period.start || undefined,
+        periodEnd: period.end || undefined,
+      })
+
+      await clearBulkSelectFlag(reportId)
+
+      return { sendResult, reportType }
     }
 
-    const sendResult = await withSendingLock(reportId, "발송중", async () => {
+    const waitForCompletion = body?.[SYNC_WAIT_FLAG] === true
+    if (waitForCompletion) {
+      const result = await performSend()
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      })
+    }
+
+    runInBackground(async () => {
       try {
-        assertValidPhone(parentPhone)
-        return await sendAlimtalk(parentPhone, variables, config, reportType)
-      } catch (sendErr) {
-        await createSendLogEntry({
-          registrationId,
-          reportId,
-          senderUserId,
-          title: studentName || reportType,
-          category: reportType as SendLogCategory,
-          status: "실패",
-          periodStart: period.start || undefined,
-          periodEnd: period.end || undefined,
-          failReason: extractErrorMessage(sendErr),
-        })
-        throw sendErr
+        await performSend()
+      } catch (err) {
+        console.error("send-report background 처리 실패:", reportId, (err as Error).message)
       }
     })
 
-    await createSendLogEntry({
-      registrationId,
-      reportId,
-      senderUserId,
-      title: studentName || reportType,
-      category: reportType as SendLogCategory,
-      status: "성공",
-      periodStart: period.start || undefined,
-      periodEnd: period.end || undefined,
-    })
-
-    await clearBulkSelectFlag(reportId)
-
-    return new Response(JSON.stringify({ sendResult, reportType }), {
-      status: 200,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
-    })
+    return respondAccepted({ reportId })
   } catch (err) {
     return new Response(JSON.stringify({ error: String((err as any)?.message ?? err) }), {
       status: 500,
