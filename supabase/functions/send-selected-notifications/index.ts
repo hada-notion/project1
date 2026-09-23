@@ -26,6 +26,7 @@ import {
 } from "../_shared/notionClient.ts"
 import { getCurrentAdminKey, resolveAdminKeyFromRequest } from "../_shared/adminShared.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
+import { SYNC_WAIT_FLAG } from "../_shared/alimtalkShared.ts"
 import { DS_REPORT, DS_TUITION, PROP_NOTIFICATION_BATCH_RELATION, PROP_BATCH_TYPE } from "../_shared/generateShared.ts"
 import { isRunning, markRunning, markDone, markError, type StatusSpec } from "../_shared/statusTracking.ts"
 
@@ -220,6 +221,10 @@ async function processBatch(batchId: string, adminKey: string, log: string[]): P
 				{
 					[idField]: page.id,
 					adminKey,
+					// send-report/send-tuition-notice가 개별 버튼 클릭과 달리 이 호출은 끝까지 동기로
+					// 기다려서 성공/실패(res.ok)를 그대로 돌려주도록 요청한다 (아래 processBatch 주석,
+					// _shared/alimtalkShared.ts의 SYNC_WAIT_FLAG 설명 참고).
+					[SYNC_WAIT_FLAG]: true,
 					...(executorUserId
 						? { data: { properties: { "실행자": { people: [{ id: executorUserId }] } } } }
 						: {}),
