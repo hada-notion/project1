@@ -40,7 +40,15 @@ export function notionHeaders() {
 // Notion API 응답은 보통 수 초 안에 오므로, 12초는 여전히 넉넉한 여유다.
 const FETCH_TIMEOUT_MS = 12_000
 
+// (2026-09-24, PART N-17: 계측 로그 추가) 지금까지는 재시도가 조용히 일어나서, "70초 넘게
+// 걸렸다"는 최종 결과만 보일 뿐 그 안에서 어느 호출이 몇 번 재시도했는지, 얼마나 기다렸는지가
+// 전혀 안 보였다 (실측: 학생 15명짜리 큰 반이 반복 타임아웃났는데 어느 단계가 원인인지 로그로
+// 확인 불가능했음, 사용자 요청으로 추가). URL에서 페이지ID 등 식별자는 그대로 남기되(민감정보
+// 아님, 오히려 어느 요청인지 구분하는 데 필요), 매 재시도 시점에 "어떤 요청을, 몇 번째 시도에서,
+// 왜, 얼마나 기다리고 재시도하는지"를 남긴다. 이 함수는 전 함수가 공용으로 쓰므로 여기 한 곳만
+// 고치면 generate-classes뿐 아니라 모든 함수에 자동 적용된다.
 export async function fetchWithRetry(url: string, init: RequestInit, maxRetries = 5): Promise<Response> {
+	const callStartedAt = Date.now()
 	let lastRes: Response | undefined
 	let lastErr: Error | undefined
 	for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -48,13 +56,23 @@ export async function fetchWithRetry(url: string, init: RequestInit, maxRetries 
 		const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
 		try {
 			const res = await fetch(url, { ...init, signal: controller.signal })
-			if (res.status !== 429 && res.status < 500) return res
+			if (res.status !== 429 && res.status < 500) {
+				if (attempt > 0) {
+					console.error(
+						`[fetchWithRetry] ${url} 재시도 끝에 성공 (시도 ${attempt + 1}/${maxRetries + 1}, 누적 ${Date.now() - callStartedAt}ms)`,
+					)
+				}
+				return res
+			}
 			lastRes = res
 			lastErr = undefined
 			if (attempt === maxRetries) return res
 			const retryAfterHeader = res.headers.get("Retry-After")
 			const retryAfterMs = retryAfterHeader ? Number(retryAfterHeader) * 1000 : NaN
 			const backoffMs = Number.isFinite(retryAfterMs) ? retryAfterMs : 300 * Math.pow(2, attempt)
+			console.error(
+				`[fetchWithRetry] ${url} 응답 ${res.status}, ${backoffMs}ms 대기 후 재시도 (시도 ${attempt + 1}/${maxRetries + 1}, 누적 ${Date.now() - callStartedAt}ms)`,
+			)
 			await new Promise((resolve) => setTimeout(resolve, backoffMs))
 		} catch (err) {
 			// fetch 자체가 타임아웃(AbortError)이나 네트워크 오류로 실패한 경우. 429/5xx와 동일한
@@ -64,10 +82,13 @@ export async function fetchWithRetry(url: string, init: RequestInit, maxRetries 
 			lastRes = undefined
 			if (attempt === maxRetries) {
 				throw new Error(
-					`Notion API 요청이 ${maxRetries + 1}번 시도 후에도 실패함 (마지막 원인: ${lastErr.message}): ${url}`,
+					`Notion API 요청이 ${maxRetries + 1}번 시도 후에도 실패함 (마지막 원인: ${lastErr.message}, 누적 ${Date.now() - callStartedAt}ms): ${url}`,
 				)
 			}
 			const backoffMs = 300 * Math.pow(2, attempt)
+			console.error(
+				`[fetchWithRetry] ${url} 오류(${lastErr.message}), ${backoffMs}ms 대기 후 재시도 (시도 ${attempt + 1}/${maxRetries + 1}, 누적 ${Date.now() - callStartedAt}ms)`,
+			)
 			await new Promise((resolve) => setTimeout(resolve, backoffMs))
 		} finally {
 			clearTimeout(timeoutId)

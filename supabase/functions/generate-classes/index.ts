@@ -535,6 +535,12 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
   const generationTime = props["자동생성 시간"]?.rich_text?.[0]?.plain_text || "00:00"
 
   const today = todayKstDateStr()
+  // (2026-09-24, PART N-17: 계측 로그 추가) 학생 수가 많은 반이 반복 타임아웃나는 걸 실측으로
+  // 확인했는데, 70초 예산 중 준비 단계/수업 생성/출석 검색/학생별 처리 중 정확히 어느 구간이
+  // 오래 걸리는지 로그로 구분이 안 됐다. 각 구간 시작/끝에 소요 시간을 log에 남긴다 --
+  // withTimeout이 중간에 포기해도 이미 push된 항목은 그 시점의 오류 로그에 그대로 남으므로,
+  // "어느 항목까지는 찍혔고 그 다음이 없는지"로 막힌 구간을 알 수 있다.
+  const setupStartedAt = Date.now()
   const latestSession = await getLatestClassSession(timetableId)
   let latestDate = latestSession?.date ?? null
   let createdCount = 0
@@ -553,6 +559,7 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
   const { name: className, teacherIds } = await getClassInfo(classId)
   const weekdayKr = WEEKDAY_KR[weekday]
   const timetableRegs = await getTimetableRegistrations(timetableId)
+  log.push(`[timing] ${timetableName}: 준비 단계(최근수업/백필계산/휴강/클래스정보/등록목록) ${Date.now() - setupStartedAt}ms`)
 
   // horizonDate is supplied directly by the caller for "until" mode. Both the cron path and
   // the bulk button path use "until" now; see ProcessMode above for how each computes it.
@@ -607,6 +614,7 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
     // date (2026-09-11 perf fix).
     const registrationIds = filterRegistrationsForDate(timetableRegs, nextDate)
 
+    const createSessionStartedAt = Date.now()
     const classPage = await createPage(DS.classSession, {
       이름: { title: [{ text: { content: classPageTitle } }] },
       수업일시: { date: { start: startIso, end: endIso } },
@@ -618,6 +626,7 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
       [SESSION_GEN_STATUS_SPEC.statusProp]: { select: { name: STATUS_RUNNING } },
       [SESSION_GEN_STATUS_SPEC.startedAtProp]: { date: { start: new Date().toISOString() } },
     })
+    log.push(`[timing] ${timetableName}: 수업 페이지 생성 ${Date.now() - createSessionStartedAt}ms`)
 
     log.push(`[created] ${timetableName}: class session created (${nextDate}), 등록 ${registrationIds.length}건 연결`)
     await enqueueDashboardLink(classPage.id, log, { skipWake: true })
@@ -630,6 +639,7 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
     // 학생 중 하나"로 넓히면 된다). 등록 13명 기준 검색 호출을 13번 -> 1번으로 줄인다 -- 이게
     // 동시성 제한(REG_CONCURRENCY)보다 훨씬 직접적인 "실제 호출 수 자체를 줄이는" 수정이다.
     const { start: dayStart, end: dayEnd } = dayRangeIso(nextDate)
+    const unlinkedSearchStartedAt = Date.now()
     const unlinkedByReg = new Map<string, any>()
     if (registrationIds.length > 0) {
       const unlinkedCandidates = await queryAllPages(DS.attendance, {
@@ -646,6 +656,9 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
         }
       }
     }
+    log.push(
+      `[timing] ${timetableName}: 미연결 출석 검색 ${Date.now() - unlinkedSearchStartedAt}ms (등록 ${registrationIds.length}명)`,
+    )
 
     // Perf (2026-09-11): attendance creation + pending-assignment-deadline linking for each
     // registration are independent of each other, so run them concurrently instead of
@@ -654,6 +667,7 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
     // 등록당 2건(미연결 출석 검색 + 생성/갱신)씩 한꺼번에 쏘던 게 429/재시도 폭주로 150초
     // WallClockTime 타임아웃의 주요 원인이었다 (위 REG_CONCURRENCY 주석 참고). 동시성을 낮추는 게
     // "안전장치"가 아니라 실제 동시 호출 수 자체를 줄이는 근본 수정이다.
+    const regLoopStartedAt = Date.now()
     try {
       await mapWithConcurrency(registrationIds, REG_CONCURRENCY, async (regId) => {
         const unlinkedCandidates = unlinkedByReg.has(regId) ? [unlinkedByReg.get(regId)] : []
@@ -702,11 +716,17 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
         await enqueueDashboardLink(attendanceId, log, { skipWake: true })
       })
     } catch (err) {
+      log.push(
+        `[timing] ${timetableName}: 학생별 출석 처리 중 오류 발생 (실패까지 ${Date.now() - regLoopStartedAt}ms, ${registrationIds.length}명, concurrency=${REG_CONCURRENCY})`,
+      )
       // 출석 생성 중 하나라도 실패하면 이 수업 행의 "생성중"을 끄고 오류를 남긴 뒤 그대로 다시 던진다
       // (이 예외는 위쪽 호출부의 catch에서 markError(TIMETABLE_STATUS_SPEC)로 시간표 쪽에도 기록된다 — 기존 동작 유지).
       await markSessionError(classPage.id, (err as Error).message)
       throw err
     }
+    log.push(
+      `[timing] ${timetableName}: 학생별 출석 처리 완료 ${Date.now() - regLoopStartedAt}ms (${registrationIds.length}명, concurrency=${REG_CONCURRENCY})`,
+    )
     await markSessionDone(classPage.id)
     log.push(`  -> ${registrationIds.length} attendance record(s) created`)
 
