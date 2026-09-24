@@ -493,7 +493,15 @@ async function markSessionError(sessionId: string, message: string): Promise<voi
 // backfill-attendance에서 같은 패턴 재현됨 — cpu_time_used는 0.5초 수준으로 낮은데 wall clock은
 // 150초를 다 씀 -- 즉 거의 전부 네트워크 대기/재시도였다는 뜻). 그래서 processTimetable() 호출
 // 전체를 withTimeout으로 감싸서, 이 예산을 넘기면 호출부가 기다리지 않고 포기하고 돌아간다.
-const PROCESS_TIMETABLE_TIMEOUT_MS = 100_000
+// (2026-09-24, PART N-16) 100_000 -> 70_000으로 하향. 실제 사고 로그에서 이 withTimeout 자체의
+// 100초 데드라인이 148초가 되어서야 발동한 사례가 확인됐다 -- Notion 호출/재시도가 몰려 이벤트
+// 루프가 밀리면 우리 내부 타임아웃 체크조차 정시에 실행되지 못하고, 그 순간 플랫폼의 하드
+// 종료 한도(약 150초)와 거의 붙어버려서 뒤이은 markQueued/callSelf(정상 종료 경로)가 끝까지
+// 실행될 시간을 못 받고 함께 죽었다. 데드라인을 낮추면 실제 작업량이 줄어드는 건 아니지만
+// (사용자가 지적한 대로 안전장치 자체는 일을 줄이지 않는다), 최소한 "정상 종료 경로가 실행될
+// 여유 시간"을 더 확보해서 완전 침묵 사망 대신 항상 로그+재대기열+이어달리기로 끝나게 한다.
+// 진짜 근본 수정은 아래 실제 호출 수를 줄이는 변경(등록당 미연결 출석 검색을 세션당 1회로 통합)이다.
+const PROCESS_TIMETABLE_TIMEOUT_MS = 70_000
 
 async function processTimetable(timetable: any, log: string[], mode: ProcessMode) {
   const props = timetable.properties
@@ -614,6 +622,31 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
     log.push(`[created] ${timetableName}: class session created (${nextDate}), 등록 ${registrationIds.length}건 연결`)
     await enqueueDashboardLink(classPage.id, log, { skipWake: true })
 
+    // (2026-09-24, PART N-16 근본 수정) 학부모 요청 등으로 이 날짜의 수업이 생기기 전에 등록
+    // 페이지의 캘린더 탭에서 미리 출석을 만들어둔 경우(결석 표시, 메모 등을 이미 적어둔 상태)가
+    // 있을 수 있어서, 원래는 "등록별로" 미연결 출석을 검색했다(등록 N명 = 검색 N번). 그런데
+    // 실제로 이 사전 생성 케이스는 드물고, 검색 자체는 전체 반에 대해 한 번만 해도 결과가 같다
+    // (같은 날짜 범위 + "수업이 비어있음" 조건은 등록마다 다르지 않다 -- 등록 조건만 "OR로 이 반
+    // 학생 중 하나"로 넓히면 된다). 등록 13명 기준 검색 호출을 13번 -> 1번으로 줄인다 -- 이게
+    // 동시성 제한(REG_CONCURRENCY)보다 훨씬 직접적인 "실제 호출 수 자체를 줄이는" 수정이다.
+    const { start: dayStart, end: dayEnd } = dayRangeIso(nextDate)
+    const unlinkedByReg = new Map<string, any>()
+    if (registrationIds.length > 0) {
+      const unlinkedCandidates = await queryAllPages(DS.attendance, {
+        and: [
+          { property: "수업", relation: { is_empty: true } },
+          { property: "수업일시", date: { on_or_after: dayStart } },
+          { property: "수업일시", date: { before: dayEnd } },
+          { or: registrationIds.map((id) => ({ property: "등록", relation: { contains: id } })) },
+        ],
+      })
+      for (const candidate of unlinkedCandidates) {
+        for (const regId of relIds(candidate.properties["등록"])) {
+          if (!unlinkedByReg.has(regId)) unlinkedByReg.set(regId, candidate)
+        }
+      }
+    }
+
     // Perf (2026-09-11): attendance creation + pending-assignment-deadline linking for each
     // registration are independent of each other, so run them concurrently instead of
     // one-at-a-time — this matters most for classes with many students.
@@ -623,20 +656,7 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
     // "안전장치"가 아니라 실제 동시 호출 수 자체를 줄이는 근본 수정이다.
     try {
       await mapWithConcurrency(registrationIds, REG_CONCURRENCY, async (regId) => {
-        // 학부모 요청 등으로 이 날짜의 수업이 생기기 전에 등록 페이지의 캘린더 탭에서 미리
-        // 출석을 만들어둔 경우(결석 표시, 메모 등을 이미 적어둔 상태)가 있을 수 있다. 그런
-        // 페이지가 있으면 새로 만들지 않고, 수업/클래스/수업일시(정확한 시간으로 보정)만 채워
-        // 연결한다 -- fix-attendance(출석 조정 버튼)의 동일한 로직과 맞춤. 제목/출석 상태/메모
-        // 등 사용자가 미리 적어둔 값은 그대로 보존한다.
-        const { start, end } = dayRangeIso(nextDate)
-        const unlinkedCandidates = await queryAllPages(DS.attendance, {
-          and: [
-            { property: "등록", relation: { contains: regId } },
-            { property: "수업", relation: { is_empty: true } },
-            { property: "수업일시", date: { on_or_after: start } },
-            { property: "수업일시", date: { before: end } },
-          ],
-        })
+        const unlinkedCandidates = unlinkedByReg.has(regId) ? [unlinkedByReg.get(regId)] : []
 
         // (2026-09-24, 분리 큐 재설계) 이 학생 것으로 미리 계산해둔 백필 대상이 있으면
         // 출석 생성/연결과 같은 쓰기에 얹어서 채운다 — 없으면 아무 것도 안 채우고 그대로
