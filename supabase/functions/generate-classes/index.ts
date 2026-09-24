@@ -13,10 +13,21 @@
 // calling this endpoint repeatedly is always safe (idempotent).
 //
 // v2에서 추가됨: 출석을 새로 만든 직후, 그 등록(학생)에 대해 "과제 마감"이 아직 비어있는 과제
-// 학습활동이 있으면 이번에 새로 생긴 출석(수업)에 자동으로 연결한다 (linkPendingAssignmentDeadlines).
-// 출제 당시엔 다음 수업이 없어서 마감을 못 잡았던 경우, 이 함수가 나중에 다음 수업을 만들 때
-// 자동으로 채워지도록 하는 안전망이다. (sync-registration-class-session에도 동일한 로직이 있음 —
-// 등록의 "수업 생성" 버튼 경로. 이 함수는 시간표 기준 자동/수동 생성 경로를 담당한다.)
+// 학습활동이 있으면 이번에 새로 생긴 출석(수업)에 자동으로 연결해야 한다. 출제 당시엔 다음 수업이
+// 없어서 마감을 못 잡았던 경우, 이 함수가 나중에 다음 수업을 만들 때 자동으로 채워지도록 하는
+// 안전망이다.
+//
+// v3에서 재설계됨 (2026-09-24): 기존엔 학습활동(학원) DB를 "구분=과제 AND 과제 마감=empty" 필터로
+// 직접 검색했는데, 학습활동의 "구분"이 학습기록(학원) DB의 구분을 미러링하는 rollup으로 바뀐 뒤로
+// select 필터가 타입 불일치(400)로 매 호출 실패하고 있었다 (조용히 catch되어 안 보였음). 이제는
+// 검색을 아예 하지 않는다: 직전 수업(getLatestClassSession)이 이미 갖고 있는 "학습기록" 관계 ID들을
+// 그대로 물려받아, 학습기록(구분은 여기서 네이티브 select) -> 학습활동 관계를 getPage로만 순수하게
+// 따라가서(computePendingDeadlineTargets) 대상 학습활동 ID를 찾는다. 이 함수는 실제로 "과제 마감"을
+// 쓰지 않고, 새로 만든 출석 페이지에 "과제마감 백필 대상"/"과제마감 백필 상태(대기열)"만 세팅해서
+// 독립된 큐에 넘긴다 — 실제 연결 작업은 별도 함수 backfill-assignment-deadlines가 그 큐를 드레인하며
+// 수행한다 (분리큐 원칙: 단위 작업마다 독립된 큐/체인). sync-registration-class-session의 등록
+// "수업 생성" 버튼 경로에도 동일한 백필 로직이 있다 — 이 함수는 시간표 기준 자동/수동 생성 경로를
+// 담당한다.
 
 import {
 	queryDataSource,
@@ -24,7 +35,6 @@ import {
 	getPage,
 	createPage,
 	updatePageProperties,
-	dateStart,
 	relIds,
 	withTimeout,
 } from "../_shared/notionClient.ts"
@@ -103,16 +113,25 @@ const DS = {
   learningRecord: DS_LEARNING_RECORD,
 }
 
-// ---- 학습활동(학원) DB: 대기 중인 과제 마감 백필용 ----
-const PROP_ACTIVITY_CATEGORY = "구분"
-const PROP_ACTIVITY_REGISTRATION = "등록"
-const PROP_ACTIVITY_ATTENDANCE = "출석"
-const PROP_ACTIVITY_RECORD = "학습기록"
-const PROP_ACTIVITY_DEADLINE = "과제 마감"
+// ---- 대기 중인 과제 마감 백필용 (2026-09-24, PART N-12 후속 재설계) ----
+// 예전엔 "학습활동 DB를 등록ID+구분+마감비어있음으로 검색"하는 방식이었는데, 학습활동의 "구분"이
+// 어느 시점에 select에서 rollup(학습기록.구분을 그대로 미러링)으로 바뀌면서 그 필터가 매번
+// 400(rollup does not match filter select)으로 깨져 있었다(2026-09-24 실측 로그로 확인). 게다가
+// 검색 자체가 사용자의 설계 원칙("호출부가 이미 정확한 범위를 넘겨줘야 한다")에도 안 맞았다.
+// 새 설계: 수업(학원) DB -> 학습기록(학원) DB -> 학습활동(학원) DB가 전부 진짜 relation이므로,
+// 이미 하고 있던 "이전 수업 조회" 한 번에 학습기록 relation을 얹어서 챙기고, 그걸 getPage로
+// 직접 따라 내려간다(별도 DB 검색 전혀 없음). 학습기록(학원) DB의 "구분"은 (학습활동과 달리)
+// 진짜 select라서 그대로 비교할 수 있다.
+const PROP_SESSION_LEARNING_RECORDS = "학습기록" // 수업(학원) DB relation -> 학습기록(학원) DB
+const PROP_RECORD_CATEGORY = "구분" // 학습기록(학원) DB (select: 학습/과제/평가)
+const PROP_RECORD_REGISTRATION = "등록" // 학습기록(학원) DB relation -> 등록(학원) DB
+const PROP_RECORD_ACTIVITIES = "학습활동" // 학습기록(학원) DB relation -> 학습활동(학원) DB
 const CATEGORY_ASSIGNMENT = "과제"
-const PROP_RECORD_DATE = "수업일" // 학습기록(학원) DB
-const PROP_ATTENDANCE_REGISTRATION = "등록" // 출석(학원) DB
-const PROP_ATTENDANCE_CLASS_DATETIME = "수업일시" // 출석(학원) DB
+const PROP_ACTIVITY_DEADLINE = "과제 마감" // 학습활동(학원) DB relation -> 출석(학원) DB
+// 출석(학원) DB: 여기서는 실제로 마감을 연결하지 않고, "이 학생 것으로 이미 계산해둔 대상"만
+// 채워서 별도 큐(backfill-assignment-deadlines)에 넘긴다 (분리 큐 설계, 사용자 요청).
+const PROP_ATTENDANCE_BACKFILL_TARGET = "과제마감 백필 대상" // relation -> 학습활동(학원) DB
+const PROP_ATTENDANCE_BACKFILL_STATUS = "과제마감 백필 상태" // select
 
 // Korean weekday select option name -> weekday number (0 = Sunday ... 6 = Saturday)
 const WEEKDAY_MAP: Record<string, number> = {
@@ -152,61 +171,48 @@ const TIMETABLE_CONCURRENCY = 4
 // notionHeaders / queryDataSource / getPage / createPage / updatePageProperties / dateStart / relIds
 // 는 이제 _shared/notionClient.ts에서 가져온다 (429/5xx 재시도가 자동으로 추가됨, 로드맵 5-9).
 
-// 등록 1건에 대해, "과제 마감"이 아직 비어있는 과제 학습활동들을 찾아서 그 학생의 다음 수업(출석)이
-// 새로 생겨났는지 확인하고 있으면 연결한다. 출제 당시엔 다음 수업이 없어서 마감을 못 잡았던 경우,
-// 나중에 수업이 생성될 때(이 함수가 다시 호출될 때) 자동으로 채워지도록 하는 안전망이다.
-async function linkPendingAssignmentDeadlines(regId: string, log: string[]) {
-  const pending = await queryDataSource(DS.studyActivity, {
-    filter: {
-      and: [
-        { property: PROP_ACTIVITY_REGISTRATION, relation: { contains: regId } },
-        { property: PROP_ACTIVITY_CATEGORY, select: { equals: CATEGORY_ASSIGNMENT } },
-        { property: PROP_ACTIVITY_DEADLINE, relation: { is_empty: true } },
-      ],
-    },
-    page_size: 100,
-  })
-  if (pending.results.length === 0) return
+// 이전 수업(같은 시간표의 latestDate에 해당하는 수업 페이지, getLatestClassSession이 이미 한 번
+// 조회하면서 함께 챙겨온 것)의 "학습기록" relation ID들을 받아서, 학생(등록)별로 "이번에 새로
+// 만드는 출석에 마감을 연결해줘야 할 학습활동 ID 목록"을 계산한다. DB 검색이 전혀 없다 — 전부
+// 이미 알고 있는 ID를 getPage로 직접 따라 내려가는 것뿐이다(수업.학습기록 -> 학습기록.학습활동).
+// 실제 마감 연결(쓰기)은 여기서 하지 않는다 — 계산 결과만 반환하고, 호출부가 출석 생성 시점에
+// "과제마감 백필 대상"/"과제마감 백필 상태"에 채워서 별도 큐(backfill-assignment-deadlines)로
+// 넘긴다(2026-09-24, 분리 큐 재설계, 사용자 요청).
+async function computePendingDeadlineTargets(learningRecordIds: string[]): Promise<Map<string, string[]>> {
+  const targets = new Map<string, string[]>()
+  if (learningRecordIds.length === 0) return targets
 
-  let linked = 0
-  for (const activity of pending.results as any[]) {
-    // 마감 기준 시각: 이 학습활동이 만들어진 시점의 수업(출석) 날짜, 없으면 학습기록의 수업일.
-    let issueDate: string | null = null
-    const attendanceIds = relIds(activity.properties[PROP_ACTIVITY_ATTENDANCE])
-    if (attendanceIds.length > 0) {
-      const attendancePage = await getPage(attendanceIds[0])
-      issueDate = dateStart(attendancePage, PROP_ATTENDANCE_CLASS_DATETIME)
+  const records = await Promise.all(learningRecordIds.map((id) => getPage(id)))
+  const assignmentRecords = records.filter(
+    (r: any) => r.properties[PROP_RECORD_CATEGORY]?.select?.name === CATEGORY_ASSIGNMENT,
+  )
+  if (assignmentRecords.length === 0) return targets
+
+  // 학습활동 ID -> 그게 속한 등록(학생) ID. 여러 학습기록이 같은 학습활동을 가리킬 일은 없지만,
+  // 안전하게 Map으로 관리한다.
+  const activityOwner = new Map<string, string>()
+  for (const record of assignmentRecords) {
+    const regId = relIds(record.properties[PROP_RECORD_REGISTRATION])[0]
+    if (!regId) continue
+    for (const activityId of relIds(record.properties[PROP_RECORD_ACTIVITIES])) {
+      activityOwner.set(activityId, regId)
     }
-    if (!issueDate) {
-      const recordIds = relIds(activity.properties[PROP_ACTIVITY_RECORD])
-      if (recordIds.length > 0) {
-        const recordPage = await getPage(recordIds[0])
-        issueDate = dateStart(recordPage, PROP_RECORD_DATE)
-      }
-    }
-    if (!issueDate) continue
-
-    const nextAttendance = await queryDataSource(DS.attendance, {
-      filter: {
-        and: [
-          { property: PROP_ATTENDANCE_REGISTRATION, relation: { contains: regId } },
-          { property: PROP_ATTENDANCE_CLASS_DATETIME, date: { after: issueDate } },
-        ],
-      },
-      sorts: [{ property: PROP_ATTENDANCE_CLASS_DATETIME, direction: "ascending" }],
-      page_size: 1,
-    })
-    const nextId = nextAttendance.results[0]?.id
-    if (!nextId) continue
-
-    await updatePageProperties(activity.id, {
-      [PROP_ACTIVITY_DEADLINE]: { relation: [{ id: nextId }] },
-    })
-    linked++
   }
-  if (linked > 0) {
-    log.push(`📌 대기 중이던 과제 마감 ${linked}건을 새로 생긴 수업에 연결함 (등록 ${regId})`)
+  if (activityOwner.size === 0) return targets
+
+  // 이미 마감이 채워져 있는 항목은 제외해야 하므로, 각 학습활동을 직접 조회해서 확인한다
+  // (검색이 아니라 위에서 이미 확보한 ID들을 그대로 getPage로 읽는 것뿐).
+  const activityIds = [...activityOwner.keys()]
+  const activities = await Promise.all(activityIds.map((id) => getPage(id)))
+  for (const activity of activities) {
+    if (relIds(activity.properties[PROP_ACTIVITY_DEADLINE]).length > 0) continue // 이미 마감 있음
+    const regId = activityOwner.get(activity.id)
+    if (!regId) continue
+    const list = targets.get(regId) ?? []
+    list.push(activity.id)
+    targets.set(regId, list)
   }
+  return targets
 }
 
 // Today's date (YYYY-MM-DD) in KST.
@@ -290,6 +296,26 @@ async function getLatestClassDate(timetableId: string): Promise<string | null> {
   if (data.results.length === 0) return null
   const date = data.results[0].properties["수업일시"].date
   return date ? date.start.slice(0, 10) : null
+}
+
+// processTimetable이 쓰는 버전: 위 getLatestClassDate와 똑같은 조회(같은 필터/정렬/page_size)
+// 이지만, 날짜만 뽑고 버리지 않고 그 수업 페이지의 "학습기록" relation도 함께 챙긴다 — 이걸로
+// computePendingDeadlineTargets를 검색 없이 바로 호출할 수 있다(2026-09-24, 분리 큐 재설계).
+async function getLatestClassSession(
+  timetableId: string,
+): Promise<{ date: string | null; learningRecordIds: string[] } | null> {
+  const data = await queryDataSource(DS.classSession, {
+    filter: { property: "시간표", relation: { contains: timetableId } },
+    sorts: [{ property: "수업일시", direction: "descending" }],
+    page_size: 1,
+  })
+  if (data.results.length === 0) return null
+  const page = data.results[0] as any
+  const date = page.properties["수업일시"].date
+  return {
+    date: date ? date.start.slice(0, 10) : null,
+    learningRecordIds: relIds(page.properties[PROP_SESSION_LEARNING_RECORDS]),
+  }
 }
 
 // Monday (YYYY-MM-DD) of the calendar week containing dateStr. Used by the bulk button's
@@ -487,8 +513,14 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
   const generationTime = props["자동생성 시간"]?.rich_text?.[0]?.plain_text || "00:00"
 
   const today = todayKstDateStr()
-  let latestDate = await getLatestClassDate(timetableId)
+  const latestSession = await getLatestClassSession(timetableId)
+  let latestDate = latestSession?.date ?? null
   let createdCount = 0
+  let backfillQueuedCount = 0
+  // (2026-09-24, 분리 큐 재설계) 위 조회에 이미 얹혀서 나온 이전 수업의 "학습기록" relation을
+  // 그대로 따라 내려가서, 학생별로 "이번에 만드는 출석에 마감을 백필해줘야 할 학습활동 ID"를
+  // 미리 계산해둔다 — 검색 없음, 전부 이미 알고 있는 ID로 getPage만 호출(위 함수 주석 참고).
+  const pendingDeadlineTargets = await computePendingDeadlineTargets(latestSession?.learningRecordIds ?? [])
 
   // Perf (2026-09-11): closures, class name, and the registration list don't change across
   // iterations of the while-loop below for a given timetable, but were previously re-fetched
@@ -589,6 +621,19 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
             ],
           })
 
+          // (2026-09-24, 분리 큐 재설계) 이 학생 것으로 미리 계산해둔 백필 대상이 있으면
+          // 출석 생성/연결과 같은 쓰기에 얹어서 채운다 — 없으면 아무 것도 안 채우고 그대로
+          // 패스(추가 호출 없음). 실제 마감 연결은 여기서 하지 않고 별도 큐가 한다.
+          const backfillTargets = pendingDeadlineTargets.get(regId)
+          const backfillProps =
+            backfillTargets && backfillTargets.length > 0
+              ? {
+                  [PROP_ATTENDANCE_BACKFILL_TARGET]: { relation: backfillTargets.map((id) => ({ id })) },
+                  [PROP_ATTENDANCE_BACKFILL_STATUS]: { select: { name: STATUS_QUEUED } },
+                }
+              : {}
+          if (backfillTargets && backfillTargets.length > 0) backfillQueuedCount++
+
           let attendanceId: string
           if (unlinkedCandidates.length > 0) {
             const candidate = unlinkedCandidates[0]
@@ -599,6 +644,7 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
               // 2026-09-16 버그 수정: 시간표 -> 수업까지만 복사되던 담당강사가 출석에는
               // 전달되지 않고 있었음. 기존 미연결 출석을 새로 연결할 때도 담당강사를 채운다.
               ...(teacherIds.length ? { 담당강사: { relation: teacherIds.map((id) => ({ id })) } } : {}),
+              ...backfillProps,
             })
             log.push(`[linked] ${timetableName}: existing unlinked attendance ${candidate.id} -> reg ${regId} (${nextDate})`)
             attendanceId = candidate.id
@@ -611,17 +657,12 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
               등록: { relation: [{ id: regId }] },
               // 2026-09-16 버그 수정: 시간표의 담당강사를 출석 생성 시에도 함께 복사한다.
               ...(teacherIds.length ? { 담당강사: { relation: teacherIds.map((id) => ({ id })) } } : {}),
+              ...backfillProps,
             })
             attendanceId = attendancePage.id
           }
 
           await enqueueDashboardLink(attendanceId, log, { skipWake: true })
-
-          try {
-            await linkPendingAssignmentDeadlines(regId, log)
-          } catch (err) {
-            log.push(`[error] linkPendingAssignmentDeadlines(${regId}): ${(err as Error).message}`)
-          }
         }),
       )
     } catch (err) {
@@ -646,6 +687,10 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
   // 필요도 없음). single/bulk체인/크론 세 경로 모두 이 함수를 통해서만 페이지를 만들므로, 여기
   // 한 곳에만 추가하면 세 경로 전부 동일하게 "호출 하나당 wake 최대 1건"이 보장된다.
   if (createdCount > 0) wakeSyncQueueWorker()
+  // (2026-09-24, 분리 큐 재설계) 과제마감 백필은 완전히 별도의 큐/함수(backfill-assignment-deadlines)
+  // 이므로 독립적으로 깨운다 — sync_queue 워커와 몰려서 같은 레이트리밋 문제를 재현하지 않도록
+  // 이 호출 하나당 최대 1번만 호출한다(위 wakeSyncQueueWorker와 동일한 이유).
+  if (backfillQueuedCount > 0) wakeAssignmentDeadlineWorker()
 
   // (PART N-12 후속 4차) 이 시간표에 아직 더 만들 날짜가 남아있는지 미리보기(다음 날짜 하나만
   // 계산 -- DB 스캔 아니고 이미 메모리에 있는 closures/weekday로 순수 계산)한다. mode.type이
@@ -679,6 +724,31 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
 const BULK_CHAIN_TOTAL_BUDGET_MS = 30 * 60 * 1000 // 30분 -- 극단적으로 많이 밀려있는 경우의 최후 안전장치.
 const BULK_SELF_CALL_TIMEOUT_MS = 60_000 // 자기호출(다음 시간표로 이어달리기) 자체가 응답 없이 멈추는 것을 방지.
 const FUNCTIONS_BASE = `${Deno.env.get("SB_URL") ?? ""}/functions/v1`
+
+// (2026-09-24, 분리 큐 재설계) sync_queue의 wakeSyncQueueWorker(_shared/syncQueue.ts)와 정확히
+// 같은 패턴 -- 실패해도 조용히 로그만 남기고 던지지 않는다(어차피 이 함수 전용 pg_cron 안전망이
+// 나중에 대기열을 다시 찾아 처리한다). generate-classes 전용 로컬 함수로 두는 이유는 다른 함수
+// 폴더들과 같은 관례(TIMETABLE_STATUS_SPEC 등도 로컬 복제)를 따르기 위함이다.
+function wakeAssignmentDeadlineWorker(): void {
+  if (!Deno.env.get("SB_URL")) return
+  const promise = getCurrentAdminKey()
+    .then((adminKey) =>
+      fetch(`${FUNCTIONS_BASE}/backfill-assignment-deadlines`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-key": adminKey },
+        body: JSON.stringify({ source: "wake" }),
+      }),
+    )
+    .catch((err) => {
+      console.error("[wakeAssignmentDeadlineWorker] 워커 즉시 트리거 실패 (pg_cron 안전망이 대신 처리함):", (err as Error)?.message)
+    })
+  const edgeRuntime = (globalThis as Record<string, unknown>).EdgeRuntime as
+    | { waitUntil?: (p: Promise<unknown>) => void }
+    | undefined
+  if (edgeRuntime && typeof edgeRuntime.waitUntil === "function") {
+    edgeRuntime.waitUntil(promise)
+  }
+}
 
 // (2026-09-24, PART N-12 후속 5차 버그 수정) 이 함수가 체인을 이어가는 유일한 연결고리인데,
 // 지금까지 fetch()의 응답 상태(response.ok)를 전혀 확인하지 않았다 -- Supabase 자체 함수

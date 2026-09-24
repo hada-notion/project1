@@ -103,6 +103,14 @@ const BULK_SEND_STATUS_SPEC: StatusSpec = {
 	startedAtProp: "처리 시작 시각",
 }
 
+// 출석(학원) DB의 "과제마감 백필" 큐(backfill-assignment-deadlines/index.ts)도 같은 관례로
+// 로컬에 정의돼 있다 (2026-09-24, 분리 큐 재설계).
+const ATTENDANCE_BACKFILL_STATUS_SPEC: StatusSpec = {
+	statusProp: "과제마감 백필 상태",
+	errorProp: "마지막 오류",
+	startedAtProp: "과제마감 백필 처리 시작 시각",
+}
+
 const TARGETS: Array<{ label: string; dataSourceId: string; spec: StatusSpec }> = [
 	{ label: "시간표", dataSourceId: DS_TIMETABLE, spec: TIMETABLE_STATUS_SPEC },
 	{ label: "메뉴", dataSourceId: DS_MENU, spec: TIMETABLE_STATUS_SPEC },
@@ -146,6 +154,9 @@ const TARGETS: Array<{ label: string; dataSourceId: string; spec: StatusSpec }> 
 	// (2026-09-22, Phase 3) send-selected-notifications("일괄 전송" 버튼)의 "일괄전송중" checkbox ->
 	// 상태 전환. Phase 3의 마지막 항목.
 	{ label: "알림톡발송함:일괄전송", dataSourceId: DS_NOTIFICATION_BATCH, spec: BULK_SEND_STATUS_SPEC },
+	// (2026-09-24, 분리 큐 재설계) generate-classes가 채우고 backfill-assignment-deadlines가
+	// 드레인하는 출석(학원) DB "과제마감 백필" 큐.
+	{ label: "출석:과제마감백필", dataSourceId: DS_ATTENDANCE, spec: ATTENDANCE_BACKFILL_STATUS_SPEC },
 ]
 
 Deno.serve(async (req) => {
