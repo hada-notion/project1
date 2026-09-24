@@ -168,6 +168,16 @@ const AUTO_HORIZON_DAYS = 7
 // (2026-09-11 perf fix).
 const TIMETABLE_CONCURRENCY = 4
 
+// (2026-09-24, PART N-14 동시성 폭주 수정) 시간표 1건 처리 안에서 등록별 병렬 작업(출석
+// 생성/재사용, computePendingDeadlineTargets의 getPage 두 단계)에 쓰는 동시성 상한. 기존에는
+// Promise.all로 무제한 동시 호출했는데, 13명짜리 반 하나만 처리해도 등록 루프 26건 + 백필 계산
+// 최대 26건까지 합쳐 50건 넘는 Notion API 호출이 한꺼번에 나가 429/재시도가 겹치며 150초
+// WallClockTime으로 죽는 사고(로그로 확인)가 반복됐다. REG_CONCURRENCY=4는 기존
+// TIMETABLE_CONCURRENCY(시간표 동시 처리 수)·generateReportTarget.ts/generateTuitionTarget.ts의
+// REG_CONCURRENCY와 동일한 값으로 맞춘 것 — 안전장치(타임아웃)가 아니라 실제로 한 번에 나가는
+// 호출 수 자체를 줄이는 근본 수정이다.
+const REG_CONCURRENCY = 4
+
 // notionHeaders / queryDataSource / getPage / createPage / updatePageProperties / dateStart / relIds
 // 는 이제 _shared/notionClient.ts에서 가져온다 (429/5xx 재시도가 자동으로 추가됨, 로드맵 5-9).
 
@@ -182,7 +192,8 @@ async function computePendingDeadlineTargets(learningRecordIds: string[]): Promi
   const targets = new Map<string, string[]>()
   if (learningRecordIds.length === 0) return targets
 
-  const records = await Promise.all(learningRecordIds.map((id) => getPage(id)))
+  // (2026-09-24, PART N-14) 무제한 Promise.all -> REG_CONCURRENCY로 상한 (위 상수 주석 참고).
+  const records = await mapWithConcurrency(learningRecordIds, REG_CONCURRENCY, (id) => getPage(id))
   const assignmentRecords = records.filter(
     (r: any) => r.properties[PROP_RECORD_CATEGORY]?.select?.name === CATEGORY_ASSIGNMENT,
   )
@@ -203,7 +214,8 @@ async function computePendingDeadlineTargets(learningRecordIds: string[]): Promi
   // 이미 마감이 채워져 있는 항목은 제외해야 하므로, 각 학습활동을 직접 조회해서 확인한다
   // (검색이 아니라 위에서 이미 확보한 ID들을 그대로 getPage로 읽는 것뿐).
   const activityIds = [...activityOwner.keys()]
-  const activities = await Promise.all(activityIds.map((id) => getPage(id)))
+  // (2026-09-24, PART N-14) 무제한 Promise.all -> REG_CONCURRENCY로 상한 (위 상수 주석 참고).
+  const activities = await mapWithConcurrency(activityIds, REG_CONCURRENCY, (id) => getPage(id))
   for (const activity of activities) {
     if (relIds(activity.properties[PROP_ACTIVITY_DEADLINE]).length > 0) continue // 이미 마감 있음
     const regId = activityOwner.get(activity.id)
@@ -412,19 +424,21 @@ function filterRegistrationsForDate(
 // Perf helper: runs fn over items with at most `concurrency` in flight at once, instead of
 // either fully sequential (slow) or unbounded Promise.all (risks Notion rate limits). Used to
 // process several timetables in parallel (2026-09-11 perf fix).
-async function mapWithConcurrency<T>(
+async function mapWithConcurrency<T, R = void>(
   items: T[],
   concurrency: number,
-  fn: (item: T) => Promise<void>,
-): Promise<void> {
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length)
   let nextIndex = 0
   async function worker() {
     while (nextIndex < items.length) {
-      const current = items[nextIndex++]
-      await fn(current)
+      const current = nextIndex++
+      results[current] = await fn(items[current])
     }
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()))
+  return results
 }
 
 type ProcessMode =
@@ -603,68 +617,70 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
     // Perf (2026-09-11): attendance creation + pending-assignment-deadline linking for each
     // registration are independent of each other, so run them concurrently instead of
     // one-at-a-time — this matters most for classes with many students.
+    // (2026-09-24, PART N-14) 무제한 Promise.all -> REG_CONCURRENCY로 상한. 학생 수가 많은 반일수록
+    // 등록당 2건(미연결 출석 검색 + 생성/갱신)씩 한꺼번에 쏘던 게 429/재시도 폭주로 150초
+    // WallClockTime 타임아웃의 주요 원인이었다 (위 REG_CONCURRENCY 주석 참고). 동시성을 낮추는 게
+    // "안전장치"가 아니라 실제 동시 호출 수 자체를 줄이는 근본 수정이다.
     try {
-      await Promise.all(
-        registrationIds.map(async (regId) => {
-          // 학부모 요청 등으로 이 날짜의 수업이 생기기 전에 등록 페이지의 캘린더 탭에서 미리
-          // 출석을 만들어둔 경우(결석 표시, 메모 등을 이미 적어둔 상태)가 있을 수 있다. 그런
-          // 페이지가 있으면 새로 만들지 않고, 수업/클래스/수업일시(정확한 시간으로 보정)만 채워
-          // 연결한다 -- fix-attendance(출석 조정 버튼)의 동일한 로직과 맞춤. 제목/출석 상태/메모
-          // 등 사용자가 미리 적어둔 값은 그대로 보존한다.
-          const { start, end } = dayRangeIso(nextDate)
-          const unlinkedCandidates = await queryAllPages(DS.attendance, {
-            and: [
-              { property: "등록", relation: { contains: regId } },
-              { property: "수업", relation: { is_empty: true } },
-              { property: "수업일시", date: { on_or_after: start } },
-              { property: "수업일시", date: { before: end } },
-            ],
+      await mapWithConcurrency(registrationIds, REG_CONCURRENCY, async (regId) => {
+        // 학부모 요청 등으로 이 날짜의 수업이 생기기 전에 등록 페이지의 캘린더 탭에서 미리
+        // 출석을 만들어둔 경우(결석 표시, 메모 등을 이미 적어둔 상태)가 있을 수 있다. 그런
+        // 페이지가 있으면 새로 만들지 않고, 수업/클래스/수업일시(정확한 시간으로 보정)만 채워
+        // 연결한다 -- fix-attendance(출석 조정 버튼)의 동일한 로직과 맞춤. 제목/출석 상태/메모
+        // 등 사용자가 미리 적어둔 값은 그대로 보존한다.
+        const { start, end } = dayRangeIso(nextDate)
+        const unlinkedCandidates = await queryAllPages(DS.attendance, {
+          and: [
+            { property: "등록", relation: { contains: regId } },
+            { property: "수업", relation: { is_empty: true } },
+            { property: "수업일시", date: { on_or_after: start } },
+            { property: "수업일시", date: { before: end } },
+          ],
+        })
+
+        // (2026-09-24, 분리 큐 재설계) 이 학생 것으로 미리 계산해둔 백필 대상이 있으면
+        // 출석 생성/연결과 같은 쓰기에 얹어서 채운다 — 없으면 아무 것도 안 채우고 그대로
+        // 패스(추가 호출 없음). 실제 마감 연결은 여기서 하지 않고 별도 큐가 한다.
+        const backfillTargets = pendingDeadlineTargets.get(regId)
+        const backfillProps =
+          backfillTargets && backfillTargets.length > 0
+            ? {
+                [PROP_ATTENDANCE_BACKFILL_TARGET]: { relation: backfillTargets.map((id) => ({ id })) },
+                [PROP_ATTENDANCE_BACKFILL_STATUS]: { select: { name: STATUS_QUEUED } },
+              }
+            : {}
+        if (backfillTargets && backfillTargets.length > 0) backfillQueuedCount++
+
+        let attendanceId: string
+        if (unlinkedCandidates.length > 0) {
+          const candidate = unlinkedCandidates[0]
+          await updatePageProperties(candidate.id, {
+            수업: { relation: [{ id: classPage.id }] },
+            클래스: { relation: [{ id: classId }] },
+            수업일시: { date: { start: startIso, end: endIso } },
+            // 2026-09-16 버그 수정: 시간표 -> 수업까지만 복사되던 담당강사가 출석에는
+            // 전달되지 않고 있었음. 기존 미연결 출석을 새로 연결할 때도 담당강사를 채운다.
+            ...(teacherIds.length ? { 담당강사: { relation: teacherIds.map((id) => ({ id })) } } : {}),
+            ...backfillProps,
           })
+          log.push(`[linked] ${timetableName}: existing unlinked attendance ${candidate.id} -> reg ${regId} (${nextDate})`)
+          attendanceId = candidate.id
+        } else {
+          const attendancePage = await createPage(DS.attendance, {
+            출석: { title: [{ text: { content: `${nextDate} 출석` } }] },
+            수업일시: { date: { start: startIso, end: endIso } },
+            수업: { relation: [{ id: classPage.id }] },
+            클래스: { relation: [{ id: classId }] },
+            등록: { relation: [{ id: regId }] },
+            // 2026-09-16 버그 수정: 시간표의 담당강사를 출석 생성 시에도 함께 복사한다.
+            ...(teacherIds.length ? { 담당강사: { relation: teacherIds.map((id) => ({ id })) } } : {}),
+            ...backfillProps,
+          })
+          attendanceId = attendancePage.id
+        }
 
-          // (2026-09-24, 분리 큐 재설계) 이 학생 것으로 미리 계산해둔 백필 대상이 있으면
-          // 출석 생성/연결과 같은 쓰기에 얹어서 채운다 — 없으면 아무 것도 안 채우고 그대로
-          // 패스(추가 호출 없음). 실제 마감 연결은 여기서 하지 않고 별도 큐가 한다.
-          const backfillTargets = pendingDeadlineTargets.get(regId)
-          const backfillProps =
-            backfillTargets && backfillTargets.length > 0
-              ? {
-                  [PROP_ATTENDANCE_BACKFILL_TARGET]: { relation: backfillTargets.map((id) => ({ id })) },
-                  [PROP_ATTENDANCE_BACKFILL_STATUS]: { select: { name: STATUS_QUEUED } },
-                }
-              : {}
-          if (backfillTargets && backfillTargets.length > 0) backfillQueuedCount++
-
-          let attendanceId: string
-          if (unlinkedCandidates.length > 0) {
-            const candidate = unlinkedCandidates[0]
-            await updatePageProperties(candidate.id, {
-              수업: { relation: [{ id: classPage.id }] },
-              클래스: { relation: [{ id: classId }] },
-              수업일시: { date: { start: startIso, end: endIso } },
-              // 2026-09-16 버그 수정: 시간표 -> 수업까지만 복사되던 담당강사가 출석에는
-              // 전달되지 않고 있었음. 기존 미연결 출석을 새로 연결할 때도 담당강사를 채운다.
-              ...(teacherIds.length ? { 담당강사: { relation: teacherIds.map((id) => ({ id })) } } : {}),
-              ...backfillProps,
-            })
-            log.push(`[linked] ${timetableName}: existing unlinked attendance ${candidate.id} -> reg ${regId} (${nextDate})`)
-            attendanceId = candidate.id
-          } else {
-            const attendancePage = await createPage(DS.attendance, {
-              출석: { title: [{ text: { content: `${nextDate} 출석` } }] },
-              수업일시: { date: { start: startIso, end: endIso } },
-              수업: { relation: [{ id: classPage.id }] },
-              클래스: { relation: [{ id: classId }] },
-              등록: { relation: [{ id: regId }] },
-              // 2026-09-16 버그 수정: 시간표의 담당강사를 출석 생성 시에도 함께 복사한다.
-              ...(teacherIds.length ? { 담당강사: { relation: teacherIds.map((id) => ({ id })) } } : {}),
-              ...backfillProps,
-            })
-            attendanceId = attendancePage.id
-          }
-
-          await enqueueDashboardLink(attendanceId, log, { skipWake: true })
-        }),
-      )
+        await enqueueDashboardLink(attendanceId, log, { skipWake: true })
+      })
     } catch (err) {
       // 출석 생성 중 하나라도 실패하면 이 수업 행의 "생성중"을 끄고 오류를 남긴 뒤 그대로 다시 던진다
       // (이 예외는 위쪽 호출부의 catch에서 markError(TIMETABLE_STATUS_SPEC)로 시간표 쪽에도 기록된다 — 기존 동작 유지).
