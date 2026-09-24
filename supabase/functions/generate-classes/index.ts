@@ -774,6 +774,27 @@ function wakeAssignmentDeadlineWorker(): void {
 // 상태), 사용자가 버튼을 다시 눌러야만 재개되는 문제가 실제로 관찰됐다. 상태 코드를 확인하고,
 // 실패하면 짧게 재시도(레이트리밋은 금방 풀리는 것으로 이미 확인됨)한 뒤, 그래도 안 되면 던져서
 // 호출부의 markError 경로가 확실히 남게 한다.
+// (2026-09-24, PART N-15 체인 사망 버그 수정) markRunning/markQueued/markDone/markError 같은
+// "상태 표시" 호출도 결국 Notion API 호출이라 실패할 수 있다. 특히 방금 processTimetable()이
+// 429/재시도 폭주로 타임아웃난 바로 그 순간에는, 뒤이은 markQueued() 호출도 같은 혼잡에 걸려
+// 실패할 가능성이 오히려 더 높다 — 그런데 이 호출들에 안전망이 없으면 예외가 그대로 던져져서,
+// 바로 아래 있는 이어달리기(callSelf) 호출까지 전혀 실행되지 못하고 체인 전체가 "아무 로그도
+// 없이" 조용히 죽는다. 실제로 2026-09-24 20:52 KST 사고에서 이 패턴이 재현됐다: 로그는
+// "[requeue] ... 처리 시간 예산 초과, 대기열 재투입"까지만 찍히고 그 뒤로 9분 넘게 완전히
+// 멈췄는데, 해당 시간표는 상태가 "대기열"로 바뀌지도 않고 "작업중" + 원래 시작 시각 그대로
+// 남아있었다 — markQueued() 자체가 던진 예외가 callSelf() 호출을 가로막았다는 뜻이다.
+// 상태 표시는 부가 정보(관찰용)일 뿐 실제 처리 결과가 아니므로, 실패해도 삼키고 로그만 남긴 뒤
+// 반드시 이어달리기까지는 도달하게 한다 — 안전장치가 아니라, "체인은 반드시 다음 단계로
+// 이어진다"는 이 설계의 핵심 전제 자체를 지키기 위한 수정이다.
+async function safeMarkStatus(label: string, fn: () => Promise<void>, log: string[]): Promise<void> {
+  try {
+    await fn()
+  } catch (err) {
+    log.push(`[warn] ${label}: 상태 표시 갱신 실패(무시하고 계속): ${(err as Error).message}`)
+    console.error(`generate-classes (bulk chain) ${label} 상태 표시 갱신 실패:\n`, log.join("\n"))
+  }
+}
+
 async function callSelf(body: Record<string, unknown>, adminKey: string): Promise<void> {
   const maxAttempts = 3
   let lastErr: Error | undefined
@@ -835,7 +856,13 @@ async function runBulkChainStep(opts: {
   } catch (err) {
     log.push(`[error] bulk chain: 대기열 조회 실패: ${(err as Error).message}`)
     console.error("generate-classes (bulk chain) 대기열 조회 실패:\n", log.join("\n"))
-    if (menuPageId) await markError(menuPageId, TIMETABLE_STATUS_SPEC, (err as Error).message)
+    if (menuPageId) {
+      await safeMarkStatus(
+        `${menuPageId} markError(대기열 조회 실패)`,
+        () => markError(menuPageId, TIMETABLE_STATUS_SPEC, (err as Error).message),
+        log,
+      )
+    }
     return
   }
 
@@ -843,12 +870,16 @@ async function runBulkChainStep(opts: {
   if (!next) {
     // 더 이상 대기중인 시간표가 없음 -> 체인 종료.
     console.log("generate-classes (bulk button) finished:\n", log.join("\n"))
-    if (menuPageId) await markDone(menuPageId, TIMETABLE_STATUS_SPEC)
+    if (menuPageId) {
+      await safeMarkStatus(`${menuPageId} markDone(체인 종료)`, () => markDone(menuPageId, TIMETABLE_STATUS_SPEC), log)
+    }
     return
   }
 
   const tId = next.id
-  await markRunning(tId, TIMETABLE_STATUS_SPEC)
+  // (2026-09-24, PART N-15) markRunning 실패해도 처리 자체는 계속한다 -- next는 이미 확보했으므로
+  // "작업중" 표시 실패가 실제 처리를 막을 이유가 없다(아래 safeMarkStatus 주석 참고).
+  await safeMarkStatus(`${tId} markRunning`, () => markRunning(tId, TIMETABLE_STATUS_SPEC), log)
   const timeoutLabel = `processTimetable(${tId})`
   try {
     const result = await withTimeout(
@@ -861,9 +892,9 @@ async function runBulkChainStep(opts: {
       // "대기열"로 표시해서 다음 체인 스텝이 이어서 처리하게 한다 (무한루프 걱정 없음: 매 스텝마다
       // 최소 1건은 만들고 멈추므로 항상 앞으로 나아간다).
       log.push(`[requeue] ${tId}: 시간 예산 초과로 이번 스텝은 일부만 처리, 다시 대기열에 넣음`)
-      await markQueued(tId, TIMETABLE_STATUS_SPEC)
+      await safeMarkStatus(`${tId} markQueued(부분 처리)`, () => markQueued(tId, TIMETABLE_STATUS_SPEC), log)
     } else {
-      await markDone(tId, TIMETABLE_STATUS_SPEC)
+      await safeMarkStatus(`${tId} markDone`, () => markDone(tId, TIMETABLE_STATUS_SPEC), log)
     }
   } catch (err) {
     const isTimeout = ((err as Error)?.message ?? "").includes(`${timeoutLabel}: 시간 제한(`)
@@ -873,25 +904,37 @@ async function runBulkChainStep(opts: {
       // 다시 "대기열"에 넣는다 (다음 스텝은 latestDate 기준으로 자동으로 이어서 재개됨).
       log.push(`[requeue] ${tId}: withTimeout(${PROCESS_TIMETABLE_TIMEOUT_MS}ms) 초과, 다시 대기열에 넣음`)
       console.error(`generate-classes (bulk chain) ${tId} 처리 시간 예산 초과, 대기열 재투입:\n`, log.join("\n"))
-      await markQueued(tId, TIMETABLE_STATUS_SPEC)
+      // (2026-09-24, PART N-15) 바로 이 markQueued가 실패해서 체인이 죽는 사고가 실제로 재현됨
+      // (위 safeMarkStatus 주석 참고) -- 실패해도 반드시 아래 callSelf까지 도달해야 한다.
+      await safeMarkStatus(`${tId} markQueued(타임아웃)`, () => markQueued(tId, TIMETABLE_STATUS_SPEC), log)
     } else {
       log.push(`[error] ${tId}: ${(err as Error).message}`)
-      await markError(tId, TIMETABLE_STATUS_SPEC, (err as Error)?.message ?? String(err))
+      await safeMarkStatus(
+        `${tId} markError`,
+        () => markError(tId, TIMETABLE_STATUS_SPEC, (err as Error)?.message ?? String(err)),
+        log,
+      )
     }
   }
 
   // 다음 시간표로 이어달리기: 202(즉시 응답)만 기다리고, 실제 처리는 그 다음 호출의 백그라운드에서
-  // 진행된다 -- 호출이 계속 쌓이지 않는다 (send-selected-notifications와 동일 패턴).
+  // 진행된다 -- 호출이 계속 쌓이지 않는다 (send-selected-notifications와 동일 패턴). 위에서 무슨
+  // 일이 있었든(상태 표시 실패 포함) 이 줄에는 항상 도달한다 -- PART N-15의 핵심.
   try {
     await callSelf({ isContinuation: true, menuPageId, horizonDate, chainStartedAt }, adminKey)
   } catch (err) {
     log.push(`[error] bulk chain: 다음 단계 이어달리기 호출 실패: ${(err as Error).message}`)
     console.error("generate-classes (bulk chain) 이어달리기 실패:\n", log.join("\n"))
     if (menuPageId) {
-      await markError(
-        menuPageId,
-        TIMETABLE_STATUS_SPEC,
-        `이어달리기 호출 실패: ${(err as Error).message} (다시 버튼을 눌러 이어서 처리해주세요)`,
+      await safeMarkStatus(
+        `${menuPageId} markError(이어달리기 실패)`,
+        () =>
+          markError(
+            menuPageId,
+            TIMETABLE_STATUS_SPEC,
+            `이어달리기 호출 실패: ${(err as Error).message} (다시 버튼을 눌러 이어서 처리해주세요)`,
+          ),
+        log,
       )
     }
   }
