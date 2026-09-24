@@ -479,6 +479,36 @@ async function peekNextNeededDate(timetable: any): Promise<string | null> {
   return findNextClassDate(baseDate, weekday, closures)
 }
 
+// [PART N-11, 2026-09-24] 사용자 피드백: 체인1(수업 생성)이 체인2(출석 채우기, backfill-attendance)
+// 보다 훨씬 앞서나가서, 출석이 하나도 안 채워진 주차가 여러 주 쌓인 뒤에도 계속 그 다음 주차 수업을
+// 만들어버리는 문제가 있었다 ("다음주 체인2가 완성이 안되어 있으면 다다음주 체인1이 진행을 막아야").
+// 이 함수는 "오늘 이후 수업 중 등록/출석 개수가 아직 안 맞는(=체인2가 아직 못 채운) 가장 빠른 주"를
+// 찾아서, 그 주의 "다음 주" 토요일까지만 이번 라운드에서 수업을 만들도록 상한선을 준다 -- 한 주
+// 여유는 허용해서 "항상 다음주는 미리 만들어두고 싶다"는 요구와 "체인2가 밀리면 무한정 앞서나가지
+// 않게 막는다"는 요구를 함께 만족시킨다. backfill-attendance의 스캔과 동일하게 "오늘 이후" 세션만
+// 보고(전체 히스토리 스캔 금지 -- 2026-09-24, 249건 스캔이 WallClockTime을 다 먹은 버그와 동일한
+// 실수를 여기서도 하지 않기 위함), 이미 읽어온 페이지 속성(등록/출석 relation 길이)만으로
+// 판정하므로(looksAlreadySynced와 동일한 공짜 판정) 추가 쿼리가 없다.
+async function computeAttendanceBackfillGateHorizon(): Promise<string | null> {
+  const today = todayKstDateStr()
+  const sessions = await queryAllPages(DS.classSession, {
+    property: "수업일시",
+    date: { on_or_after: today },
+  })
+  let earliestIncomplete: string | null = null
+  for (const page of sessions) {
+    const regCount = relIds(page.properties?.["등록"]).length
+    const attCount = relIds(page.properties?.["출석"]).length
+    if (regCount === attCount) continue
+    const dateStr: string | undefined = page.properties?.["수업일시"]?.date?.start?.slice(0, 10)
+    if (!dateStr) continue
+    if (earliestIncomplete === null || dateStr < earliestIncomplete) earliestIncomplete = dateStr
+  }
+  if (earliestIncomplete === null) return null // 체인2가 이미 다 따라잡음 -- 상한선 없음
+  // 가장 빠른 미완료 주(일-토)의 "다음 주" 토요일까지는 허용한다 (한 주치 여유).
+  return addDays(sundayOfWeek(earliestIncomplete), 13)
+}
+
 // Fetches the class page's "클래스명" (title) and "담당강사" (relation) properties together.
 // [2026-09-21] Changed from a "클래스명 문자열만 가져오는" helper to also read 담당강사 directly
 // from 클래스(학원) DB — the ultimate source of truth for a class's teacher assignment — instead
@@ -963,10 +993,20 @@ Deno.serve(async (req: Request) => {
         }
 
         const earliestNextNeeded = needed.map((p) => p.nextNeeded).reduce((min, cur) => (cur < min ? cur : min))
-        const horizonDate = addDays(sundayOfWeek(earliestNextNeeded), 6) // Saturday of the earliest incomplete week (일-토)
+        let horizonDate = addDays(sundayOfWeek(earliestNextNeeded), 6) // Saturday of the earliest incomplete week (일-토)
         log.push(
           `[debug] bulk: earliest incomplete week starts (일) ${sundayOfWeek(earliestNextNeeded)}, filling through (토) ${horizonDate}; ${needed.length}/${(timetables.results as any[]).length} timetables need work`,
         )
+
+        // [PART N-11, 2026-09-24] 체인1이 체인2보다 너무 앞서나가지 못하도록 상한선 적용 (사용자
+        // 피드백). 체인2가 이미 다 따라잡았으면(gateHorizon===null) 아무 영향 없음.
+        const gateHorizon = await computeAttendanceBackfillGateHorizon()
+        if (gateHorizon !== null && gateHorizon < horizonDate) {
+          log.push(
+            `[gate] 체인2(출석 채우기)가 아직 ${gateHorizon} 이전 주차를 다 못 채워서, 이번 라운드는 ${horizonDate} 대신 ${gateHorizon}까지만 생성합니다 (체인2가 더 진행된 뒤 다시 누르면 이어서 만들어짐).`,
+          )
+          horizonDate = gateHorizon
+        }
 
         await runBulkSessionChain({
           menuPageId: menuPageId ?? null,
