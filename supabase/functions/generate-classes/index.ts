@@ -680,19 +680,39 @@ const BULK_CHAIN_TOTAL_BUDGET_MS = 30 * 60 * 1000 // 30분 -- 극단적으로 �
 const BULK_SELF_CALL_TIMEOUT_MS = 60_000 // 자기호출(다음 시간표로 이어달리기) 자체가 응답 없이 멈추는 것을 방지.
 const FUNCTIONS_BASE = `${Deno.env.get("SB_URL") ?? ""}/functions/v1`
 
-async function callSelf(body: Record<string, unknown>, adminKey: string): Promise<Response> {
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), BULK_SELF_CALL_TIMEOUT_MS)
-  try {
-    return await fetch(`${FUNCTIONS_BASE}/generate-classes?mode=bulk`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-admin-key": adminKey },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    })
-  } finally {
-    clearTimeout(timeoutId)
+// (2026-09-24, PART N-12 후속 5차 버그 수정) 이 함수가 체인을 이어가는 유일한 연결고리인데,
+// 지금까지 fetch()의 응답 상태(response.ok)를 전혀 확인하지 않았다 -- Supabase 자체 함수
+// 호출 레이트리밋(429)이나 순간적인 오류로 이 자기호출이 거부돼도, fetch() 자체는 "정상적으로"
+// resolve되므로(예외를 던지지 않음) 호출부가 이를 성공으로 착각하고 그대로 끝나버렸다. 그러면
+// 체인이 아무 오류도 남기지 않고 조용히 멈춰서(대기열은 남아있는데 아무것도 진행 중이지 않은
+// 상태), 사용자가 버튼을 다시 눌러야만 재개되는 문제가 실제로 관찰됐다. 상태 코드를 확인하고,
+// 실패하면 짧게 재시도(레이트리밋은 금방 풀리는 것으로 이미 확인됨)한 뒤, 그래도 안 되면 던져서
+// 호출부의 markError 경로가 확실히 남게 한다.
+async function callSelf(body: Record<string, unknown>, adminKey: string): Promise<void> {
+  const maxAttempts = 3
+  let lastErr: Error | undefined
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), BULK_SELF_CALL_TIMEOUT_MS)
+    try {
+      const res = await fetch(`${FUNCTIONS_BASE}/generate-classes?mode=bulk`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-key": adminKey },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      })
+      if (res.ok) return
+      lastErr = new Error(`이어달리기 자기호출 실패: HTTP ${res.status} ${await res.text()}`)
+    } catch (err) {
+      lastErr = err as Error
+    } finally {
+      clearTimeout(timeoutId)
+    }
+    if (attempt < maxAttempts - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, attempt))) // 1s, 2s
+    }
   }
+  throw lastErr ?? new Error("이어달리기 자기호출 실패: 알 수 없는 오류")
 }
 
 // 일괄 생성 체인의 한 단계: "⏳ 대기열"인 시간표를 딱 1개 찾아 처리하고, 끝나면 다음 단계로
