@@ -12,11 +12,11 @@
 // 반영되지만, report_cache(학부모 리포트 웹앱이 실제로 읽는 캐시)는 그날 보고서가 따로 발송되지
 // 않는 한 갱신될 계기가 전혀 없었다 (2026-09-19 실측 확인: 여러 건을 한꺼번에 편집하면 Notion
 // 자동화가 일부 페이지의 웹훅을 누락하기도 해서, attendance_records만 시간별 배치로 자가 복구되고
-// report_cache는 그대로 낡아 있는 사례가 발생함). 이제 아래 pageId 경로와 incremental 경로 모두,
-// 영향받은 등록의 report_cache를 함께 재계산한다. reconcile은 매일 전체를 훑기 때문에 여기서까지
-// 하면 등록 수만큼 매일 report_cache를 전부 재계산하게 되어 2026-09-17에 없앤 "매시간 전체 재계산"
-// 문제가 되살아나므로 일부러 제외한다 -- reconcile이 놓칠 수 있는 부분은 nightly-report-sync-audit이
-// 별도로 커버한다.
+// report_cache는 그대로 낡아 있는 사례가 발생함). 당시엔 아래 pageId 경로와 incremental 경로 모두
+// 영향받은 등록의 report_cache를 함께 재계산하도록 고쳤었다. reconcile은 매일 전체를 훑기 때문에
+// 여기서까지 하면 등록 수만큼 매일 report_cache를 전부 재계산하게 되어 2026-09-17에 없앤 "매시간
+// 전체 재계산" 문제가 되살아나므로 일부러 제외했다 -- reconcile이 놓칠 수 있는 부분은
+// nightly-report-sync-audit이 별도로 커버한다.
 //
 // [FIX, 2026-09-23] 위 재계산은 원래(2026-09-19) sync_queue에 target: "sync-report-cache"로
 // 적재해서 process-sync-queue 워커가 처리하게 했었다. 그런데 2026-09-22 PART N-4("개별 트리거는
@@ -27,6 +27,12 @@
 // 누적, report_cache는 전혀 갱신되지 않음 -- 2026-09-23 사용자 보고로 발견). 다른 개별 트리거들과
 // 동일하게 큐를 거치지 않고 sync-report-cache/index.ts의 기본 경로가 쓰는 것과 같은 함수
 // (syncReportCacheForRegistration)를 직접, 동기적으로 호출하도록 고쳤다.
+//
+// [FIX, 2026-09-25, PART N-20] pageId 경로(출석 1건 실시간 웹훅)의 report_cache 재계산은 다시
+// 제거했다 -- generate-classes의 대량 출석 생성 중 이 웹훅이 등록 1건당 5~10회씩 Notion을 추가로
+// 호출해서 오늘 실측된 429 레이트리밋의 큰 축이었다. incremental(매시간)/nightly-report-sync-audit이
+// 계속 안전망 역할을 하고, send-report가 발송 직전 항상 강제 재계산하므로 핵심 흐름(발송 시점
+// 정확성)은 그대로 보장된다. 아래 pageId 경로 참고.
 
 import { requireAdminKey, CORS_HEADERS as ADMIN_CORS } from "../_shared/adminShared.ts"
 import { getPage, queryAllPages, extractPageId, mapWithConcurrency } from "../_shared/notionClient.ts"
@@ -135,9 +141,14 @@ Deno.serve(async (req: Request) => {
     }
     await upsertAttendanceRows([row])
 
-    // [FIX, 2026-09-19] 출석 편집도 등록/학습기록 편집과 동일하게 즉시 report_cache를 재계산한다
-    // (기존에는 attendance_records만 갱신되고 report_cache는 그대로 낡아 있었음).
-    await refreshReportCacheForRegistrations([row.registration_id])
+    // (2026-09-25, PART N-20) 출석 1건 편집마다 즉시 report_cache를 재계산하던 부분을 없앴다.
+    // generate-classes가 대량으로 출석을 만들 때마다 이 웹훅이 등록 1건당 5~10회의 Notion 호출을
+    // 추가로 발생시켜서(학생 정보/등록 개요/상세 내역 각각 조회), 오늘 실측된 Notion 429 레이트리밋의
+    // 큰 축이었다. 초기 배포 단계라 실시간(편집 즉시) 트리거를 최대한 줄이는 방향에 맞춰 제거했고,
+    // 대신 이미 있던 두 안전망이 report_cache 최신성을 계속 보장한다: (1) send-report가 보고서
+    // 발송 직전 항상 강제로 재계산하고(ensureFreshReportCache) (2) 위 "incremental"(매시간) 배치와
+    // nightly-report-sync-audit(매일 밤)이 그 사이 편집분을 놓치지 않게 따라잡는다. (예전 호출은
+    // `await refreshReportCacheForRegistrations([row.registration_id])`.)
 
     return new Response(JSON.stringify({ synced: 1 }), {
       headers: { ...ADMIN_CORS, "Content-Type": "application/json" },
