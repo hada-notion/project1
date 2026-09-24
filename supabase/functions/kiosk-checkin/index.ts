@@ -50,9 +50,11 @@ import {
   extractErrorMessage,
 } from "../_shared/adminShared.ts"
 import { normalizePhone, resolveParentPhone } from "../_shared/alimtalkShared.ts"
-// 대시보드(학원) DB 자동 연결: 이 함수가 Notion API로 직접 만드는/갱신하는 출석 페이지는 페이지
-// 자동화가 트리거되지 않으므로, 상태가 바뀐 직후 여기서 직접 큐에 적재한다 (2026-09-20, 대시보드 기능 추가).
-import { enqueueDashboardLink } from "../_shared/dashboardLinkTarget.ts"
+// (2026-09-25, PART N-18) 대시보드(학원) DB 자동 연결(enqueueDashboardLink)을 제거했다. 오늘
+// Notion API 자체의 429(Retry-After 28~56초) 레이트리밋이 실측 확인됐고, 초기 배포 단계라
+// 기능을 최대한 줄이는 방향으로 가기로 했다 -- 나중에 pull 모델로 별도 작업에서 다시 만들 예정.
+// (예전 import는 `import { enqueueDashboardLink } from "../_shared/dashboardLinkTarget.ts"`,
+// 호출부는 stateChanged 블록 안 한 곳이었다.)
 
 function plainText(prop: any): string {
   if (!prop) return ""
@@ -260,10 +262,6 @@ Deno.serve(async (req: Request) => {
 
       attendance = await notionCreatePage(attendanceDbId, properties)
       stateChanged = true
-    }
-
-    if (stateChanged) {
-      await enqueueDashboardLink(attendance.id)
     }
 
     // 카카오 알림톡 (등원/하원 통합 템플릿이 아직 설정 전이면 조용히 건너뛴다)

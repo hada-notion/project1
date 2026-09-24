@@ -75,15 +75,16 @@ const SESSION_GEN_STATUS_SPEC: StatusSpec = {
 	errorProp: PROP_LAST_ERROR,
 	startedAtProp: "생성 처리 시작 시각",
 }
-// 대시보드(학원) DB 자동 연결: 이 함수가 Notion API로 직접 만드는 수업/출석 페이지는 페이지
-// 자동화가 트리거되지 않으므로, 생성 직후 여기서 직접 큐에 적재한다 (2026-09-20, 대시보드 기능 추가).
-import { enqueueDashboardLink } from "../_shared/dashboardLinkTarget.ts"
-// (2026-09-24, PART N-12 후속 3차) 아래 processTimetable()이 세션/출석 페이지를 만들 때마다
-// enqueueDashboardLink를 호출하는데, 매번 워커까지 깨우면(기본값) 학생 수만큼(예: 15명 반이면
-// 세션 1 + 출석 15 = 16번) 배경 HTTP 호출이 같은 순간에 겹쳐 몰린다 -- 이건 9/23 2b79f1c에서 이미
-// 한 번 고쳤던 문제인데, 오늘 9/22로 롤백하면서 그 커밋도 함께 날아갔었다. skipWake:true로 큐
-// 적재만 반복하고, processTimetable() 호출 하나가 끝날 때 딱 한 번만 깨운다 (아래 wakeSyncQueueWorker
-// 호출부 참고).
+// (2026-09-25, PART N-18) 대시보드(학원) DB 자동 연결(enqueueDashboardLink)을 이 함수에서
+// 완전히 제거했다. 이유: 오늘 실측으로, 대량 수업/출석 생성 중 Notion API 자체가 429(Too Many
+// Requests)를 Retry-After 28~56초짜리로 반환하는 현상이 확인됐다 -- 이는 내부 큐/동시성 문제가
+// 아니라 이 통합 토큰이 쓰는 Notion API 초당 평균 호출량 자체가 한도를 넘어선 것이다. 세션 1개
+// 생성 + 등록 N명 출석 생성마다 매번 대시보드 큐에 적재하던 이 호출(페이지 생성 규모에 정확히
+// 비례해서 늘어남)이 그 호출량의 큰 축이었다. 지금은 초기 배포 단계라 기능을 최대한 줄이는
+// 방향으로 가기로 했고, 대시보드 연결은 나중에 "대시보드 페이지 생성/수동 버튼 → 그날 데이터를
+// 당겨오는" pull 모델로 별도 작업에서 다시 만들 예정이다. (예전 import는
+// `import { enqueueDashboardLink } from "../_shared/dashboardLinkTarget.ts"`, 호출부는
+// createPage(DS.classSession) 직후와 등록별 출석 생성 루프 안쪽 두 곳이었다.)
 import { wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 // (2026-09-21, 인증 정책 추가) 이 함수는 지금까지 아무 인증도 없이 POST만 확인하면 누구나 호출할 수 있었다.
 // 다른 어드민 함수들과 동일하게 x-admin-key 헤더를 요구해서, URL만 알면 전체 시간표를 강제로
@@ -629,7 +630,6 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
     log.push(`[timing] ${timetableName}: 수업 페이지 생성 ${Date.now() - createSessionStartedAt}ms`)
 
     log.push(`[created] ${timetableName}: class session created (${nextDate}), 등록 ${registrationIds.length}건 연결`)
-    await enqueueDashboardLink(classPage.id, log, { skipWake: true })
 
     // (2026-09-24, PART N-16 근본 수정) 학부모 요청 등으로 이 날짜의 수업이 생기기 전에 등록
     // 페이지의 캘린더 탭에서 미리 출석을 만들어둔 경우(결석 표시, 메모 등을 이미 적어둔 상태)가
@@ -685,7 +685,6 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
             : {}
         if (backfillTargets && backfillTargets.length > 0) backfillQueuedCount++
 
-        let attendanceId: string
         if (unlinkedCandidates.length > 0) {
           const candidate = unlinkedCandidates[0]
           await updatePageProperties(candidate.id, {
@@ -698,9 +697,8 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
             ...backfillProps,
           })
           log.push(`[linked] ${timetableName}: existing unlinked attendance ${candidate.id} -> reg ${regId} (${nextDate})`)
-          attendanceId = candidate.id
         } else {
-          const attendancePage = await createPage(DS.attendance, {
+          await createPage(DS.attendance, {
             출석: { title: [{ text: { content: `${nextDate} 출석` } }] },
             수업일시: { date: { start: startIso, end: endIso } },
             수업: { relation: [{ id: classPage.id }] },
@@ -710,10 +708,7 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
             ...(teacherIds.length ? { 담당강사: { relation: teacherIds.map((id) => ({ id })) } } : {}),
             ...backfillProps,
           })
-          attendanceId = attendancePage.id
         }
-
-        await enqueueDashboardLink(attendanceId, log, { skipWake: true })
       })
     } catch (err) {
       log.push(
