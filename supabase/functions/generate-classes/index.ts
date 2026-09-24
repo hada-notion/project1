@@ -68,6 +68,13 @@ const SESSION_GEN_STATUS_SPEC: StatusSpec = {
 // 대시보드(학원) DB 자동 연결: 이 함수가 Notion API로 직접 만드는 수업/출석 페이지는 페이지
 // 자동화가 트리거되지 않으므로, 생성 직후 여기서 직접 큐에 적재한다 (2026-09-20, 대시보드 기능 추가).
 import { enqueueDashboardLink } from "../_shared/dashboardLinkTarget.ts"
+// (2026-09-24, PART N-12 후속 3차) 아래 processTimetable()이 세션/출석 페이지를 만들 때마다
+// enqueueDashboardLink를 호출하는데, 매번 워커까지 깨우면(기본값) 학생 수만큼(예: 15명 반이면
+// 세션 1 + 출석 15 = 16번) 배경 HTTP 호출이 같은 순간에 겹쳐 몰린다 -- 이건 9/23 2b79f1c에서 이미
+// 한 번 고쳤던 문제인데, 오늘 9/22로 롤백하면서 그 커밋도 함께 날아갔었다. skipWake:true로 큐
+// 적재만 반복하고, processTimetable() 호출 하나가 끝날 때 딱 한 번만 깨운다 (아래 wakeSyncQueueWorker
+// 호출부 참고).
+import { wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 // (2026-09-21, 인증 정책 추가) 이 함수는 지금까지 아무 인증도 없이 POST만 확인하면 누구나 호출할 수 있었다.
 // 다른 어드민 함수들과 동일하게 x-admin-key 헤더를 요구해서, URL만 알면 전체 시간표를 강제로
 // 재생성시킬 수 있었던 구멍을 막는다.
@@ -573,7 +580,7 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
     })
 
     log.push(`[created] ${timetableName}: class session created (${nextDate}), 등록 ${registrationIds.length}건 연결`)
-    await enqueueDashboardLink(classPage.id, log)
+    await enqueueDashboardLink(classPage.id, log, { skipWake: true })
 
     // Perf (2026-09-11): attendance creation + pending-assignment-deadline linking for each
     // registration are independent of each other, so run them concurrently instead of
@@ -622,7 +629,7 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
             attendanceId = attendancePage.id
           }
 
-          await enqueueDashboardLink(attendanceId, log)
+          await enqueueDashboardLink(attendanceId, log, { skipWake: true })
 
           try {
             await linkPendingAssignmentDeadlines(regId, log)
@@ -657,6 +664,12 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
   if (createdCount === 0 && horizonDate !== null && !cappedByTimeBudget) {
     log.push(`[ok] ${timetableName}: already has a session through ${horizonDate} (latest=${latestDate})`)
   }
+
+  // (2026-09-24, PART N-12 후속 3차) 위에서 만든 세션/출석 페이지들은 모두 skipWake:true로 큐에만
+  // 적재했으니, 이 호출 전체가 끝난 지금 딱 한 번만 워커를 깨운다 (아무것도 안 만들었으면 깨울
+  // 필요도 없음). single/bulk체인/크론 세 경로 모두 이 함수를 통해서만 페이지를 만들므로, 여기
+  // 한 곳에만 추가하면 세 경로 전부 동일하게 "호출 하나당 wake 최대 1건"이 보장된다.
+  if (createdCount > 0) wakeSyncQueueWorker()
 
   return { done: !cappedByTimeBudget }
 }
