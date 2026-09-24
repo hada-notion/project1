@@ -2,15 +2,19 @@
 // Reads the timetable (recurring class schedule) DB and creates class-session pages,
 // then creates attendance only for registrations actually linked to that specific timetable.
 //
-// There are 2 call modes, distinguished by the request body:
-// (1) Button (manual) call: body = { "timetableId": "<timetable page id>" }
+// There are 2 real call modes, distinguished by the request body/query string:
+// (1) Single button call: body = { "timetableId": "<timetable page id>" }
 //     -> Only that one timetable is processed, and only ONE upcoming class session is created for it.
-// (2) Cron (automatic) call: body has no timetableId
-//     -> ALL timetables are processed. For each one, class sessions are created/backfilled
-//        until sessions exist all the way through "today + AUTO_HORIZON_DAYS" (next week, same weekday).
-// Both modes share the same processTimetable() function; only horizonDate differs.
+// (2) Bulk button call: URL has ?mode=bulk (메뉴 DB의 "다음주 수업 일괄 생성" 버튼)
+//     -> ALL timetables are queued, then processed one at a time via a self-calling chain
+//        (runBulkChainStep) until sessions exist through the earliest incomplete week's Sunday.
 // Since a call is skipped once a timetable already has a session on/after horizonDate,
 // calling this endpoint repeatedly is always safe (idempotent).
+//
+// (2026-09-25, PART N-19) 예전엔 body가 없는 호출을 "크론(자동) 모드"로 취급해 전체 시간표를
+// 동기적으로 스캔했는데, 이걸 실제로 트리거하는 스케줄러(pg_cron/GitHub Actions cron)가 레포에
+// 하나도 없어 죽어있던 코드였다. 초기 배포 단계라 예약실행/자동 트리거를 최대한 줄이는 방향에
+// 맞춰 이 죽은 경로를 제거했다 -- 이제 timetableId도 mode=bulk도 없는 호출은 400 에러로 응답한다.
 //
 // v2에서 추가됨: 출석을 새로 만든 직후, 그 등록(학생)에 대해 "과제 마감"이 아직 비어있는 과제
 // 학습활동이 있으면 이번에 새로 생긴 출석(수업)에 자동으로 연결해야 한다. 출제 당시엔 다음 수업이
@@ -159,14 +163,11 @@ const WEEKDAY_KR: Record<number, string> = {
 
 const KST_OFFSET = "+09:00"
 const MAX_LOOKAHEAD_DAYS = 90
-// Automatic (cron) calls make sure class sessions exist through this many days from today,
-// i.e. through next week's same weekday.
-const AUTO_HORIZON_DAYS = 7
-// Perf: how many timetables to process at once (bulk-button and cron paths) instead of
-// strictly one-at-a-time. Each timetable's work is independent, so this cuts wall-clock time
-// roughly by this factor for a full multi-timetable run. Kept modest to stay well under
-// Notion's rate limit (existing 429/5xx retry logic in notionClient.ts covers any overshoot)
-// (2026-09-11 perf fix).
+// Perf: concurrency cap for writing "⏳ 대기열" status onto multiple timetables at once
+// (bulk-button path) before the chain processes them one at a time. Kept modest to stay well
+// under Notion's rate limit (existing 429/5xx retry logic in notionClient.ts covers any
+// overshoot) (2026-09-11 perf fix; 2026-09-25: 크론 경로가 죽은 코드로 삭제되면서 이 상수의
+// 용도도 "대기열 표시" 단계 하나로 줄었다).
 const TIMETABLE_CONCURRENCY = 4
 
 // (2026-09-24, PART N-14 동시성 폭주 수정) 시간표 1건 처리 안에서 등록별 병렬 작업(출석
@@ -446,19 +447,18 @@ type ProcessMode =
   // Button (manual, single) mode: always creates exactly ONE new session right after the
   // latest existing one, regardless of whether that latest session is already in the future.
   | { type: "single" }
-  // Cron (automatic) mode AND bulk button (manual, "다음주 수업 일괄 생성") mode both use this:
-  // keep creating sessions (oldest-missing-first) until one exists on/after horizonDate.
-  // - Cron: horizonDate is always "today + AUTO_HORIZON_DAYS", so repeated cron runs converge
-  //   on "always ~7 days ahead" instead of drifting forward.
-  // - Bulk button: horizonDate is recomputed fresh on EVERY click as the Sunday of the
-  //   earliest calendar week that at least one timetable is still missing a session for (see
-  //   the week-completeness pre-pass in the bulk button handler below). This horizon is
-  //   intentionally SHARED across every timetable in one click (not computed per-timetable),
-  //   so a timetable that already has extra weeks pre-made ahead (for whatever reason) is left
-  //   alone -- it's already past this horizon, so it creates nothing this round -- while
-  //   timetables still missing that week get filled up to it. This keeps every timetable's
-  //   length converging together instead of already-ahead ones running further ahead while
-  //   behind ones never catch up (2026-09-11).
+  // Bulk button (manual, "다음주 수업 일괄 생성") mode: keep creating sessions
+  // (oldest-missing-first) until one exists on/after horizonDate. horizonDate is recomputed
+  //   fresh on EVERY click as the Sunday of the earliest calendar week that at least one
+  //   timetable is still missing a session for (see the week-completeness pre-pass in the
+  //   bulk button handler below). This horizon is intentionally SHARED across every timetable
+  //   in one click (not computed per-timetable), so a timetable that already has extra weeks
+  //   pre-made ahead (for whatever reason) is left alone -- it's already past this horizon, so
+  //   it creates nothing this round -- while timetables still missing that week get filled up
+  //   to it. This keeps every timetable's length converging together instead of already-ahead
+  //   ones running further ahead while behind ones never catch up (2026-09-11).
+  //   (2026-09-25: 예전엔 이 모드를 크론 경로도 같이 썼지만, 그 크론 경로 자체가 죽은 코드였어서
+  //   제거했다 -- 이제 이 모드는 일괄 버튼 체인 전용이다.)
   | { type: "until"; horizonDate: string }
 
 // 시간표/메뉴 DB에 처리 상태 표시 (버튼 단일/일괄 모드 + 크론 모드 공용).
@@ -1209,49 +1209,18 @@ Deno.serve(async (req: Request) => {
     return respondAccepted({ timetableId })
   }
 
-  try {
-    // (2) Cron call: all timetables, backfilled through next week's same weekday. This path is
-    // not triggered by a Notion button waiting on the response, so it stays synchronous.
-    // Mark each timetable's "생성중"/"마지막 오류" the same way the button/bulk-button paths
-    // already do, so the "실시간 처리 상태" formula shows "🔄 생성 중" while a scheduled (cron)
-    // run is in progress too — previously only the button paths updated this status, so a plain
-    // automatic cron call never showed any live progress at all (2026-09-11 fix).
-    const horizonDate = addDays(todayKstDateStr(), AUTO_HORIZON_DAYS)
-    const timetables = await queryDataSource(DS.timetable, { page_size: 100 })
-    // Perf (2026-09-11): same concurrency treatment as the bulk-button path above.
-    await mapWithConcurrency(timetables.results as any[], TIMETABLE_CONCURRENCY, async (timetable) => {
-      const tId = timetable.id
-      const alreadyRunning = isRunning(timetable, TIMETABLE_STATUS_SPEC)
-      if (alreadyRunning) {
-        log.push(`[skip] ${tId}: already processing (생성중)`)
-        return
-      }
-      await markRunning(tId, TIMETABLE_STATUS_SPEC)
-      try {
-        // (PART N-12 후속) 반환된 done:false(시간 예산 안에 다 못 따라잡음)는 크론 경로에서는
-        // 그냥 무시한다 -- bulk 체인처럼 별도로 재투입해봐야 다음 크론 실행도 "대기열"을 이미
-        // 접수된 것으로 보고 건너뛰므로 오히려 영원히 멈출 수 있다. 대신 이번 실행에서 진행된
-        // 만큼(latestDate)은 이미 반영돼 있으니 그냥 "완료"로 두고, 다음 크론 실행이 자연스럽게
-        // 이어서 마무리한다 (기존 20건 안전장치가 있었을 때도 동일하게 동작했음).
-        await withTimeout(
-          processTimetable(timetable, log, { type: "until", horizonDate }),
-          PROCESS_TIMETABLE_TIMEOUT_MS,
-          `processTimetable(${tId})`,
-        )
-        await markDone(tId, TIMETABLE_STATUS_SPEC)
-      } catch (err) {
-        log.push(`[error] ${tId}: ${(err as Error).message}`)
-        await markError(tId, TIMETABLE_STATUS_SPEC, (err as Error)?.message ?? String(err))
-      }
-    })
-    return new Response(JSON.stringify({ ok: true, log }, null, 2), {
-      headers: { "Content-Type": "application/json" },
-    })
-  } catch (err) {
-    console.error("generate-classes failed:", (err as Error).message, "\nlog so far:", log.join("\n"), "\nstack:", (err as Error).stack)
-    return new Response(JSON.stringify({ ok: false, error: (err as Error).message, log }, null, 2), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    })
-  }
+  // (2026-09-25, PART N-19) 예전엔 여기서 "크론(자동) 모드"로 전체 시간표를 스캔했지만, 이
+  // 경로를 트리거하는 스케줄러가 레포에 전혀 없어 죽은 코드였다(위 파일 헤더 주석 참고). 초기
+  // 배포 단계라 예약실행을 최대한 줄이는 방향에 맞춰 제거했다 -- timetableId도 mode=bulk도
+  // 없는 호출은 이제 명확한 에러로 응답한다.
+  log.push(`[error] invalid request: no timetableId and mode != bulk`)
+  console.error("generate-classes: invalid request (no timetableId, mode!=bulk):", JSON.stringify(rawBodyForLog))
+  return new Response(
+    JSON.stringify(
+      { ok: false, error: "invalid_request: timetableId 또는 ?mode=bulk 가 필요합니다 (자동/크론 모드는 제거됨)", log },
+      null,
+      2,
+    ),
+    { status: 400, headers: { "Content-Type": "application/json" } },
+  )
 })
