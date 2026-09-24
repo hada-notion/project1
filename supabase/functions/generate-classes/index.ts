@@ -592,6 +592,35 @@ async function checkWeekAttendanceComplete(weekStart: string, weekEnd: string): 
     .map((page: any) => page.id)
 }
 
+// [PART N-11, 2026-09-24] 클릭 시작 시점에 딱 1번만 실행하는 "출석 백로그 범위 찾기". runWeekChain
+// 자체는 항상 이번 주만 보므로 안전하지만, weekStart/finalWeekStart를 처음 잡을 때 "수업은 이미
+// 있는데 출석만 아직 안 맞는" 주가 세션-기준 판정(peekNextNeededDate)보다 더 과거이거나 미래에
+// 있으면(예: 이전 테스트에서 체인1이 체인2보다 훨씬 앞서나가 쌓인 백로그) 그 범위를 놓치고 지나가
+// 버릴 수 있다 -- 그래서 클릭 시작 시 1번, "오늘 이후" 세션 전체를 스캔해서(전체 히스토리 스캔은
+// 아님, 249건 스캔이 WallClockTime을 다 먹은 버그와 동일한 실수를 피함) 출석이 안 맞는 세션의
+// 가장 빠른/가장 늦은 날짜를 찾는다. 이미 읽어온 페이지 속성(등록/출석 relation 길이)만으로
+// 판정하므로(공짜 판정) 추가 쿼리는 이 스캔 1번뿐이다.
+async function findAttendanceIncompleteDateRange(): Promise<{ earliest: string; latest: string } | null> {
+  const today = todayKstDateStr()
+  const sessions = await queryAllPages(DS.classSession, {
+    property: "수업일시",
+    date: { on_or_after: today },
+  })
+  let earliest: string | null = null
+  let latest: string | null = null
+  for (const page of sessions) {
+    const regCount = relIds(page.properties?.["등록"]).length
+    const attCount = relIds(page.properties?.["출석"]).length
+    if (regCount === attCount) continue
+    const dateStr: string | undefined = page.properties?.["수업일시"]?.date?.start?.slice(0, 10)
+    if (!dateStr) continue
+    if (earliest === null || dateStr < earliest) earliest = dateStr
+    if (latest === null || dateStr > latest) latest = dateStr
+  }
+  if (earliest === null || latest === null) return null
+  return { earliest, latest }
+}
+
 // Fetches the class page's "클래스명" (title) and "담당강사" (relation) properties together.
 // [2026-09-21] Changed from a "클래스명 문자열만 가져오는" helper to also read 담당강사 directly
 // from 클래스(학원) DB — the ultimate source of truth for a class's teacher assignment — instead
@@ -1068,24 +1097,48 @@ Deno.serve(async (req: Request) => {
         )
         const needed = peeked.filter((p) => p.nextNeeded !== null) as Array<{ id: string; nextNeeded: string }>
 
-        if (needed.length === 0) {
-          log.push(`[ok] bulk: every timetable is already fully caught up, nothing to create`)
-          console.log("generate-classes (week chain) nothing to create:\n", log.join("\n"))
-          wakeSyncQueueWorker()
-          if (menuPageId) await markDone(menuPageId, TIMETABLE_STATUS_SPEC)
-          return
-        }
-
-        const earliestNextNeeded = needed.map((p) => p.nextNeeded).reduce((min, cur) => (cur < min ? cur : min))
+        // [PART N-11, 2026-09-24] needed.length===0(모든 시간표가 이미 수업 생성 기준으로는 캐치업
+        // 완료)이어도, 수업은 이미 있지만 출석만 안 맞는 백로그가 남아있을 수 있으므로(예: 이전
+        // 테스트로 체인1이 체인2보다 훨씬 앞서나간 경우) 바로 종료하지 않고 아래 attendanceRange
+        // 체크까지 거친 뒤에 판단한다. needed가 비어있을 때의 fallback 시작 주는 "오늘이 속한 주".
+        const earliestNextNeeded = needed.length > 0
+          ? needed.map((p) => p.nextNeeded).reduce((min, cur) => (cur < min ? cur : min))
+          : todayKstDateStr()
         // [PART N-11, 2026-09-24] weekStart = 가장 시급한(가장 뒤처진) 주의 일요일부터 시작한다.
         // finalWeekStart = "오늘+AUTO_HORIZON_DAYS"가 속한 주의 일요일 -- 크론이 평소에 유지하는
         // 목표(항상 다음 주까지는 미리 만들어둠)와 동일한 지점까지만 이 체인이 전진한다. 이미 그
         // 지점보다 더 뒤처진 시간표가 있으면(오래 방치됨) weekStart가 finalWeekStart보다 앞서게
         // 되어 여러 주를 거쳐 전진하고, 반대로 이미 그 지점을 넘어 앞서있는 경우는 없다(있다면
         // needed에 안 잡혔을 것) -- 혹시라도 그런 극단적 경우를 대비해 최솟값 보정을 둔다.
-        const weekStart = sundayOfWeek(earliestNextNeeded)
+        let weekStart = sundayOfWeek(earliestNextNeeded)
         let finalWeekStart = sundayOfWeek(addDays(todayKstDateStr(), AUTO_HORIZON_DAYS))
         if (weekStart > finalWeekStart) finalWeekStart = weekStart
+
+        // [PART N-11, 2026-09-24] 위 weekStart/finalWeekStart는 "수업이 아직 없는" 기준으로만
+        // 잡혔다 -- 수업은 이미 있지만 출석만 안 맞는 백로그(예: 이전 테스트에서 체인1이 체인2보다
+        // 훨씬 앞서나가 쌓인 것)가 이 범위 밖에 있으면 이번 체인이 그 주들을 건너뛰고 지나가버려서
+        // 영원히 다시 방문하지 않게 된다. 1번의 스캔으로 그 백로그 범위를 찾아 시작/목표 지점을
+        // 넓혀서, 이번 클릭 한 번으로 기존에 밀려있던 출석까지 다 정리되도록("완주") 한다.
+        const attendanceRange = await findAttendanceIncompleteDateRange()
+        if (attendanceRange !== null) {
+          const attendanceEarliestWeek = sundayOfWeek(attendanceRange.earliest)
+          const attendanceLatestWeek = sundayOfWeek(attendanceRange.latest)
+          if (attendanceEarliestWeek < weekStart) {
+            log.push(`[debug] 출석 미완료 백로그가 ${attendanceEarliestWeek}주부터 있어 시작 지점을 앞당김`)
+            weekStart = attendanceEarliestWeek
+          }
+          if (attendanceLatestWeek > finalWeekStart) {
+            log.push(`[debug] 출석 미완료 백로그가 ${attendanceLatestWeek}주까지 있어 목표 지점을 늘림`)
+            finalWeekStart = attendanceLatestWeek
+          }
+        }
+        if (needed.length === 0 && attendanceRange === null) {
+          log.push(`[ok] bulk: every timetable is already fully caught up (수업/출석 모두), nothing to do`)
+          console.log("generate-classes (week chain) nothing to create:\n", log.join("\n"))
+          wakeSyncQueueWorker()
+          if (menuPageId) await markDone(menuPageId, TIMETABLE_STATUS_SPEC)
+          return
+        }
         log.push(
           `[debug] bulk: 가장 뒤처진 주 (일) ${weekStart} 부터 시작, 목표는 (일) ${finalWeekStart} 주까지; ${needed.length}/${(timetables.results as any[]).length}개 시간표가 작업 필요`,
         )
