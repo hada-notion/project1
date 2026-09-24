@@ -510,46 +510,32 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
   // not against the previously-created latestDate — otherwise, once a weekly class has a
   // session anywhere before horizonDate, the loop would run one more time and create an
   // extra session for the following week (one full cycle past horizonDate).
-  // (2026-09-24, PART N-12) 한 시간표가 오랫동안 밀려 있으면(예: 15명짜리 반이 여러 주 backlog)
-  // 이번 한 번의 processTimetable 호출 안에서 전부 처리하려다 150초 플랫폼 실행시간 한도에
-  // 걸려 조용히 죽을 수 있다(실제로 관찰됨: "고1 A반 (월)"이 "🔄 작업중"에서 멈춤, 오류도 안 남고
-  // 이어달리기도 안 됨). 그래서 이번 호출 안에서 이미 1건이라도 만들었다면, 시간 예산(60초)을 넘긴
-  // 순간 더 만들지 않고 멈춘다 -- 남은 backlog는 "완료" 대신 "대기열"로 다시 표시해서, bulk 체인의
-  // 다음 스텝이 이어서 처리한다 (latestDate는 이미 진행된 만큼 Notion에 반영돼 있으므로 자동으로
-  // 이어짐). single/cron 호출 경로는 이 반환값을 그냥 무시하므로 동작이 그대로다.
-  const stepStartedAt = Date.now()
-  const MAX_STEP_MS = 60_000
-  let cappedByTimeBudget = false
+  // (2026-09-24, PART N-12 후속 4차, 사용자 설계 반영) 시간 예산을 재는 대신, 이 호출은 애초에
+  // "세션 1개 + 그 출석들"만 만들고 끝나도록 범위 자체를 작게 고정한다 -- 넘겨받은 데이터(등록
+  // 목록 등)가 이미 다 정해져 있어서 각 단위 작업의 크기가 작고 고정돼 있으므로, 시간 초과가
+  // 구조적으로 생길 이유가 없다. 아직 더 만들 날짜가 남아있으면 done:false를 반환해서 호출부가
+  // 이 시간표를 다시 "대기열"에 넣고, 다음 체인 스텝이 최신 latestDate 기준으로 이어서 만들게
+  // 한다 (한 주씩 이어달리기). single/cron 호출 경로는 이 반환값을 그냥 무시하므로 동작이 그대로다.
+  const baseDate = latestDate ? addDays(latestDate, 1) : today
+  const nextDate = findNextClassDate(baseDate, weekday, closures)
 
-  while (true) {
-    const baseDate = latestDate ? addDays(latestDate, 1) : today
-    const nextDate = findNextClassDate(baseDate, weekday, closures)
+  // Cron/extend mode: don't create a session that falls beyond horizonDate.
+  const withinHorizon = horizonDate === null || nextDate <= horizonDate
 
-    // Cron/extend mode: stop BEFORE creating a session that falls beyond horizonDate.
-    if (horizonDate !== null && nextDate > horizonDate) {
-      break
-    }
+  // Cron mode ONLY: if the next missing session is TODAY's, wait until this timetable's
+  // configured "자동생성 시간" (generation time-of-day) before creating it. This only gates
+  // today's date -- past catch-up dates and future dates within the horizon are created
+  // immediately regardless of time-of-day. Manual clicks (single/extend) skip this gate --
+  // an explicit user click should create today's session right away (2026-09-11).
+  const gatedByGenerationTime =
+    mode.type === "until" && nextDate === today && generationTime > nowKstTimeStr()
+  if (gatedByGenerationTime) {
+    log.push(
+      `[wait] ${timetableName}: today's session (${nextDate}) scheduled for ${generationTime}, now is ${nowKstTimeStr()}`,
+    )
+  }
 
-    // Cron mode ONLY: if the next missing session is TODAY's, wait until this timetable's
-    // configured "자동생성 시간" (generation time-of-day) before creating it. This only gates
-    // today's date -- past catch-up dates and future dates within the horizon are created
-    // immediately regardless of time-of-day. Manual clicks (single/extend) skip this gate --
-    // an explicit user click should create today's session right away (2026-09-11).
-    if (mode.type === "until" && nextDate === today && generationTime > nowKstTimeStr()) {
-      log.push(
-        `[wait] ${timetableName}: today's session (${nextDate}) scheduled for ${generationTime}, now is ${nowKstTimeStr()}`,
-      )
-      break
-    }
-
-    if (createdCount > 0 && Date.now() - stepStartedAt > MAX_STEP_MS) {
-      log.push(
-        `[warn] ${timetableName}: stopped early after ${createdCount} session(s) this call (time budget) — will resume next step`,
-      )
-      cappedByTimeBudget = true
-      break
-    }
-
+  if (withinHorizon && !gatedByGenerationTime) {
     const startIso = `${nextDate}T${startTime}:00${KST_OFFSET}`
     const endIso = `${nextDate}T${endTime}:00${KST_OFFSET}`
 
@@ -649,19 +635,9 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
 
     latestDate = nextDate
     createdCount++
-
-    // Button (single) mode always creates exactly one session, then stops.
-    if (mode.type === "single") break
-
-    if (createdCount > 20) {
-      // Safety valve to avoid a runaway loop.
-      log.push(`[warn] ${timetableName}: stopped after creating 20 sessions in one call (check closures/data)`)
-      cappedByTimeBudget = true // (PART N-12) 이 경우도 "더 남았을 수 있음" 취급 -- 대기열 재투입
-      break
-    }
   }
 
-  if (createdCount === 0 && horizonDate !== null && !cappedByTimeBudget) {
+  if (createdCount === 0 && horizonDate !== null && !gatedByGenerationTime) {
     log.push(`[ok] ${timetableName}: already has a session through ${horizonDate} (latest=${latestDate})`)
   }
 
@@ -671,7 +647,18 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
   // 한 곳에만 추가하면 세 경로 전부 동일하게 "호출 하나당 wake 최대 1건"이 보장된다.
   if (createdCount > 0) wakeSyncQueueWorker()
 
-  return { done: !cappedByTimeBudget }
+  // (PART N-12 후속 4차) 이 시간표에 아직 더 만들 날짜가 남아있는지 미리보기(다음 날짜 하나만
+  // 계산 -- DB 스캔 아니고 이미 메모리에 있는 closures/weekday로 순수 계산)한다. mode.type이
+  // "until"이고 방금 세션을 만들었을 때만 의미가 있다 (single 모드/아무것도 안 만든 경우는 호출부가
+  // 반환값을 안 쓰거나 이미 끝난 것으로 취급).
+  let moreNeeded = false
+  if (mode.type === "until" && createdCount > 0) {
+    const followingBase = addDays(latestDate!, 1)
+    const followingDate = findNextClassDate(followingBase, weekday, closures)
+    moreNeeded = followingDate <= horizonDate!
+  }
+
+  return { done: !moreNeeded }
 }
 
 // (2026-09-24, PART N-12: 일괄 생성 버튼을 "대기중 상태 + 순차 이어달리기" 체인으로 재설계)
