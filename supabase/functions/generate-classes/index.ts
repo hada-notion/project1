@@ -493,6 +493,17 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
   // not against the previously-created latestDate — otherwise, once a weekly class has a
   // session anywhere before horizonDate, the loop would run one more time and create an
   // extra session for the following week (one full cycle past horizonDate).
+  // (2026-09-24, PART N-12) 한 시간표가 오랫동안 밀려 있으면(예: 15명짜리 반이 여러 주 backlog)
+  // 이번 한 번의 processTimetable 호출 안에서 전부 처리하려다 150초 플랫폼 실행시간 한도에
+  // 걸려 조용히 죽을 수 있다(실제로 관찰됨: "고1 A반 (월)"이 "🔄 작업중"에서 멈춤, 오류도 안 남고
+  // 이어달리기도 안 됨). 그래서 이번 호출 안에서 이미 1건이라도 만들었다면, 시간 예산(60초)을 넘긴
+  // 순간 더 만들지 않고 멈춘다 -- 남은 backlog는 "완료" 대신 "대기열"로 다시 표시해서, bulk 체인의
+  // 다음 스텝이 이어서 처리한다 (latestDate는 이미 진행된 만큼 Notion에 반영돼 있으므로 자동으로
+  // 이어짐). single/cron 호출 경로는 이 반환값을 그냥 무시하므로 동작이 그대로다.
+  const stepStartedAt = Date.now()
+  const MAX_STEP_MS = 60_000
+  let cappedByTimeBudget = false
+
   while (true) {
     const baseDate = latestDate ? addDays(latestDate, 1) : today
     const nextDate = findNextClassDate(baseDate, weekday, closures)
@@ -511,6 +522,14 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
       log.push(
         `[wait] ${timetableName}: today's session (${nextDate}) scheduled for ${generationTime}, now is ${nowKstTimeStr()}`,
       )
+      break
+    }
+
+    if (createdCount > 0 && Date.now() - stepStartedAt > MAX_STEP_MS) {
+      log.push(
+        `[warn] ${timetableName}: stopped early after ${createdCount} session(s) this call (time budget) — will resume next step`,
+      )
+      cappedByTimeBudget = true
       break
     }
 
@@ -620,13 +639,16 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
     if (createdCount > 20) {
       // Safety valve to avoid a runaway loop.
       log.push(`[warn] ${timetableName}: stopped after creating 20 sessions in one call (check closures/data)`)
+      cappedByTimeBudget = true // (PART N-12) 이 경우도 "더 남았을 수 있음" 취급 -- 대기열 재투입
       break
     }
   }
 
-  if (createdCount === 0 && horizonDate !== null) {
+  if (createdCount === 0 && horizonDate !== null && !cappedByTimeBudget) {
     log.push(`[ok] ${timetableName}: already has a session through ${horizonDate} (latest=${latestDate})`)
   }
+
+  return { done: !cappedByTimeBudget }
 }
 
 // (2026-09-24, PART N-12: 일괄 생성 버튼을 "대기중 상태 + 순차 이어달리기" 체인으로 재설계)
@@ -712,8 +734,16 @@ async function runBulkChainStep(opts: {
   const tId = next.id
   await markRunning(tId, TIMETABLE_STATUS_SPEC)
   try {
-    await processTimetable(next, log, { type: "until", horizonDate })
-    await markDone(tId, TIMETABLE_STATUS_SPEC)
+    const result = await processTimetable(next, log, { type: "until", horizonDate })
+    if (result && result.done === false) {
+      // (PART N-12) 이번 스텝의 시간 예산 안에 이 시간표를 다 못 따라잡음 -- "완료" 대신 다시
+      // "대기열"로 표시해서 다음 체인 스텝이 이어서 처리하게 한다 (무한루프 걱정 없음: 매 스텝마다
+      // 최소 1건은 만들고 멈추므로 항상 앞으로 나아간다).
+      log.push(`[requeue] ${tId}: 시간 예산 초과로 이번 스텝은 일부만 처리, 다시 대기열에 넣음`)
+      await markQueued(tId, TIMETABLE_STATUS_SPEC)
+    } else {
+      await markDone(tId, TIMETABLE_STATUS_SPEC)
+    }
   } catch (err) {
     log.push(`[error] ${tId}: ${(err as Error).message}`)
     await markError(tId, TIMETABLE_STATUS_SPEC, (err as Error)?.message ?? String(err))
