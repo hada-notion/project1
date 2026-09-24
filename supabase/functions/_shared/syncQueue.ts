@@ -136,6 +136,24 @@ export async function claimNextSyncQueueItem(): Promise<SyncQueueItem | null> {
   return rows?.[0] ?? null
 }
 
+// (2026-09-24, sync_queue 분리큐 1단계) sync-dashboard-link만 대량 적체(실측 1056건, 평균
+// 대기 885초/최대 6857초)로 다른 target들을 뒤에서 기다리게 만드는 문제를 실측으로 확인했다.
+// claim_next_sync_queue_item()은 target 구분 없이 "생성된 순서대로" 하나만 꺼내므로, 서로
+// 무관한 target들이 같은 줄에 서게 된다. 이 함수는 지정한 target 목록 안에서만 순서대로 하나를
+// 꺼낸다 -- process-sync-queue가 sync-dashboard-link 전용 레인과 나머지 target 전용 레인을
+// 독립적으로 동시에 돌릴 수 있게 한다(20260924020000 마이그레이션).
+export async function claimNextSyncQueueItemForTargets(targets: string[]): Promise<SyncQueueItem | null> {
+  requireEnv()
+  const res = await fetchSupabaseWithRetry(`${SB_URL}/rest/v1/rpc/claim_next_sync_queue_item_for_targets`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ p_targets: targets }),
+  })
+  if (!res.ok) throw new Error(`claim_next_sync_queue_item_for_targets 실패: ${res.status} ${await res.text()}`)
+  const rows = await res.json()
+  return rows?.[0] ?? null
+}
+
 export async function markSyncQueueItemDone(id: number): Promise<void> {
   requireEnv()
   const res = await fetchSupabaseWithRetry(`${SB_URL}/rest/v1/sync_queue?id=eq.${id}`, {

@@ -55,7 +55,7 @@ import {
   tryAcquireWorkerLock,
   releaseWorkerLock,
   renewWorkerLock,
-  claimNextSyncQueueItem,
+  claimNextSyncQueueItemForTargets,
   markSyncQueueItemDone,
   markSyncQueueItemFailedOrRetry,
   recoverStaleSyncQueueItems,
@@ -97,23 +97,41 @@ const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Pro
 }
 
 // (2026-09-22, Phase 6) 이 워커 한 번의 실행(위 sync_queue_worker_lock으로 항상 한 번에 하나만
-// 돈다) 안에서, claim -> 처리 -> 다음 claim을 반복하는 "레인(lane)"을 이 숫자만큼 동시에 돌린다.
-// claimNextSyncQueueItem이 부르는 claim_next_sync_queue_item RPC는 FOR UPDATE SKIP LOCKED를 써서
-// 여러 레인이 동시에 호출해도 같은 항목을 두 번 집지 않는다(원래도 여러 워커 인스턴스가 동시에
-// 떠도 안전하게 설계되어 있었음 -- 이제 그 안전성을 한 인스턴스 안의 동시 레인에도 그대로 활용).
+// 돈다) 안에서, claim -> 처리 -> 다음 claim을 반복하는 "레인(lane)"을 동시에 돌린다.
+// claim_next_sync_queue_item 계열 RPC는 FOR UPDATE SKIP LOCKED를 써서 여러 레인이 동시에 호출해도
+// 같은 항목을 두 번 집지 않는다(원래도 여러 워커 인스턴스가 동시에 떠도 안전하게 설계되어 있었음
+// -- 이제 그 안전성을 한 인스턴스 안의 동시 레인에도 그대로 활용).
 //
-// (2026-09-22, Phase 6 후속: 3 -> 1로 되돌림) 실제 운영에서 N=3으로 돌려보니 두 가지 문제가
-// 드러났다: (1) 학생 수가 많은 클래스(보고서/수강료 생성)의 등록별 처리가 당시 순차 for 루프였던
-// 탓에 한 항목이 몇 분씩 걸렸고, 그동안 레인 하나가 계속 묶여 있었다. (2) 더 심각하게는, 그렇게
-// 오래 걸리는 항목을 처리하던 함수 실행이 Supabase Edge Function의 실행시간 한도에 걸려 도중에
-// 강제 종료되면 sync_queue_worker_lock까지 함께 유실되어(정상적으로 release되지 못함), 다음 pg_cron
-// 주기가 새로 락을 잡고 또 3개를 새로 집으면서 화면에 "작업중"이 3개 한도를 넘어 계속 쌓이는
-// 현상(사용자 보고, 2026-09-22)으로 이어졌다. 사용자 요청에 따라 (a) 등록별 처리는 병렬화해서
-// 항목 하나의 처리 시간 자체를 줄이고(generateReportTarget.ts/generateTuitionTarget.ts의
-// REG_CONCURRENCY 참고), (b) 큐 처리 자체는 다시 완전히 하나씩(요청이 들어온 시간순, 즉 큐에 쌓인
-// created_at 순서 그대로) 처리하도록 되돌려서, 화면에는 항상 최대 1건만 "🔄 작업중"으로 보이고
-// 순서도 항상 예측 가능하게 만든다. 마스터플랜: https://app.notion.com/p/903c90386c1d473494c5df6306c53517
-const CONCURRENCY = 1
+// (2026-09-22, Phase 6 후속: 3 -> 1로 되돌림) 실제 운영에서 N=3(target 구분 없는 동일한 하나의
+// 레인을 3개 동시 실행)으로 돌려보니 두 가지 문제가 드러났다: (1) 학생 수가 많은 클래스(보고서/
+// 수강료 생성)의 등록별 처리가 당시 순차 for 루프였던 탓에 한 항목이 몇 분씩 걸렸고, 그동안 레인
+// 하나가 계속 묶여 있었다. (2) 더 심각하게는, 그렇게 오래 걸리는 항목을 처리하던 함수 실행이
+// Supabase Edge Function의 실행시간 한도에 걸려 도중에 강제 종료되면 sync_queue_worker_lock까지
+// 함께 유실되어(정상적으로 release되지 못함), 다음 pg_cron 주기가 새로 락을 잡고 또 3개를 새로
+// 집으면서 화면에 "작업중"이 3개 한도를 넘어 계속 쌓이는 현상(사용자 보고, 2026-09-22)으로
+// 이어졌다. 사용자 요청에 따라 (a) 등록별 처리는 병렬화해서 항목 하나의 처리 시간 자체를 줄이고
+// (generateReportTarget.ts/generateTuitionTarget.ts의 REG_CONCURRENCY 참고), (b) 큐 처리 자체는
+// 다시 완전히 하나씩(요청이 들어온 시간순, 즉 큐에 쌓인 created_at 순서 그대로) 처리하도록
+// 되돌려서, 화면에는 항상 최대 1건만 "🔄 작업중"으로 보이고 순서도 항상 예측 가능하게 만든다.
+// 마스터플랜: https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+//
+// (2026-09-24, sync_queue 분리큐 1단계) 사용자가 Supabase SQL Editor에서 직접 실측한 결과,
+// sync-dashboard-link만 물량이 압도적으로 많았다(대기 중인 항목 1056건, 평균 대기 885초/최대
+// 6857초) -- generate-classes/kiosk-checkin이 수업/출석 페이지를 만들 때마다 건별로 하나씩
+// 쌓이기 때문이다. target 구분 없는 위 "하나씩" 레인 하나만 있으면, 이 대량 적체가 무관한
+// cascade-delete(298건, 평균 대기 366초) 등 다른 target까지 뒤에서 오래 기다리게 만든다(레인
+// 기아). sync-dashboard-link의 중복 생성 방지는 이미 findOrCreateDashboard의 날짜별 advisory
+// lock(20260923000000 마이그레이션, dashboardLinkTarget.ts)이 별도로 보장하므로, 이 target을
+// 다른 target들과 같은 줄에 세울 필요가 없다 -- 아래처럼 target 목록으로 필터링해 꺼내는
+// claim_next_sync_queue_item_for_targets(20260924020000 마이그레이션)를 이용해, "레인은 여전히
+// 하나씩(각 레인 내부 순서 보장, 위 Phase 6 후속 교훈 유지)"를 지키면서 sync-dashboard-link
+// 전용 레인과 나머지 6개 target 전용 레인을 독립적으로 동시에 돌린다. 두 레인이 서로 다른 target만
+// 보므로 서로를 막지 않는다. (나머지 6개 target 중 실측상 유의미한 대기가 있던 건 cascade-delete
+// 뿐이었는데, 이는 sync-dashboard-link 적체에 밀려 대기했던 것으로 추정된다 -- 이번 분리 후 재측정
+// 해서 여전히 대기가 크면 그 다음 단계로 cascade-delete도 별도 레인으로 뗀다, 사용자 지시: "결과적
+// 으로는 다 분리하기로 하는데, 일단 하나씩하나씩 분리해보자.")
+const DASHBOARD_TARGET = "sync-dashboard-link"
+const OTHER_TARGETS = Object.keys(HANDLERS).filter((target) => target !== DASHBOARD_TARGET)
 
 // Edge Function 자체의 실행 시간 한도보다 여유 있게 짧은 시간 예산 안에서만 계속 처리하고, 남으면
 // 스스로를 다시 깨운다 (한 번의 실행이 시간 제한에 걸려 강제 종료되는 것보다, 미리 멈추고 이어가는
@@ -173,12 +191,14 @@ Deno.serve(async (req: Request) => {
       console.log(`[process-sync-queue] 처리 중 상태로 멈춰있던 작업 ${recoveredCount}건을 복구함 (pending 또는 failed로 확정)`)
     }
 
-    // (2026-09-22, Phase 6) 한 항목을 claim -> 처리 -> 결과 반영까지 끝내는 레인 하나. deadline까지
-    // "더 이상 집을 게 없을 때"만 멈추므로, 항목이 남아있는 한 이 레인은 계속 다음 항목을 이어서
-    // 집는다 -- 아래에서 이 함수를 CONCURRENCY개 동시에 돌려서 동시 처리를 구현한다.
-    async function lane(): Promise<void> {
+    // (2026-09-22, Phase 6 / 2026-09-24 분리큐 1단계) 한 항목을 claim -> 처리 -> 결과 반영까지
+    // 끝내는 레인 하나. deadline까지 "이 레인이 맡은 target들 중 더 이상 집을 게 없을 때"만
+    // 멈추므로, 해당 target에 항목이 남아있는 한 이 레인은 계속 다음 항목을 이어서 집는다 --
+    // 아래에서 target 목록이 서로 다른 레인 2개(sync-dashboard-link 전용 / 나머지 전용)를 동시에
+    // 돌려서, 서로 다른 target끼리는 줄을 분리하되 각 레인 내부는 여전히 하나씩 순서대로 처리한다.
+    async function lane(targets: string[]): Promise<void> {
       while (Date.now() < deadline) {
-        const item: SyncQueueItem | null = await claimNextSyncQueueItem()
+        const item: SyncQueueItem | null = await claimNextSyncQueueItemForTargets(targets)
         if (!item) return
 
         const handler = HANDLERS[item.target]
@@ -207,7 +227,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    await Promise.all(Array.from({ length: CONCURRENCY }, () => lane()))
+    await Promise.all([lane([DASHBOARD_TARGET]), lane(OTHER_TARGETS)])
   } finally {
     clearInterval(lockRenewalTimer)
     await releaseWorkerLock()
