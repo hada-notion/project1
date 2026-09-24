@@ -21,7 +21,7 @@
 // Supabase 함수 로그(console.log)로만 남기고, 별도의 Notion 상태 필드는 두지 않았다 (기존
 // status-watchdog/개별 버튼과 중복되는 새 필드를 늘리지 않기 위함).
 
-import { queryAllPages, relIds, withTimeout, mapWithConcurrency } from "../_shared/notionClient.ts"
+import { queryAllPages, relIds, withTimeout, mapWithConcurrency, todaySeoulDate } from "../_shared/notionClient.ts"
 import { DS_CLASS_SESSION } from "../_shared/constants.ts"
 import { getCurrentAdminKey, resolveAdminKeyFromRequest, CORS_HEADERS } from "../_shared/adminShared.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
@@ -122,11 +122,22 @@ Deno.serve(async (req: Request) => {
     accScanned = typeof body?.accScanned === "number" ? body.accScanned : pendingIds.length
     accErrors = Array.isArray(body?.accErrors) ? body.accErrors : []
   } else {
-    // 최초 트리거: 수업(학원) DB 전체를 한 번 스캔해서 후보 목록을 만든다 (264건 기준 API 호출
-    // 몇 번 -- queryAllPages가 커서를 따라가며 알아서 다 모아온다).
+    // 최초 트리거: 수업(학원) DB를 스캔해서 후보 목록을 만든다. (2026-09-24, 실측 버그 수정)
+    // 원래는 전체 히스토리를 필터 없이 다 긁어왔는데 -- "개수 비교는 공짜니까 데이터가 늘어나도
+    // 이 스캔 비용은 낮게 유지된다"고 가정했었다. 실제로는 그 가정이 틀렸다: 249건을 모으려면
+    // queryAllPages가 페이지네이션(100건씩) 호출을 3번 순차로 해야 하고, 오늘처럼 Notion API가
+    // 레이트리밋에 걸리기 쉬운 상황에서는 이 스캔 자체가(각 호출의 재시도/백오프까지 합쳐서)
+    // 100초 넘게 걸려 플랫폼의 150초 WallClockTime 한도를 스캔 단계에서 거의 다 써버렸다 (실제
+    // 로그로 재현: 부팅~스캔완료 122초, 그 직후 강제종료). 게다가 이 함수는 원래 "오늘 이후
+    // 수업만 신경쓴다"는 원칙 대상인데 과거 수업까지 다 스캔하고 있었다 -- 아래 필터로 오늘(KST)
+    // 이후 수업만 가져오도록 좁혀서, 스캔 대상 자체를 줄인다 (과거 수업의 출석 보정은 이 자동
+    // 백필의 책임 범위 밖이며, 필요하면 개별 "출석 조정" 버튼으로 처리).
     let allSessions: any[]
     try {
-      allSessions = await queryAllPages(DS_CLASS_SESSION)
+      allSessions = await queryAllPages(DS_CLASS_SESSION, {
+        property: "수업일시",
+        date: { on_or_after: todaySeoulDate() },
+      })
     } catch (err) {
       console.error("backfill-attendance: 수업 DB 스캔 실패:", (err as Error).message)
       return new Response(JSON.stringify({ ok: false, error: (err as Error).message }, null, 2), {
