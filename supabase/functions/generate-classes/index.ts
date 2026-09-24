@@ -26,6 +26,7 @@ import {
 	updatePageProperties,
 	dateStart,
 	relIds,
+	withTimeout,
 } from "../_shared/notionClient.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 import {
@@ -438,6 +439,15 @@ async function markSessionError(sessionId: string, message: string): Promise<voi
   }
 }
 
+// (2026-09-24, PART N-12 후속) fetchWithRetry는 호출 하나하나에는 타임아웃(12초, 최대 5회 재시도)이
+// 걸려 있지만, processTimetable() 한 번의 실행 안에는 그런 호출이 순서대로(닫힌기간/클래스정보/등록
+// 목록 조회 + 주차마다 세션/출석 생성) 여러 번 들어있다. 개별 호출은 각자 자기 한도 안에서 "정상적으로"
+// 재시도하며 시간을 쓰더라도, 합치면 여전히 150초 플랫폼 한도를 넘길 수 있다 (실측: 09/23
+// backfill-attendance에서 같은 패턴 재현됨 — cpu_time_used는 0.5초 수준으로 낮은데 wall clock은
+// 150초를 다 씀 -- 즉 거의 전부 네트워크 대기/재시도였다는 뜻). 그래서 processTimetable() 호출
+// 전체를 withTimeout으로 감싸서, 이 예산을 넘기면 호출부가 기다리지 않고 포기하고 돌아간다.
+const PROCESS_TIMETABLE_TIMEOUT_MS = 100_000
+
 async function processTimetable(timetable: any, log: string[], mode: ProcessMode) {
   const props = timetable.properties
   const timetableId = timetable.id
@@ -733,8 +743,13 @@ async function runBulkChainStep(opts: {
 
   const tId = next.id
   await markRunning(tId, TIMETABLE_STATUS_SPEC)
+  const timeoutLabel = `processTimetable(${tId})`
   try {
-    const result = await processTimetable(next, log, { type: "until", horizonDate })
+    const result = await withTimeout(
+      processTimetable(next, log, { type: "until", horizonDate }),
+      PROCESS_TIMETABLE_TIMEOUT_MS,
+      timeoutLabel,
+    )
     if (result && result.done === false) {
       // (PART N-12) 이번 스텝의 시간 예산 안에 이 시간표를 다 못 따라잡음 -- "완료" 대신 다시
       // "대기열"로 표시해서 다음 체인 스텝이 이어서 처리하게 한다 (무한루프 걱정 없음: 매 스텝마다
@@ -745,8 +760,18 @@ async function runBulkChainStep(opts: {
       await markDone(tId, TIMETABLE_STATUS_SPEC)
     }
   } catch (err) {
-    log.push(`[error] ${tId}: ${(err as Error).message}`)
-    await markError(tId, TIMETABLE_STATUS_SPEC, (err as Error)?.message ?? String(err))
+    const isTimeout = ((err as Error)?.message ?? "").includes(`${timeoutLabel}: 시간 제한(`)
+    if (isTimeout) {
+      // (PART N-12 후속) 개별 Notion API 호출은 각자 재시도하며(12초 x 최대 5회) 시간을 쓰다가
+      // 합쳐서 예산을 넘긴 것일 수 있다 -- 실제 처리 오류가 아닐 수 있으므로 "오류"로 남기지 않고
+      // 다시 "대기열"에 넣는다 (다음 스텝은 latestDate 기준으로 자동으로 이어서 재개됨).
+      log.push(`[requeue] ${tId}: withTimeout(${PROCESS_TIMETABLE_TIMEOUT_MS}ms) 초과, 다시 대기열에 넣음`)
+      console.error(`generate-classes (bulk chain) ${tId} 처리 시간 예산 초과, 대기열 재투입:\n`, log.join("\n"))
+      await markQueued(tId, TIMETABLE_STATUS_SPEC)
+    } else {
+      log.push(`[error] ${tId}: ${(err as Error).message}`)
+      await markError(tId, TIMETABLE_STATUS_SPEC, (err as Error)?.message ?? String(err))
+    }
   }
 
   // 다음 시간표로 이어달리기: 202(즉시 응답)만 기다리고, 실제 처리는 그 다음 호출의 백그라운드에서
@@ -977,7 +1002,11 @@ Deno.serve(async (req: Request) => {
 
     runInBackground(async () => {
       try {
-        await processTimetable(timetable, log, { type: "single" })
+        await withTimeout(
+          processTimetable(timetable, log, { type: "single" }),
+          PROCESS_TIMETABLE_TIMEOUT_MS,
+          `processTimetable(${timetableId})`,
+        )
         console.log("generate-classes (button) finished:", timetableId, "\n", log.join("\n"))
         await markDone(timetableId, TIMETABLE_STATUS_SPEC)
       } catch (err) {
@@ -1015,7 +1044,16 @@ Deno.serve(async (req: Request) => {
       }
       await markRunning(tId, TIMETABLE_STATUS_SPEC)
       try {
-        await processTimetable(timetable, log, { type: "until", horizonDate })
+        // (PART N-12 후속) 반환된 done:false(시간 예산 안에 다 못 따라잡음)는 크론 경로에서는
+        // 그냥 무시한다 -- bulk 체인처럼 별도로 재투입해봐야 다음 크론 실행도 "대기열"을 이미
+        // 접수된 것으로 보고 건너뛰므로 오히려 영원히 멈출 수 있다. 대신 이번 실행에서 진행된
+        // 만큼(latestDate)은 이미 반영돼 있으니 그냥 "완료"로 두고, 다음 크론 실행이 자연스럽게
+        // 이어서 마무리한다 (기존 20건 안전장치가 있었을 때도 동일하게 동작했음).
+        await withTimeout(
+          processTimetable(timetable, log, { type: "until", horizonDate }),
+          PROCESS_TIMETABLE_TIMEOUT_MS,
+          `processTimetable(${tId})`,
+        )
         await markDone(tId, TIMETABLE_STATUS_SPEC)
       } catch (err) {
         log.push(`[error] ${tId}: ${(err as Error).message}`)
