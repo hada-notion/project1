@@ -13,16 +13,21 @@
 //
 // body.weekReturn이 있으면(항상 generate-classes가 채워서 보냄) 이번 주 후보를 모두 처리한 뒤
 // (성공/스킵 포함, pendingIds가 0이 되면) generate-classes를 다시 호출해서 "다음 주"로 전진시킨다
-// (핑퐁 구조). weekReturn이 없는 호출은(과거 방식의 스탠드얼론 트리거) 그냥 처리만 하고 끝낸다 --
-// 지금은 generate-classes만 이 함수를 호출하므로 항상 weekReturn이 채워져 있지만, 혹시 모를 다른
-// 트리거 경로를 위해 하위호환으로 남겨둔다.
+// (핑퐁 구조).
+//
+// [PART N-11, 2026-09-24, "출석 큐 정리" 버튼] body에 pendingIds도 isContinuation도 없이(빈
+// 바디 {}) 호출되면 별도 모드: 이 함수 스스로 "오늘 이후" 전체를 1번 스캔해서 등록/출석 개수가
+// 안 맞는 세션을 전부 후보로 잡아 처리한다 (weekReturn 없음, 처리 후 그냥 종료). 메뉴(학원) DB의
+// "출석 큐 정리" 버튼이 이 경로를 호출한다 -- generate-classes의 주차별 순서와 무관하게, 언제든
+// 수동으로 눌러서 밀린 출석을 한 번에 정리하고 싶을 때 쓰는 용도.
 //
 // 개별 세션에 대한 "출석 조정" 버튼과 동일한 로직을 쓰므로, 각 세션의 "출석조정 상태"/"마지막
 // 오류" 필드에 그 세션 자신의 진행상황이 그대로 남는다 — 이 함수 자체는 전체 체인의 진행상황을
 // Supabase 함수 로그(console.log)로만 남기고, 별도의 Notion 상태 필드는 두지 않았다 (기존
 // status-watchdog/개별 버튼과 중복되는 새 필드를 늘리지 않기 위함).
 
-import { relIds, withTimeout, mapWithConcurrency } from "../_shared/notionClient.ts"
+import { relIds, withTimeout, mapWithConcurrency, queryAllPages, todaySeoulDate } from "../_shared/notionClient.ts"
+import { DS_CLASS_SESSION } from "../_shared/constants.ts"
 import { getCurrentAdminKey, resolveAdminKeyFromRequest, CORS_HEADERS } from "../_shared/adminShared.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 import {
@@ -190,15 +195,42 @@ Deno.serve(async (req: Request) => {
       })
     }
   } else {
-    // 하위호환: pendingIds 없이 트리거된 과거 방식의 스탠드얼론 호출은 이제 이 경로를 쓰지 않지만
-    // (generate-classes는 항상 주차별로 스캔한 pendingIds를 넘김), 혹시 다른 경로에서 호출될 경우
-    // 아무 것도 하지 않고 안전하게 끝낸다 (전체 히스토리 재스캔은 WallClockTime 위험이 있어 다시
-    // 두지 않음 -- 2026-09-24 실측 버그 참고).
-    console.log("backfill-attendance: pendingIds 없이 호출됨 -- 처리할 것 없음 (generate-classes가 주차별로 후보를 넘겨야 함)")
-    return new Response(JSON.stringify({ ok: true, message: "no_pending_ids_supplied" }, null, 2), {
-      status: 200,
-      headers: { "Content-Type": "application/json", ...CORS_HEADERS },
-    })
+    // [PART N-11, 2026-09-24, "출석 큐 정리" 버튼] pendingIds도 isContinuation도 없이 호출되면
+    // "큐 정리" 모드: generate-classes의 주차별 위임과 무관하게, "오늘 이후" 전체를 1번 스캔해서
+    // 등록/출석 개수가 안 맞는 세션을 전부 후보로 잡는다. 메뉴(학원) DB의 "출석 큐 정리" 버튼이
+    // 이 경로를 호출한다(빈 바디, {}) -- 매주 순서대로 진행하는 generate-classes 체인과 달리,
+    // 언제든 수동으로 눌러서 밀린 출석을 한 번에 정리하고 싶을 때 쓴다. 스캔 자체는 "오늘 이후"로
+    // 좁혀서(과거 전체 스캔 금지 -- 2026-09-24, 249건 스캔이 WallClockTime을 다 먹은 버그와 동일한
+    // 실수를 피함) 비용을 낮게 유지하고, 실제 무거운 조정 작업은 기존과 동일하게 청크+동시성+
+    // 서킷브레이커로 처리한다. weekReturn 없음 -- 끝나면 그냥 로그만 남기고 종료.
+    let allSessions: any[]
+    try {
+      allSessions = await queryAllPages(DS_CLASS_SESSION, {
+        property: "수업일시",
+        date: { on_or_after: todaySeoulDate() },
+      })
+    } catch (err) {
+      console.error("backfill-attendance(큐 정리): 수업 DB 스캔 실패:", (err as Error).message)
+      return new Response(JSON.stringify({ ok: false, error: (err as Error).message }, null, 2), {
+        status: 500,
+        headers: { "Content-Type": "application/json", ...CORS_HEADERS },
+      })
+    }
+    pendingIds = allSessions
+      .filter((page: any) => relIds(page.properties?.["등록"]).length !== relIds(page.properties?.["출석"]).length)
+      .map((page: any) => page.id)
+    chainStartedAt = Date.now()
+    accFixed = 0
+    accScanned = pendingIds.length
+    accErrors = []
+    failCounts = {}
+    console.log(`backfill-attendance(큐 정리): 오늘 이후 전체 ${allSessions.length}건 스캔, 후보 ${pendingIds.length}건`)
+    if (pendingIds.length === 0) {
+      return new Response(JSON.stringify({ ok: true, message: "no_candidates", scanned: allSessions.length }, null, 2), {
+        status: 200,
+        headers: { "Content-Type": "application/json", ...CORS_HEADERS },
+      })
+    }
   }
 
   const log: string[] = []
