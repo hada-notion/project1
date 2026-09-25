@@ -7,7 +7,7 @@ import { makePageCache } from "./reportCacheShared.ts"
 import { syncReportCacheForRegistration } from "./reportCacheBuilder.ts"
 import { makePersistentReportPageCache } from "./persistentReportPageCache.ts"
 
-export async function refreshDailyReportForSend(
+export async function refreshStudentReport(
   registrationId: string,
   opts?: { sharedRunKey?: string },
 ): Promise<{ access_token: string; reportUrl: string }> {
@@ -28,3 +28,7 @@ export async function refreshDailyReportForSend(
 
   return tokenInfo
 }
+
+// 기존 일일보고서 호출부 이름을 유지하는 호환 별칭. 실제 동작은 전송과 무관한
+// "토큰 보장 + 출석 원본 + 완성 캐시" 최신화이므로 수동 동기화 버튼도 같은 함수를 쓴다.
+export const refreshDailyReportForSend = refreshStudentReport

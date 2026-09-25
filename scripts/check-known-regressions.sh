@@ -67,6 +67,17 @@ else
   fail=1
 fi
 
+# 4) 등록 페이지/웹앱의 수동 학생 페이지 동기화는 전송과 같은 전체 최신화 경로를 사용해야 한다.
+SYNC_CACHE_FILE=supabase/functions/sync-report-cache/index.ts
+if ! grep -q 'refreshStudentReport' "$SYNC_CACHE_FILE" || ! grep -q 'isRegistrationPage' "$SYNC_CACHE_FILE"; then
+  echo "❌ $SYNC_CACHE_FILE: 등록 페이지 수동 전체 최신화 경로가 빠졌습니다."
+  fail=1
+fi
+if grep -q 'Promise.all(ids.map((id) => requestSyncForRegistrationId' student_report_part2.js; then
+  echo "❌ student_report_part2.js: 여러 등록의 수동 최신화를 다시 병렬 호출하고 있습니다."
+  fail=1
+fi
+
 if [ "$fail" != 0 ]; then
   echo ""
   echo "회귀 가드 실패 -- 위 문제를 고친 뒤 다시 배포하세요."

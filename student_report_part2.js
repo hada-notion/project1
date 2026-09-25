@@ -197,10 +197,10 @@ async function requestGlobalSync() {
     const r = currentReg()
     const targets = r ? [r] : (STUDENT?.registrations || [])
     const ids = [...new Set(targets.map((t) => t.registration_id).filter(Boolean))]
-    // sync-report-cache는 즉시 큐에만 적재하고(실제 재계산은 process-sync-queue 워커가 비동기로
-    // 처리) 202를 반환하므로, 워커가 처리를 끝낼 시간을 잠깐 준 다음 최신 데이터를 다시 불러온다.
-    await Promise.all(ids.map((id) => requestSyncForRegistrationId(id)))
-    await new Promise((resolve) => setTimeout(resolve, 3000))
+    // registrationId를 명시한 웹앱 요청은 토큰·출석 원본·학습기록·학습활동·완성 캐시까지
+    // 동기로 최신화한 뒤 응답한다. 모든 등록이 끝난 뒤 최신 데이터를 다시 불러온다.
+    // 학생의 여러 등록을 한꺼번에 열지 않고 하나씩 처리해 Notion API 부하를 분산한다.
+    for (const id of ids) await requestSyncForRegistrationId(id)
     await loadReportFromServer()
     renderApp()
     renderGlobalSyncToast("✅ 최신 정보로 갱신했어요")
