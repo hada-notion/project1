@@ -180,6 +180,27 @@ if grep -q 'crumb.*r\.emoji' student_report_part1.js student_report_part2.js || 
   fail=1
 fi
 
+
+# 16) 알림톡 수신 대상 설정은 모든 실발송 경로에 연결되고, 미설정 시 주요 연락처를 유지한다.
+if ! grep -q 'recipientTarget: "주요 연락처"' supabase/functions/_shared/adminShared.ts || ! grep -q 'export async function resolveAlimtalkRecipients' supabase/functions/_shared/alimtalkShared.ts; then
+  echo "❌ 알림톡: 수신 대상 기본값 또는 공용 수신자 해석기가 빠졌습니다."
+  fail=1
+fi
+for file in \
+  supabase/functions/send-report/index.ts \
+  supabase/functions/send-tuition-notice/index.ts \
+  supabase/functions/send-textbook-notice/index.ts \
+  supabase/functions/kiosk-checkin/index.ts; do
+  if ! grep -q 'resolveAlimtalkRecipients' "$file"; then
+    echo "❌ 알림톡: $file에 수신 대상 설정 연결이 빠졌습니다."
+    fail=1
+  fi
+done
+if ! grep -q 'registrationId, primaryPhone: parentPhone' supabase/functions/send-daily-report/index.ts || ! grep -q 'registrationId, primaryPhone: parentPhone' supabase/functions/send-class-daily-reports/index.ts; then
+  echo "❌ 알림톡: 일일 보고서 발송 경로에 수신 대상 설정 연결이 빠졌습니다."
+  fail=1
+fi
+
 if [ "$fail" != 0 ]; then
   echo ""
   echo "회귀 가드 실패 -- 위 문제를 고친 뒤 다시 배포하세요."

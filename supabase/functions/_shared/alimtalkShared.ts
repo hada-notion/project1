@@ -12,6 +12,8 @@ import {
   notionGetPage,
   notionPatchPageProperties,
   getAlimtalkConfig,
+  assertValidPhone,
+  type AlimtalkRecipientTarget,
   parseTokenValue,
   generateToken,
 } from "./adminShared.ts"
@@ -98,6 +100,65 @@ export async function resolveParentPhone(attendancePage: any, registrationId: st
   return ""
 }
 
+export type AlimtalkRecipient = { label: "주요 연락처" | "어머니" | "아버지"; phone: string }
+
+function getPropertyText(property: any): string {
+  if (!property) return ""
+  if (property.type === "phone_number") return property.phone_number ?? ""
+  if (property.type === "formula") return property.formula?.string ?? ""
+  if (property.type === "rich_text") return (property.rich_text ?? []).map((item: any) => item.plain_text ?? "").join("")
+  if (property.type === "title") return (property.title ?? []).map((item: any) => item.plain_text ?? "").join("")
+  if (property.type === "rollup" && property.rollup?.type === "array") {
+    return property.rollup.array.map(getPropertyText).find(Boolean) ?? ""
+  }
+  return ""
+}
+
+// 알림톡 설정의 수신 대상에 맞춰 등록→학생정보에서 어머니/아버지 연락처를 찾는다.
+// '둘 다'는 같은 번호를 중복 발송하지 않으며, 한쪽만 등록돼 있으면 등록된 쪽에만 보낸다.
+export async function resolveAlimtalkRecipients(args: {
+  registrationId: string
+  primaryPhone?: string
+  recipientTarget: AlimtalkRecipientTarget
+}): Promise<AlimtalkRecipient[]> {
+  if (args.recipientTarget === "주요 연락처") {
+    let phone = args.primaryPhone ?? ""
+    if (!phone) {
+      const registrationPage = await notionGetPage(args.registrationId)
+      phone = getRollupText(registrationPage, PARENT_PHONE_PROPERTY)
+    }
+    assertValidPhone(phone, "주요 연락처")
+    return [{ label: "주요 연락처", phone: normalizePhone(phone) }]
+  }
+
+  const registrationPage = await notionGetPage(args.registrationId)
+  const studentId = getRelationFirstId(registrationPage, "학생정보")
+  if (!studentId) throw new Error("연락처 오류: 등록 페이지에 연결된 학생정보가 없습니다.")
+  const studentPage = await notionGetPage(studentId)
+  const motherPhone = getPropertyText(studentPage.properties?.["어머니 연락처"])
+  const fatherPhone = getPropertyText(studentPage.properties?.["아버지 연락처"])
+
+  const candidates: AlimtalkRecipient[] = []
+  if (args.recipientTarget === "어머니" || args.recipientTarget === "둘 다") {
+    if (motherPhone) candidates.push({ label: "어머니", phone: motherPhone })
+    else if (args.recipientTarget === "어머니") throw new Error("연락처 오류: 어머니 연락처가 비어 있습니다.")
+  }
+  if (args.recipientTarget === "아버지" || args.recipientTarget === "둘 다") {
+    if (fatherPhone) candidates.push({ label: "아버지", phone: fatherPhone })
+    else if (args.recipientTarget === "아버지") throw new Error("연락처 오류: 아버지 연락처가 비어 있습니다.")
+  }
+  if (!candidates.length) throw new Error("연락처 오류: 어머니·아버지 연락처가 모두 비어 있습니다.")
+
+  const seen = new Set<string>()
+  return candidates.filter((recipient) => {
+    assertValidPhone(recipient.phone, `${recipient.label} 연락처`)
+    recipient.phone = normalizePhone(recipient.phone)
+    if (seen.has(recipient.phone)) return false
+    seen.add(recipient.phone)
+    return true
+  })
+}
+
 const SITE_BASE_URL = Deno.env.get("SITE_BASE_URL") ?? ""
 
 export async function syncStudentReport(registrationId: string): Promise<{ access_token: string; reportUrl: string }> {
@@ -124,12 +185,10 @@ const SOLAPI_PF_ID_FALLBACK = Deno.env.get("SOLAPI_PF_ID") ?? ""
 const SOLAPI_TEMPLATE_ID_DAILY_FALLBACK = Deno.env.get("SOLAPI_TEMPLATE_ID_DAILY") ?? ""
 
 export async function sendDailyReportAlimtalk(payload: {
-  to: string
+  registrationId: string
+  primaryPhone: string
   variables: Record<string, string>
 }) {
-  if (!payload.to) {
-    throw new Error("Missing recipient phone number (parent contact).")
-  }
 
   const config = await getAlimtalkConfig("일일 보고서", {
     pfId: SOLAPI_PF_ID_FALLBACK,
@@ -140,18 +199,25 @@ export async function sendDailyReportAlimtalk(payload: {
   const { SolapiMessageService } = await import("npm:solapi")
   const messageService = new SolapiMessageService(SOLAPI_API_KEY, SOLAPI_API_SECRET)
 
-  const result = await messageService.send({
-    to: normalizePhone(payload.to),
-    from: normalizePhone(config.senderNumber),
-    kakaoOptions: {
-      pfId: config.pfId,
-      templateId: config.templateId,
-      variables: payload.variables,
-      disableSms: false,
-    },
+  const recipients = await resolveAlimtalkRecipients({
+    registrationId: payload.registrationId,
+    primaryPhone: payload.primaryPhone,
+    recipientTarget: config.recipientTarget,
   })
-
-  return result
+  const results = []
+  for (const recipient of recipients) {
+    results.push(await messageService.send({
+      to: recipient.phone,
+      from: normalizePhone(config.senderNumber),
+      kakaoOptions: {
+        pfId: config.pfId,
+        templateId: config.templateId,
+        variables: payload.variables,
+        disableSms: false,
+      },
+    }))
+  }
+  return results
 }
 
 const NOTION_TOKEN = Deno.env.get("NOTION_TOKEN")!

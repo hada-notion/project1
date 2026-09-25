@@ -49,7 +49,7 @@ import {
   createSendLogEntry,
   extractErrorMessage,
 } from "../_shared/adminShared.ts"
-import { normalizePhone, resolveParentPhone } from "../_shared/alimtalkShared.ts"
+import { normalizePhone, resolveParentPhone, resolveAlimtalkRecipients } from "../_shared/alimtalkShared.ts"
 // (2026-09-25, PART N-18) 대시보드(학원) DB 자동 연결(enqueueDashboardLink)을 제거했다. 오늘
 // Notion API 자체의 429(Retry-After 28~56초) 레이트리밋이 실측 확인됐고, 초기 배포 단계라
 // 기능을 최대한 줄이는 방향으로 가기로 했다 -- 나중에 pull 모델로 별도 작업에서 다시 만들 예정.
@@ -287,21 +287,28 @@ Deno.serve(async (req: Request) => {
             Deno.env.get("SOLAPI_API_KEY")!,
             Deno.env.get("SOLAPI_API_SECRET")!,
           )
-          await messageService.send({
-            to: normalizePhone(parentPhone),
-            from: normalizePhone(config.senderNumber),
-            kakaoOptions: {
-              pfId: config.pfId,
-              templateId: config.templateId,
-              variables: {
-                "학생이름": studentName,
-                "구분": type === "checkin" ? "등원" : "하원",
-                "일자": formatKstDateKorean(todayKst()),
-                "시간": formatKstTimeKorean(nowIso),
-              },
-              disableSms: false,
-            },
+          const recipients = await resolveAlimtalkRecipients({
+            registrationId,
+            primaryPhone: parentPhone,
+            recipientTarget: config.recipientTarget,
           })
+          for (const recipient of recipients) {
+            await messageService.send({
+              to: recipient.phone,
+              from: normalizePhone(config.senderNumber),
+              kakaoOptions: {
+                pfId: config.pfId,
+                templateId: config.templateId,
+                variables: {
+                  "학생이름": studentName,
+                  "구분": type === "checkin" ? "등원" : "하원",
+                  "일자": formatKstDateKorean(todayKst()),
+                  "시간": formatKstTimeKorean(nowIso),
+                },
+                disableSms: false,
+              },
+            })
+          }
           await createSendLogEntry({
             registrationId,
             attendanceId: attendance.id,

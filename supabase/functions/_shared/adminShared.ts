@@ -359,6 +359,8 @@ export async function createSyncFailureLogEntry(args: {
 // [NEW] "알림톡 설정(학원) DB"에서 발송 구분별 pfId/템플릿ID/발신번호를 가져옵니다.
 // 카카오 채널이나 템플릿이 바뀌면 코드 수정 없이 이 Notion DB의 값만 바꾸면 됩니다.
 // 설정 DB에 해당 행이 없거나 "활성 여부"가 꺼져 있거나 조회가 실패하면 fallback(Secrets 기본값)을 사용합니다.
+export type AlimtalkRecipientTarget = "주요 연락처" | "어머니" | "아버지" | "둘 다"
+
 export type AlimtalkConfig = {
   pfId: string
   templateId: string
@@ -368,6 +370,8 @@ export type AlimtalkConfig = {
   // 읽으려 했는데, 그 속성이 실제로는 없어서 항상 빈 값이 나가던 버그가 있었다.
   // 이제 발송 코드가 이 config.notice를 쓰도록 바꿔서 알림톡 설정 DB의 "안내멘트" 값이 그대로 반영된다.
   notice: string
+  // 발송 종류별 실제 수신자를 Notion 설정에서 선택한다. 미설정은 기존 동작(주요 연락처) 유지.
+  recipientTarget: AlimtalkRecipientTarget
 }
 
 const alimtalkConfigCache = new Map<string, { value: AlimtalkConfig; expiresAt: number }>()
@@ -460,7 +464,7 @@ export async function getAlimtalkConfig(
 
   if (!ALIMTALK_CONFIG_DB_ID) {
     console.warn(`[getAlimtalkConfig][${category}] ALIMTALK_CONFIG_DB_ID env var가 비어있어 fallback 사용`)
-    return { ...fallback, notice: "" }
+    return { ...fallback, notice: "", recipientTarget: "주요 연락처" }
   }
 
   try {
@@ -476,23 +480,30 @@ export async function getAlimtalkConfig(
       console.warn(
         `[getAlimtalkConfig][${category}] ALIMTALK_CONFIG_DB_ID=${ALIMTALK_CONFIG_DB_ID}에서 일치하는 행을 못 찾음`,
       )
-      return { ...fallback, notice: "" }
+      return { ...fallback, notice: "", recipientTarget: "주요 연락처" }
     }
 
     const active = page.properties?.["활성 여부"]?.checkbox
     if (active === false) {
       console.warn(`[getAlimtalkConfig][${category}] 해당 행의 활성 여부가 꺼져있어 fallback 사용 (pageId=${page.id})`)
-      return { ...fallback, notice: "" }
+      return { ...fallback, notice: "", recipientTarget: "주요 연락처" }
     }
 
     const getText = (name: string) =>
       (page.properties?.[name]?.rich_text ?? []).map((t: any) => t.plain_text).join("").trim()
+
+    const rawRecipientTarget = page.properties?.["알림 수신 대상"]?.select?.name
+    const recipientTarget: AlimtalkRecipientTarget =
+      rawRecipientTarget === "어머니" || rawRecipientTarget === "아버지" || rawRecipientTarget === "둘 다"
+        ? rawRecipientTarget
+        : "주요 연락처"
 
     const config: AlimtalkConfig = {
       pfId: getText("카카오 채널 ID (pfId)") || fallback.pfId,
       templateId: getText("템플릿 ID") || fallback.templateId,
       senderNumber: getText("발신번호") || fallback.senderNumber,
       notice: getText("안내멘트"),
+      recipientTarget,
     }
 
     // [DEBUG, 2026-09-17] 안내멘트 누락 원인 추적용 임시 로그. 원인 파악 후 제거 예정.
@@ -504,6 +515,6 @@ export async function getAlimtalkConfig(
     return config
   } catch (e) {
     console.error(`[getAlimtalkConfig][${category}] 조회 실패, Secrets 기본값 사용:`, e)
-    return { ...fallback, notice: "" }
+    return { ...fallback, notice: "", recipientTarget: "주요 연락처" }
   }
 }

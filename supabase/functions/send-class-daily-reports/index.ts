@@ -99,7 +99,7 @@ async function sendOneStudentReport(
       (await getBotUserId().catch(() => null))
 
     try {
-      await sendDailyReportAlimtalk({ to: parentPhone, variables })
+      await sendDailyReportAlimtalk({ registrationId, primaryPhone: parentPhone, variables })
     } catch (sendErr) {
       await createSendLogEntry({
         registrationId,

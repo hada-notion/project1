@@ -37,7 +37,6 @@ import {
   getCurrentAdminKey,
   resolveAdminKeyFromRequest,
   getBotUserId,
-  assertValidPhone,
   extractErrorMessage,
 } from "../_shared/adminShared.ts"
 import {
@@ -45,6 +44,7 @@ import {
   getRelationFirstId,
   getRollupText,
   normalizePhone,
+  resolveAlimtalkRecipients,
   isSendingLockActive,
   withSendingLock,
 } from "../_shared/alimtalkShared.ts"
@@ -176,8 +176,16 @@ Deno.serve(async (req) => {
 
         const sendResult = await withSendingLock(cartId, "안내문 발송중", async () => {
           try {
-            assertValidPhone(parentPhone)
-            return await sendAlimtalk(parentPhone, variables, config)
+            const recipients = await resolveAlimtalkRecipients({
+              registrationId,
+              primaryPhone: parentPhone,
+              recipientTarget: config.recipientTarget,
+            })
+            const sendResults = []
+            for (const recipient of recipients) {
+              sendResults.push(await sendAlimtalk(recipient.phone, variables, config))
+            }
+            return sendResults
           } catch (sendErr) {
             await createSendLogEntry({
               registrationId,

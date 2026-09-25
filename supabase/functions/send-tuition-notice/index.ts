@@ -40,7 +40,6 @@ import {
   getCurrentAdminKey,
   resolveAdminKeyFromRequest,
   getBotUserId,
-  assertValidPhone,
   extractErrorMessage,
 } from "../_shared/adminShared.ts"
 import {
@@ -49,6 +48,7 @@ import {
   getRelationFirstId,
   getRollupText,
   normalizePhone,
+  resolveAlimtalkRecipients,
   isSendingLockActive,
   withSendingLock,
   SYNC_WAIT_FLAG,
@@ -197,8 +197,17 @@ Deno.serve(async (req) => {
 
       const sendResult = await withSendingLock(tuitionId, "발송중", async () => {
         try {
-          assertValidPhone(parentPhone)
-          return await sendAlimtalk(parentPhone, variables, config)
+          if (!registrationId) throw new Error("이 수강료 안내에 연결된 등록이 없습니다.")
+          const recipients = await resolveAlimtalkRecipients({
+            registrationId,
+            primaryPhone: parentPhone,
+            recipientTarget: config.recipientTarget,
+          })
+          const sendResults = []
+          for (const recipient of recipients) {
+            sendResults.push(await sendAlimtalk(recipient.phone, variables, config))
+          }
+          return sendResults
         } catch (sendErr) {
           if (registrationId) {
             await createSendLogEntry({

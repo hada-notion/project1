@@ -107,7 +107,7 @@ Deno.serve(async (req) => {
 
       let sendResult: unknown
       try {
-        sendResult = await sendDailyReportAlimtalk({ to: parentPhone, variables })
+        sendResult = await sendDailyReportAlimtalk({ registrationId, primaryPhone: parentPhone, variables })
       } catch (sendErr) {
         await createSendLogEntry({
           registrationId,

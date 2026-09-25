@@ -45,7 +45,6 @@ import {
   getAlimtalkConfig,
   getCurrentAdminKey,
   resolveAdminKeyFromRequest,
-  assertValidPhone,
   extractErrorMessage,
   type SendLogCategory,
 } from "../_shared/adminShared.ts"
@@ -54,6 +53,7 @@ import {
   getDateRange,
   getRelationFirstId,
   normalizePhone,
+  resolveAlimtalkRecipients,
   isSendingLockActive,
   withSendingLock,
   SYNC_WAIT_FLAG,
@@ -235,8 +235,16 @@ Deno.serve(async (req) => {
             "#{페이지ID}": tokenQueryString,
           }
 
-          assertValidPhone(parentPhone)
-          return await sendAlimtalk(parentPhone, variables, config, reportType)
+          const recipients = await resolveAlimtalkRecipients({
+            registrationId,
+            primaryPhone: parentPhone,
+            recipientTarget: config.recipientTarget,
+          })
+          const sendResults = []
+          for (const recipient of recipients) {
+            sendResults.push(await sendAlimtalk(recipient.phone, variables, config, reportType))
+          }
+          return sendResults
         }, { skipMinVisibleDelay: body?.[SYNC_WAIT_FLAG] === true })
 
         await createSendLogEntry({
