@@ -1,7 +1,7 @@
 function renderSchedulePage() {
   return `
     <div class="sub-page">
-      <div class="header-plain"><button class="back-btn-plain" onclick="goIntro()">←</button></div>
+      <div class="header-plain"><button class="back-btn-plain" onclick="goIntro()" aria-label="뒤로가기"><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4 7 12l8 8M7 12h12"/></svg></button></div>
       <div class="card">
         <h2>📅 일정정보</h2>
         <div class="view-toggle">
@@ -39,7 +39,7 @@ function renderIntro() {
   return `
     <div class="scroll-container">
       <div class="snap-section intro-section" id="intro-section">
-        <button class="hamburger-btn" onclick="openMenu()">☰</button>
+        <button class="hamburger-btn" onclick="openMenu()" aria-label="메뉴 열기"><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
         <div class="intro-greeting">${esc(s.academy_name)}</div>
         <div class="intro-name">${esc(s.student_name)}</div>
         <div class="intro-sub">${[s.school, s.grade, s.gender].filter(Boolean).map((x) => `<span>${esc(x)}</span>`).join("")}</div>
@@ -59,7 +59,7 @@ function renderIntro() {
         <div class="swipe-hint" onclick="scrollToTimetable()">통합 시간표 보기<span class="chevron">⌄</span></div>
       </div>
       <div class="snap-section timetable-section" id="timetable-section">
-        <button class="hamburger-btn dark" onclick="openMenu()">☰</button>
+        <button class="hamburger-btn dark" onclick="openMenu()" aria-label="메뉴 열기"><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
         <h2>🗓️ 통합 시간표</h2>
         <div class="tt-hint">현재 수강중인 반들만 요일별로 합쳐서 보여줍니다</div>
         ${buildWeekGridHtml(s.registrations)}
@@ -67,7 +67,7 @@ function renderIntro() {
         <div class="swipe-hint" onclick="scrollToSchedule()">일정 보기<span class="chevron">⌄</span></div>
       </div>
       <div class="snap-section schedule-section" id="schedule-section">
-        <button class="hamburger-btn dark" onclick="openMenu()">☰</button>
+        <button class="hamburger-btn dark" onclick="openMenu()" aria-label="메뉴 열기"><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
         <h2>📅 일정</h2>
         <div class="section-hint">학원 공지와 상담 일정을 확인하세요</div>
         <div id="schedule-cal-area" style="width:100%">${buildScheduleCalendarHtml()}</div>
@@ -718,7 +718,7 @@ function renderDetail() {
     <div class="reg-detail-page">
       <div class="reg-header-bar">
         <div class="reg-header-top">
-          <button class="reg-back-btn" onclick="goIntro()">←</button>
+          <button class="reg-back-btn" onclick="goIntro()" aria-label="뒤로가기"><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4 7 12l8 8M7 12h12"/></svg></button>
           <div class="reg-breadcrumb">
             <span class="crumb" onclick="goIntro()">${esc(STUDENT.student_name)}</span>
             <span class="crumb-sep">›</span>
