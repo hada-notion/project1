@@ -130,6 +130,20 @@ if ! grep -q 'reportWeekLabel' student_report_part2.js || ! grep -q 'openReportP
   fail=1
 fi
 
+# 9) 학교 성적은 내부 운영 전용이다. 학부모용 화면·캐시 생성·공개 응답에 노출하지 않는다.
+if grep -Eq 'grades-section|renderGradesPage|buildGradeTableHtml|buildGradeChartHtml' student_report.html student_report_part1.js student_report_part2.js; then
+  echo "❌ 학생 리포트: 학부모 화면에 학교 성적 UI가 다시 추가됐습니다."
+  fail=1
+fi
+if grep -q 'sp\["성적"\]' supabase/functions/_shared/reportCacheBuilder.ts; then
+  echo "❌ reportCacheBuilder.ts: 학부모 캐시에 학교 성적을 다시 수집하고 있습니다."
+  fail=1
+fi
+if ! grep -q '_privateGrades' supabase/functions/get-report-fast/index.ts; then
+  echo "❌ get-report-fast: 기존 캐시의 학교 성적을 공개 응답에서 제거하는 보호 장치가 없습니다."
+  fail=1
+fi
+
 if [ "$fail" != 0 ]; then
   echo ""
   echo "회귀 가드 실패 -- 위 문제를 고친 뒤 다시 배포하세요."

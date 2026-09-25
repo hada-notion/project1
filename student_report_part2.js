@@ -1,19 +1,3 @@
-function renderGradesPage() {
-  const grades = STUDENT.grades
-  return `
-    <div class="sub-page">
-      <div class="header-plain"><button class="back-btn-plain" onclick="goIntro()">←</button></div>
-      <div class="card">
-        <h2>📊 성적정보</h2>
-        <div class="view-toggle">
-          <button class="${gradeView === "table" ? "active" : ""}" onclick="setGradeView('table')">표로 보기</button>
-          <button class="${gradeView === "chart" ? "active" : ""}" onclick="setGradeView('chart')">차트로 보기</button>
-        </div>
-        ${gradeView === "table" ? buildGradeTableHtml(grades) : buildGradeChartHtml(grades)}
-      </div>
-    </div>
-  `
-}
 function renderSchedulePage() {
   return `
     <div class="sub-page">
@@ -30,26 +14,6 @@ function renderSchedulePage() {
     </div>
   `
 }
-function gradesContentHtml() {
-  return `
-    <div class="view-toggle">
-      <button class="${gradeView === "table" ? "active" : ""}" onclick="setGradeView('table')">표로 보기</button>
-      <button class="${gradeView === "chart" ? "active" : ""}" onclick="setGradeView('chart')">차트로 보기</button>
-    </div>
-    <div class="card">${gradeView === "table" ? buildGradeTableHtml(STUDENT.grades) : buildGradeChartHtml(STUDENT.grades)}</div>
-  `
-}
-function setGradeView(v) {
-  gradeView = v
-  const area = document.getElementById("grades-content-area")
-  if (area) {
-    area.innerHTML = gradesContentHtml()
-  } else {
-    renderApp()
-    scrollToGrades()
-  }
-}
-
 const DAYS = ["월", "화", "수", "목", "금", "토", "일"]
 function buildWeekGridHtml(regs) {
   const active = regs.filter((r) => r.status === "수강중")
@@ -108,14 +72,6 @@ function renderIntro() {
         <div class="section-hint">학원 공지와 상담 일정을 확인하세요</div>
         <div id="schedule-cal-area" style="width:100%">${buildScheduleCalendarHtml()}</div>
         <div class="up-hint" onclick="scrollToTimetable()"><span class="chevron">⌃</span>이전으로</div>
-        <div class="swipe-hint" onclick="scrollToGrades()">성적 보기<span class="chevron">⌄</span></div>
-      </div>
-      <div class="snap-section grades-section" id="grades-section">
-        <button class="hamburger-btn dark" onclick="openMenu()">☰</button>
-        <h2>📊 성적</h2>
-        <div class="section-hint">최근 시험 성적 추이를 확인하세요</div>
-        <div class="section-scroll" id="grades-content-area">${gradesContentHtml()}</div>
-        <div class="up-hint" onclick="scrollToSchedule()"><span class="chevron">⌃</span>이전으로</div>
       </div>
     </div>
   `

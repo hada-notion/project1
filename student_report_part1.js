@@ -225,13 +225,6 @@ function mapReportToStudent(r) {
     mother_phone: r.mother_phone || "",
     father_phone: r.father_phone || "",
     primary_contact: r.primary_contact || "",
-    grades: (r.grades || []).map((g) => ({
-      subject: g.subject || "수학",
-      exam_name: g.title || "",
-      score: g.score,
-      grade_level: g.level || "",
-      date: g.iso || null,
-    })),
     notices: (r.notices || []).map((n) => ({ date: n.date || null, title: n.title || "", category: n.category || "" })),
     registrations: regs.map(mapRegistration),
   }
@@ -295,10 +288,9 @@ async function loadReportFromServer() {
 
 // ===================== 상태 =====================
 const app = document.getElementById("app")
-let view = "intro" // "intro" | "detail" | "grades" | "schedule" | "book"
+let view = "intro" // "intro" | "detail" | "schedule" | "book"
 let selectedToken = null
 let selectedBookTitle = null
-let gradeView = "table"
 let scheduleMonthIndex = 0
 let expandedSection = null // "basic" | "registrations" | null
 let selectedCalDate = null
@@ -541,9 +533,6 @@ function scrollToIntro() {
 function scrollToSchedule() {
   document.getElementById("schedule-section")?.scrollIntoView({ behavior: "smooth" })
 }
-function scrollToGrades() {
-  document.getElementById("grades-section")?.scrollIntoView({ behavior: "smooth" })
-}
 function scrollToRegSection(id) {
   document.getElementById(id)?.scrollIntoView({ behavior: "smooth" })
 }
@@ -711,67 +700,4 @@ function showTestDetailModal(i) {
 }
 function closeTestDetailModal() {
   document.getElementById("test-detail-modal").classList.remove("active")
-}
-
-function buildGradeTableHtml(grades) {
-  return `
-    <table class="grade-table">
-      <thead><tr><th>과목</th><th>시험명</th><th>점수</th><th>등급</th><th>날짜</th></tr></thead>
-      <tbody>${grades.slice().reverse().map((g) => `<tr><td>${esc(g.subject)}</td><td>${esc(g.exam_name)}</td><td>${g.score}점</td><td>${esc(g.grade_level)}</td><td>${esc(g.date)}</td></tr>`).join("")}</tbody>
-    </table>
-  `
-}
-const SUBJECT_COLORS = { "수학": "#6c5ce7" }
-function niceAxisStep(maxValue, targetTicks) {
-  const safeMax = maxValue > 0 ? maxValue : 100
-  const roughStep = safeMax / targetTicks
-  const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)))
-  const residual = roughStep / magnitude
-  let niceResidual
-  if (residual > 5) niceResidual = 10
-  else if (residual > 2) niceResidual = 5
-  else if (residual > 1) niceResidual = 2
-  else niceResidual = 1
-  return niceResidual * magnitude
-}
-function buildGradeChartHtml(grades) {
-  const subjects = [...new Set(grades.map((g) => g.subject))]
-  const width = 400, height = 240
-  const paddingLeft = 34, paddingRight = 14, paddingTop = 18, paddingBottom = 36
-  const dates = [...new Set(grades.map((g) => g.date))].sort()
-  // X축에는 날짜 대신 해당 날짜의 시험명(예: "중1 1학기 중간고사")을 표시하고, 시험명이 없으면 날짜로 폴백합니다. dates가 이미 날짜순(ISO 문자열 sort)으로 정렬돼 있으므로 시간순이 유지됩니다.
-  const dateExamLabels = dates.map((d) => {
-    const match = grades.find((g) => g.date === d && g.exam_name)
-    return match ? match.exam_name : toShortDate(d)
-  })
-  const plotWidth = width - paddingLeft - paddingRight
-  const xStep = dates.length > 1 ? plotWidth / (dates.length - 1) : 0
-  const scores = grades.map((g) => g.score)
-  const axisMax = 100
-  const ticks = [0, 20, 40, 60, 80, 100]
-  const yFor = (score) => height - paddingBottom - (score / axisMax) * (height - paddingTop - paddingBottom)
-  const xFor = (date) => dates.length > 1 ? paddingLeft + dates.indexOf(date) * xStep : paddingLeft + plotWidth / 2
-  const lines = subjects.map((subj) => {
-    const pts = grades.filter((g) => g.subject === subj).sort((a, b) => (a.date || "").localeCompare(b.date || ""))
-    const path = pts.map((p) => `${xFor(p.date)},${yFor(p.score)}`).join(" ")
-    const color = SUBJECT_COLORS[subj] || "#999"
-    const dots = pts.map((p) => `<circle cx="${xFor(p.date)}" cy="${yFor(p.score)}" r="4" fill="${color}" />`).join("")
-    const valueLabels = pts.map((p) => `<text x="${xFor(p.date)}" y="${yFor(p.score) - 10}" font-size="11" font-weight="700" fill="${color}" text-anchor="middle">${p.score}점</text>`).join("")
-    return `<polyline points="${path}" fill="none" stroke="${color}" stroke-width="2" />${dots}${valueLabels}`
-  }).join("")
-  const gridLines = ticks.map((v) => `
-    <line x1="${paddingLeft}" y1="${yFor(v)}" x2="${width - paddingRight}" y2="${yFor(v)}" stroke="#eee" stroke-width="1" />
-    <text x="${paddingLeft - 6}" y="${yFor(v) + 3}" font-size="9" fill="#bbb" text-anchor="end">${v}</text>
-  `).join("")
-  const axisLines = `
-    <line x1="${paddingLeft}" y1="${paddingTop}" x2="${paddingLeft}" y2="${height - paddingBottom}" stroke="#ddd" stroke-width="1" />
-    <line x1="${paddingLeft}" y1="${height - paddingBottom}" x2="${width - paddingRight}" y2="${height - paddingBottom}" stroke="#ddd" stroke-width="1" />
-  `
-  const xAxisTicks = dates.map((d, i) => `
-    <text x="${xFor(d)}" y="${height - paddingBottom + 14}" font-size="9" fill="#bbb" text-anchor="middle">${esc(dateExamLabels[i])}</text>
-  `).join("")
-  return `
-    <div class="chart-legend">${subjects.map((s) => `<div class="legend-item"><span class="dot" style="background:${SUBJECT_COLORS[s] || "#999"}"></span>${esc(s)}</div>`).join("")}</div>
-    <div class="chart-wrap"><svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">${gridLines}${axisLines}${lines}${xAxisTicks}</svg></div>
-  `
 }

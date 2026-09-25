@@ -13,7 +13,6 @@ import {
   fmtDateKr,
   kstDateOf,
   normalizeStatus,
-  shortExamLabel,
   upsertReportCacheRows,
   type ReportCacheRow,
 } from "./reportCacheShared.ts"
@@ -145,43 +144,6 @@ async function buildStudentFields(studentId: string, cachedGetPage: (id: string)
     }),
   )
 
-  const gradeIds = relationIds(sp["성적"])
-  const gradePages = await Promise.all(gradeIds.map((id: string) => cachedGetPage(id)))
-  let grades = await Promise.all(
-    gradePages.map(async (gp: any) => {
-      const gpr = gp.properties
-      const scopeId = firstRelationId(gpr["시험범위"])
-      let examTitle = "",
-        gradeLabel = "",
-        subject = "",
-        iso: string | null = null
-      if (scopeId) {
-        const scope = await cachedGetPage(scopeId)
-        examTitle = text(scope.properties["이름"])
-        subject = text(scope.properties["과목"])
-        iso = dateStartOf(scope.properties["시험일"])
-        const scopeGradeId = firstRelationId(scope.properties["학년"])
-        if (scopeGradeId) {
-          const gradePage = await cachedGetPage(scopeGradeId)
-          gradeLabel = anyTitle(gradePage)
-        }
-      }
-      const title = shortExamLabel(examTitle, gradeLabel) || text(gpr["이름"])
-      return {
-        title,
-        score: numberOf(gpr["점수"]),
-        rank: numberOf(gpr["등수"]),
-        total: numberOf(gpr["응시인원"]),
-        percentile: numberOf(gpr["백분률"]),
-        level: text(gpr["등급"]),
-        subject,
-        iso,
-        date: fmtDateKr(iso),
-      }
-    }),
-  )
-  grades = grades.sort((a, b) => ((a.iso ?? "") < (b.iso ?? "") ? 1 : -1)).slice(0, 10)
-
   const notices = await buildStudentNotices(studentId, sp, cachedGetPage)
 
   return {
@@ -192,7 +154,6 @@ async function buildStudentFields(studentId: string, cachedGetPage: (id: string)
     father_phone: fatherPhone,
     primary_contact: primaryContact,
     siblings,
-    grades,
     notices,
     issued_at: new Date().toISOString(),
   }

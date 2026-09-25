@@ -165,9 +165,8 @@ body {
 .timetable-section h2 { font-size: 17px; margin: 0 0 4px; }
 .timetable-section .tt-hint { font-size: 12px; color: #999; margin-bottom: 18px; }
 .schedule-section { background: linear-gradient(160deg, #eef4ff, #dbe9ff); justify-content: flex-start; padding-top: clamp(36px, 12vh, 130px); padding-bottom: clamp(8px, 3vh, 40px); padding-left: clamp(4px, 1.5vw, 12px); padding-right: clamp(4px, 1.5vw, 12px); }
-.grades-section { background: linear-gradient(160deg, #fff2e6, #ffe6d6); justify-content: flex-start; padding-top: clamp(90px, 18vh, 150px); padding-left: clamp(8px, 3vw, 20px); padding-right: clamp(8px, 3vw, 20px); }
-.schedule-section h2, .grades-section h2 { font-size: 17px; margin: 0 0 4px; color: #333; }
-.schedule-section .section-hint, .grades-section .section-hint { font-size: 12px; color: #888; margin-bottom: 16px; }
+.schedule-section h2 { font-size: 17px; margin: 0 0 4px; color: #333; }
+.schedule-section .section-hint { font-size: 12px; color: #888; margin-bottom: 16px; }
 .section-scroll { width: 100%; max-width: var(--content-w); overflow-y: visible; padding: 2px 2px 10px; }
 .week-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; width: 100%; max-width: var(--content-w); }
 .week-col { text-align: center; }
@@ -427,9 +426,6 @@ body {
 .view-toggle { display: flex; gap: 6px; margin-bottom: 16px; }
 .view-toggle button { flex: 1; padding: 8px 0; border-radius: 10px; border: 1px solid #eee; background: #f7f7f9; color: #888; font-size: 13px; font-weight: 600; cursor: pointer; }
 .view-toggle button.active { background: #6c5ce7; color: #fff; border-color: #6c5ce7; }
-.grade-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.grade-table th, .grade-table td { padding: 8px 6px; border-bottom: 1px solid #f0f0f0; text-align: left; }
-.grade-table th { color: #999; font-weight: 600; font-size: 12px; }
 .chart-legend { display: flex; gap: 14px; margin-bottom: 10px; font-size: 12px; }
 .chart-legend .legend-item { display: flex; align-items: center; gap: 5px; }
 .chart-legend .dot { width: 8px; height: 8px; border-radius: 50%; }
@@ -579,10 +575,10 @@ body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
     padding-top: 6px !important;
     padding-bottom: 2px !important;
   }
-  .schedule-section h2, .grades-section h2, .books-section h2, .attendance-section h2, .study-section h2, .tasks-section h2 {
+  .schedule-section h2, .books-section h2, .attendance-section h2, .study-section h2, .tasks-section h2 {
     font-size: 12px; margin: 0 0 2px;
   }
-  .schedule-section .section-hint, .grades-section .section-hint, .books-section .section-hint, .attendance-section .section-hint, .study-section .section-hint, .tasks-section .section-hint {
+  .schedule-section .section-hint, .books-section .section-hint, .attendance-section .section-hint, .study-section .section-hint, .tasks-section .section-hint {
     font-size: 0px; margin-bottom: 0px; height: 0; overflow: hidden;
   }
   .up-hint, .swipe-hint { font-size: 0px; }

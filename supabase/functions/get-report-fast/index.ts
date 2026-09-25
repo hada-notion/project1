@@ -32,8 +32,11 @@ Deno.serve(async (req: Request) => {
     const overviews = await selectReportCacheOverviewsByStudentKey(row.student_key)
     overviews.sort((a: any, b: any) => String(a?.start_date ?? "").localeCompare(String(b?.start_date ?? "")))
 
+    // 학교 성적은 내부 운영 정보이며 학부모용 리포트 응답에는 포함하지 않는다.
+    // 기존 캐시에 grades가 남아 있어도 공개 응답 경계에서 제거한다.
+    const { grades: _privateGrades, ...publicStudentFields } = row.student_fields ?? {}
     const payload = {
-      ...row.student_fields,
+      ...publicStudentFields,
       token: row.access_token,
       registration_id: row.registration_id,
       registrations: overviews,
