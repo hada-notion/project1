@@ -97,6 +97,20 @@ if ! grep -q 'id: rp.id' supabase/functions/_shared/reportCacheBuilder.ts; then
   fail=1
 fi
 
+# 6) 학습활동의 "구분"은 롤업 속성이다. rollup을 텍스트로 해석하지 못하면 과제/평가가
+#    모두 빈 분류로 탈락해 HTML에 "해당 없음"으로 표시된다.
+if ! grep -q 'case "rollup"' supabase/functions/_shared/reportCacheShared.ts; then
+  echo "❌ reportCacheShared.ts: 롤업 텍스트 해석이 없어 과제/평가 분류가 누락됩니다."
+  fail=1
+fi
+
+# 7) 등록 페이지 수동 동기화는 그룹 공통 학습기록/학습활동을 공유하는 학생 캐시에도
+#    순차 전파해야 한다. 그렇지 않으면 한 학생만 최신 범위·내용을 보고 나머지는 과거 캐시를 본다.
+if ! grep -q 'resolveSharedLearningRegistrationIds' "$SYNC_CACHE_FILE"; then
+  echo "❌ $SYNC_CACHE_FILE: 공유 학습기록의 관련 학생 캐시 전파가 빠졌습니다."
+  fail=1
+fi
+
 if [ "$fail" != 0 ]; then
   echo ""
   echo "회귀 가드 실패 -- 위 문제를 고친 뒤 다시 배포하세요."

@@ -18,7 +18,11 @@ import { requireAdminKey, CORS_HEADERS as ADMIN_CORS } from "../_shared/adminSha
 import { queryAllPages, mapWithConcurrency, extractPageId } from "../_shared/notionClient.ts"
 import { makePageCache } from "../_shared/reportCacheShared.ts"
 import { upsertReportCacheRows, type ReportCacheRow } from "../_shared/reportCacheShared.ts"
-import { buildCacheRowForRegistration, syncReportCacheForRegistration } from "../_shared/reportCacheBuilder.ts"
+import {
+  buildCacheRowForRegistration,
+  resolveSharedLearningRegistrationIds,
+  syncReportCacheForRegistration,
+} from "../_shared/reportCacheBuilder.ts"
 import { resolveRegistrationIds, DS_REGISTRATION } from "../_shared/syncReportCacheTarget.ts"
 import { refreshStudentReport } from "../_shared/dailyReportRefresh.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
@@ -64,30 +68,49 @@ Deno.serve(async (req: Request) => {
     const registrationIds = await resolveRegistrationIds(rawId, cachedGetPage)
 
     if (isRegistrationPage(sourcePage)) {
-      const doFullRefresh = async () => {
+      const doFullRefresh = async (fanOutSharedLearning = false) => {
         // 같은 버튼 안에서 토큰이 없으면 먼저 발급하고, 출석 원본과 학습기록·학습활동을 포함한
         // 완성 캐시까지 갱신한다. 알림톡 발송 함수는 호출하지 않는다.
         await refreshStudentReport(rawId)
+
+        if (!fanOutSharedLearning) return { synced: 1, registrationIds: [rawId] }
+
+        // Notion 등록 페이지의 수동 버튼은 그룹 공통 학습기록/학습활동을 공유하는 다른 학생의
+        // report_cache도 갱신한다. 공통 원본은 한 번만 읽고, 동시 폭주를 피하려고 한 명씩 처리한다.
+        const sharedCache = makePageCache()
+        const affectedIds = await resolveSharedLearningRegistrationIds(rawId, sharedCache)
+        let synced = 1
+        for (const id of affectedIds) {
+          if (id === rawId) continue
+          try {
+            const row = await syncReportCacheForRegistration(id, sharedCache)
+            if (row) synced += 1
+          } catch (err) {
+            // 한 학생의 오류 때문에 나머지 같은 반 학생 갱신이 중단되지 않게 한다.
+            console.error(`공유 학습기록 캐시 갱신 실패(${id}):`, (err as Error).message)
+          }
+        }
+        return { synced, registrationIds: affectedIds }
       }
 
       // 웹앱 FAB는 완료 응답을 기다린 뒤 데이터를 다시 읽으므로 동기로 처리한다. Notion 등록 페이지
       // 버튼은 웹훅 응답 제한에 걸리지 않도록 빠른 202를 반환하고 실제 최신화는 백그라운드에서 끝낸다.
       const explicitRegistrationRequest = typeof body?.registrationId === "string"
       if (explicitRegistrationRequest || body?.awaitCompletion === true) {
-        await doFullRefresh()
-        return new Response(JSON.stringify({ synced: 1, registrationIds: [rawId], fullRefresh: true }), {
+        const result = await doFullRefresh(false)
+        return new Response(JSON.stringify({ ...result, fullRefresh: true, sharedFanOut: false }), {
           headers: { ...ADMIN_CORS, "Content-Type": "application/json" },
         })
       }
 
       runInBackground(async () => {
         try {
-          await doFullRefresh()
+          await doFullRefresh(true)
         } catch (err) {
           console.error(`등록 학생 페이지 수동 동기화 실패(${rawId}):`, (err as Error).message)
         }
       })
-      return respondAccepted({ registrationIds: [rawId], fullRefresh: true })
+      return respondAccepted({ registrationIds: [rawId], fullRefresh: true, sharedFanOut: true })
     }
 
     // 정규교재·일정 자동화는 기존처럼 영향받는 등록의 완성 캐시만 다시 만든다. 여기까지 전체 출석

@@ -509,3 +509,31 @@ export async function syncReportCacheForRegistration(
   if (row) await upsertReportCacheRows([row])
   return row
 }
+
+// 등록 페이지에서 수동 동기화할 때, 그 학생이 사용하는 그룹 공통 학습기록/학습활동의
+// "등록" 관계를 따라가 같은 원본을 공유하는 학생을 찾는다. 원본 페이지는 cachedGetPage로
+// 한 번만 읽고, 호출부가 반환된 등록을 한 명씩 순차 처리한다.
+export async function resolveSharedLearningRegistrationIds(
+  registrationId: string,
+  cachedGetPage: (id: string) => Promise<any>,
+): Promise<string[]> {
+  const ids = new Set<string>([registrationId])
+  const sinceIso = `${sinceIsoMonthsAgo(DETAIL_LOOKBACK_MONTHS)}T00:00:00+09:00`
+  const attendanceRows = await selectAttendanceByRegistrationId(registrationId, sinceIso)
+  const logIds = Array.from(new Set(attendanceRows.flatMap((row) => row.study_log_ids ?? [])))
+  const logPages = await Promise.all(logIds.map((id) => cachedGetPage(id)))
+
+  for (const page of logPages) {
+    for (const id of relationIds(page.properties?.["등록"])) ids.add(id)
+  }
+
+  const activityPages = await queryAllPages(DS_STUDY_ACTIVITY, {
+    property: "등록",
+    relation: { contains: registrationId },
+  })
+  for (const page of activityPages) {
+    for (const id of relationIds(page.properties?.["등록"])) ids.add(id)
+  }
+
+  return Array.from(ids)
+}

@@ -28,6 +28,16 @@ export function text(prop: any): string {
       return prop.number != null ? String(prop.number) : ""
     case "date":
       return prop.date?.start ?? ""
+    case "rollup": {
+      const r = prop.rollup
+      if (!r) return ""
+      if (r.type === "array") {
+        return (r.array ?? []).map((item: any) => text(item)).filter(Boolean).join(", ")
+      }
+      if (r.type === "number") return r.number != null ? String(r.number) : ""
+      if (r.type === "date") return r.date?.start ?? ""
+      return ""
+    }
     case "formula": {
       const f = prop.formula
       if (!f) return ""
