@@ -19,7 +19,7 @@
 //
 // (2026-09-20, 웹훅 코드 정리 2단계) 이 버튼도 sync-registration-enroll/end/timetable/textbook과
 // 동일하게 큐 기반으로 전환했다. 실제 처리 로직은 _shared/registrationClassSessionTarget.ts로
-// 옮겼고, 이 파일은 다른 등록 버튼들과 동일하게 웹훅 body 파싱 + 잠금 선체크만 담당한다. body 없이
+// 옮겼고, 이 파일은 다른 등록 버튼들과 동일하게 웹훅 body 파싱 + 사전 잠금 확인만 담당한다. body 없이
 // 호출하는 cron 전체 스캔 경로는 버튼이 기다리는 응답이 아니므로 기존과 동일하게 동기 처리를 유지한다.
 //
 // (2026-09-21, PART N-2) runLockedQueueWebhookForPage/runSyncWebhookForPage는 req를 받지 않아
