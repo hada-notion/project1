@@ -37,6 +37,13 @@ function stripLeadingEmoji(s: string): string {
   return s.replace(/^[^\w가-힣]+/u, "").trim()
 }
 
+// 반별 전송의 영속 실행 캐시는 queryAllPages가 이미 반환한 페이지도 seed()로 공유한다.
+// 일반 메모리 캐시에는 seed가 없으므로 기존처럼 원본 결과를 그대로 사용한다.
+async function shareQueriedPages(pages: any[], cachedGetPage: (id: string) => Promise<any>): Promise<any[]> {
+  const seed = (cachedGetPage as ((id: string) => Promise<any>) & { seed?: (page: any) => Promise<any> }).seed
+  return seed ? await Promise.all(pages.map((page) => seed(page))) : pages
+}
+
 async function buildStudentNotices(
   studentId: string,
   studentProps: any,
@@ -323,10 +330,13 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
     .slice(0, 200)
     .map((e) => ({ text: e.comment, iso: e.iso, date: fmtDateKr(e.iso), by: teacherName }))
 
-  const reportPages = await queryAllPages(DS_REPORT, {
-    property: "등록",
-    relation: { contains: registrationId },
-  })
+  const reportPages = await shareQueriedPages(
+    await queryAllPages(DS_REPORT, {
+      property: "등록",
+      relation: { contains: registrationId },
+    }),
+    cachedGetPage,
+  )
   const report_comments = reportPages
     .map((rp: any) => {
       const rpr = rp.properties
@@ -368,10 +378,13 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
     .slice(0, 12)
     .map((l) => ({ iso: l.iso, date: fmtDateKr(l.iso), book: l.bookTitle, range: l.range, unit: "", note: l.content, body: [] as unknown[] }))
 
-  const activityPages = await queryAllPages(DS_STUDY_ACTIVITY, {
-    property: "등록",
-    relation: { contains: registrationId },
-  })
+  const activityPages = await shareQueriedPages(
+    await queryAllPages(DS_STUDY_ACTIVITY, {
+      property: "등록",
+      relation: { contains: registrationId },
+    }),
+    cachedGetPage,
+  )
   const activities = await Promise.all(
     activityPages.map(async (ap: any) => {
       const props = ap.properties
