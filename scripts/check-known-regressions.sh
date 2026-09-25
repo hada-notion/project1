@@ -144,6 +144,12 @@ if ! grep -q '_privateGrades' supabase/functions/get-report-fast/index.ts; then
   fail=1
 fi
 
+# 10) 전역 새로고침 버튼은 기기별 이모지 대신 지정된 이미지 아이콘을 사용한다.
+if grep -q '>🔄</button>' student_report.html || ! grep -q 'global-sync-fab.*aria-label="새로고침".*<img' student_report.html; then
+  echo "❌ 학생 리포트: 전역 새로고침 버튼의 이미지 아이콘 또는 접근성 라벨이 빠졌습니다."
+  fail=1
+fi
+
 if [ "$fail" != 0 ]; then
   echo ""
   echo "회귀 가드 실패 -- 위 문제를 고친 뒤 다시 배포하세요."
