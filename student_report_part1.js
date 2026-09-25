@@ -53,15 +53,18 @@ function scorePillText(correct, total) {
   const pct = Math.round(((correct ?? 0) / total) * 100)
   return `${pct >= 100 ? "💯 " : ""}${pct}점 (${correct ?? 0}/${total})`
 }
-// 학습기록 카드의 보조정보는 단원과 내용을 각각 독립된 줄로 표시한다.
-// NBSP 두 칸 뒤에 불릿을 두어 HTML 공백 병합 때문에 들여쓰기가 사라지지 않게 한다.
+// 학습기록 카드의 단원·내용은 각각 독립된 줄로 표시한다.
+// 단원/마감/날짜에는 불릿 라벨을 쓰고, 내용은 원문만 그대로 보여준다.
 function renderLogMetaRows(unit, note, extraRows = []) {
-  const rows = [
-    unit ? `단원: ${unit}` : "",
-    note ? `내용: ${note}` : "",
-    ...extraRows,
-  ].filter(Boolean)
-  return rows.map((row) => `<div class="log-context">${esc(`\u00a0\u00a0• ${row}`)}</div>`).join("")
+  const unitRow = unit
+    ? `<div class="log-context">${esc(`\u00a0\u00a0• 단원: ${unit}`)}</div>`
+    : ""
+  const noteRow = note ? `<div class="log-note">${esc(note)}</div>` : ""
+  const extras = extraRows
+    .filter(Boolean)
+    .map((row) => `<div class="log-context">${esc(`\u00a0\u00a0• ${row}`)}</div>`)
+    .join("")
+  return unitRow + noteRow + extras
 }
 // 노션 학습기록 "페이지 본문"을 피드용 부록으로 정리한다.
 // Edge Function 이 body: [{ type: "text" | "image", text?, url?, caption? }] 로 내려준다.

@@ -121,6 +121,10 @@ if ! grep -q 'renderLogMetaRows' student_report_part1.js || ! grep -q '💯 ' st
   echo "❌ 학생 리포트: 디자인 문서의 단원·내용 줄 분리/100점 💯 규칙이 빠졌습니다."
   fail=1
 fi
+if grep -q '내용: \\${note}' student_report_part1.js; then
+  echo "❌ 학생 리포트: 내용 원문 앞에 불필요한 '• 내용:' 라벨이 다시 추가됐습니다."
+  fail=1
+fi
 
 if [ "$fail" != 0 ]; then
   echo ""
