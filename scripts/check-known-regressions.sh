@@ -174,6 +174,12 @@ if ! grep -q 'grid-template-columns: clamp(82px, 18vw, 120px) minmax(0, 1fr) cla
   fail=1
 fi
 
+# 15) 상세 헤더의 이동 경로는 텍스트만 사용하고 클래스·탭·교재 이모지를 넣지 않는다.
+if grep -q 'crumb.*r\.emoji' student_report_part1.js student_report_part2.js || grep -q 'crumb current.*\.icon' student_report_part2.js || grep -Eq 'crumb[^>]*>[^<]*(📚|📘)' student_report_part1.js; then
+  echo "❌ 학생 리포트: 헤더 이동 경로에 이모지가 다시 포함됐습니다."
+  fail=1
+fi
+
 if [ "$fail" != 0 ]; then
   echo ""
   echo "회귀 가드 실패 -- 위 문제를 고친 뒤 다시 배포하세요."

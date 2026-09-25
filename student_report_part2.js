@@ -722,9 +722,9 @@ function renderDetail() {
           <div class="reg-breadcrumb">
             <span class="crumb" onclick="goIntro()">${esc(STUDENT.student_name)}</span>
             <span class="crumb-sep">›</span>
-            <span class="crumb" onclick="goIntro()">${r.emoji} ${esc(r.class_name)}</span>
+            <span class="crumb" onclick="goIntro()">${esc(r.class_name)}</span>
             <span class="crumb-sep">›</span>
-            <span class="crumb current">${esc(tabs.find((t) => t.id === regTab)?.icon || "")} ${esc(tabs.find((t) => t.id === regTab)?.label || "")}</span>
+            <span class="crumb current">${esc(tabs.find((t) => t.id === regTab)?.label || "")}</span>
           </div>
         </div>
         <div class="reg-head-row stacked">

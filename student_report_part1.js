@@ -425,11 +425,11 @@ function renderBookDetail() {
           <div class="reg-breadcrumb">
             <span class="crumb" onclick="goIntro()">${esc(STUDENT.student_name)}</span>
             <span class="crumb-sep">›</span>
-            <span class="crumb" onclick="closeBookDetail()">${r.emoji} ${esc(r.class_name)}</span>
+            <span class="crumb" onclick="closeBookDetail()">${esc(r.class_name)}</span>
             <span class="crumb-sep">›</span>
-            <span class="crumb" onclick="closeBookDetail()">📚 교재</span>
+            <span class="crumb" onclick="closeBookDetail()">교재</span>
             <span class="crumb-sep">›</span>
-            <span class="crumb current">📘 ${esc(selectedBookTitle)}</span>
+            <span class="crumb current">${esc(selectedBookTitle)}</span>
           </div>
         </div>
         <div class="reg-cover-wrap">
