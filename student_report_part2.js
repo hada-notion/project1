@@ -298,6 +298,43 @@ function goReportCurrent() {
   }
   renderApp()
 }
+// 주간보고서의 월 소속은 그 주의 목요일로 정한다.
+// 월~일 중 더 많은 날짜가 포함된 달을 안정적으로 선택하고, 월 경계에서도 한 주가 중복되지 않는다.
+function reportWeekLabel(rangeStart) {
+  const thursday = addDaysStr(rangeStart, 3)
+  const [, month, day] = thursday.split("-").map(Number)
+  const weekOfMonth = Math.floor((day - 1) / 7) + 1
+  return `${month}월 ${weekOfMonth}주차`
+}
+function openReportWeekPicker() {
+  const modal = document.getElementById("report-week-modal")
+  const body = document.getElementById("report-week-modal-body")
+  if (!modal || !body) return
+  const currentMonday = mondayOfWeek(MOCK_TODAY)
+  const maxOffset = MAX_LOOKBACK_MONTHS * 4
+  body.innerHTML = Array.from({ length: maxOffset + 1 }, (_, offset) => {
+    const start = addDaysStr(currentMonday, -7 * offset)
+    const end = addDaysStr(start, 6)
+    const exactRange = `${start.slice(5).replace("-", ".")}~${end.slice(5).replace("-", ".")}`
+    return `
+      <button class="week-picker-item ${offset === reportOffset ? "active" : ""}" onclick="selectReportWeek(${offset})">
+        <span class="week-picker-label">${esc(reportWeekLabel(start))}</span>
+        <span class="week-picker-range">${esc(exactRange)}</span>
+        <span class="week-picker-check">${offset === reportOffset ? "✓" : ""}</span>
+      </button>
+    `
+  }).join("")
+  modal.classList.add("active")
+  body.querySelector(".week-picker-item.active")?.scrollIntoView({ block: "center" })
+}
+function closeReportWeekPicker() {
+  document.getElementById("report-week-modal")?.classList.remove("active")
+}
+function selectReportWeek(offset) {
+  reportOffset = Math.max(0, Math.min(MAX_LOOKBACK_MONTHS * 4, Number(offset) || 0))
+  closeReportWeekPicker()
+  renderApp()
+}
 function reportRange() {
   if (reportPeriod === "week") {
     const currentMonday = mondayOfWeek(MOCK_TODAY)
@@ -391,7 +428,7 @@ function buildReportTabHtml(r) {
   const attRate = countedAttendanceRows.length ? Math.round((presentCount / countedAttendanceRows.length) * 100) : 0
   const doneHomework = homeworkItems.filter((h) => h.status === "완료").length
   const hwRate = homeworkItems.length ? Math.round((doneHomework / homeworkItems.length) * 100) : 0
-  const periodLabel = reportPeriod === "week" ? `${withDow(rangeStart)} ~ ${withDow(rangeEnd)}` : `${rangeStart.slice(0, 7)}`
+  const periodLabel = reportPeriod === "week" ? reportWeekLabel(rangeStart) : `${rangeStart.slice(0, 7)}`
   const segToggleHtml = `
     <div class="seg-toggle">
       <button class="${reportPeriod === "day" ? "active" : ""}" onclick="setReportPeriod('day')">일간 보고서</button>
@@ -422,7 +459,9 @@ function buildReportTabHtml(r) {
     ${segToggleHtml}
     <div class="cal-month-nav">
       <button class="cal-nav-btn" ${reportOffset >= (reportPeriod === "week" ? MAX_LOOKBACK_MONTHS * 4 : MAX_LOOKBACK_MONTHS) ? "disabled" : ""} onclick="navigateReportPeriod(1)">‹</button>
-      <div class="cal-month-title">${esc(periodLabel)}</div>
+      ${reportPeriod === "week"
+        ? `<button class="cal-month-title period-picker-trigger" onclick="openReportWeekPicker()" aria-label="주차 선택">${esc(periodLabel)}<span class="period-picker-chevron">⌄</span></button>`
+        : `<div class="cal-month-title">${esc(periodLabel)}</div>`}
       <div class="cal-nav-right">
         <button class="cal-today-btn" onclick="goReportCurrent()">현재</button>
         <button class="cal-nav-btn" ${reportOffset === 0 ? "disabled" : ""} onclick="navigateReportPeriod(-1)">›</button>
