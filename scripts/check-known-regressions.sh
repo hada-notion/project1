@@ -151,7 +151,7 @@ if grep -q '>🔄</button>' student_report.html || ! grep -q 'global-sync-fab.*a
 fi
 
 # 11) 브랜드 색상은 개별 하드코딩 대신 공용 팔레트 변수로 관리한다.
-if ! grep -q -- '--brand-primary: #5b5bd6' student_report.html || ! grep -q -- '--brand-soft: #eeeeff' student_report.html || ! grep -q 'background: var(--brand-primary)' student_report.html; then
+if ! grep -q -- '--brand-primary: #e6d8c4' student_report.html || ! grep -q -- '--brand-soft: #f5efe7' student_report.html || ! grep -q 'background: var(--brand-primary)' student_report.html; then
   echo "❌ 학생 리포트: 공용 브랜드 팔레트 또는 주요 컴포넌트 연결이 빠졌습니다."
   fail=1
 fi
