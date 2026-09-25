@@ -27,7 +27,7 @@ const SOURCE_CONFIGS: SourceConfig[] = [
     dataSourceId: DS_ATTENDANCE,
     registrationProp: "등록",
     meaningfulProps: [
-      "출석 상태", "수업일시", "등원스템프", "하원스템프", "선생님 한마디", "선생님 한마때",
+      "출석 상태", "수업일시", "선생님 한마디", "선생님 한마때",
       "학습기록", "학습활동/과제", "학습활동", "등록", "수업", "클래스", "담당강사",
     ],
   },
