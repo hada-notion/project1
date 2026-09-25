@@ -309,9 +309,9 @@ function goReportCurrent() {
 // 월~일 중 더 많은 날짜가 포함된 달을 안정적으로 선택하고, 월 경계에서도 한 주가 중복되지 않는다.
 function reportWeekLabel(rangeStart) {
   const thursday = addDaysStr(rangeStart, 3)
-  const [, month, day] = thursday.split("-").map(Number)
+  const [year, month, day] = thursday.split("-").map(Number)
   const weekOfMonth = Math.floor((day - 1) / 7) + 1
-  return `${month}월 ${weekOfMonth}주차`
+  return `${year}년 ${month}월 ${weekOfMonth}주차`
 }
 let reportPickerMonthOffset = 0
 function reportMonthValue(offset) {
@@ -471,7 +471,7 @@ function computeRecentTestPoints(tests, asOfDate, count) {
   const past = tests.filter((t) => t.date <= asOfDate).slice().sort((a, b) => (a.date || "").localeCompare(b.date || ""))
   const recent = past.slice(-count)
   return recent.map((t) => ({
-    label: (t.date || "").slice(5).replace("-", "."),
+    label: (t.date || "").slice(0, 10).slice(5).replace("-", "."),
     avg: t.total ? Math.round((t.correct / t.total) * 1000) / 10 : null,
     count: 1,
     items: [t],
@@ -532,7 +532,7 @@ function buildReportTabHtml(r) {
       ${segToggleHtml}
       <div class="cal-month-nav">
         <button class="cal-nav-btn" ${dayDate <= reportDayEarliest() ? "disabled" : ""} onclick="navigateReportDay(1)">‹</button>
-        <button class="cal-month-title period-picker-trigger" onclick="openReportPeriodPicker()" aria-label="날짜 선택"><span class="period-picker-calendar">📅</span>${esc(periodLabel)}<span class="period-picker-chevron">⌄</span></button>
+        <button class="cal-month-title period-picker-trigger" onclick="openReportPeriodPicker()" aria-label="날짜 선택">${esc(periodLabel)}</button>
         <div class="cal-nav-right">
           <button class="cal-today-btn" onclick="goReportCurrent()">오늘</button>
           <button class="cal-nav-btn" ${dayDate >= MOCK_TODAY ? "disabled" : ""} onclick="navigateReportDay(-1)">›</button>
@@ -547,7 +547,7 @@ function buildReportTabHtml(r) {
     ${segToggleHtml}
     <div class="cal-month-nav">
       <button class="cal-nav-btn" ${reportOffset >= (reportPeriod === "week" ? REPORT_WEEK_LOOKBACK : REPORT_MONTH_LOOKBACK) ? "disabled" : ""} onclick="navigateReportPeriod(1)">‹</button>
-      <button class="cal-month-title period-picker-trigger" onclick="openReportPeriodPicker()" aria-label="${reportPeriod === "week" ? "주차" : "월"} 선택"><span class="period-picker-calendar">📅</span>${esc(periodLabel)}<span class="period-picker-chevron">⌄</span></button>
+      <button class="cal-month-title period-picker-trigger" onclick="openReportPeriodPicker()" aria-label="${reportPeriod === "week" ? "주차" : "월"} 선택">${esc(periodLabel)}</button>
       <div class="cal-nav-right">
         <button class="cal-today-btn" onclick="goReportCurrent()">현재</button>
         <button class="cal-nav-btn" ${reportOffset === 0 ? "disabled" : ""} onclick="navigateReportPeriod(-1)">›</button>
