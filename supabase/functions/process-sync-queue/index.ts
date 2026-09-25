@@ -1,6 +1,6 @@
 // POST /functions/v1/process-sync-queue
 //
-// sync_queue에 쌓인 작업을 "생성된 순서대로 하나씩만" 꾼내서 처리하는 전용 워커.
+// sync_queue에 쌓인 작업을 "생성된 순서대로 하나씩만" 꺼내서 처리하는 전용 워커.
 // (2026-09-18, 큐 기반 순차 처리 도입 -- 배경 설명은 _shared/syncQueue.ts, sync-report-cache/index.ts 참고)
 //
 // 두 가지 경로로 호출된다:
@@ -9,7 +9,7 @@
 //   2) pg_cron이 매분 호출하는 안전망 (즉시 트리거가 실패/유실되거나, 처리 중 이 함수 자체가
 //      시간 예산을 다 쓰고 멈춰도 다음 분에 이어서 처리하도록).
 //
-// 동시에 여러 번 호출돼도(즉시 트리거 + 마침 겡친 cron 등) 실제 처리가 격지지 않도록,
+// 동시에 여러 번 호출돼도(즉시 트리거 + 마침 겹친 cron 등) 실제 처리가 겹치지 않도록,
 // public.sync_queue_worker_lock 테이블 기반의 리스(lease) 잠금을 먼저 얻어야 시작한다. 잠금을 못
 // 얻으면 (이미 다른 실행이 돌고 있다는 뜻) 바로 조용히 끝난다 -- 이렇게 해서 아무리 많은 요청이
 // 동시에 몰려도 실제 처리는 항상 한 번에 하나씩, 큐에 쌓인 순서대로만 진행된다.
@@ -50,6 +50,10 @@
 // CONCURRENCY를 3으로 두고 동시에(순서 보장 없이) 처리하도록 했으나, 실제 운영 중 문제가 드러나
 // 다시 1로 되돌렸다 -- 아래 CONCURRENCY 선언부 주석 참고). 마스터플랜:
 // https://app.notion.com/p/903c90386c1d473494c5df6306c53517
+
+// [현재 상태, 2026-09-25] 대시보드 관련 자동화와 직접 enqueue 호출은 제거됐다. 따라서
+// sync-dashboard-link 핸들러와 전용 레인은 현재 새 작업을 받지 않는 휴면 경로다. 기존 큐 항목 처리와
+// 향후 재설계 가능성을 위해 코드는 남겼으며, 삭제는 별도 구조 변경으로 다룬다.
 
 import {
   tryAcquireWorkerLock,
@@ -233,7 +237,7 @@ Deno.serve(async (req: Request) => {
     await releaseWorkerLock()
   }
 
-  // 시간 예산을 다 쓰고 멈춰는데 아직 남은 작업이 있으면, 다음 pg_cron 주기(최대 1분)까지 기다리지
+  // 시간 예산을 다 쓰고 멈췄는데 아직 남은 작업이 있으면, 다음 pg_cron 주기(최대 1분)까지 기다리지
   // 않고 스스로를 한 번 더 깨운다.
   if (Date.now() >= deadline && (await hasPendingSyncQueueItems().catch(() => false))) {
     wakeSyncQueueWorker()

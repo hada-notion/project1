@@ -1,15 +1,14 @@
 // _shared/textbookDistributionTarget.ts
 //
-// sync-textbook-distribution가 처리하는 실제 장바건지/교재배부 생성 로직을 별도 파일로 분리했다
+// sync-textbook-distribution가 처리하는 실제 교재비(장바구니)/교재배부 생성 로직을 별도 파일로 분리했다
 // (2026-09-18, 큐 기반 순차 처리 도입, Phase 2). 원래 index.ts 안에 있던 코드를 그대로 옮긴 것이다.
 // webhook payload 파싱/람다 route 분기는 index.ts에 그대로 둔다. (2026-09-21) 원인 진단용 임시
 // 디버그 로깅(logDebugWebhookCall)과 "🔧 웹훅 디버그 로그 (임시)" DB는 원인 파악(웹훅 주소 오류) 완료 후
 // 함께 제거했다.
 //
-// (2026-09-18) 기존 runWithSafetyTimeout(개별 Edge Function 실행이 응답 없이 실패할 수 있으니 정해진
-// 시간 안에 스스로 오류 처리하는 안전장식)는 큐 숿으로 이전하지 앞눈다. 큐에 쓸이건 작업은 sync_queue
-// 헉에 영속적으로 농이있어서(함수 실행이 중단되어도 다시 집어지지 않습), 응답을 바로 되맔면서
-// 실패로 감지해 되늄렱해야하는 근거 자신이 사라졌다.
+// (2026-09-18) 기존 runWithSafetyTimeout(개별 Edge Function이 응답 없이 멈출 때 정해진 시간 안에
+// 스스로 오류 처리하는 안전장치)은 큐 경로로 이전하지 않았다. 큐에 쌓인 작업은 sync_queue 행으로
+// 영속 저장되고, 워커가 중단돼도 stale 복구 후 다시 처리되므로 개별 함수 내부 타임아웃이 불필요하다.
 //
 // (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환) from-cart는 교재비 페이지 1건만 대상으로
 // 하는 개별 트리거라 큐를 거칠 필요가 없다고 판단했다. processFromCartQueueItem(process-sync-queue
@@ -77,7 +76,7 @@ export const CART_STATUS_SPEC: StatusSpec = {
 	startedAtProp: "담기 처리 시작 시각",
 }
 
-// 등록 하나에 대해 교재비(장바구니) 페이지를 확보한다: 이밀 있으맔 재사용, 없으맔 생성한다.
+// 등록 하나에 대해 교재비(장바구니) 페이지를 확보한다: 이미 있으면 재사용하고, 없으면 생성한다.
 export async function ensureCartForRegistration(
 	registrationId: string,
 	preFetchedRegistration?: any,
@@ -97,7 +96,7 @@ export async function ensureCartForRegistration(
 	return { cartId: cart.id, cartCreated: true }
 }
 
-// 등록 하나에 대해: 아직 담기지 않은 "진행 중" 진도교재를 모아, 교재(정규교재)당 교재배부를 개뱌로 생성한다.
+// 등록 하나에 대해 아직 담기지 않은 "진행 중" 진도교재를 모아, 정규교재별 교재배부를 개별 생성한다.
 export async function distributeForRegistration(
 	registrationId: string,
 	preFetchedRegistration?: any,

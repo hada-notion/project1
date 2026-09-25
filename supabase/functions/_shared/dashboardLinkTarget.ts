@@ -1,19 +1,12 @@
 // _shared/dashboardLinkTarget.ts
 //
-// "대시보드" 기능 (2026-09-20 추가): 수업(학원)/출석(학원)/일정(학원) 페이지가 생성되면 같은
-// 날짜의 대시보드(학원) DB 페이지를 자동으로 찾거나 만들어서 서로 연결한다. 4개 관계 모두 실제
-// 양방향(two-way) relation이라 이 파일에서 한쪽만 채워도 Notion이 반대쪽을 자동으로 채워준다
-// (수업/출석/일정 -> 대시보드 방향으로만 쓰면 충분하다).
+// 수업·출석·일정과 같은 날짜의 대시보드 페이지를 찾아 연결하는 공용 로직이다.
+// [현재 상태, 2026-09-25] 대시보드 생성 자동화와 generate-classes/kiosk-checkin의 직접 적재,
+// nightly-dashboard-link-audit가 모두 제거되어 enqueueDashboardLink를 포함한 운영 호출자는 없다.
+// 수업 생성 중 Notion API 호출량을 줄이기 위해 제거 상태를 유지한다.
 //
-// 대시보드 자신이 생성/수정될 때는(사람이 직접 만들거나, 아래에서 새로 만든 경우) 그 날짜에
-// 해당하는 수업/출석/일정을 전부 다시 모아 대시보드 쪽 관계를 재구성한다 (멱등한 전체 재빌드).
-//
-// 수업(학원)/출석(학원) 페이지는 대부분 generate-classes, kiosk-checkin 두 Edge Function이
-// Notion API를 직접 호출해서 만들기 때문에(사람이 노션 화면에서 직접 "새로 만들기"를 누르는 게
-// 아니라) 페이지 자동화(자동화 액션)가 걸리지 않는다. 그래서 이 두 함수 안에서 각각 페이지를
-// 만든 직후 enqueueDashboardLink()를 직접 호출해서 같은 큐에 넣는다 (아래). 그 외 경로(사람이
-// 노션에서 직접 만들거나, 일정을 직접 만드는 경우)는 대시보드/일정 DB에 걸어둔 "페이지가 생성되면
-// → 웹훅 보내기" 자동화가 sync-dashboard-link 함수를 호출해서 같은 큐로 들어온다.
+// 아래 구현과 큐 target은 향후 별도 pull/수동 방식 재설계를 검토하기 전까지 휴면 코드로 남긴다.
+// 실제 삭제는 실행 구조 변경이므로 별도 승인 후 진행한다.
 
 import { getPage, updatePageProperties, createPage, queryAllPages, dateStart } from "./notionClient.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "./syncQueue.ts"

@@ -1,9 +1,9 @@
-// 출석(학원) DB 마룕니다지로 자시되량게명로 버리메니다/란머리마막.
-// (2026-09-16, 리포트 캐시 아키톤즍첧 1단개: 출석 도맔리딴 "리포트를 만들 따마다 전상위재생잘"
-//  대신 "원슴맔 증몤롐람잌 쌍젔똄 조립" 방식으로 전환한다.)
+// 출석(학원) DB의 원자료를 Supabase attendance_records에 동기화하는 공용 헬퍼.
+// (2026-09-16, 리포트 캐시 아키텍처 1단계) 리포트를 만들 때마다 Notion 출석 DB 전체를
+// 다시 조회하는 대신, 원자료를 증분 동기화한 뒤 저장된 행을 조립하는 방식으로 전환했다.
 //
-// sync-attendance Edge Function이 이 헬퍼로 Notion → attendance_records를 채우고,
-// sync-report-cache는 이 헬퍼로 attendance_records만 읽어서 리포트를 조립한다(Notion 미조회).
+// sync-attendance가 이 헬퍼로 Notion → attendance_records를 채우고,
+// sync-report-cache는 attendance_records만 읽어서 리포트를 조립한다(Notion 출석 DB 미조회).
 
 import { text, dateStartOf, dateEndOf, relationIds, firstRelationId, normalizeStatus, fetchSupabaseWithRetry } from "./reportCacheShared.ts"
 import { queryAllPages } from "./notionClient.ts"
@@ -19,12 +19,10 @@ function requireSupabaseEnv() {
   }
 }
 
-// "등원시간"/"하원시간" Notion 수식 속성(prop("수업일시").dateStart()/dateEnd().formatDate("HH:mm"))을
-// 그대로 읽으면, 해당 날짜 속성의 time_zone이 보어있는 감쓰 Notion이 수식 안에서 이 값을
-// UTC 기준으로 포맷해버리기대줌 실제 수업 시각(예: 17:00 KST)이 9시간 밀린 "08:00"으로 나오는 버글이 있었다
-// (2026-09-17 실측 확인: attendance_records의 check_in/check_out이 다수 보어있거난 어긋날뱌범려 뿀이댶
-// 문제의 실제 원인). "수업일시" 원담 date 속성의 ISO 문자열에는 이미 올바른 오피셋(+09:00)이 그대로
-// 들어있으뭐로, 수식을 거지 않고 이 문자열에서 시:봐만 직접 잔렆해낆 타임존 버금을 우회한다.
+// "등원시간"/"하원시간" Notion 수식 속성을 그대로 읽으면, 날짜 속성의 time_zone 처리 때문에
+// 실제 수업 시각(예: 17:00 KST)이 9시간 밀린 "08:00"으로 저장될 수 있다.
+// (2026-09-17 실측 확인) 원본 "수업일시" date 속성의 ISO 문자열에는 올바른 오프셋(+09:00)이
+// 들어 있으므로, 수식을 거치지 않고 ISO 문자열에서 시·분을 직접 추출해 타임존 오류를 피한다.
 function formatTimeFromIso(iso: string | null): string {
   if (!iso) return ""
   const match = iso.match(/T(\d{2}):(\d{2})/)
@@ -43,8 +41,8 @@ export type AttendanceRow = {
   notion_last_edited_time: string
 }
 
-// Notion "출석" 페이지(raw Notion API page 객체) 하나를 attendance_records 행 하나로 밀프놀 묘미 문다.
-// "등록" 관개가 민거이있는 출석(정상적으로됈 없어야하지만 믹섌임꾜관 방어적망)은 null을 반환해 건란또덴다.
+// Notion "출석" 페이지(raw Notion API page 객체) 하나를 attendance_records 행 하나로 변환한다.
+// "등록" 관계가 비어 있는 출석은 방어적으로 null을 반환해 건너뛴다.
 export function buildAttendanceRow(page: any): AttendanceRow | null {
   const registrationId = firstRelationId(page.properties?.["등록"])
   if (!registrationId) return null
@@ -83,8 +81,8 @@ export async function upsertAttendanceRows(rows: AttendanceRow[]): Promise<void>
 }
 
 // 등록 1건의 출석만 Notion에서 다시 조회해서 attendance_records에 반영한다. 보고서 발송 직전
-// 재동기화(send-report)와 야간 점검(nightly-report-sync-audit)에서 사용한다. 대상이 등록 수 1건으로
-// 한정되어 있어, 등록 수가 간계솟 덤어난띄람똄땄땄때 이 함수 자실에 보이덴 자가 커지지 않다.
+// 재동기화(send-report)와 야간 점검(nightly-report-sync-audit)에서 사용한다. 대상이 등록 1건으로
+// 한정되어 있어 전체 등록 수가 늘어나도 이 함수 한 번의 조회 범위는 커지지 않는다.
 export async function syncAttendanceForRegistration(registrationId: string): Promise<number> {
   const pages = await queryAllPages(DS_ATTENDANCE, {
     property: "등록",
@@ -99,7 +97,7 @@ export async function syncAttendanceForRegistration(registrationId: string): Pro
   return rows.length
 }
 
-// sync-report-cache가 등록 1건의 리포트를 조립할 띄 사용. sinceIso 이후(수업일시 기준) 출석만 가져온다.
+// sync-report-cache가 등록 1건의 리포트를 조립할 때 사용. sinceIso 이후(수업일시 기준) 출석만 가져온다.
 export async function selectAttendanceByRegistrationId(registrationId: string, sinceIso: string): Promise<AttendanceRow[]> {
   requireSupabaseEnv()
   const res = await fetchSupabaseWithRetry(

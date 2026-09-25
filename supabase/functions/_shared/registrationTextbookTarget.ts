@@ -24,12 +24,9 @@
 // 구현된 적이 없었다 (항상 404 "알 수 없는 경로: create-class" — Supabase 로그로 실제 운영 클래스
 // "고1 A반"에서도 확인됨, 화면에는 그냥 아무 반응 없음으로만 보였다). 클래스에 연결된 활성(🟢 수강
 // 중) 등록 전체에 대해 createIndividualBooksForRegistration을 실행하는 createBooksForClass를
-// 추가했다. generate-report/generate-tuition(클래스 단위 일괄 버튼)과 동일하게 "즉시 202 응답 +
-// EdgeRuntime.waitUntil 백그라운드 처리" 방식을 쓰되, 별도 헬퍼 없이 이미 create-individual이 쓰는
-// runSyncWebhookForPage를 그대로 재사용한다 (pageId 자리에 classId를 넘겨도 동작은 동일 — 잠금/상태
-// 속성만 클래스 DB의 "교재 생성중"/"마지막 오류"로 바뀔 뿐이다). 학생 수가 크지 않은 일반적인 클래스
-// 규모(수십 명 이하)에서는 큐 없이도 안전하다는 점은 이미 generate-report/generate-tuition으로
-// 검증된 전제를 그대로 따른다.
+// 추가했다. 현재는 create-individual과 동일한 runSyncWebhookForPage를 재사용해 즉시 응답 후
+// EdgeRuntime.waitUntil 백그라운드에서 처리한다. pageId 자리에 classId를 넘기고, 잠금/상태 속성은
+// 클래스 DB의 "교재 생성 상태"와 "마지막 오류"를 사용한다.
 
 import {
 	PROP_CLASS,
@@ -103,7 +100,7 @@ async function resolveInstanceForTemplate(registrationId: string, templatePage: 
 	const templateId = templatePage.id
 	const mode = selectName(templatePage, PROP_PROGRESS_MODE) ?? "그룹 진도"
 
-	// 그룹 진도: 반별교재(템플릿) 페이지 자체가 곳 반 전체가 쓰는 "그 교재"이다 - 별도 인스턴스를
+	// 그룹 진도: 반별교재(템플릿) 페이지 자체가 곧 반 전체가 쓰는 "그 교재"이다 - 별도 인스턴스를
 	// 찾거나 만들지 않고, 이 등록을 템플릿 자체의 "등록" relation에만 추가로 연결한다.
 	if (mode === "그룹 진도") {
 		const registrationIds = relationIds(templatePage, PROP_REGISTRATION_ON_BOOK)
@@ -146,9 +143,9 @@ async function resolveInstanceForTemplate(registrationId: string, templatePage: 
 	return { instanceId: page.id, created: true }
 }
 
-// 등록에 연결된 클래스의 반별교재(템플릿) 전체에 대해 개별교재 인스턴스를 만든다.
-// 클래스가 없거나 템플릿이 하나도 없으면 건너뜀다 (에러로 취급하지 않음 - 클래스 세팅 전에도
-// 버튼을 누러볼 수 있어야 하며, 그 경우 안내만 반환한다).
+// 등록에 연결된 클래스의 반별교재(템플릿) 전체를 그룹/개별 진도 규칙에 따라 연결하거나 생성한다.
+// 클래스가 없거나 템플릿이 하나도 없으면 건너뛴다 (에러로 취급하지 않음 - 클래스 세팅 전에도
+// 버튼을 눌러볼 수 있어야 하며, 그 경우 안내만 반환한다).
 export async function createIndividualBooksForRegistration(registrationId: string) {
 	const registration = await getPage(registrationId)
 	const classIds = relationIds(registration, PROP_CLASS)
@@ -204,7 +201,7 @@ async function getActiveRegistrationsForClassNow(classId: string): Promise<any[]
 // index.ts의 create-class 라우트가 직접 호출하는 진입점 (2026-09-22, PART N-8). 클래스(학원) DB
 // "교재 생성" 버튼 -- 클래스에서 수강 중인 등록 전체에 대해 createIndividualBooksForRegistration을
 // 실행한다. createIndividualBooksForRegistration은 이미 (등록+템플릿) 조합 단위로 멱등이므로,
-// 이 버튼을 여러 번 누러거나 나중에 클래스에 템플릿이 추가된 뒤 다시 눌러도 중복 생성되지 않는다.
+// 이 버튼을 여러 번 눌러도 나중에 클래스에 템플릿이 추가된 뒤 다시 눌러도 중복 생성되지 않는다.
 export async function createBooksForClass(classId: string): Promise<{ processed: number }> {
 	const registrations = await getActiveRegistrationsForClassNow(classId)
 	await mapWithConcurrency(registrations, 4, (reg: any) => createIndividualBooksForRegistration(reg.id))
@@ -237,7 +234,7 @@ export async function cleanupUnusedBooksOnEnd(registrationId: string) {
 		if (mode === "그룹 진도") {
 			remaining = remaining.filter((id) => id !== bookId)
 			unlinked.push(bookId)
-			// 그룹 진도 인스턴스는 반 전체가 공유하므로, 이 등록만 그 인스턴스의 "등록" relation에서 뮨다
+			// 그룹 진도 교재는 반 전체가 공유하므로, 이 등록만 해당 교재의 "등록" relation에서 뺀다
 			// (인스턴스 자체는 다른 학생들이 계속 쓰므로 보존).
 			const bookRegistrationIds = relationIds(book, PROP_REGISTRATION_ON_BOOK).filter((id) => id !== registrationId)
 			await updatePageProperties(bookId, {

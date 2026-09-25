@@ -107,7 +107,7 @@ grant execute on function public.try_acquire_sync_queue_lock(int) to service_rol
 grant execute on function public.release_sync_queue_lock() to service_role;
 
 -- 안전망: 웹훅 함수가 적재 직후 부르는 즉시 트리거(wakeSyncQueueWorker)가 실패/유실되거나, 처리
--- 도중 워커가 시간 예산을 다 써서 멈춰도, 큐에 쌓인 작업이 방지되지 않도록 pg_cron으로 매분
+-- 도중 워커가 시간 예산을 다 써서 멈춰도, 큐에 쌓인 작업이 방치되지 않도록 pg_cron으로 매분
 -- process-sync-queue를 깨운다.
 create extension if not exists pg_cron;
 create extension if not exists pg_net;
