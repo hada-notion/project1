@@ -163,8 +163,14 @@ if grep -Eq '>←</button>|>☰</button>' student_report_part1.js student_report
 fi
 
 # 13) 접힌 상세 헤더는 56px 높이 안에서 한 줄을 수직 중앙 정렬하고 현재 제목을 별도 볼드 처리하지 않는다.
-if ! grep -q '.reg-header-bar { min-height: 56px; padding: 6px 10px; box-sizing: border-box; }' student_report.html || ! grep -q '.reg-header-bar:not(.expanded) .reg-header-top { height: 44px; margin-bottom: 0; align-items: center; }' student_report.html || ! grep -q '.reg-breadcrumb .crumb.current { font-weight: inherit;' student_report.html; then
+if ! grep -q '.reg-header-bar { min-height: 56px; padding: 6px 10px; box-sizing: border-box; }' student_report.html || ! grep -q '.reg-header-bar:not(.expanded) .reg-header-top { height: 44px; margin-bottom: 0; align-items: center; }' student_report.html || ! grep -q '.reg-breadcrumb .crumb.current { font-weight: 400;' student_report.html; then
   echo "❌ 학생 리포트: 접힌 상세 헤더의 높이·중앙 정렬·제목 굵기 규칙이 빠졌습니다."
+  fail=1
+fi
+
+# 14) 기간 제목은 좌우 동일 폭 3열 중앙 정렬, 메뉴 닫기와 상세 새로고침은 투명 헤더 버튼, 본문은 하단 안전 여백을 사용한다.
+if ! grep -q 'grid-template-columns: clamp(82px, 18vw, 120px) minmax(0, 1fr) clamp(82px, 18vw, 120px)' student_report.html || ! grep -q 'body.has-detail-header .global-sync-fab' student_report.html || ! grep -q 'body.has-tabbar .reg-tab-content { padding-bottom: calc(96px' student_report.html || ! grep -q 'class="menu-close".*<svg class="header-icon"' student_report.html || ! grep -q 'has-detail-header.*view === "detail" || view === "book"' student_report_part2.js; then
+  echo "❌ 학생 리포트: 기간 중앙 정렬·상세 헤더 버튼·하단 안전 여백 규칙이 빠졌습니다."
   fail=1
 fi
 

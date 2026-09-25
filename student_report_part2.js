@@ -771,9 +771,10 @@ function renderApp() {
     detachRegScrollShrink()
     app.innerHTML = renderIntro()
   }
-  // [NEW, 2026-09-19] 하단 탭바(교재/캘린더/학습기록/보고서)가 있는 "detail" 화면에서는
-  // 동기화 FAB이 탭바와 겹치지 않도록 body 클래스로 위치를 조정한다.
+  // 하단 탭바가 있는 등록 상세에는 안전 여백을 적용하고,
+  // 등록/교재 상세에서는 새로고침 버튼을 상단 헤더 오른쪽에 배치한다.
   document.body.classList.toggle("has-tabbar", view === "detail")
+  document.body.classList.toggle("has-detail-header", view === "detail" || view === "book")
 }
 
 async function initApp() {

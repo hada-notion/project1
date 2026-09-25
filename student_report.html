@@ -120,12 +120,16 @@ body {
 .menu-item .icon { font-size: 18px; }
 .menu-close {
   position: absolute;
-  top: 18px; left: 16px;
-  background: #f0f0f0;
+  top: 12px; left: 12px;
+  width: 44px; height: 44px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--text-primary);
   border: none;
-  border-radius: 50%;
-  width: 30px; height: 30px;
-  font-size: 14px;
+  border-radius: 0;
   cursor: pointer;
 }
 
@@ -220,7 +224,7 @@ body {
 .reg-breadcrumb { display: none; flex: 1; min-width: 0; align-items: center; gap: 4px; font-size: 14px; font-weight: 600; line-height: 1; flex-wrap: nowrap; overflow: hidden; text-align: left; }
 .reg-breadcrumb .crumb { display: inline-flex; align-items: center; line-height: 1; cursor: pointer; opacity: 0.9; white-space: nowrap; }
 .reg-breadcrumb .crumb:hover { text-decoration: underline; }
-.reg-breadcrumb .crumb.current { font-weight: inherit; opacity: 1; cursor: default; overflow: hidden; text-overflow: ellipsis; }
+.reg-breadcrumb .crumb.current { font-weight: 400; opacity: 1; cursor: default; overflow: hidden; text-overflow: ellipsis; }
 .reg-breadcrumb .crumb.current:hover { text-decoration: none; }
 .reg-breadcrumb .crumb-sep { display: inline-flex; align-items: center; line-height: 1; opacity: 0.6; flex-shrink: 0; }
 .reg-head-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 10px; }
@@ -358,7 +362,7 @@ body {
 .attendance-calendar .cal-day.보강 { background: var(--info-soft); color: var(--info); font-weight: 700; }
 .attendance-calendar .cal-legend { display: flex; gap: 14px; font-size: 11px; color: var(--text-muted); margin-top: 4px; justify-content: center; }
 .attendance-calendar .cal-legend .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
-.cal-hint { font-size: 11px; color: #bbb; text-align: center; margin-top: 10px; }
+.cal-hint { font-size: 11px; color: #bbb; text-align: center; margin-top: 6px; padding-bottom: 4px; }
 
 /* 학습기록 카드 공통 스타일 (학습/과제/평가 공통 사용) */
 .log-card { background: #fff; border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
@@ -494,7 +498,10 @@ body {
 
 .cal-month { background: #fff; border-radius: 14px; padding: clamp(8px, min(4vw, 3.6vh), 38px); margin-bottom: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
 .cal-month-title { font-size: clamp(16px, 3.2vw, 22px); font-weight: 700; }
-.cal-month-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.cal-month-nav { display: grid; grid-template-columns: clamp(82px, 18vw, 120px) minmax(0, 1fr) clamp(82px, 18vw, 120px); align-items: center; margin-bottom: 10px; }
+.cal-month-nav > .cal-nav-btn:first-child { justify-self: start; }
+.cal-month-nav > .cal-month-title { justify-self: center; text-align: center; }
+.cal-month-nav > .cal-nav-right { justify-self: end; }
 .cal-nav-btn { background: var(--brand-soft); border: none; width: clamp(28px, 4vw, 40px); height: clamp(28px, 4vw, 40px); border-radius: 50%; color: var(--brand-deep); font-size: clamp(15px, 2.4vw, 20px); font-weight: 700; cursor: pointer; }
 .cal-nav-btn:disabled { opacity: 0.3; cursor: default; }
 /* ===== 전역 동기화 FAB (2026-09-19: 캘린더 탭 전용 버튼에서 화면 전역 플로팅 버튼으로 이동, 10-12 참고) ===== */
@@ -523,6 +530,19 @@ body {
 .global-sync-fab.syncing img { animation: global-sync-spin 0.9s linear infinite; }
 @keyframes global-sync-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 body.has-tabbar .global-sync-fab { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+body.has-detail-header .global-sync-fab {
+  top: 6px;
+  right: 10px;
+  bottom: auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+body.has-detail-header .global-sync-fab img { width: 20px; height: 20px; filter: none; }
+body.has-detail-header .reg-header-top { padding-right: 44px; box-sizing: border-box; }
+body.has-tabbar .reg-tab-content { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
 .global-sync-toast {
   position: fixed;
   right: 16px;
@@ -558,8 +578,8 @@ body:not(.reg-expanded) .cal-summary,
 body:not(.reg-expanded) .attendance-calendar .cal-legend,
 body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
 @keyframes calExtraFadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
-.cal-summary { display: flex; gap: 8px; margin-top: 10px; }
-.cal-summary-item { flex: 1; background: #fff; border-radius: 12px; padding: 10px 6px; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.cal-summary { display: flex; gap: 8px; margin-top: 8px; }
+.cal-summary-item { flex: 1; background: #fff; border-radius: 12px; padding: 8px 6px; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
 .cal-summary-item .num { display: block; font-size: clamp(16px, 3.4vw, 22px); font-weight: 800; line-height: 1.1; }
 .cal-summary-item .lbl { display: block; font-size: clamp(10px, 1.9vw, 12px); color: var(--text-muted); margin-top: 3px; font-weight: 600; }
 .cal-summary-item.present .num { color: var(--success); }
@@ -630,7 +650,7 @@ body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
 
 <div class="menu-overlay" id="menu">
   <div class="menu-panel">
-    <button class="menu-close" onclick="closeMenu()">✕</button>
+    <button class="menu-close" onclick="closeMenu()" aria-label="메뉴 닫기"><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     <h3 style="margin-top:28px;">메뉴</h3>
     <div id="menu-body"></div>
   </div>
