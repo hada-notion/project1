@@ -162,6 +162,12 @@ if grep -Eq '>←</button>|>☰</button>' student_report_part1.js student_report
   fail=1
 fi
 
+# 13) 접힌 상세 헤더는 모바일 앱 수준인 56px 높이로 유지한다.
+if ! grep -q '.reg-header-bar { min-height: 56px; padding: 6px 10px; box-sizing: border-box; }' student_report.html; then
+  echo "❌ 학생 리포트: 접힌 상세 헤더의 56px 높이 규칙이 빠졌습니다."
+  fail=1
+fi
+
 if [ "$fail" != 0 ]; then
   echo ""
   echo "회귀 가드 실패 -- 위 문제를 고친 뒤 다시 배포하세요."
