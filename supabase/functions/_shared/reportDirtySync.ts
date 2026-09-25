@@ -41,7 +41,7 @@ const SOURCE_CONFIGS: SourceConfig[] = [
     type: "study_activity",
     dataSourceId: DS_STUDY_ACTIVITY,
     registrationProp: "등록",
-    meaningfulProps: ["과제상태", "전체 문항", "정답 문항", "학습기록", "출석", "등록", "수업", "과제 마감", "과제 마감일"],
+    meaningfulProps: ["학습활동", "과제상태", "전체 문항", "정답 문항", "학습기록", "출석", "등록", "수업", "과제 마감", "과제 마감일"],
   },
   {
     type: "report",
