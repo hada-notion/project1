@@ -384,8 +384,11 @@ function buildReportTabHtml(r) {
   const attendanceRows = (r.attendance_rows || []).filter((a) => a.date >= rangeStart && a.date <= rangeEnd)
   const homeworkItems = (r.homework_days || []).filter((h) => h.date && h.date >= rangeStart && h.date <= rangeEnd)
   const testItems = tests.filter((t) => t.date >= rangeStart && t.date <= rangeEnd)
-  const presentCount = attendanceRows.filter((a) => a.status !== "결석").length
-  const attRate = attendanceRows.length ? Math.round((presentCount / attendanceRows.length) * 100) : 0
+  // 출석률은 상태가 확정된 출석만 계산한다. 빈 상태(미입력/미래 수업)는 분모에서 제외하고,
+  // 보강은 실제 수업 참여로 보아 출석과 함께 분자에 포함한다.
+  const countedAttendanceRows = attendanceRows.filter((a) => ["출석", "보강", "결석"].includes(a.status))
+  const presentCount = countedAttendanceRows.filter((a) => a.status === "출석" || a.status === "보강").length
+  const attRate = countedAttendanceRows.length ? Math.round((presentCount / countedAttendanceRows.length) * 100) : 0
   const doneHomework = homeworkItems.filter((h) => h.status === "완료").length
   const hwRate = homeworkItems.length ? Math.round((doneHomework / homeworkItems.length) * 100) : 0
   const periodLabel = reportPeriod === "week" ? `${withDow(rangeStart)} ~ ${withDow(rangeEnd)}` : `${rangeStart.slice(0, 7)}`
@@ -429,7 +432,7 @@ function buildReportTabHtml(r) {
       <div class="donut-card">
         <div class="donut-title">✅ 출석률</div>
         <div class="donut" style="background: conic-gradient(#1e9e5c 0% ${attRate}%, #eee ${attRate}% 100%)"><div class="donut-hole">${attRate}%</div></div>
-        <div class="donut-count-below">(${presentCount}/${attendanceRows.length})</div>
+        <div class="donut-count-below">(${presentCount}/${countedAttendanceRows.length})</div>
       </div>
       <div class="donut-card">
         <div class="donut-title">📝 과제이행률</div>
