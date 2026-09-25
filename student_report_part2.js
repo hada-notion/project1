@@ -285,9 +285,14 @@ function navigateReportPeriod(delta) {
   reportOffset = Math.max(0, Math.min(maxOffset, reportOffset + delta))
   renderApp()
 }
+function reportDayEarliest() {
+  const [y, m] = MOCK_TODAY.split("-").map(Number)
+  const d = new Date(y, m - 1 - MAX_LOOKBACK_MONTHS, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`
+}
 function navigateReportDay(delta) {
   const candidate = addDaysStr(reportDayDate || MOCK_TODAY, -delta)
-  reportDayDate = candidate > MOCK_TODAY ? MOCK_TODAY : candidate
+  reportDayDate = candidate > MOCK_TODAY ? MOCK_TODAY : candidate < reportDayEarliest() ? reportDayEarliest() : candidate
   renderApp()
 }
 function goReportCurrent() {
@@ -306,33 +311,114 @@ function reportWeekLabel(rangeStart) {
   const weekOfMonth = Math.floor((day - 1) / 7) + 1
   return `${month}월 ${weekOfMonth}주차`
 }
-function openReportWeekPicker() {
-  const modal = document.getElementById("report-week-modal")
-  const body = document.getElementById("report-week-modal-body")
-  if (!modal || !body) return
+let reportPickerMonthOffset = 0
+function reportMonthValue(offset) {
+  const [y, m] = MOCK_TODAY.split("-").map(Number)
+  const d = new Date(y, m - 1 - offset, 1)
+  return { y: d.getFullYear(), m: d.getMonth() + 1 }
+}
+function reportDateDiffDays(a, b) {
+  const parse = (value) => {
+    const [y, m, d] = value.split("-").map(Number)
+    return Date.UTC(y, m - 1, d)
+  }
+  return Math.round((parse(a) - parse(b)) / 86400000)
+}
+function reportWeekOffsetForDate(date) {
+  return Math.round(reportDateDiffDays(mondayOfWeek(MOCK_TODAY), mondayOfWeek(date)) / 7)
+}
+function reportPickerSelectedMonthOffset() {
+  let date = MOCK_TODAY
+  if (reportPeriod === "day") date = reportDayDate || MOCK_TODAY
+  if (reportPeriod === "week") date = addDaysStr(mondayOfWeek(MOCK_TODAY), -7 * reportOffset + 3)
+  const [ty, tm] = MOCK_TODAY.split("-").map(Number)
+  const [y, m] = date.split("-").map(Number)
+  return Math.max(0, Math.min(MAX_LOOKBACK_MONTHS, (ty - y) * 12 + tm - m))
+}
+function reportPeriodButtonLabel() {
+  if (reportPeriod === "day") {
+    const [, m, d] = (reportDayDate || MOCK_TODAY).split("-").map(Number)
+    return `${m}월 ${d}일`
+  }
+  if (reportPeriod === "week") return reportWeekLabel(reportRange().rangeStart)
+  const { y, m } = reportMonthValue(reportOffset)
+  return `${y}년 ${m}월`
+}
+function buildReportCalendarPicker() {
+  const { y, m } = reportMonthValue(reportPickerMonthOffset)
+  const first = new Date(y, m - 1, 1)
+  const lastDay = new Date(y, m, 0).getDate()
+  const leading = (first.getDay() + 6) % 7
   const currentMonday = mondayOfWeek(MOCK_TODAY)
-  const maxOffset = MAX_LOOKBACK_MONTHS * 4
-  body.innerHTML = Array.from({ length: maxOffset + 1 }, (_, offset) => {
-    const start = addDaysStr(currentMonday, -7 * offset)
-    const end = addDaysStr(start, 6)
-    const exactRange = `${start.slice(5).replace("-", ".")}~${end.slice(5).replace("-", ".")}`
-    return `
-      <button class="week-picker-item ${offset === reportOffset ? "active" : ""}" onclick="selectReportWeek(${offset})">
-        <span class="week-picker-label">${esc(reportWeekLabel(start))}</span>
-        <span class="week-picker-range">${esc(exactRange)}</span>
-        <span class="week-picker-check">${offset === reportOffset ? "✓" : ""}</span>
-      </button>
-    `
-  }).join("")
+  const selectedMonday = addDaysStr(currentMonday, -7 * reportOffset)
+  const selectedDay = reportDayDate || MOCK_TODAY
+  const cells = []
+  for (let i = 0; i < leading; i++) cells.push('<div class="report-picker-day empty"></div>')
+  for (let day = 1; day <= lastDay; day++) {
+    const date = `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`
+    const weekOffset = reportWeekOffsetForDate(date)
+    const enabled = reportPeriod === "day"
+      ? date >= reportDayEarliest() && date <= MOCK_TODAY
+      : weekOffset >= 0 && weekOffset <= MAX_LOOKBACK_MONTHS * 4
+    const selected = reportPeriod === "day" ? date === selectedDay : mondayOfWeek(date) === selectedMonday
+    const today = date === MOCK_TODAY
+    cells.push(`<button class="report-picker-day ${selected ? "selected" : ""} ${reportPeriod === "week" && selected ? "selected-week" : ""} ${today ? "today" : ""}" ${enabled ? `onclick="selectReportPickerDate('${date}')"` : "disabled"}>${day}</button>`)
+  }
+  const selectedRange = reportPeriod === "week"
+    ? `${reportWeekLabel(selectedMonday)} · ${selectedMonday.slice(5).replace("-", ".")}~${addDaysStr(selectedMonday, 6).slice(5).replace("-", ".")}`
+    : "날짜를 선택하세요"
+  return `
+    <div class="report-picker-month-nav">
+      <button class="cal-nav-btn" ${reportPickerMonthOffset >= MAX_LOOKBACK_MONTHS ? "disabled" : ""} onclick="navigateReportPickerMonth(1)">‹</button>
+      <strong>${y}년 ${m}월</strong>
+      <button class="cal-nav-btn" ${reportPickerMonthOffset <= 0 ? "disabled" : ""} onclick="navigateReportPickerMonth(-1)">›</button>
+    </div>
+    <div class="report-picker-grid">
+      ${["월", "화", "수", "목", "금", "토", "일"].map((v) => `<div class="report-picker-dow">${v}</div>`).join("")}
+      ${cells.join("")}
+    </div>
+    <div class="report-picker-help">${esc(selectedRange)}</div>
+  `
+}
+function buildReportMonthPicker() {
+  return `<div class="report-month-picker">${Array.from({ length: MAX_LOOKBACK_MONTHS + 1 }, (_, offset) => {
+    const { y, m } = reportMonthValue(offset)
+    return `<button class="report-month-tile ${offset === reportOffset ? "active" : ""}" onclick="selectReportMonth(${offset})"><span class="report-month-icon">📅</span><strong>${m}월</strong><small>${y}년</small>${offset === reportOffset ? '<span class="report-month-check">✓</span>' : ""}</button>`
+  }).join("")}</div>`
+}
+function openReportPeriodPicker() {
+  const modal = document.getElementById("report-period-modal")
+  const body = document.getElementById("report-period-modal-body")
+  const title = document.getElementById("report-period-modal-title")
+  if (!modal || !body || !title) return
+  reportPickerMonthOffset = reportPickerSelectedMonthOffset()
+  title.textContent = reportPeriod === "day" ? "날짜 선택" : reportPeriod === "week" ? "주차 선택" : "월 선택"
+  body.innerHTML = reportPeriod === "month" ? buildReportMonthPicker() : buildReportCalendarPicker()
   modal.classList.add("active")
-  body.querySelector(".week-picker-item.active")?.scrollIntoView({ block: "center" })
 }
-function closeReportWeekPicker() {
-  document.getElementById("report-week-modal")?.classList.remove("active")
+function refreshReportPeriodPicker() {
+  const body = document.getElementById("report-period-modal-body")
+  if (body) body.innerHTML = reportPeriod === "month" ? buildReportMonthPicker() : buildReportCalendarPicker()
 }
-function selectReportWeek(offset) {
-  reportOffset = Math.max(0, Math.min(MAX_LOOKBACK_MONTHS * 4, Number(offset) || 0))
-  closeReportWeekPicker()
+function navigateReportPickerMonth(delta) {
+  reportPickerMonthOffset = Math.max(0, Math.min(MAX_LOOKBACK_MONTHS, reportPickerMonthOffset + delta))
+  refreshReportPeriodPicker()
+}
+function closeReportPeriodPicker() {
+  document.getElementById("report-period-modal")?.classList.remove("active")
+}
+function selectReportPickerDate(date) {
+  if (reportPeriod === "day") {
+    reportDayDate = date < reportDayEarliest() ? reportDayEarliest() : date > MOCK_TODAY ? MOCK_TODAY : date
+  } else {
+    reportOffset = Math.max(0, Math.min(MAX_LOOKBACK_MONTHS * 4, reportWeekOffsetForDate(date)))
+  }
+  closeReportPeriodPicker()
+  renderApp()
+}
+function selectReportMonth(offset) {
+  reportOffset = Math.max(0, Math.min(MAX_LOOKBACK_MONTHS, Number(offset) || 0))
+  closeReportPeriodPicker()
   renderApp()
 }
 function reportRange() {
@@ -428,7 +514,7 @@ function buildReportTabHtml(r) {
   const attRate = countedAttendanceRows.length ? Math.round((presentCount / countedAttendanceRows.length) * 100) : 0
   const doneHomework = homeworkItems.filter((h) => h.status === "완료").length
   const hwRate = homeworkItems.length ? Math.round((doneHomework / homeworkItems.length) * 100) : 0
-  const periodLabel = reportPeriod === "week" ? reportWeekLabel(rangeStart) : `${rangeStart.slice(0, 7)}`
+  const periodLabel = reportPeriodButtonLabel()
   const segToggleHtml = `
     <div class="seg-toggle">
       <button class="${reportPeriod === "day" ? "active" : ""}" onclick="setReportPeriod('day')">일간 보고서</button>
@@ -443,8 +529,8 @@ function buildReportTabHtml(r) {
       <div class="section-hint">주간·월간·일간 학습 리포트를 확인하세요</div>
       ${segToggleHtml}
       <div class="cal-month-nav">
-        <button class="cal-nav-btn" onclick="navigateReportDay(1)">‹</button>
-        <div class="cal-month-title">${esc(formatDateLabel(dayDate))}</div>
+        <button class="cal-nav-btn" ${dayDate <= reportDayEarliest() ? "disabled" : ""} onclick="navigateReportDay(1)">‹</button>
+        <button class="cal-month-title period-picker-trigger" onclick="openReportPeriodPicker()" aria-label="날짜 선택"><span class="period-picker-calendar">📅</span>${esc(periodLabel)}<span class="period-picker-chevron">⌄</span></button>
         <div class="cal-nav-right">
           <button class="cal-today-btn" onclick="goReportCurrent()">오늘</button>
           <button class="cal-nav-btn" ${dayDate >= MOCK_TODAY ? "disabled" : ""} onclick="navigateReportDay(-1)">›</button>
@@ -459,9 +545,7 @@ function buildReportTabHtml(r) {
     ${segToggleHtml}
     <div class="cal-month-nav">
       <button class="cal-nav-btn" ${reportOffset >= (reportPeriod === "week" ? MAX_LOOKBACK_MONTHS * 4 : MAX_LOOKBACK_MONTHS) ? "disabled" : ""} onclick="navigateReportPeriod(1)">‹</button>
-      ${reportPeriod === "week"
-        ? `<button class="cal-month-title period-picker-trigger" onclick="openReportWeekPicker()" aria-label="주차 선택">${esc(periodLabel)}<span class="period-picker-chevron">⌄</span></button>`
-        : `<div class="cal-month-title">${esc(periodLabel)}</div>`}
+      <button class="cal-month-title period-picker-trigger" onclick="openReportPeriodPicker()" aria-label="${reportPeriod === "week" ? "주차" : "월"} 선택"><span class="period-picker-calendar">📅</span>${esc(periodLabel)}<span class="period-picker-chevron">⌄</span></button>
       <div class="cal-nav-right">
         <button class="cal-today-btn" onclick="goReportCurrent()">현재</button>
         <button class="cal-nav-btn" ${reportOffset === 0 ? "disabled" : ""} onclick="navigateReportPeriod(-1)">›</button>

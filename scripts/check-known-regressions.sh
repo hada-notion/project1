@@ -125,8 +125,8 @@ if grep -q '내용: \\${note}' student_report_part1.js; then
   echo "❌ 학생 리포트: 내용 원문 앞에 불필요한 '• 내용:' 라벨이 다시 추가됐습니다."
   fail=1
 fi
-if ! grep -q 'reportWeekLabel' student_report_part2.js || ! grep -q 'report-week-modal' student_report.html; then
-  echo "❌ 학생 리포트: 모바일 주간보고서의 M월 N주차 표기 또는 주차 선택기가 빠졌습니다."
+if ! grep -q 'reportWeekLabel' student_report_part2.js || ! grep -q 'openReportPeriodPicker' student_report_part2.js || ! grep -q 'report-period-modal' student_report.html; then
+  echo "❌ 학생 리포트: 일간·주간·월간 달력형 기간 선택기 또는 M월 N주차 표기가 빠졌습니다."
   fail=1
 fi
 
