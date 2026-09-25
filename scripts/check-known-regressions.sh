@@ -41,10 +41,35 @@ for f in "${IMPORT_CHECK_FILES[@]}"; do
 	fi
 done
 
-if [ "$fail" != 0 ]; then
-	echo ""
-	echo "회귀 가드 실패 -- 위 문제를 고친 뒤 다시 배포하세요."
-	exit 1
+# 3) 일일보고서는 토큰만 확인하고 바로 발송하던 과거 경로로 돌아가면 안 된다.
+#    개별/반별 모두 공용 최신화 경로를 사용하고, 공용 경로는 반드시
+#    토큰 보장 -> 출석 원본 -> 완성 캐시 순서여야 한다.
+for f in \
+  supabase/functions/send-daily-report/index.ts \
+  supabase/functions/send-class-daily-reports/index.ts; do
+  if ! grep -q 'refreshDailyReportForSend' "$f"; then
+    echo "❌ $f: 일일보고서 전송 전 공용 최신화 경로가 빠졌습니다."
+    fail=1
+  fi
+done
+REFRESH_FILE=supabase/functions/_shared/dailyReportRefresh.ts
+if [ -f "$REFRESH_FILE" ]; then
+  token_line=$(grep -n 'await syncStudentReport' "$REFRESH_FILE" | head -1 | cut -d: -f1)
+  attendance_line=$(grep -n 'await syncAttendanceForRegistration' "$REFRESH_FILE" | head -1 | cut -d: -f1)
+  cache_line=$(grep -n 'await syncReportCacheForRegistration' "$REFRESH_FILE" | head -1 | cut -d: -f1)
+  if [ -z "$token_line" ] || [ -z "$attendance_line" ] || [ -z "$cache_line" ] || \
+     [ "$token_line" -ge "$attendance_line" ] || [ "$attendance_line" -ge "$cache_line" ]; then
+    echo "❌ $REFRESH_FILE: 토큰 -> 출석 원본 -> 보고서 캐시 순서가 깨졌습니다."
+    fail=1
+  fi
+else
+  echo "❌ $REFRESH_FILE: 일일보고서 공용 최신화 파일이 없습니다."
+  fail=1
 fi
 
+if [ "$fail" != 0 ]; then
+  echo ""
+  echo "회귀 가드 실패 -- 위 문제를 고친 뒤 다시 배포하세요."
+  exit 1
+fi
 echo "✅ 회귀 가드 통과"

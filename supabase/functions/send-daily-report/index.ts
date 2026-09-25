@@ -17,7 +17,6 @@ import {
   getFormulaText,
   getEffectiveAdminKey,
   resolveParentPhone,
-  syncStudentReport,
   sendDailyReportAlimtalk,
   appendSendLog,
   setAttendanceReportSendingFlag,
@@ -25,6 +24,7 @@ import {
   setAttendanceReportCompleteFlag,
 } from "../_shared/alimtalkShared.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
+import { refreshDailyReportForSend } from "../_shared/dailyReportRefresh.ts"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -66,8 +66,7 @@ Deno.serve(async (req) => {
   // 응답 전에 이미 동기로 켜 두었으므로 그대로 진행 상황을 보여준다.
   runInBackground(async () => {
     try {
-      const { access_token, reportUrl } = await syncStudentReport(registrationId)
-
+      // 이미 전송한 건은 무거운 출석/캐시 최신화 전에 먼저 걸러낸다.
       const attendancePage = await notionGetPage(attendanceId)
       const studentName = getFormulaText(attendancePage, "학생이름(보고서)")
 
@@ -77,6 +76,10 @@ Deno.serve(async (req) => {
         await setAttendanceReportSendingFlag(attendanceId, false)
         return
       }
+
+      // 토큰 발급 -> 출석 원본 동기화 -> 학습기록/학습활동을 포함한 보고서 캐시 생성이
+      // 모두 성공한 뒤에만 알림톡을 보낸다. 최신화 실패 시 아래 catch로 이동해 전송하지 않는다.
+      const { access_token, reportUrl } = await refreshDailyReportForSend(registrationId)
 
       const className = getFormulaText(attendancePage, "클래스(보고서)")
       const classDate = getFormulaText(attendancePage, "수업일(보고서)")
