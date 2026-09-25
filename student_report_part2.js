@@ -444,8 +444,8 @@ function buildTestTrendChartHtml(points) {
   const xFor = (i) => paddingX + i * xStep
   const validPoints = points.map((p, i) => ({ ...p, i })).filter((p) => p.avg !== null)
   const path = validPoints.map((p) => `${xFor(p.i)},${yFor(p.avg)}`).join(" ")
-  const dots = validPoints.map((p) => `<circle cx="${xFor(p.i)}" cy="${yFor(p.avg)}" r="4" fill="#6256d8" style="pointer-events:none" /><circle cx="${xFor(p.i)}" cy="${yFor(p.avg)}" r="12" fill="transparent" style="cursor:pointer" onclick="showTestDetailModal(${p.i})" />`).join("")
-  const valueLabels = validPoints.map((p) => `<text x="${xFor(p.i)}" y="${yFor(p.avg) - 10}" font-size="11" font-weight="700" fill="#6256d8" text-anchor="middle" style="cursor:pointer" onclick="showTestDetailModal(${p.i})">${p.avg.toFixed(1)}점</text>`).join("")
+  const dots = validPoints.map((p) => `<circle cx="${xFor(p.i)}" cy="${yFor(p.avg)}" r="4" fill="#5b5bd6" style="pointer-events:none" /><circle cx="${xFor(p.i)}" cy="${yFor(p.avg)}" r="12" fill="transparent" style="cursor:pointer" onclick="showTestDetailModal(${p.i})" />`).join("")
+  const valueLabels = validPoints.map((p) => `<text x="${xFor(p.i)}" y="${yFor(p.avg) - 10}" font-size="11" font-weight="700" fill="#5b5bd6" text-anchor="middle" style="cursor:pointer" onclick="showTestDetailModal(${p.i})">${p.avg.toFixed(1)}점</text>`).join("")
   const gridLines = ticks.map((v) => `
     <line x1="${paddingX}" y1="${yFor(v)}" x2="${width - paddingX}" y2="${yFor(v)}" stroke="#eee" stroke-width="1" />
     <text x="2" y="${yFor(v) + 4}" font-size="9" fill="#bbb">${v}</text>
@@ -453,7 +453,7 @@ function buildTestTrendChartHtml(points) {
   const xLabels = points.map((p, i) => `<text x="${xFor(i)}" y="${height - 10}" font-size="10" fill="#999" text-anchor="middle">${esc(p.label)}</text>`).join("")
   const emptyOverlay = validPoints.length ? "" : '<div class="empty">해당 기간 평가 기록이 없습니다.</div>'
   return `
-    <div class="chart-wrap"><svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">${gridLines}<polyline points="${path}" fill="none" stroke="#6256d8" stroke-width="2" />${dots}${valueLabels}${xLabels}</svg></div>
+    <div class="chart-wrap"><svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">${gridLines}<polyline points="${path}" fill="none" stroke="#5b5bd6" stroke-width="2" />${dots}${valueLabels}${xLabels}</svg></div>
     ${emptyOverlay}
   `
 }
@@ -517,7 +517,7 @@ function buildReportTabHtml(r) {
       </div>
       <div class="donut-card">
         <div class="donut-title">📝 과제이행률</div>
-        <div class="donut" style="background: conic-gradient(#6256d8 0% ${hwRate}%, #eee ${hwRate}% 100%)"><div class="donut-hole">${hwRate}%</div></div>
+        <div class="donut" style="background: conic-gradient(#5b5bd6 0% ${hwRate}%, #eee ${hwRate}% 100%)"><div class="donut-hole">${hwRate}%</div></div>
         <div class="donut-count-below">(${doneHomework}/${homeworkItems.length})</div>
       </div>
     </div>
