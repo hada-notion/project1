@@ -156,8 +156,8 @@ if ! grep -q -- '--brand-primary: #e6d8c4' student_report.html || ! grep -q -- '
   fail=1
 fi
 
-# 12) 헤더의 뒤로가기·메뉴는 44px 클릭 영역 안의 30px 선형 SVG이며 불투명 원형 배경을 쓰지 않는다.
-if grep -Eq '>←</button>|>☰</button>' student_report_part1.js student_report_part2.js || ! grep -q '.header-icon { width: 30px; height: 30px' student_report.html || ! grep -q '.reg-back-btn {.*background: transparent' student_report.html || ! grep -q '.hamburger-btn {' student_report.html; then
+# 12) 헤더는 44px 클릭 영역을 유지하고, 메뉴 30px·뒤로가기 28px 선형 SVG와 투명 배경을 사용한다.
+if grep -Eq '>←</button>|>☰</button>' student_report_part1.js student_report_part2.js || ! grep -q '.header-icon { width: 30px; height: 30px' student_report.html || ! grep -q '.reg-back-btn .header-icon, .back-btn-plain .header-icon { width: 28px; height: 28px; }' student_report.html || ! grep -q '.reg-back-btn {.*background: transparent' student_report.html || ! grep -q '.hamburger-btn {' student_report.html; then
   echo "❌ 학생 리포트: 헤더 선형 아이콘·클릭 영역 또는 투명 배경 규칙이 빠졌습니다."
   fail=1
 fi
