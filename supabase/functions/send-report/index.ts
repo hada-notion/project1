@@ -17,11 +17,11 @@
 // - [v2, 2026-09-16] send-tuition-notice와 100% 중복이던 헬퍼(getFormulaText/getDateRange/
 //   getRelationFirstId/normalizePhone/발송중 락 처리)를 _shared/alimtalkShared.ts로 옥기고
 //   이 파일에서는 가져다 씁니다 (로드맵 5-9 공용 모듈화 후속). 동작은 이전과 동일합니다.
-// - [v3, 2026-09-17] 리포트 동기화 안정화 3단계 중 2단계("전송 직전 검증"): 보고서를 보내기 직전에
-//   해당 등록의 출석/학습기록/학습활동이 Supabase(attendance_records/report_cache)에 제대로
-//   올라가있는지 보장할 수 없어서(즉시 웹훅이 실패했거나 늦게 도착했을 수 있음), ensureFreshReportCache()를
-//   추가해 발송하기 전에 한 번 더 강제로 다시 계산한다. 이 단계가 실패해도(예: 일시적인 Supabase
-//   장애) 보고서 발송 자체를 막지는 않고 로그만 남긴다 (동기화 지연이 보고서 미발송보다 더 나쁘).
+// - [v3, 2026-09-17] 보고서 발송 직전에 해당 등록의 출석/학습기록/학습활동과 report_cache를
+//   다시 계산하는 안전망을 추가했다.
+// - [v6, 2026-09-25] 최신화 실패를 무시하고 옛 캐시 링크를 보내던 동작을 제거했다. 이제 토큰 보장 ->
+//   출석 원본 -> 학습기록/학습활동/선생님 코멘트 포함 완성 캐시가 성공한 경우에만 발송한다.
+//   일괄전송에서 최신화가 실패한 건도 선택 체크를 해제해 같은 건이 체인에서 무한 반복되지 않는다.
 // - [v4, 2026-09-22] 발송 성공 후 "일괄전송 선택" 체크박스를 자동으로 해제한다. 개별 "보고서 전송"
 //   버튼으로 이미 보낸 건이 나중에 클래스/발송함의 "일괄 전송"에 다시 걸려 중복 발송되는 것을 막기
 //   위함(사용자 요청). send-selected-notifications는 이미 자체적으로 성공 후 이 체크박스를 끄고
@@ -40,8 +40,6 @@
 import {
   notionGetPage,
   notionPatchPageProperties,
-  generateToken,
-  parseTokenValue,
   createSendLogEntry,
   getBotUserId,
   getAlimtalkConfig,
@@ -60,9 +58,7 @@ import {
   withSendingLock,
   SYNC_WAIT_FLAG,
 } from "../_shared/alimtalkShared.ts"
-import { syncAttendanceForRegistration } from "../_shared/attendanceSyncShared.ts"
-import { makePageCache } from "../_shared/reportCacheShared.ts"
-import { syncReportCacheForRegistration } from "../_shared/reportCacheBuilder.ts"
+import { refreshStudentReport } from "../_shared/dailyReportRefresh.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 
 const ALIMTALK_CONFIG_CATEGORY = "보고서" as const
@@ -91,41 +87,9 @@ function templateFallbackFor(_reportType: string): string {
   return SOLAPI_TEMPLATE_ID_WEEKLY_FALLBACK || SOLAPI_TEMPLATE_ID_MONTHLY_FALLBACK
 }
 
-async function syncStudentReport(registrationId: string): Promise<{ access_token: string; tokenQueryString: string }> {
-  const page = await notionGetPage(registrationId)
-  const currentRaw = (page.properties?.["토큰"]?.rich_text ?? []).map((t: any) => t.plain_text).join("")
-  const { accessToken: existingToken, disabled } = parseTokenValue(currentRaw)
-
-  let accessToken = existingToken
-  if (!accessToken || disabled) {
-    accessToken = generateToken()
-    await notionPatchPageProperties(registrationId, {
-      "토큰": { rich_text: [{ text: { content: accessToken } }] },
-    })
-  }
-
-  const tokenQueryString = REPORT_PATH + "?token=" + accessToken
-  return { access_token: accessToken, tokenQueryString }
-}
-
-// 보고서 발송 직전에 해당 등록의 출석/학습기록/학습활동이 Supabase에 최신으로 반영되어있는지
-// 한 번 더 보장한다. 편집 시점의 즉시 웹훅(각 DB의 "생성 또는 편집 시")이 이미 대부분 처리하지만,
-// 웹훅은 백그라운드로 동작해서 완료 시점을 보장하지 않으므로, 실제 발송 직전에 다시 한번
-// 강제로 동기화해 "발송 순간에는 반드시 최신"임을 보장한다. 여기서 오류가 나도 보고서 발송
-// 자체는 계속진행한다 (약간 오래된 데이터로 보내는 것이, 정상적인 보고서가 아예 안 가는 것보다 낫다).
-async function ensureFreshReportCache(registrationId: string): Promise<void> {
-  try {
-    await syncAttendanceForRegistration(registrationId)
-    const cachedGetPage = makePageCache()
-    await syncReportCacheForRegistration(registrationId, cachedGetPage)
-  } catch (err) {
-    console.error(`ensureFreshReportCache(${registrationId}) 실패(발송은 계속진행):`, (err as Error).message)
-  }
-}
-
-// [NEW, v4] 발송 성공 후 "일괄전송 선택"을 꺼서, 이 보고서가 다음 "일괄 전송" 클릭에서 다시
-// 골라지지 않도록 한다(중복 발송 방지). 이미 꺼져 있어도 그대로 false를 써서 문제없다.
-// 실패해도 로그만 남기고 응답에는 영향을 주지 않는다 (발송 자체는 이미 끝난 뒤).
+// 발송 성공 후에는 개별/일괄 경로 모두 "일괄전송 선택"을 끈다. 일괄 경로는 실패해도 1회
+// 시도로 끝내야 다음 청크가 같은 보고서를 다시 집어 무한 반복하지 않으므로 실패 catch에서도 끈다.
+// 속성 갱신 실패는 원래 발송/실패 결과를 바꾸지 않고 로그만 남긴다.
 async function clearBulkSelectFlag(reportId: string): Promise<void> {
   try {
     await notionPatchPageProperties(reportId, { [PROP_BULK_SELECT]: { checkbox: false } })
@@ -211,6 +175,10 @@ Deno.serve(async (req) => {
     const className = getFormulaText(reportPage, "클래스(보고서)")
     const studyPeriod = getFormulaText(reportPage, "학습기간(보고서)")
     const reportSummary = getFormulaText(reportPage, "보고서요약(보고서)")
+    const teacherComment = (reportPage.properties?.["선생님 한마디"]?.rich_text ?? [])
+      .map((item: any) => item.plain_text ?? "")
+      .join("")
+      .trim()
     const period = getDateRange(reportPage, "보고서 기간")
     const registrationId = getRelationFirstId(reportPage, "등록")
 
@@ -226,70 +194,81 @@ Deno.serve(async (req) => {
     // 동일하게 끝까지 동기로 기다려야 한다. body에 SYNC_WAIT_FLAG(=true)가 있는지로 두 경로를
     // 구분한다 (send-selected-notifications만 이 플래그를 보낸다).
     const performSend = async (): Promise<{ sendResult: unknown; reportType: string }> => {
-      await ensureFreshReportCache(registrationId)
-
-      const { tokenQueryString } = await syncStudentReport(registrationId)
-
       const clickerUserId =
         body?.data?.properties?.["실행자"]?.people?.[0]?.id ??
         reportPage.properties?.["실행자"]?.people?.[0]?.id ??
         null
       const senderUserId = clickerUserId ?? (await getBotUserId().catch(() => null)) ?? undefined
 
-      const config = await getAlimtalkConfig(ALIMTALK_CONFIG_CATEGORY, {
-        pfId: SOLAPI_PF_ID_FALLBACK,
-        templateId: templateFallbackFor(reportType),
-        senderNumber: SOLAPI_SENDER_NUMBER_FALLBACK,
-      })
+      try {
+        const result = await withSendingLock(reportId, "발송중", async () => {
+          // 공용 전체 최신화는 토큰을 먼저 보장하고, 출석 원본과 학습기록·학습활동·보고서 코멘트를
+          // 포함한 완성 캐시까지 성공해야 반환한다. 실패하면 아래 catch로 이동해 알림톡을 보내지 않는다.
+          const { access_token, cacheRow } = await refreshStudentReport(registrationId)
+          const tokenQueryString = REPORT_PATH + "?token=" + access_token
 
-      const variables: Record<string, string> = {
-        "#{보고서기간}": reportPeriodLabel,
-        "#{보고서구분}": reportType,
-        "#{학생이름}": studentName,
-        "#{클래스}": className,
-        "#{학습기간}": studyPeriod,
-        "#{보고서요약}": reportSummary,
-        "#{페이지ID}": tokenQueryString,
-      }
+          // 현재 전송하려는 보고서에 선생님 코멘트가 있다면, 방금 생성한 캐시에 그 보고서 행이 실제로
+          // 포함됐는지 확인한다. 코멘트 누락 상태로 링크를 보내는 것을 마지막 단계에서 차단한다.
+          if (teacherComment) {
+            const comments = (cacheRow.registration_detail?.report_comments ?? []) as Array<{ id?: string; comment?: string }>
+            const normalizedReportId = reportId.replaceAll("-", "").toLowerCase()
+            const included = comments.some((comment) =>
+              String(comment.id ?? "").replaceAll("-", "").toLowerCase() === normalizedReportId &&
+              comment.comment === teacherComment
+            )
+            if (!included) throw new Error("선생님 코멘트가 최신 보고서 캐시에 포함되지 않았습니다.")
+          }
 
-      const sendResult = await withSendingLock(reportId, "발송중", async () => {
-        try {
+          const config = await getAlimtalkConfig(ALIMTALK_CONFIG_CATEGORY, {
+            pfId: SOLAPI_PF_ID_FALLBACK,
+            templateId: templateFallbackFor(reportType),
+            senderNumber: SOLAPI_SENDER_NUMBER_FALLBACK,
+          })
+
+          const variables: Record<string, string> = {
+            "#{보고서기간}": reportPeriodLabel,
+            "#{보고서구분}": reportType,
+            "#{학생이름}": studentName,
+            "#{클래스}": className,
+            "#{학습기간}": studyPeriod,
+            "#{보고서요약}": reportSummary,
+            "#{페이지ID}": tokenQueryString,
+          }
+
           assertValidPhone(parentPhone)
           return await sendAlimtalk(parentPhone, variables, config, reportType)
-        } catch (sendErr) {
-          await createSendLogEntry({
-            registrationId,
-            reportId,
-            senderUserId,
-            title: studentName || reportType,
-            category: reportType as SendLogCategory,
-            status: "실패",
-            periodStart: period.start || undefined,
-            periodEnd: period.end || undefined,
-            failReason: extractErrorMessage(sendErr),
-          })
-          // [v5, PART N-8] 일괄전송 경로에서는 실패해도 1회 시도로 끝낸다 (위 파일 상단 주석 참고).
-          if (body?.[SYNC_WAIT_FLAG] === true) {
-            await clearBulkSelectFlag(reportId)
-          }
-          throw sendErr
-        }
-      }, { skipMinVisibleDelay: body?.[SYNC_WAIT_FLAG] === true })
+        }, { skipMinVisibleDelay: body?.[SYNC_WAIT_FLAG] === true })
 
-      await createSendLogEntry({
-        registrationId,
-        reportId,
-        senderUserId,
-        title: studentName || reportType,
-        category: reportType as SendLogCategory,
-        status: "성공",
-        periodStart: period.start || undefined,
-        periodEnd: period.end || undefined,
-      })
+        await createSendLogEntry({
+          registrationId,
+          reportId,
+          senderUserId,
+          title: studentName || reportType,
+          category: reportType as SendLogCategory,
+          status: "성공",
+          periodStart: period.start || undefined,
+          periodEnd: period.end || undefined,
+        })
+        await clearBulkSelectFlag(reportId)
+        return { sendResult: result, reportType }
+      } catch (err) {
+        // 최신화/코멘트 검증/연락처/알림톡 중 어느 단계에서 실패해도 동일한 실패 로그를 남긴다.
+        await createSendLogEntry({
+          registrationId,
+          reportId,
+          senderUserId,
+          title: studentName || reportType,
+          category: reportType as SendLogCategory,
+          status: "실패",
+          periodStart: period.start || undefined,
+          periodEnd: period.end || undefined,
+          failReason: extractErrorMessage(err),
+        }).catch((logErr) => console.error("보고서 실패 로그 기록 실패:", extractErrorMessage(logErr)))
 
-      await clearBulkSelectFlag(reportId)
-
-      return { sendResult, reportType }
+        // 일괄전송은 실패 건도 1회 시도로 끝내야 다음 청크가 같은 페이지를 무한 반복하지 않는다.
+        if (body?.[SYNC_WAIT_FLAG] === true) await clearBulkSelectFlag(reportId)
+        throw err
+      }
     }
 
     const waitForCompletion = body?.[SYNC_WAIT_FLAG] === true

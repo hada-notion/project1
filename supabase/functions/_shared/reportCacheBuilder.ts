@@ -341,6 +341,7 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
     .map((rp: any) => {
       const rpr = rp.properties
       return {
+        id: rp.id,
         kind: text(rpr["보고서 구분"]),
         start: dateStartOf(rpr["보고서 기간"]),
         end: dateEndOf(rpr["보고서 기간"]),

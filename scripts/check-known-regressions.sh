@@ -78,6 +78,25 @@ if grep -q 'Promise.all(ids.map((id) => requestSyncForRegistrationId' student_re
   fail=1
 fi
 
+# 5) 주간/월간 보고서는 전체 최신화와 선생님 코멘트 검증 성공 후에만 발송해야 한다.
+SEND_REPORT_FILE=supabase/functions/send-report/index.ts
+if ! grep -q 'refreshStudentReport' "$SEND_REPORT_FILE"; then
+  echo "❌ $SEND_REPORT_FILE: 주간/월간 전송 전 전체 최신화가 빠졌습니다."
+  fail=1
+fi
+if ! grep -q '선생님 코멘트가 최신 보고서 캐시에 포함되지 않았습니다' "$SEND_REPORT_FILE"; then
+  echo "❌ $SEND_REPORT_FILE: 선생님 코멘트 포함 검증이 빠졌습니다."
+  fail=1
+fi
+if [ "$(grep -c 'clearBulkSelectFlag(reportId)' "$SEND_REPORT_FILE")" -lt 2 ]; then
+  echo "❌ $SEND_REPORT_FILE: 일괄전송 실패 건의 선택 해제가 빠져 무한 반복 위험이 있습니다."
+  fail=1
+fi
+if ! grep -q 'id: rp.id' supabase/functions/_shared/reportCacheBuilder.ts; then
+  echo "❌ reportCacheBuilder.ts: 캐시에 보고서 ID가 없어 현재 코멘트 포함 여부를 검증할 수 없습니다."
+  fail=1
+fi
+
 if [ "$fail" != 0 ]; then
   echo ""
   echo "회귀 가드 실패 -- 위 문제를 고친 뒤 다시 배포하세요."

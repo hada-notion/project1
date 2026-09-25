@@ -10,7 +10,7 @@ import { makePersistentReportPageCache } from "./persistentReportPageCache.ts"
 export async function refreshStudentReport(
   registrationId: string,
   opts?: { sharedRunKey?: string },
-): Promise<{ access_token: string; reportUrl: string }> {
+): Promise<{ access_token: string; reportUrl: string; cacheRow: NonNullable<Awaited<ReturnType<typeof syncReportCacheForRegistration>>> }> {
   // 토큰이 없는 등록은 같은 전송 버튼 실행 안에서 먼저 발급한다. 캐시 빌더는 토큰이 없으면
   // 행을 만들지 않으므로 이 순서를 바꾸면 안 된다.
   const tokenInfo = await syncStudentReport(registrationId)
@@ -26,7 +26,7 @@ export async function refreshStudentReport(
   const row = await syncReportCacheForRegistration(registrationId, cachedGetPage)
   if (!row) throw new Error("보고서 캐시를 생성하지 못했습니다. 등록의 토큰과 학생정보 관계를 확인하세요.")
 
-  return tokenInfo
+  return { ...tokenInfo, cacheRow: row }
 }
 
 // 기존 일일보고서 호출부 이름을 유지하는 호환 별칭. 실제 동작은 전송과 무관한
