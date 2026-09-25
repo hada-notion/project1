@@ -162,9 +162,9 @@ if grep -Eq '>←</button>|>☰</button>' student_report_part1.js student_report
   fail=1
 fi
 
-# 13) 접힌 상세 헤더는 56px 높이 안에서 한 줄을 수직 중앙 정렬하고 현재 제목을 별도 볼드 처리하지 않는다.
-if ! grep -q '.reg-header-bar { min-height: 56px; padding: 6px 10px; box-sizing: border-box; }' student_report.html || ! grep -q '.reg-header-bar:not(.expanded) .reg-header-top { height: 44px; margin-bottom: 0; align-items: center; }' student_report.html || ! grep -q '.reg-breadcrumb .crumb.current { font-weight: 400;' student_report.html; then
-  echo "❌ 학생 리포트: 접힌 상세 헤더의 높이·중앙 정렬·제목 굵기 규칙이 빠졌습니다."
+# 13) 접힌 상세 헤더는 56px 높이 안에서 한 줄을 수직 중앙 정렬하고 이동 경로 전체를 같은 볼드 굵기로 표시한다.
+if ! grep -q '.reg-header-bar { min-height: 56px; padding: 6px 10px; box-sizing: border-box; }' student_report.html || ! grep -q '.reg-header-bar:not(.expanded) .reg-header-top { height: 44px; margin-bottom: 0; align-items: center; }' student_report.html || ! grep -q '.reg-breadcrumb {.*font-weight: 700;' student_report.html || ! grep -q '.reg-breadcrumb .crumb.current { font-weight: inherit;' student_report.html; then
+  echo "❌ 학생 리포트: 접힌 상세 헤더의 높이·중앙 정렬·통일된 볼드 규칙이 빠졌습니다."
   fail=1
 fi
 
