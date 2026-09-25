@@ -117,8 +117,8 @@ if grep -q 'content: text(props\\[\"학습활동\"\\])' supabase/functions/_shar
   echo "❌ reportCacheBuilder.ts: 내부 학습활동 페이지명이 학생 화면 데이터로 다시 노출됩니다."
   fail=1
 fi
-if ! grep -q 'logSecondaryText' student_report_part1.js || ! grep -q '💯 ' student_report_part1.js; then
-  echo "❌ 학생 리포트: 디자인 문서의 2줄 카드/100점 💯 규칙이 빠졌습니다."
+if ! grep -q 'renderLogMetaRows' student_report_part1.js || ! grep -q '💯 ' student_report_part1.js; then
+  echo "❌ 학생 리포트: 디자인 문서의 단원·내용 줄 분리/100점 💯 규칙이 빠졌습니다."
   fail=1
 fi
 

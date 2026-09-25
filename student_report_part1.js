@@ -53,9 +53,15 @@ function scorePillText(correct, total) {
   const pct = Math.round(((correct ?? 0) / total) * 100)
   return `${pct >= 100 ? "💯 " : ""}${pct}점 (${correct ?? 0}/${total})`
 }
-// 학습기록 카드의 보조정보는 디자인 규칙에 따라 단원·내용을 한 줄로 병합한다.
-function logSecondaryText(unit, note) {
-  return [unit ? `단원: ${unit}` : "", note || ""].filter(Boolean).join(" · ")
+// 학습기록 카드의 보조정보는 단원과 내용을 각각 독립된 줄로 표시한다.
+// NBSP 두 칸 뒤에 불릿을 두어 HTML 공백 병합 때문에 들여쓰기가 사라지지 않게 한다.
+function renderLogMetaRows(unit, note, extraRows = []) {
+  const rows = [
+    unit ? `단원: ${unit}` : "",
+    note ? `내용: ${note}` : "",
+    ...extraRows,
+  ].filter(Boolean)
+  return rows.map((row) => `<div class="log-context">${esc(`\u00a0\u00a0• ${row}`)}</div>`).join("")
 }
 // 노션 학습기록 "페이지 본문"을 피드용 부록으로 정리한다.
 // Edge Function 이 body: [{ type: "text" | "image", text?, url?, caption? }] 로 내려준다.
@@ -482,7 +488,7 @@ function renderBookDetail() {
                       <div class="log-title">${esc([l.book, l.range].filter(Boolean).join(" · ") || "기록")}</div>
                       ${l.pill ? `<span class="log-pill ${l.pillTone || ""}">${esc(l.pill)}</span>` : ""}
                     </div>
-                    ${logSecondaryText(l.unit, l.note) ? `<div class="log-context">${esc(`\u00a0\u00a0• ${logSecondaryText(l.unit, l.note)}`)}</div>` : ""}
+                    ${renderLogMetaRows(l.unit, l.note)}
                   </div>
                 </div>
                 ${(l.photo || (l.body && buildFeedBodyHtml(l.body))) ? `<div class="log-divider"></div><div class="log-extra">${l.photo ? `<img class="log-photo" src="${esc(l.photo)}" />` : ""}${buildFeedBodyHtml(l.body)}</div>` : ""}
@@ -694,9 +700,7 @@ function showTestDetailModal(i) {
     ? items.map((t) => `
       <div class="log-row 평가">
         <div class="log-title-row"><div class="log-title">${esc([t.book, t.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${scorePillTone(t.correct ?? 0, t.total ?? 0)}">${scorePillText(t.correct ?? 0, t.total ?? 0)}</span></div>
-        ${t.unit ? `<div class="log-context">${esc(`  • 단원: ${t.unit}`)}</div>` : ""}
-        ${(t.note || t.title) ? `<div class="log-note">${esc(t.note || t.title)}</div>` : ""}
-        <div class="log-context">  • 날짜: ${esc(t.date || "-")}</div>
+        ${renderLogMetaRows(t.unit, t.note, [`날짜: ${t.date || "-"}`])}
       </div>
     `).join("")
     : `<div class="log-row 평가"><div class="log-note">해당 기간 평가 기록이 없습니다.</div></div>`
