@@ -156,15 +156,15 @@ if ! grep -q -- '--brand-primary: #e6d8c4' student_report.html || ! grep -q -- '
   fail=1
 fi
 
-# 12) 헤더는 44px 클릭 영역을 유지하고, 뒤로가기·메뉴 모두 24px 선형 SVG와 투명 배경을 사용한다.
-if grep -Eq '>←</button>|>☰</button>' student_report_part1.js student_report_part2.js || ! grep -q '.header-icon { width: 24px; height: 24px' student_report.html || ! grep -q '.reg-back-btn {.*background: transparent' student_report.html || ! grep -q '.hamburger-btn {' student_report.html; then
+# 12) 헤더는 44px 클릭 영역을 유지하고, 뒤로가기·메뉴 모두 20px 선형 SVG와 투명 배경을 사용한다.
+if grep -Eq '>←</button>|>☰</button>' student_report_part1.js student_report_part2.js || ! grep -q '.header-icon { width: 20px; height: 20px' student_report.html || ! grep -q '.reg-back-btn {.*background: transparent' student_report.html || ! grep -q '.hamburger-btn {' student_report.html; then
   echo "❌ 학생 리포트: 헤더 선형 아이콘·클릭 영역 또는 투명 배경 규칙이 빠졌습니다."
   fail=1
 fi
 
-# 13) 접힌 상세 헤더는 모바일 앱 수준인 56px 높이로 유지한다.
-if ! grep -q '.reg-header-bar { min-height: 56px; padding: 6px 10px; box-sizing: border-box; }' student_report.html; then
-  echo "❌ 학생 리포트: 접힌 상세 헤더의 56px 높이 규칙이 빠졌습니다."
+# 13) 접힌 상세 헤더는 56px 높이 안에서 한 줄을 수직 중앙 정렬하고 현재 제목을 별도 볼드 처리하지 않는다.
+if ! grep -q '.reg-header-bar { min-height: 56px; padding: 6px 10px; box-sizing: border-box; }' student_report.html || ! grep -q '.reg-header-bar:not(.expanded) .reg-header-top { height: 44px; margin-bottom: 0; align-items: center; }' student_report.html || ! grep -q '.reg-breadcrumb .crumb.current { font-weight: inherit;' student_report.html; then
+  echo "❌ 학생 리포트: 접힌 상세 헤더의 높이·중앙 정렬·제목 굵기 규칙이 빠졌습니다."
   fail=1
 fi
 

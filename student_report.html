@@ -82,7 +82,7 @@ body {
   justify-content: center;
 }
 .hamburger-btn.dark { background: transparent; color: var(--text-primary); }
-.header-icon { width: 24px; height: 24px; display: block; fill: none; stroke: currentColor; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; }
+.header-icon { width: 20px; height: 20px; display: block; fill: none; stroke: currentColor; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; }
 
 .menu-overlay {
   display: none;
@@ -220,7 +220,7 @@ body {
 .reg-breadcrumb { display: none; flex: 1; min-width: 0; align-items: center; gap: 4px; font-size: 14px; font-weight: 600; line-height: 1; flex-wrap: nowrap; overflow: hidden; text-align: left; }
 .reg-breadcrumb .crumb { display: inline-flex; align-items: center; line-height: 1; cursor: pointer; opacity: 0.9; white-space: nowrap; }
 .reg-breadcrumb .crumb:hover { text-decoration: underline; }
-.reg-breadcrumb .crumb.current { font-weight: 800; opacity: 1; cursor: default; overflow: hidden; text-overflow: ellipsis; }
+.reg-breadcrumb .crumb.current { font-weight: inherit; opacity: 1; cursor: default; overflow: hidden; text-overflow: ellipsis; }
 .reg-breadcrumb .crumb.current:hover { text-decoration: none; }
 .reg-breadcrumb .crumb-sep { display: inline-flex; align-items: center; line-height: 1; opacity: 0.6; flex-shrink: 0; }
 .reg-head-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 10px; }
@@ -275,7 +275,7 @@ body {
 .reg-header-bar .reg-head-row, .reg-header-bar .reg-cover-wrap, .reg-header-bar .reg-sub-badges, .reg-header-bar .reg-period, .reg-header-bar .reg-divider { display: none; }
 .reg-header-bar .reg-breadcrumb { display: flex; }
 .reg-header-bar .reg-back-btn { width: 44px; height: 44px; }
-.reg-header-bar:not(.expanded) .reg-header-top { margin-bottom: 0; }
+.reg-header-bar:not(.expanded) .reg-header-top { height: 44px; margin-bottom: 0; align-items: center; }
 .reg-header-bar.expanded { padding: 14px 14px 14px; }
 .reg-header-bar.expanded .reg-head-row { display: flex; }
 .reg-header-bar.expanded .reg-head-row.stacked { display: flex; flex-direction: column; }
