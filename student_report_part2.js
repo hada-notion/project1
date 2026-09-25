@@ -514,8 +514,7 @@ function buildDailyBodyHtml(r, date) {
       ${todaysLogs.length ? todaysLogs.map((l) => `
         <div class="log-row 학습">
           <div class="log-title-row"><div class="log-title">${esc([l.book, l.range].filter(Boolean).join(" · ") || "학습 기록")}</div></div>
-          ${l.unit ? `<div class="log-context">${esc(`  • 단원: ${l.unit}`)}</div>` : ""}
-          ${l.note ? `<div class="log-note">${esc(l.note)}</div>` : ""}
+          ${logSecondaryText(l.unit, l.note) ? `<div class="log-context">${esc(`\u00a0\u00a0• ${logSecondaryText(l.unit, l.note)}`)}</div>` : ""}
           ${buildFeedBodyHtml(l.body)}
         </div>
       `).join("") : '<div class="empty">이 날짜에 기록된 학습 내용이 없습니다.</div>'}
@@ -526,9 +525,7 @@ function buildDailyBodyHtml(r, date) {
       ${nextHomework ? `
         <div class="log-row 과제">
           <div class="log-title-row"><div class="log-title">${esc([nextHomework.book, nextHomework.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${homeworkPillTone(nextHomework.status)}">${esc(nextHomework.status)}</span></div>
-          ${nextHomework.unit ? `<div class="log-context">${esc(`  • 단원: ${nextHomework.unit}`)}</div>` : ""}
-          ${(nextHomework.note || nextHomework.title) ? `<div class="log-note">${esc(nextHomework.note || nextHomework.title)}</div>` : ""}
-          <div class="log-context">  • 마감: ${esc(withDow(nextHomework.due))}</div>
+          <div class="log-context">${esc(`\u00a0\u00a0• ${[logSecondaryText(nextHomework.unit, nextHomework.note), `마감: ${withDow(nextHomework.due)}`].filter(Boolean).join(" · ")}`)}</div>
         </div>
       ` : '<div class="empty">예정된 과제가 없습니다.</div>'}
     </div>
@@ -538,8 +535,7 @@ function buildDailyBodyHtml(r, date) {
       ${todaysTests.length ? todaysTests.map((t) => `
         <div class="log-row 평가">
           <div class="log-title-row"><div class="log-title">${esc([t.book, t.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${scorePillTone(t.correct ?? 0, t.total ?? 0)}">${scorePillText(t.correct ?? 0, t.total ?? 0)}</span></div>
-          ${t.unit ? `<div class="log-context">${esc(`  • 단원: ${t.unit}`)}</div>` : ""}
-          ${(t.note || t.title) ? `<div class="log-note">${esc(t.note || t.title)}</div>` : ""}
+          ${logSecondaryText(t.unit, t.note) ? `<div class="log-context">${esc(`\u00a0\u00a0• ${logSecondaryText(t.unit, t.note)}`)}</div>` : ""}
         </div>
       `).join("") : '<div class="empty">이 날짜에 기록된 평가가 없습니다.</div>'}
       <div class="feed-divider"></div>
@@ -604,9 +600,9 @@ function renderDetail() {
       <div class="section-hint">학습 · 과제 · 평가 기록을 최신순으로 보여줍니다</div>
       ${(() => {
         const items = []
-        studyLogs.forEach((l) => items.push({ type: "학습", icon: "📖", date: l.date, title: [l.book, l.range].filter(Boolean).join(" · ") || "학습 기록", context: l.unit ? `  • 단원: ${l.unit}` : "", note: l.note, photo: l.photo, body: l.body, book: l.book }))
-        homework.forEach((h) => items.push({ type: "과제", icon: "📝", date: h.date || h.due, title: [h.book, h.range].filter(Boolean).join(" · "), context: h.unit ? `  • 단원: ${h.unit}` : "", note: h.note || h.title || "", pill: h.status, pillTone: homeworkPillTone(h.status), book: h.book }))
-        tests.forEach((t) => items.push({ type: "평가", icon: "📄", date: t.date, title: [t.book, t.range].filter(Boolean).join(" · "), context: t.unit ? `  • 단원: ${t.unit}` : "", note: t.note || t.title || "", pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), book: t.book }))
+        studyLogs.forEach((l) => items.push({ type: "학습", icon: "📖", date: l.date, title: [l.book, l.range].filter(Boolean).join(" · ") || "학습 기록", context: logSecondaryText(l.unit, l.note), photo: l.photo, body: l.body, book: l.book }))
+        homework.forEach((h) => items.push({ type: "과제", icon: "📝", date: h.date || h.due, title: [h.book, h.range].filter(Boolean).join(" · "), context: logSecondaryText(h.unit, h.note), pill: h.status, pillTone: homeworkPillTone(h.status), book: h.book }))
+        tests.forEach((t) => items.push({ type: "평가", icon: "📄", date: t.date, title: [t.book, t.range].filter(Boolean).join(" · "), context: logSecondaryText(t.unit, t.note), pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), book: t.book }))
         const sorted = items.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
         const groups = []
         sorted.forEach((l) => {
@@ -625,8 +621,7 @@ function renderDetail() {
                       <div class="log-title">${esc(l.title)}</div>
                       ${l.pill ? `<span class="log-pill ${l.pillTone || ""}">${esc(l.pill)}</span>` : ""}
                     </div>
-                    ${l.context ? `<div class="log-context">${esc(l.context)}</div>` : ""}
-                    ${l.note ? `<div class="log-note">${esc(l.note)}</div>` : ""}
+                    ${l.context ? `<div class="log-context">${esc(`\u00a0\u00a0• ${l.context}`)}</div>` : ""}
                   </div>
                 </div>
                 ${(l.photo || (l.body && buildFeedBodyHtml(l.body))) ? `<div class="log-divider"></div><div class="log-extra">${l.photo ? `<img class="log-photo" src="${esc(l.photo)}" />` : ""}${buildFeedBodyHtml(l.body)}</div>` : ""}

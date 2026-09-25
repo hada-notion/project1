@@ -111,6 +111,17 @@ if ! grep -q 'resolveSharedLearningRegistrationIds' "$SYNC_CACHE_FILE"; then
   fail=1
 fi
 
+# 8) 학생 화면에는 "[과제] 학생명 날짜" 같은 학습활동 페이지명을 노출하지 않는다.
+#    과제·평가는 연결된 학습기록의 교재/범위/단원/내용으로 조립해야 한다.
+if grep -q 'content: text(props\\[\"학습활동\"\\])' supabase/functions/_shared/reportCacheBuilder.ts; then
+  echo "❌ reportCacheBuilder.ts: 내부 학습활동 페이지명이 학생 화면 데이터로 다시 노출됩니다."
+  fail=1
+fi
+if ! grep -q 'logSecondaryText' student_report_part1.js || ! grep -q '💯 ' student_report_part1.js; then
+  echo "❌ 학생 리포트: 디자인 문서의 2줄 카드/100점 💯 규칙이 빠졌습니다."
+  fail=1
+fi
+
 if [ "$fail" != 0 ]; then
   echo ""
   echo "회귀 가드 실패 -- 위 문제를 고친 뒤 다시 배포하세요."

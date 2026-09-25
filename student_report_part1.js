@@ -51,7 +51,11 @@ function scorePillTone(correct, total) {
 function scorePillText(correct, total) {
   if (!total) return `정답 ${correct ?? 0} / 0`
   const pct = Math.round(((correct ?? 0) / total) * 100)
-  return `${pct}점 (${correct ?? 0}/${total})`
+  return `${pct >= 100 ? "💯 " : ""}${pct}점 (${correct ?? 0}/${total})`
+}
+// 학습기록 카드의 보조정보는 디자인 규칙에 따라 단원·내용을 한 줄로 병합한다.
+function logSecondaryText(unit, note) {
+  return [unit ? `단원: ${unit}` : "", note || ""].filter(Boolean).join(" · ")
 }
 // 노션 학습기록 "페이지 본문"을 피드용 부록으로 정리한다.
 // Edge Function 이 body: [{ type: "text" | "image", text?, url?, caption? }] 로 내려준다.
@@ -478,8 +482,7 @@ function renderBookDetail() {
                       <div class="log-title">${esc([l.book, l.range].filter(Boolean).join(" · ") || "기록")}</div>
                       ${l.pill ? `<span class="log-pill ${l.pillTone || ""}">${esc(l.pill)}</span>` : ""}
                     </div>
-                    ${l.unit ? `<div class="log-context">${esc(`  • 단원: ${l.unit}`)}</div>` : ""}
-                    ${l.note ? `<div class="log-note">${esc(l.note)}</div>` : ""}
+                    ${logSecondaryText(l.unit, l.note) ? `<div class="log-context">${esc(`\u00a0\u00a0• ${logSecondaryText(l.unit, l.note)}`)}</div>` : ""}
                   </div>
                 </div>
                 ${(l.photo || (l.body && buildFeedBodyHtml(l.body))) ? `<div class="log-divider"></div><div class="log-extra">${l.photo ? `<img class="log-photo" src="${esc(l.photo)}" />` : ""}${buildFeedBodyHtml(l.body)}</div>` : ""}

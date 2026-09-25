@@ -354,22 +354,23 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
   attendanceRows.forEach((r) => r.study_log_ids.forEach((id: string) => logIdSet.add(id)))
   const logIds = Array.from(logIdSet)
   const logPages = await Promise.all(logIds.map((id) => cachedGetPage(id)))
-  const logDetails = await Promise.all(
-    logPages.map(async (lp: any) => {
-      const lprops = lp.properties
-      const category = text(lprops["구분"])
-      const iso = dateStartOf(lprops["수업일"])
-      const content = text(lprops["내용"])
-      const range = text(lprops["범위"])
-      const bookId = firstRelationId(lprops["교재"])
-      let bookTitle = ""
-      if (bookId) {
-        const bp = await cachedGetPage(bookId)
-        bookTitle = text(bp.properties["교재명"])
-      }
-      return { id: lp.id, category, iso, content, range, bookTitle }
-    }),
-  )
+  const readLogDetail = async (lp: any) => {
+    const lprops = lp.properties
+    const category = text(lprops["구분"])
+    const iso = dateStartOf(lprops["수업일"])
+    const content = text(lprops["내용"])
+    const range = text(lprops["범위"])
+    const unit = text(lprops["단원"])
+    const bookId = firstRelationId(lprops["교재"])
+    let bookTitle = ""
+    if (bookId) {
+      const bp = await cachedGetPage(bookId)
+      bookTitle = text(bp.properties["교재명"])
+    }
+    return { id: lp.id, category, iso, content, range, unit, bookTitle }
+  }
+  const logDetails = await Promise.all(logPages.map(readLogDetail))
+  const logDetailById = new Map(logDetails.map((detail) => [detail.id, detail]))
 
   const pastLogDetails = logDetails.filter((l) => (l.iso ?? "").slice(0, 10) <= todayIso && (l.iso ?? "") >= sinceIso)
 
@@ -377,7 +378,7 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
     .filter((l) => l.category === "학습")
     .sort((a, b) => ((a.iso ?? "") < (b.iso ?? "") ? 1 : -1))
     .slice(0, 12)
-    .map((l) => ({ iso: l.iso, date: fmtDateKr(l.iso), book: l.bookTitle, range: l.range, unit: "", note: l.content, body: [] as unknown[] }))
+    .map((l) => ({ iso: l.iso, date: fmtDateKr(l.iso), book: l.bookTitle, range: l.range, unit: l.unit, note: l.content, body: [] as unknown[] }))
 
   const activityPages = await shareQueriedPages(
     await queryAllPages(DS_STUDY_ACTIVITY, {
@@ -390,10 +391,16 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
     activityPages.map(async (ap: any) => {
       const props = ap.properties
       const attendanceId = firstRelationId(props["출석"])
+      const learningRecordId = firstRelationId(props["학습기록"])
       let classIso: string | null = null
       if (attendanceId) {
         const att = await cachedGetPage(attendanceId)
         classIso = dateStartOf(att.properties["수업일시"])
+      }
+      let source = learningRecordId ? logDetailById.get(learningRecordId) : undefined
+      if (!source && learningRecordId) {
+        source = await readLogDetail(await cachedGetPage(learningRecordId))
+        logDetailById.set(learningRecordId, source)
       }
       return {
         category: text(props["구분"]),
@@ -402,7 +409,10 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
         status: normalizeStatus(text(props["과제상태"])),
         correct: numberOf(props["정답 문항"]) ?? 0,
         total: numberOf(props["전체 문항"]) ?? 0,
-        content: text(props["학습활동"]),
+        bookTitle: source?.bookTitle ?? "",
+        range: source?.range ?? "",
+        unit: source?.unit ?? "",
+        content: source?.content ?? "",
       }
     }),
   )
@@ -410,10 +420,10 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
   const homeworkAll = activities
     .filter((a) => a.category === "과제" && a.classIso && a.classIso >= sinceIso && a.classIso <= todayIso)
     .map((a) => ({
-      title: a.content,
-      book: "",
-      range: "",
-      unit: "",
+      title: "",
+      book: a.bookTitle,
+      range: a.range,
+      unit: a.unit,
       note: a.content,
       iso: a.classIso,
       date: fmtDateKr(a.classIso),
@@ -448,10 +458,10 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
     .filter((a) => a.category === "평가" && a.classIso && a.classIso >= sinceIso && a.classIso <= todayIso)
     .slice(0, 6)
     .map((a) => ({
-      title: a.content,
-      book: "",
-      range: "",
-      unit: "",
+      title: "",
+      book: a.bookTitle,
+      range: a.range,
+      unit: a.unit,
       note: a.content,
       iso: a.classIso,
       date: fmtDateKr(a.classIso),
