@@ -6,7 +6,7 @@
 // 학생 매칭·출석 기록·알림톡 발송을 위임했는데, 그 경로를 없애고 다른 관리 함수들과 동일하게
 // Notion을 직접 조회/갱신하도록 통합한다 (로드맵: 키오스크 Make 의존 제거, 2026-09-19).
 //
-// 매칭: 학생(학원) DB의 학생/어머니/아버지 연락처 중 하나가 일치하고, 수강 중(🟢)인 등록을 찾는다.
+// 매칭: 학생(학원) DB의 학생/어머니/아버지/기타 보호자 연락처 중 하나가 일치하고, 수강 중(🟢)인 등록을 찾는다.
 // - 매칭이 하나도 없으면 { matched: false }.
 // - 같은 번호로 매칭되는 등록이 여러 건이면(형제/자매가 보호자 번호 공유 등) 검색을 바로 끝내지
 //   않고 { needsSelection: true, candidates: [...] }를 반환한다. 프론트는 사용자가 고른
@@ -185,7 +185,8 @@ Deno.serve(async (req: Request) => {
         return (
           normalizePhone(p["학생 연락처"]?.phone_number ?? "") === phone ||
           normalizePhone(p["어머니 연락처"]?.phone_number ?? "") === phone ||
-          normalizePhone(p["아버지 연락처"]?.phone_number ?? "") === phone
+          normalizePhone(p["아버지 연락처"]?.phone_number ?? "") === phone ||
+          normalizePhone(p["기타 보호자 연락처"]?.phone_number ?? "") === phone
         )
       })
 
