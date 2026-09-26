@@ -51,9 +51,11 @@
 // 다시 1로 되돌렸다 -- 아래 CONCURRENCY 선언부 주석 참고). 마스터플랜:
 // https://app.notion.com/p/903c90386c1d473494c5df6306c53517
 
-// [현재 상태, 2026-09-25] 대시보드 관련 자동화와 직접 enqueue 호출은 제거됐다. 따라서
-// sync-dashboard-link 핸들러와 전용 레인은 현재 새 작업을 받지 않는 휴면 경로다. 기존 큐 항목 처리와
-// 향후 재설계 가능성을 위해 코드는 남겼으며, 삭제는 별도 구조 변경으로 다룬다.
+// [현재 상태, 2026-09-26] 대시보드 관련 자동화와 직접 enqueue 호출은 제거됐다. sync-dashboard-link를
+// 다른 target들과 분리했던 이유(물량 적체로 다른 target들이 뒤에서 오래 기다리는 문제, 2026-09-24
+// 분리큐 1단계)가 더 이상 발생하지 않으므로, 전용 레인 분리는 되돌리고 다시 레인 하나로 합쳤다
+// (아래 lane() 호출부 참고). 혹시 예전에 쌓인 sync-dashboard-link 항목이 남아 있어도 이 레인에서
+// 순서대로 함께 처리되므로 핸들러는 그대로 둔다.
 
 import {
   tryAcquireWorkerLock,
@@ -90,6 +92,10 @@ import { processDashboardLinkQueueItem } from "../_shared/dashboardLinkTarget.ts
 // 참고)를 오히려 자주 유발하는 쪽이었다. 대시보드 연결은 사람이 지켜보는 "실시간 처리 상태"가 없어
 // 지연에 관대하고, 오히려 이 워커의 CONCURRENCY=1 순차 처리에 맡기는 쪽이 동시성 문제를 줄여주므로
 // 다시 등록한다 (findOrCreateDashboard 자체의 날짜별 잠금과 함께 이중 방어).
+//
+// [정리, 2026-09-26] 대시보드 관련 자동화가 완전히 제거되어 이 target으로는 더 이상 새 작업이
+// 적재되지 않는다. 혹시 남은 옛 항목을 계속 처리할 수 있도록 핸들러는 그대로 두되, 전용 레인
+// 분리는 아래에서 되돌렸다.
 const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Promise<any>) => Promise<void>> = {
   "create-learning-record": processCreateLearningRecordQueueItem,
   "sync-textbook-distribution:from-class-carts": processFromClassCartsQueueItem,
@@ -101,10 +107,9 @@ const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Pro
 }
 
 // (2026-09-22, Phase 6) 이 워커 한 번의 실행(위 sync_queue_worker_lock으로 항상 한 번에 하나만
-// 돈다) 안에서, claim -> 처리 -> 다음 claim을 반복하는 "레인(lane)"을 동시에 돌린다.
-// claim_next_sync_queue_item 계열 RPC는 FOR UPDATE SKIP LOCKED를 써서 여러 레인이 동시에 호출해도
-// 같은 항목을 두 번 집지 않는다(원래도 여러 워커 인스턴스가 동시에 떠도 안전하게 설계되어 있었음
-// -- 이제 그 안전성을 한 인스턴스 안의 동시 레인에도 그대로 활용).
+// 돈다) 안에서, claim -> 처리 -> 다음 claim을 반복하는 "레인(lane)"을 돌린다.
+// claim_next_sync_queue_item 계열 RPC는 FOR UPDATE SKIP LOCKED를 써서 여러 레인/인스턴스가 동시에
+// 호출해도 같은 항목을 두 번 집지 않는다.
 //
 // (2026-09-22, Phase 6 후속: 3 -> 1로 되돌림) 실제 운영에서 N=3(target 구분 없는 동일한 하나의
 // 레인을 3개 동시 실행)으로 돌려보니 두 가지 문제가 드러났다: (1) 학생 수가 많은 클래스(보고서/
@@ -119,27 +124,12 @@ const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Pro
 // 되돌려서, 화면에는 항상 최대 1건만 "🔄 작업중"으로 보이고 순서도 항상 예측 가능하게 만든다.
 // 마스터플랜: https://app.notion.com/p/903c90386c1d473494c5df6306c53517
 //
-// (2026-09-24, sync_queue 분리큐 1단계) 사용자가 Supabase SQL Editor에서 직접 실측한 결과,
-// sync-dashboard-link만 물량이 압도적으로 많았다(대기 중인 항목 1056건, 평균 대기 885초/최대
-// 6857초) -- generate-classes/kiosk-checkin이 수업/출석 페이지를 만들 때마다 건별로 하나씩
-// 쌓이기 때문이다. target 구분 없는 위 "하나씩" 레인 하나만 있으면, 이 대량 적체가 무관한
-// cascade-delete(298건, 평균 대기 366초) 등 다른 target까지 뒤에서 오래 기다리게 만든다(레인
-// 기아). sync-dashboard-link의 중복 생성 방지는 이미 findOrCreateDashboard의 날짜별 advisory
-// lock(20260923000000 마이그레이션, dashboardLinkTarget.ts)이 별도로 보장하므로, 이 target을
-// 다른 target들과 같은 줄에 세울 필요가 없다 -- 아래처럼 target 목록으로 필터링해 꺼내는
-// claim_next_sync_queue_item_for_targets(20260924020000 마이그레이션)를 이용해, "레인은 여전히
-// 하나씩(각 레인 내부 순서 보장, 위 Phase 6 후속 교훈 유지)"를 지키면서 sync-dashboard-link
-// 전용 레인과 나머지 6개 target 전용 레인을 독립적으로 동시에 돌린다. 두 레인이 서로 다른 target만
-// 보므로 서로를 막지 않는다. (나머지 6개 target 중 실측상 유의미한 대기가 있던 건 cascade-delete
-// 뿐이었는데, 이는 sync-dashboard-link 적체에 밀려 대기했던 것으로 추정된다 -- 이번 분리 후 재측정
-// 해서 여전히 대기가 크면 그 다음 단계로 cascade-delete도 별도 레인으로 뗀다, 사용자 지시: "결과적
-// 으로는 다 분리하기로 하는데, 일단 하나씩하나씩 분리해보자.")
-const DASHBOARD_TARGET = "sync-dashboard-link"
-const OTHER_TARGETS = Object.keys(HANDLERS).filter((target) => target !== DASHBOARD_TARGET)
-
-// Edge Function 자체의 실행 시간 한도보다 여유 있게 짧은 시간 예산 안에서만 계속 처리하고, 남으면
-// 스스로를 다시 깨운다 (한 번의 실행이 시간 제한에 걸려 강제 종료되는 것보다, 미리 멈추고 이어가는
-// 쪽이 처리 중이던 항목이 애매한 상태로 남을 위험이 적다).
+// (2026-09-24, sync_queue 분리큐 1단계 -> 2026-09-26, 되돌림) sync-dashboard-link만 물량이
+// 압도적으로 많았던 시기(대기 중인 항목 1056건)에 다른 target들이 뒤에서 오래 기다리는 문제(레인
+// 기아)를 막기 위해, sync-dashboard-link 전용 레인과 나머지 6개 target 전용 레인을 분리해 동시에
+// 돌렸었다. 대시보드 관련 자동화가 완전히 제거되어 sync-dashboard-link로는 더 이상 새 작업이
+// 적재되지 않으므로, 분리해야 할 이유가 사라졌다 -- 아래에서 다시 레인 하나로 합쳤다(모든 target을
+// 큐에 쌓인 순서 그대로 처리, 위 Phase 6 후속 교훈과 동일).
 const TIME_BUDGET_MS = 100_000
 
 // (2026-09-18 밤) 이 값들보다 오래 processing 상태로 멈춰있으면 복구 대상으로 보고, 실패한 항목은
@@ -195,11 +185,10 @@ Deno.serve(async (req: Request) => {
       console.log(`[process-sync-queue] 처리 중 상태로 멈춰있던 작업 ${recoveredCount}건을 복구함 (pending 또는 failed로 확정)`)
     }
 
-    // (2026-09-22, Phase 6 / 2026-09-24 분리큐 1단계) 한 항목을 claim -> 처리 -> 결과 반영까지
-    // 끝내는 레인 하나. deadline까지 "이 레인이 맡은 target들 중 더 이상 집을 게 없을 때"만
-    // 멈추므로, 해당 target에 항목이 남아있는 한 이 레인은 계속 다음 항목을 이어서 집는다 --
-    // 아래에서 target 목록이 서로 다른 레인 2개(sync-dashboard-link 전용 / 나머지 전용)를 동시에
-    // 돌려서, 서로 다른 target끼리는 줄을 분리하되 각 레인 내부는 여전히 하나씩 순서대로 처리한다.
+    // (2026-09-22, Phase 6 / 2026-09-26 레인 재통합) 한 항목을 claim -> 처리 -> 결과 반영까지
+    // 끝내는 레인 하나. deadline까지 "집을 게 더 이상 없을 때"만 멈추므로, 큐에 항목이 남아있는
+    // 한 이 레인은 계속 다음 항목을 이어서 집는다. 모든 target을 이 레인 하나가 순서대로 처리한다
+    // (2026-09-24~26 사이엔 sync-dashboard-link 전용 레인이 별도로 있었으나, 위 주석대로 되돌렸다).
     async function lane(targets: string[]): Promise<void> {
       while (Date.now() < deadline) {
         const item: SyncQueueItem | null = await claimNextSyncQueueItemForTargets(targets)
@@ -231,7 +220,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    await Promise.all([lane([DASHBOARD_TARGET]), lane(OTHER_TARGETS)])
+    await lane(Object.keys(HANDLERS))
   } finally {
     clearInterval(lockRenewalTimer)
     await releaseWorkerLock()
