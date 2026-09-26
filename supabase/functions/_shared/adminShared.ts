@@ -359,7 +359,7 @@ export async function createSyncFailureLogEntry(args: {
 // [NEW] "알림톡 설정(학원) DB"에서 발송 구분별 pfId/템플릿ID/발신번호를 가져옵니다.
 // 카카오 채널이나 템플릿이 바뀌면 코드 수정 없이 이 Notion DB의 값만 바꾸면 됩니다.
 // 설정 DB에 해당 행이 없거나 "활성 여부"가 꺼져 있거나 조회가 실패하면 fallback(Secrets 기본값)을 사용합니다.
-export type AlimtalkRecipientTarget = "우선 연락 대상" | "어머니" | "아버지" | "둘 다"
+export type AlimtalkRecipientTarget = "우선 연락 대상" | "어머니" | "아버지" | "기타 보호자" | "모든 연락처"
 
 export type AlimtalkConfig = {
   pfId: string
@@ -494,7 +494,10 @@ export async function getAlimtalkConfig(
 
     const rawRecipientTarget = page.properties?.["알림 수신 대상"]?.select?.name
     const recipientTarget: AlimtalkRecipientTarget =
-      rawRecipientTarget === "어머니" || rawRecipientTarget === "아버지" || rawRecipientTarget === "둘 다"
+      rawRecipientTarget === "어머니" ||
+      rawRecipientTarget === "아버지" ||
+      rawRecipientTarget === "기타 보호자" ||
+      rawRecipientTarget === "모든 연락처"
         ? rawRecipientTarget
         : "우선 연락 대상"
 
