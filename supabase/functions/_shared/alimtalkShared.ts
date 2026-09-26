@@ -100,7 +100,7 @@ export async function resolveParentPhone(attendancePage: any, registrationId: st
   return ""
 }
 
-export type AlimtalkRecipient = { label: "우선 연락 대상" | "어머니" | "아버지"; phone: string }
+export type AlimtalkRecipient = { label: "우선 연락 대상" | "어머니" | "아버지" | "기타 보호자"; phone: string }
 
 function getPropertyText(property: any): string {
   if (!property) return ""
@@ -114,8 +114,10 @@ function getPropertyText(property: any): string {
   return ""
 }
 
-// 알림톡 설정의 수신 대상에 맞춰 등록→학생정보에서 어머니/아버지 연락처를 찾는다.
-// '둘 다'는 같은 번호를 중복 발송하지 않으며, 한쪽만 등록돼 있으면 등록된 쪽에만 보낸다.
+// 알림톡 설정의 수신 대상에 맞춰 등록→학생정보에서 어머니/아버지/기타 보호자 연락처를 찾는다.
+// (2026-09-26, 기타 보호자 옵션 추가) 기존 '둘 다'(어머니+아버지)를 '모든 연락처'로 바꾸면서 기타
+// 보호자 연락처도 함께 포함하도록 확장했다. '모든 연락처'는 같은 번호를 중복 발송하지 않으며,
+// 일부만 등록돼 있으면 등록된 연락처에만 보낸다.
 export async function resolveAlimtalkRecipients(args: {
   registrationId: string
   primaryPhone?: string
@@ -137,17 +139,22 @@ export async function resolveAlimtalkRecipients(args: {
   const studentPage = await notionGetPage(studentId)
   const motherPhone = getPropertyText(studentPage.properties?.["어머니 연락처"])
   const fatherPhone = getPropertyText(studentPage.properties?.["아버지 연락처"])
+  const otherGuardianPhone = getPropertyText(studentPage.properties?.["기타 보호자 연락처"])
 
   const candidates: AlimtalkRecipient[] = []
-  if (args.recipientTarget === "어머니" || args.recipientTarget === "둘 다") {
+  if (args.recipientTarget === "어머니" || args.recipientTarget === "모든 연락처") {
     if (motherPhone) candidates.push({ label: "어머니", phone: motherPhone })
     else if (args.recipientTarget === "어머니") throw new Error("연락처 오류: 어머니 연락처가 비어 있습니다.")
   }
-  if (args.recipientTarget === "아버지" || args.recipientTarget === "둘 다") {
+  if (args.recipientTarget === "아버지" || args.recipientTarget === "모든 연락처") {
     if (fatherPhone) candidates.push({ label: "아버지", phone: fatherPhone })
     else if (args.recipientTarget === "아버지") throw new Error("연락처 오류: 아버지 연락처가 비어 있습니다.")
   }
-  if (!candidates.length) throw new Error("연락처 오류: 어머니·아버지 연락처가 모두 비어 있습니다.")
+  if (args.recipientTarget === "기타 보호자" || args.recipientTarget === "모든 연락처") {
+    if (otherGuardianPhone) candidates.push({ label: "기타 보호자", phone: otherGuardianPhone })
+    else if (args.recipientTarget === "기타 보호자") throw new Error("연락처 오류: 기타 보호자 연락처가 비어 있습니다.")
+  }
+  if (!candidates.length) throw new Error("연락처 오류: 어머니·아버지·기타 보호자 연락처가 모두 비어 있습니다.")
 
   const seen = new Set<string>()
   return candidates.filter((recipient) => {
