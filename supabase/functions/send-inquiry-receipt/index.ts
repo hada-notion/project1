@@ -218,7 +218,15 @@ Deno.serve(async (req: Request) => {
     })
   }
 
-  const studentId = body?.data?.id ?? body?.studentId ?? body?.pageId ?? null
+  const studentId =
+    body?.data?.id ??
+    body?.id ??
+    body?.page?.id ??
+    body?.data?.page_id ??
+    body?.page_id ??
+    body?.studentId ??
+    body?.pageId ??
+    null
   if (!studentId) {
     return new Response(JSON.stringify({ error: "studentId required" }), {
       status: 400,

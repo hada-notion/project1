@@ -370,7 +370,7 @@ export type AlimtalkConfig = {
   // 읽으려 했는데, 그 속성이 실제로는 없어서 항상 빈 값이 나가던 버그가 있었다.
   // 이제 발송 코드가 이 config.notice를 쓰도록 바꿔서 알림톡 설정 DB의 "안내멘트" 값이 그대로 반영된다.
   notice: string
-  // 발송 종류별 실제 수신자를 Notion 설정에서 선택한다. 미설정은 기존 동작(주요 연락처) 유지.
+  // 발송 종류별 실제 수신자를 Notion 설정에서 선택한다. 미설정은 우선 연락 대상으로 처리한다.
   recipientTarget: AlimtalkRecipientTarget
 }
 

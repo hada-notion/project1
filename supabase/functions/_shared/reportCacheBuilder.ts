@@ -120,7 +120,7 @@ async function buildStudentFields(studentId: string, cachedGetPage: (id: string)
   const studentPhone = text(sp["학생 연락처"])
   const motherPhone = text(sp["어머니 연락처"])
   const fatherPhone = text(sp["아버지 연락처"])
-  const primaryContact = text(sp["학부모 연락처"]) || text(sp["주요 연락처"])
+  const primaryContact = text(sp["우선 연락처"])
 
   const siblingIds = relationIds(sp["형제/자매"])
   const siblings = await Promise.all(
