@@ -181,9 +181,9 @@ if grep -q 'crumb.*r\.emoji' student_report_part1.js student_report_part2.js || 
 fi
 
 
-# 16) 알림톡 수신 대상 설정은 모든 실발송 경로에 연결되고, 미설정 시 주요 연락처를 유지한다.
-if ! grep -q 'recipientTarget: "주요 연락처"' supabase/functions/_shared/adminShared.ts || ! grep -q 'export async function resolveAlimtalkRecipients' supabase/functions/_shared/alimtalkShared.ts; then
-  echo "❌ 알림톡: 수신 대상 기본값 또는 공용 수신자 해석기가 빠졌습니다."
+# 16) 알림톡 수신 대상 설정은 모든 실발송 경로에 연결되고, 미설정 시 우선 연락 대상을 유지한다.
+if ! grep -q 'recipientTarget: "우선 연락 대상"' supabase/functions/_shared/adminShared.ts || ! grep -q 'export async function resolveAlimtalkRecipients' supabase/functions/_shared/alimtalkShared.ts; then
+  echo "❌ 알림톡: 우선 연락 대상 기본값 또는 공용 수신자 해석기가 빠졌습니다."
   fail=1
 fi
 for file in \
