@@ -1,1 +1,142 @@
-Ly8gUE9TVCAvZnVuY3Rpb25zL3YxL3RvZ2dsZS1yZXBvcnQtbGluawovLyDrk7HroZ0o7ZWZ7JuQKSBEQuydmCDrp4Htgawg7J6s67Cc6riJL+unge2BrCDruYTtmZzshLHtmZQg7J6Q64+Z7ZmU6rCAIO2YuOy2nO2VnOuLpC4KLy8geC1saW5rLWFjdGlvbjogZW5hYmxlIHwgZGlzYWJsZSB8IHJlZ2VuZXJhdGUKaW1wb3J0IHsKICBDT1JTX0hFQURFUlMsCiAgcmVxdWlyZUFkbWluS2V5LAogIG5vdGlvbkdldFBhZ2UsCiAgbm90aW9uUGF0Y2hQYWdlUHJvcGVydGllcywKICBnZW5lcmF0ZVRva2VuLAogIHBhcnNlVG9rZW5WYWx1ZSwKICBESVNBQkxFRF9QUkVGSVgsCn0gZnJvbSAiLi4vX3NoYXJlZC9hZG1pblNoYXJlZC50cyIKaW1wb3J0IHsgZXh0cmFjdFBhZ2VJZCB9IGZyb20gIi4uL19zaGFyZWQvbm90aW9uQ2xpZW50LnRzIgoKY29uc3QgU0JfVVJMID0gRGVuby5lbnYuZ2V0KCJTQl9VUkwiKSA/PyAiIgpjb25zdCBTQl9TRVJWSUNFX1JPTEVfS0VZID0gRGVuby5lbnYuZ2V0KCJTQl9TRVJWSUNFX1JPTEVfS0VZIikgPz8gIiIKCmZ1bmN0aW9uIHJlc29sdmVMaW5rQWN0aW9uKHJlcTogUmVxdWVzdCwgYm9keTogYW55KTogc3RyaW5nIHwgbnVsbCB7CiAgcmV0dXJuIHJlcS5oZWFkZXJzLmdldCgieC1saW5rLWFjdGlvbiIpID8/IG5ldyBVUkwocmVxLnVybCkuc2VhcmNoUGFyYW1zLmdldCgiYWN0aW9uIikgPz8gYm9keT8uYWN0aW9uID8/IG51bGwKfQoKLy8g7ZWZ67aA66qoIO2ZlOuptOydgCBOb3Rpb27snbQg7JWE64uI6528IHJlcG9ydF9jYWNoZeulvCDsnb3snLzrr4DroZwg7Yag7YGwIOyGjeyEseunjCDrsJTqvrjrqbQg6riw7KG0IOunge2BrOqwgCDqs4Tsho0g7Je066aw64ukLgovLyDrp4Htgawg7IOB7YOcIOuzgOqyveqzvCDqsJnsnYAg7JqU7LKtIOyViOyXkOyEnCDsupDsi5zsnZgg7Yag7YGwL+ywqOuLqCDsg4Htg5zrj4Qg7KaJ7IucIOunnuy2mOuLpC4KLy8KLy8gW0ZJWCwgMjAyNi0wOS0yNl0gcmVwb3J0X2NhY2hlLnJlZ2lzdHJhdGlvbl9pZOuKlCB0ZXh0IOy7rOufvOydtOqzoCBOb3Rpb24gQVBJ6rCAIO2VreyDgSDrsJjtmZjtlZjripQKLy8g7ZWY7J207ZSIIO2PrO2VqCDtkZzspIAgVVVJRCDtj6zrp7coInh4eHh4eHh4LXh4eHgtLi4uIinsnLzroZwg7KCA7J6l64+8IOyeiOuLpC4g6re465+w642wIOydtCDtlajsiJjrpbwg7Zi47Lac7ZWY64qUIOyqveydgAovLyBub3Rpb25DbGllbnQudHPsnZggZXh0cmFjdFBhZ2VJZCgp66GcIOu9keydgCByZWdpc3RyYXRpb25JZOulvCDqt7jrjIDroZwg64SY6rKo7JmU64qU642wLCBleHRyYWN0UGFnZUlkIOuCtOu2gAovLyBpZEZyb21TdHJpbmcoKeydtCDtlZjsnbTtlIjsnYQg7KCE67aAIOygnOqxsO2VtOyEnCAzMuyekCBoZXgg66y47J6Q7Je07J2EIOuPjOugpOykgOuLpC4gTm90aW9uIO2OmOydtOyngCDsobDtmowv7IiY7KCVCi8vIChub3Rpb25HZXRQYWdlL25vdGlvblBhdGNoUGFnZVByb3BlcnRpZXMp7J2AIO2VmOydtO2UiCDsnKDrrLTrpbwg6rCA66as7KeAIOyViuyVhCDsoJXsg4Eg64+Z7J6R7ZaI7KeA66eMLCDsnbQg7ZWo7IiY7J2YCi8vIFBvc3RnUkVTVCDtlYTthLAoYHJlZ2lzdHJhdGlvbl9pZD1lcS487ZWY7J207ZSIIOyXhuuKlCDqsJI+YCnripQg7KCA7J6l65CcIO2VmOydtO2UiCDtj6ztlagg66y47J6Q7Je06rO8IOygiOuMgCDsnbzsuZjtlZjsp4AKLy8g7JWK7JWEIOunpOy5rSDtlonsnbQgMOqwnOyYgOuLpCAtLSBQQVRDSOqwgCAw7ZaJ7JeQIOyggeyaqeuPvOuPhCBQb3N0Z1JFU1TripQg7Jik66WYIOyXhuydtCAyMDDsnYQg67CY7ZmY7ZWY66+A66GcLCDqsonsnLzroZzripQKLy8gIuyEseqztSLtlojsp4Drp4wg7Iuk7KCc66Gc64qUIOy6kOyLnOqwgCDsoITtmIAg6rCx7Iug65CY7KeAIOyViuyVmOuLpC4g6re4IOqysOqzvCBOb3Rpb27snZgg7Yag7YGwIOyGjeyEseydgCDrsJTrgIzslrTrj4QKLy8gcmVwb3J0X2NhY2hlLmFjY2Vzc190b2tlbuydgCDsmIjsoIQg6rCSIOq3uOuMgOuhnCDrgqjslYQsIOyYmyDrp4Htgazrp4wg6rOE7IaNIOyXtOumrOqzoCDsg4jroZwg67Cc6riJ7ZWcIOunge2BrOuKlCDtla3sg4EKLy8gNDA0KOycoO2aqO2VmOyngCDslYrsnYAg7Yag7YGwKeqwgCDrgqzri6QuIOydtOygnCDsnbQg7ZWo7IiY64qUIO2VreyDgSBOb3Rpb27snbQg67CY7ZmY7ZWcIO2RnOykgCDtlZjsnbTtlIgg7Y+s66e3IHBhZ2VJZOulvAovLyDrsJvslYTshJwg6re4IOqwkuycvOuhnCDtlYTthLDrp4HtlZzri6QgKO2YuOy2nOu2gOyXkOyEnCBub3Rpb25HZXRQYWdlIOydkeuLteydmCBwYWdlLmlk66W8IOuEmOq4tOuLpCkuCmFzeW5jIGZ1bmN0aW9uIHVwZGF0ZUNhY2hlZExpbmtTdGF0ZShjYW5vbmljYWxSZWdpc3RyYXRpb25JZDogc3RyaW5nLCBhY2Nlc3NUb2tlbjogc3RyaW5nLCBkaXNhYmxlZDogYm9vbGVhbik6IFByb21pc2U8dm9pZD4gewogIGlmICghU0JfVVJMIHx8ICFTQl9TRVJWSUNFX1JPTEVfS0VZKSB7CiAgICB0aHJvdyBuZXcgRXJyb3IoIlNCX1VSTCAvIFNCX1NFUlZJQ0VfUk9MRV9LRVkgU2VjcmV0c+qwgCDshKTsoJXrkJjslrQg7J6I7KeAIOyViuyKteuLiOuLpC4iKQogIH0KICBjb25zdCByZXMgPSBhd2FpdCBmZXRjaCgKICAgIGAke1NCX1VSTH0vcmVzdC92MS9yZXBvcnRfY2FjaGU/cmVnaXN0cmF0aW9uX2lkPWVxLiR7ZW5jb2RlVVJJQ29tcG9uZW50KGNhbm9uaWNhbFJlZ2lzdHJhdGlvbklkKX1gLAogICAgewogICAgICBtZXRob2Q6ICJQQVRDSCIsCiAgICAgIGhlYWRlcnM6IHsKICAgICAgICBhcGlrZXk6IFNCX1NFUlZJQ0VfUk9MRV9LRVksCiAgICAgICAgQXV0aG9yaXphdGlvbjogYEJlYXJlciAke1NCX1NFUlZJQ0VfUk9MRV9LRVl9YCwKICAgICAgICAiQ29udGVudC1UeXBlIjogImFwcGxpY2F0aW9uL2pzb24iLAogICAgICAgIFByZWZlcjogInJldHVybj1yZXByZXNlbnRhdGlvbiIsCiAgICAgIH0sCiAgICAgIGJvZHk6IEpTT04uc3RyaW5naWZ5KHsKICAgICAgICBhY2Nlc3NfdG9rZW46IGFjY2Vzc1Rva2VuLAogICAgICAgIGxpbmtfZGlzYWJsZWQ6IGRpc2FibGVkLAogICAgICAgIHVwZGF0ZWRfYXQ6IG5ldyBEYXRlKCkudG9JU09TdHJpbmcoKSwKICAgICAgfSksCiAgICB9LAogICkKICBpZiAoIXJlcy5vaykgdGhyb3cgbmV3IEVycm9yKGByZXBvcnRfY2FjaGUg66eB7YGsIOyDge2DnCDqsLHsi6Ag7Iuk7YyoOiAke3Jlcy5zdGF0dXN9ICR7YXdhaXQgcmVzLnRleHQoKX1gKQogIC8vIFtGSVgsIDIwMjYtMDktMjZdIFByZWZlcjogcmV0dXJuPW1pbmltYWzsnbTrqbQgMO2WiSDrp6Tsua3rj4QgMjAw7Jy866GcIOyhsOyaqe2eiCDrhJjslrTqsIDshJwg7J2067KIIOuyhOq3uOulvAogIC8vIOyVjOyVhOyxhOq4sCDslrTroKTsm6Dri6QuIHJldHVybj1yZXByZXNlbnRhdGlvbuycvOuhnCDrsJTqv5Qg7Iuk7KCc66GcIOqwseyLoOuQnCDtlonsnYQg64+M66Ck67Cb6rOgLCAw6rG07J2066m0IOymieyLnAogIC8vIOuqhe2Zle2VnCDsmKTrpZjrpbwg642Y7KC47IScIHJlcG9ydF9jYWNoZeyZgCBOb3Rpb24g7Yag7YGw7J20IOuLpOyLnCDslrTquIvrgpjrqbQg67CU66GcIOuTnOufrOuCmOqyjCDtlZzri6QuCiAgY29uc3QgdXBkYXRlZFJvd3MgPSBhd2FpdCByZXMuanNvbigpCiAgaWYgKCFBcnJheS5pc0FycmF5KHVwZGF0ZWRSb3dzKSB8fCB1cGRhdGVkUm93cy5sZW5ndGggPT09IDApIHsKICAgIHRocm93IG5ldyBFcnJvcigKICAgICAgYHJlcG9ydF9jYWNoZeyXkCByZWdpc3RyYXRpb25faWQ9JHtjYW5vbmljYWxSZWdpc3RyYXRpb25JZH0g7ZaJ7J20IOyXhuyWtCDrp4Htgawg7IOB7YOc66W8IOqwseyLoO2VmOyngCDrqrvtlojsirXri4jri6QuIGAgKwogICAgICAgIGBzeW5jLXJlcG9ydC1jYWNoZeuhnCDrqLzsoIAg7LqQ7Iuc66W8IOyDneyEse2VnCDrkqQg64uk7IucIOyLnOuPhO2VmOyEuOyalC5gLAogICAgKQogIH0KfQoKRGVuby5zZXJ2ZShhc3luYyAocmVxOiBSZXF1ZXN0KSA9PiB7CiAgaWYgKHJlcS5tZXRob2QgPT09ICJPUFRJT05TIikgcmV0dXJuIG5ldyBSZXNwb25zZSgib2siLCB7IGhlYWRlcnM6IENPUlNfSEVBREVSUyB9KQoKICBjb25zdCBhdXRoRXJyb3IgPSBhd2FpdCByZXF1aXJlQWRtaW5LZXkocmVxKQogIGlmIChhdXRoRXJyb3IpIHJldHVybiBhdXRoRXJyb3IKCiAgbGV0IGJvZHk6IGFueSA9IHt9CiAgdHJ5IHsKICAgIGJvZHkgPSBhd2FpdCByZXEuanNvbigpCiAgfSBjYXRjaCB7CiAgICBib2R5ID0ge30KICB9CgogIHRyeSB7CiAgICBjb25zdCBhY3Rpb24gPSByZXNvbHZlTGlua0FjdGlvbihyZXEsIGJvZHkpCiAgICBpZiAoIWFjdGlvbiB8fCAhWyJlbmFibGUiLCAiZGlzYWJsZSIsICJyZWdlbmVyYXRlIl0uaW5jbHVkZXMoYWN0aW9uKSkgewogICAgICB0aHJvdyBuZXcgRXJyb3IoImFjdGlvbuydtCDsmKzrsJTrpbTsp4Ag7JWK7Iq164uI64ukICh4LWxpbmstYWN0aW9uIO2XpOuNlCwgP2FjdGlvbj0g7L+866asLCDrmJDripQgYm9keS5hY3Rpb27snbQg7ZWE7JqU7ZWp64uI64ukKS4iKQogICAgfQoKICAgIGxldCByZWdpc3RyYXRpb25JZHM6IHN0cmluZ1tdCiAgICBpZiAoQXJyYXkuaXNBcnJheShib2R5Py5yZWdpc3RyYXRpb25JZHMpICYmIGJvZHkucmVnaXN0cmF0aW9uSWRzLmxlbmd0aCkgewogICAgICByZWdpc3RyYXRpb25JZHMgPSBib2R5LnJlZ2lzdHJhdGlvbklkcwogICAgfSBlbHNlIHsKICAgICAgY29uc3QgcGFnZUlkID0gZXh0cmFjdFBhZ2VJZChib2R5KQogICAgICBpZiAoIXBhZ2VJZCkgdGhyb3cgbmV3IEVycm9yKCJyZWdpc3RyYXRpb25JZHMg65iQ64qUIOuTseuhnSDtjpjsnbTsp4AgaWTrpbwg7LC+7J2EIOyImCDsl4bsirXri4jri6QuIikKICAgICAgcmVnaXN0cmF0aW9uSWRzID0gW3BhZ2VJZF0KICAgIH0KCiAgICBjb25zdCB0b2tlbnM6IFJlY29yZDxzdHJpbmcsIHN0cmluZz4gPSB7fQoKICAgIGZvciAoY29uc3QgcmVnaXN0cmF0aW9uSWQgb2YgcmVnaXN0cmF0aW9uSWRzKSB7CiAgICAgIGNvbnN0IHBhZ2UgPSBhd2FpdCBub3Rpb25HZXRQYWdlKHJlZ2lzdHJhdGlvbklkKQogICAgICAvLyBbRklYLCAyMDI2LTA5LTI2XSDslYTrnpjrtoDthLDripQg7J6F66Cl7Jy866GcIOuwm+ydgCjtlZjsnbTtlIjsnbQg7KCc6rGw65CQ7J2EIOyImCDsnojripQpIHJlZ2lzdHJhdGlvbklk6rCAIOyVhOuLiOudvCwKICAgICAgLy8gTm90aW9u7J20IOyLpOygnOuhnCDrsJjtmZjtlZwg7ZGc7KSAIO2VmOydtO2UiCDtj6zrp7cgcGFnZS5pZOulvCByZXBvcnRfY2FjaGUg7Kq9IOyLneuzhOyekOuhnCDsgqzsmqntlZzri6QuCiAgICAgIGNvbnN0IGNhbm9uaWNhbFJlZ2lzdHJhdGlvbklkID0gcGFnZS5pZAogICAgICBjb25zdCBjdXJyZW50UmF3ID0gKHBhZ2UucHJvcGVydGllcz8uWyLthqDtgbAiXT8ucmljaF90ZXh0ID8/IFtdKS5tYXAoKHQ6IGFueSkgPT4gdC5wbGFpbl90ZXh0KS5qb2luKCIiKQogICAgICBjb25zdCB7IGFjY2Vzc1Rva2VuOiBleGlzdGluZ1Rva2VuIH0gPSBwYXJzZVRva2VuVmFsdWUoY3VycmVudFJhdykKCiAgICAgIGxldCBhY2Nlc3NUb2tlbjogc3RyaW5nCiAgICAgIGxldCBkaXNhYmxlZCA9IGZhbHNlCiAgICAgIGxldCBub3Rpb25Ub2tlblZhbHVlOiBzdHJpbmcKCiAgICAgIGlmIChhY3Rpb24gPT09ICJyZWdlbmVyYXRlIikgewogICAgICAgIGFjY2Vzc1Rva2VuID0gZ2VuZXJhdGVUb2tlbigpCiAgICAgICAgbm90aW9uVG9rZW5WYWx1ZSA9IGFjY2Vzc1Rva2VuCiAgICAgICAgdG9rZW5zW2Nhbm9uaWNhbFJlZ2lzdHJhdGlvbklkXSA9IGFjY2Vzc1Rva2VuCiAgICAgIH0gZWxzZSBpZiAoYWN0aW9uID09PSAiZGlzYWJsZSIpIHsKICAgICAgICBhY2Nlc3NUb2tlbiA9IGV4aXN0aW5nVG9rZW4gPz8gZ2VuZXJhdGVUb2tlbigpCiAgICAgICAgZGlzYWJsZWQgPSB0cnVlCiAgICAgICAgbm90aW9uVG9rZW5WYWx1ZSA9IGAke0RJU0FCTEVEX1BSRUZJWH0ke2FjY2Vzc1Rva2VufWAKICAgICAgfSBlbHNlIHsKICAgICAgICBhY2Nlc3NUb2tlbiA9IGV4aXN0aW5nVG9rZW4gPz8gZ2VuZXJhdGVUb2tlbigpCiAgICAgICAgbm90aW9uVG9rZW5WYWx1ZSA9IGFjY2Vzc1Rva2VuCiAgICAgICAgdG9rZW5zW2Nhbm9uaWNhbFJlZ2lzdHJhdGlvbklkXSA9IGFjY2Vzc1Rva2VuCiAgICAgIH0KCiAgICAgIGF3YWl0IG5vdGlvblBhdGNoUGFnZVByb3BlcnRpZXMocmVnaXN0cmF0aW9uSWQsIHsKICAgICAgICAi7Yag7YGwIjogeyByaWNoX3RleHQ6IFt7IHRleHQ6IHsgY29udGVudDogbm90aW9uVG9rZW5WYWx1ZSB9IH1dIH0sCiAgICAgIH0pCiAgICAgIGF3YWl0IHVwZGF0ZUNhY2hlZExpbmtTdGF0ZShjYW5vbmljYWxSZWdpc3RyYXRpb25JZCwgYWNjZXNzVG9rZW4sIGRpc2FibGVkKQogICAgfQoKICAgIHJldHVybiBuZXcgUmVzcG9uc2UoSlNPTi5zdHJpbmdpZnkoeyBvazogdHJ1ZSwgYWN0aW9uLCB0b2tlbnMgfSksIHsKICAgICAgaGVhZGVyczogeyAuLi5DT1JTX0hFQURFUlMsICJDb250ZW50LVR5cGUiOiAiYXBwbGljYXRpb24vanNvbiIgfSwKICAgIH0pCiAgfSBjYXRjaCAoZXJyKSB7CiAgICBjb25zb2xlLmVycm9yKCJ0b2dnbGUtcmVwb3J0LWxpbmsgZmFpbGVkIiwgZXJyKQogICAgcmV0dXJuIG5ldyBSZXNwb25zZShKU09OLnN0cmluZ2lmeSh7IGVycm9yOiBTdHJpbmcoKGVyciBhcyBFcnJvcik/Lm1lc3NhZ2UgPz8gZXJyKSB9KSwgewogICAgICBzdGF0dXM6IDUwMCwKICAgICAgaGVhZGVyczogeyAuLi5DT1JTX0hFQURFUlMsICJDb250ZW50LVR5cGUiOiAiYXBwbGljYXRpb24vanNvbiIgfSwKICAgIH0pCiAgfQp9KQo=
+// POST /functions/v1/toggle-report-link
+// 등록(학원) DB의 링크 재발급/링크 비활성화 자동화가 호출한다.
+// x-link-action: enable | disable | regenerate
+import {
+  CORS_HEADERS,
+  requireAdminKey,
+  notionGetPage,
+  notionPatchPageProperties,
+  generateToken,
+  parseTokenValue,
+  DISABLED_PREFIX,
+} from "../_shared/adminShared.ts"
+import { extractPageId } from "../_shared/notionClient.ts"
+
+const SB_URL = Deno.env.get("SB_URL") ?? ""
+const SB_SERVICE_ROLE_KEY = Deno.env.get("SB_SERVICE_ROLE_KEY") ?? ""
+
+function resolveLinkAction(req: Request, body: any): string | null {
+  return req.headers.get("x-link-action") ?? new URL(req.url).searchParams.get("action") ?? body?.action ?? null
+}
+
+// 학부모 화면은 Notion이 아니라 report_cache를 읽으므로 토큰 속성만 바꾸면 기존 링크가 계속 열린다.
+// 링크 상태 변경과 같은 요청 안에서 캐시의 토큰/차단 상태도 즉시 맞춘다.
+//
+// [FIX, 2026-09-26] report_cache.registration_id는 text 컬럼이고 Notion API가 항상 반환하는
+// 하이픈 포함 표준 UUID 포맷("xxxxxxxx-xxxx-...")으로 저장돼 있다. 그런데 이 함수를 호출하는 쪽은
+// notionClient.ts의 extractPageId()로 뽑은 registrationId를 그대로 넘겨왔는데, extractPageId 내부
+// idFromString()이 하이픈을 전부 제거해서 32자 hex 문자열을 돌려준다. Notion 페이지 조회/수정
+// (notionGetPage/notionPatchPageProperties)은 하이픈 유무를 가리지 않아 정상 동작했지만, 이 함수의
+// PostgREST 필터(`registration_id=eq.<하이픈 없는 값>`)는 저장된 하이픈 포함 문자열과 절대 일치하지
+// 않아 매칭 행이 0개였다 -- PATCH가 0행에 적용돼도 PostgREST는 오류 없이 200을 반환하므로, 겉으로는
+// "성공"했지만 실제로는 캐시가 전혀 갱신되지 않았다. 그 결과 Notion의 토큰 속성은 바뀌어도
+// report_cache.access_token은 예전 값 그대로 남아, 옛 링크만 계속 열리고 새로 발급한 링크는 항상
+// 404(유효하지 않은 토큰)가 났다. 이제 이 함수는 항상 Notion이 반환한 표준 하이픈 포맷 pageId를
+// 받아서 그 값으로 필터링한다 (호출부에서 notionGetPage 응답의 page.id를 넘긴다).
+async function updateCachedLinkState(canonicalRegistrationId: string, accessToken: string, disabled: boolean): Promise<void> {
+  if (!SB_URL || !SB_SERVICE_ROLE_KEY) {
+    throw new Error("SB_URL / SB_SERVICE_ROLE_KEY Secrets가 설정되어 있지 않습니다.")
+  }
+  const res = await fetch(
+    `${SB_URL}/rest/v1/report_cache?registration_id=eq.${encodeURIComponent(canonicalRegistrationId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        apikey: SB_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SB_SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify({
+        access_token: accessToken,
+        link_disabled: disabled,
+        updated_at: new Date().toISOString(),
+      }),
+    },
+  )
+  if (!res.ok) throw new Error(`report_cache 링크 상태 갱신 실패: ${res.status} ${await res.text()}`)
+  // [FIX, 2026-09-26] Prefer: return=minimal이면 0행 매칭도 200으로 조용히 넘어가서 이번 버그를
+  // 알아채기 어려웠다. return=representation으로 바꿔 실제로 갱신된 행을 돌려받고, 0건이면 즉시
+  // 명확한 오류를 던져서 report_cache와 Notion 토큰이 다시 어긋나면 바로 드러나게 한다.
+  const updatedRows = await res.json()
+  if (!Array.isArray(updatedRows) || updatedRows.length === 0) {
+    throw new Error(
+      `report_cache에 registration_id=${canonicalRegistrationId} 행이 없어 링크 상태를 갱신하지 못했습니다. ` +
+        `sync-report-cache로 먼저 캐시를 생성한 뒤 다시 시도하세요.`,
+    )
+  }
+}
+
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS })
+
+  const authError = await requireAdminKey(req)
+  if (authError) return authError
+
+  let body: any = {}
+  try {
+    body = await req.json()
+  } catch {
+    body = {}
+  }
+
+  try {
+    const action = resolveLinkAction(req, body)
+    if (!action || !["enable", "disable", "regenerate"].includes(action)) {
+      throw new Error("action이 올바르지 않습니다 (x-link-action 헤더, ?action= 쿼리, 또는 body.action이 필요합니다).")
+    }
+
+    let registrationIds: string[]
+    if (Array.isArray(body?.registrationIds) && body.registrationIds.length) {
+      registrationIds = body.registrationIds
+    } else {
+      const pageId = extractPageId(body)
+      if (!pageId) throw new Error("registrationIds 또는 등록 페이지 id를 찾을 수 없습니다.")
+      registrationIds = [pageId]
+    }
+
+    const tokens: Record<string, string> = {}
+
+    for (const registrationId of registrationIds) {
+      const page = await notionGetPage(registrationId)
+      // [FIX, 2026-09-26] 아래부터는 입력으로 받은(하이픈이 제거됐을 수 있는) registrationId가 아니라,
+      // Notion이 실제로 반환한 표준 하이픈 포맷 page.id를 report_cache 쪽 식별자로 사용한다.
+      const canonicalRegistrationId = page.id
+      const currentRaw = (page.properties?.["토큰"]?.rich_text ?? []).map((t: any) => t.plain_text).join("")
+      const { accessToken: existingToken } = parseTokenValue(currentRaw)
+
+      let accessToken: string
+      let disabled = false
+      let notionTokenValue: string
+
+      if (action === "regenerate") {
+        accessToken = generateToken()
+        notionTokenValue = accessToken
+        tokens[canonicalRegistrationId] = accessToken
+      } else if (action === "disable") {
+        accessToken = existingToken ?? generateToken()
+        disabled = true
+        notionTokenValue = `${DISABLED_PREFIX}${accessToken}`
+      } else {
+        accessToken = existingToken ?? generateToken()
+        notionTokenValue = accessToken
+        tokens[canonicalRegistrationId] = accessToken
+      }
+
+      await notionPatchPageProperties(registrationId, {
+        "토큰": { rich_text: [{ text: { content: notionTokenValue } }] },
+      })
+      await updateCachedLinkState(canonicalRegistrationId, accessToken, disabled)
+    }
+
+    return new Response(JSON.stringify({ ok: true, action, tokens }), {
+      headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+    })
+  } catch (err) {
+    console.error("toggle-report-link failed", err)
+    return new Response(JSON.stringify({ error: String((err as Error)?.message ?? err) }), {
+      status: 500,
+      headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+    })
+  }
+})
