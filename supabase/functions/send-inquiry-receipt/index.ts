@@ -1,7 +1,7 @@
 // 상담 신청 접수 안내 알림톡
 // - 상담 폼: 학생 DB의 "페이지 추가" 자동화 + "개인정보 동의=체크됨" 조건으로 호출
 // - 관리자 직접 입력: 학생 DB의 "접수안내 발송" 버튼으로 호출
-// 두 진입점 모두 같은 학생 페이지 ID를 전달한다. 완료 상태를 확인해 중복 발송을 막는다.
+// 상담 신청 시 선택한 "우선 연락 대상"의 번호로 발송하고, 당시 수신 정보를 로그에 보존한다.
 
 import {
   CORS_HEADERS,
@@ -40,6 +40,13 @@ function titleText(page: any, propertyName: string): string {
   return (page.properties?.[propertyName]?.title ?? []).map((item: any) => item.plain_text ?? "").join("").trim()
 }
 
+function richText(page: any, propertyName: string): string {
+  return (page.properties?.[propertyName]?.rich_text ?? [])
+    .map((item: any) => item.plain_text ?? "")
+    .join("")
+    .trim()
+}
+
 function formulaText(page: any, propertyName: string): string {
   const formula = page.properties?.[propertyName]?.formula
   if (!formula) return ""
@@ -47,8 +54,8 @@ function formulaText(page: any, propertyName: string): string {
   return formula.string ?? ""
 }
 
-function phoneText(page: any, propertyName: string): string {
-  return page.properties?.[propertyName]?.phone_number ?? ""
+function selectText(page: any, propertyName: string): string {
+  return page.properties?.[propertyName]?.select?.name ?? ""
 }
 
 async function setStatus(pageId: string, status: "⚪ 대기" | "🔄 작업중" | "✅ 완료" | "⚠️ 오류", error = "") {
@@ -82,11 +89,20 @@ async function writeLog(args: {
   studentId: string
   studentName: string
   status: "성공" | "실패"
+  recipientType: string
+  recipientPhone: string
+  guardianRelation: string
   failReason?: string
 }) {
   if (!SEND_LOG_DB_ID) return
   try {
     const date = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const snapshot = [
+      `신청 당시 우선 연락 대상: ${args.recipientType || "미입력"}`,
+      args.recipientType === "기타 보호자" ? `학생과의 관계: ${args.guardianRelation || "미입력"}` : "",
+      `수신번호: ${args.recipientPhone || "미입력"}`,
+    ].filter(Boolean).join("\n")
+
     const properties: Record<string, unknown> = {
       "이름": { title: [{ text: { content: `[${CONFIG_CODE}] ${args.studentName} (${date})` } }] },
       "발송 구분": { select: { name: CONFIG_CODE } },
@@ -94,6 +110,7 @@ async function writeLog(args: {
       "발송일시": { date: { start: new Date().toISOString() } },
       "발송 채널": { select: { name: "알림톡" } },
       "학생": { relation: [{ id: args.studentId }] },
+      "메모": { rich_text: [{ text: { content: snapshot.slice(0, 1900) } }] },
     }
     if (args.failReason) {
       properties["실패 사유"] = {
@@ -108,10 +125,15 @@ async function writeLog(args: {
 
 async function processStudent(studentId: string, studentPage: any) {
   const studentName = titleText(studentPage, "학생이름") || "학생"
+  const recipientType = selectText(studentPage, "우선 연락 대상")
+  const recipientPhone = formulaText(studentPage, "우선 연락처")
+  const guardianRelation = richText(studentPage, "학생과의 관계")
+
   try {
     if (studentPage.properties?.["개인정보 동의"]?.checkbox !== true) {
       throw new Error("개인정보 동의를 확인한 뒤 발송해주세요.")
     }
+    if (!recipientType) throw new Error("우선 연락 대상을 선택해주세요.")
 
     const config = await getConfig()
     if (!config.active) {
@@ -123,20 +145,22 @@ async function processStudent(studentId: string, studentPage: any) {
     if (!config.templateId) throw new Error("템플릿 ID가 비어 있습니다.")
     if (!config.senderNumber) throw new Error("발신번호가 비어 있습니다.")
 
-    const parentPhone = phoneText(studentPage, "어머니 연락처")
-    assertValidPhone(parentPhone, "학부모 연락처")
+    assertValidPhone(recipientPhone, "우선 연락처")
+    if (recipientType === "기타 보호자" && !guardianRelation) {
+      throw new Error("기타 보호자의 학생과의 관계를 입력해주세요.")
+    }
 
     const variables: Record<string, string> = {
       "#{학생이름}": studentName,
       "#{학교}": formulaText(studentPage, "학교(설문)") || "미입력",
       "#{학년}": formulaText(studentPage, "학년(설문)") || "미입력",
-      "#{학부모연락처}": parentPhone,
+      "#{학부모연락처}": recipientPhone,
     }
 
     const { SolapiMessageService } = await import("npm:solapi")
     const service = new SolapiMessageService(SOLAPI_API_KEY, SOLAPI_API_SECRET)
     await service.send({
-      to: normalizePhone(parentPhone),
+      to: normalizePhone(recipientPhone),
       from: normalizePhone(config.senderNumber),
       kakaoOptions: {
         pfId: config.pfId,
@@ -147,12 +171,27 @@ async function processStudent(studentId: string, studentPage: any) {
     })
 
     await setStatus(studentId, "✅ 완료")
-    await writeLog({ studentId, studentName, status: "성공" })
+    await writeLog({
+      studentId,
+      studentName,
+      status: "성공",
+      recipientType,
+      recipientPhone,
+      guardianRelation,
+    })
     console.log(`[${FUNCTION_NAME}] 발송 완료:`, studentId)
   } catch (err) {
     const message = extractErrorMessage(err)
     await setStatus(studentId, "⚠️ 오류", message).catch(() => {})
-    await writeLog({ studentId, studentName, status: "실패", failReason: message })
+    await writeLog({
+      studentId,
+      studentName,
+      status: "실패",
+      recipientType,
+      recipientPhone,
+      guardianRelation,
+      failReason: message,
+    })
     console.error(`[${FUNCTION_NAME}] 발송 실패:`, studentId, message)
   }
 }
