@@ -100,7 +100,7 @@ export async function resolveParentPhone(attendancePage: any, registrationId: st
   return ""
 }
 
-export type AlimtalkRecipient = { label: "주요 연락처" | "어머니" | "아버지"; phone: string }
+export type AlimtalkRecipient = { label: "우선 연락 대상" | "어머니" | "아버지"; phone: string }
 
 function getPropertyText(property: any): string {
   if (!property) return ""
@@ -121,14 +121,14 @@ export async function resolveAlimtalkRecipients(args: {
   primaryPhone?: string
   recipientTarget: AlimtalkRecipientTarget
 }): Promise<AlimtalkRecipient[]> {
-  if (args.recipientTarget === "주요 연락처") {
+  if (args.recipientTarget === "우선 연락 대상") {
     let phone = args.primaryPhone ?? ""
     if (!phone) {
       const registrationPage = await notionGetPage(args.registrationId)
       phone = getRollupText(registrationPage, PARENT_PHONE_PROPERTY)
     }
-    assertValidPhone(phone, "주요 연락처")
-    return [{ label: "주요 연락처", phone: normalizePhone(phone) }]
+    assertValidPhone(phone, "우선 연락처")
+    return [{ label: "우선 연락 대상", phone: normalizePhone(phone) }]
   }
 
   const registrationPage = await notionGetPage(args.registrationId)
