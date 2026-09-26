@@ -1,25 +1,35 @@
-// 일일보고서 발송 직전 최신화 공용 경로.
-// 반드시 토큰을 먼저 보장한 뒤 출석 원본과 완성 보고서 캐시를 순서대로 갱신한다.
+// 학부모 리포트 최신화 공용 경로.
+// 토큰을 보장한 뒤 출석 원본과 완성 보고서 캐시를 순서대로 갱신한다.
+// 비활성화된 링크는 동기화가 실행돼도 자동으로 다시 활성화하지 않는다.
 
 import { syncStudentReport } from "./alimtalkShared.ts"
+import { notionGetPage, parseTokenValue } from "./adminShared.ts"
 import { syncAttendanceForRegistration } from "./attendanceSyncShared.ts"
 import { makePageCache } from "./reportCacheShared.ts"
 import { syncReportCacheForRegistration } from "./reportCacheBuilder.ts"
 import { makePersistentReportPageCache } from "./persistentReportPageCache.ts"
 
+const SITE_BASE_URL = Deno.env.get("SITE_BASE_URL") ?? ""
+
 export async function refreshStudentReport(
   registrationId: string,
   opts?: { sharedRunKey?: string },
 ): Promise<{ access_token: string; reportUrl: string; cacheRow: NonNullable<Awaited<ReturnType<typeof syncReportCacheForRegistration>>> }> {
-  // 토큰이 없는 등록은 같은 전송 버튼 실행 안에서 먼저 발급한다. 캐시 빌더는 토큰이 없으면
-  // 행을 만들지 않으므로 이 순서를 바꾸면 안 된다.
-  const tokenInfo = await syncStudentReport(registrationId)
+  // 기존 링크가 비활성화된 상태라면 disabled: 접두사를 보존한다. 예전에는 여기서 새 토큰을
+  // 발급해 비활성화가 자동으로 풀리는 문제가 있었다.
+  const page = await notionGetPage(registrationId)
+  const currentRaw = (page.properties?.["토큰"]?.rich_text ?? []).map((t: any) => t.plain_text).join("")
+  const parsed = parseTokenValue(currentRaw)
 
-  // 출석 원본을 먼저 최신화해야 reportCacheBuilder가 attendance_records의 최신 행을 읽는다.
+  const tokenInfo = parsed.disabled && parsed.accessToken
+    ? {
+        access_token: parsed.accessToken,
+        reportUrl: SITE_BASE_URL + "/student_report.html?token=" + parsed.accessToken,
+      }
+    : await syncStudentReport(registrationId)
+
   await syncAttendanceForRegistration(registrationId)
 
-  // 반별 체인은 호출이 학생마다 분리되므로 Supabase 실행 캐시를 사용해 그룹 공통 학습기록/교재
-  // 페이지를 공유한다. 개별 전송은 한 호출 안의 메모리 캐시만 사용한다.
   const cachedGetPage = opts?.sharedRunKey
     ? makePersistentReportPageCache(opts.sharedRunKey)
     : makePageCache()
@@ -29,6 +39,4 @@ export async function refreshStudentReport(
   return { ...tokenInfo, cacheRow: row }
 }
 
-// 기존 일일보고서 호출부 이름을 유지하는 호환 별칭. 실제 동작은 전송과 무관한
-// "토큰 보장 + 출석 원본 + 완성 캐시" 최신화이므로 수동 동기화 버튼도 같은 함수를 쓴다.
 export const refreshDailyReportForSend = refreshStudentReport

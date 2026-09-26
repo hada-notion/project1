@@ -1,7 +1,6 @@
 // POST /functions/v1/sync-student-report
 // body: { registrationId }
-// 등록의 학부모 리포트 토큰이 없을 때 새로 발급한다. 기존 토큰이 있으면 그대로 재사용하므로,
-// 리포트를 열 때마다 별도 동기화할 필요가 없다.
+// 토큰이 없을 때만 새로 발급한다. 비활성화된 토큰은 자동으로 다시 활성화하지 않는다.
 import {
   CORS_HEADERS,
   requireAdminKey,
@@ -26,14 +25,14 @@ Deno.serve(async (req: Request) => {
     const { accessToken: existingToken, disabled } = parseTokenValue(currentRaw)
 
     let accessToken = existingToken
-    if (!accessToken || disabled) {
+    if (!accessToken) {
       accessToken = generateToken()
       await notionPatchPageProperties(registrationId, {
         "토큰": { rich_text: [{ text: { content: accessToken } }] },
       })
     }
 
-    return new Response(JSON.stringify({ access_token: accessToken }), {
+    return new Response(JSON.stringify({ access_token: accessToken, disabled }), {
       headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
     })
   } catch (err) {

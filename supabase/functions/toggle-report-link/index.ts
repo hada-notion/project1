@@ -1,21 +1,6 @@
 // POST /functions/v1/toggle-report-link
-// 등록(학원) DB의 "링크 재발급"/"링크 비활성화" 버튼(속성)이 호출한다.
-//
-// [2026-09-21] 기존 코드는 { registrationIds: string[], action: "enable"|"disable"|"regenerate" }
-// 형태의 raw JSON 바디를 기대했지만, Notion 버튼/자동화의 "웹훅 보내기" 액션은 이런 임의의 JSON
-// 바디를 직접 구성해서 보낼 수 없다(트리거 페이지 관련 필드만 자동으로 채워 보낸다). 즉 이 함수는
-// 실제로는 한 번도 정상 호출될 수 없는 상태였다 (등록 DB에 실제로 연결도 안 되어 있었음).
-//
-// 다른 웹훅들이 이미 검증한 것과 같은 해결 패턴을 그대로 따른다: 자동화의 URL에 커스텀 HTTP 헤더를
-// 추가해서(x-admin-key와 동일한 방식) 원하는 동작(action)을 함께 실어 보낸다.
-//   - "링크 재발급" 버튼: x-admin-key: 0000, x-link-action: regenerate
-//   - "링크 비활성화" 체크박스(버튼이 아니라 checkbox 속성이라 자동화 2개 필요):
-//       체크됨  -> x-admin-key: 0000, x-link-action: disable
-//       체크 해제 -> x-admin-key: 0000, x-link-action: enable
-// (헤더가 없는 옛 방식 호출도 계속 지원하도록 body.action / URL 쿼리 ?action=도 fallback으로 확인한다.)
-//
-// registrationIds도 body에 직접 넣어 보낼 수 없으므로, _shared/notionClient.ts의 extractPageId로
-// 트리거된 등록 페이지 자신의 id를 웹훅 바디에서 찾는다 (sync-exam-scope 등에서 이미 검증된 방식).
+// 등록(학원) DB의 링크 재발급/링크 비활성화 자동화가 호출한다.
+// x-link-action: enable | disable | regenerate
 import {
   CORS_HEADERS,
   requireAdminKey,
@@ -27,13 +12,37 @@ import {
 } from "../_shared/adminShared.ts"
 import { extractPageId } from "../_shared/notionClient.ts"
 
+const SB_URL = Deno.env.get("SB_URL") ?? ""
+const SB_SERVICE_ROLE_KEY = Deno.env.get("SB_SERVICE_ROLE_KEY") ?? ""
+
 function resolveLinkAction(req: Request, body: any): string | null {
-  return (
-    req.headers.get("x-link-action") ??
-    new URL(req.url).searchParams.get("action") ??
-    body?.action ??
-    null
+  return req.headers.get("x-link-action") ?? new URL(req.url).searchParams.get("action") ?? body?.action ?? null
+}
+
+// 학부모 화면은 Notion이 아니라 report_cache를 읽으므로 토큰 속성만 바꾸면 기존 링크가 계속 열린다.
+// 링크 상태 변경과 같은 요청 안에서 캐시의 토큰/차단 상태도 즉시 맞춘다.
+async function updateCachedLinkState(registrationId: string, accessToken: string, disabled: boolean): Promise<void> {
+  if (!SB_URL || !SB_SERVICE_ROLE_KEY) {
+    throw new Error("SB_URL / SB_SERVICE_ROLE_KEY Secrets가 설정되어 있지 않습니다.")
+  }
+  const res = await fetch(
+    `${SB_URL}/rest/v1/report_cache?registration_id=eq.${encodeURIComponent(registrationId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        apikey: SB_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SB_SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        access_token: accessToken,
+        link_disabled: disabled,
+        updated_at: new Date().toISOString(),
+      }),
+    },
   )
+  if (!res.ok) throw new Error(`report_cache 링크 상태 갱신 실패: ${res.status} ${await res.text()}`)
 }
 
 Deno.serve(async (req: Request) => {
@@ -52,14 +61,11 @@ Deno.serve(async (req: Request) => {
   try {
     const action = resolveLinkAction(req, body)
     if (!action || !["enable", "disable", "regenerate"].includes(action)) {
-      throw new Error(
-        "action이 올바르지 않습니다 (x-link-action 헤더, ?action= 쿼리, 또는 body.action 중 하나가 필요합니다).",
-      )
+      throw new Error("action이 올바르지 않습니다 (x-link-action 헤더, ?action= 쿼리, 또는 body.action이 필요합니다).")
     }
 
     let registrationIds: string[]
     if (Array.isArray(body?.registrationIds) && body.registrationIds.length) {
-      // 옛 방식(직접 JSON 바디로 여러 건)도 계속 지원.
       registrationIds = body.registrationIds
     } else {
       const pageId = extractPageId(body)
@@ -74,30 +80,35 @@ Deno.serve(async (req: Request) => {
       const currentRaw = (page.properties?.["토큰"]?.rich_text ?? []).map((t: any) => t.plain_text).join("")
       const { accessToken: existingToken } = parseTokenValue(currentRaw)
 
-      let newValue: string
+      let accessToken: string
+      let disabled = false
+      let notionTokenValue: string
+
       if (action === "regenerate") {
-        const fresh = generateToken()
-        newValue = fresh
-        tokens[registrationId] = fresh
+        accessToken = generateToken()
+        notionTokenValue = accessToken
+        tokens[registrationId] = accessToken
       } else if (action === "disable") {
-        const base = existingToken ?? generateToken()
-        newValue = `${DISABLED_PREFIX}${base}`
+        accessToken = existingToken ?? generateToken()
+        disabled = true
+        notionTokenValue = `${DISABLED_PREFIX}${accessToken}`
       } else {
-        // enable
-        const base = existingToken ?? generateToken()
-        newValue = base
-        tokens[registrationId] = base
+        accessToken = existingToken ?? generateToken()
+        notionTokenValue = accessToken
+        tokens[registrationId] = accessToken
       }
 
       await notionPatchPageProperties(registrationId, {
-        "토큰": { rich_text: [{ text: { content: newValue } }] },
+        "토큰": { rich_text: [{ text: { content: notionTokenValue } }] },
       })
+      await updateCachedLinkState(registrationId, accessToken, disabled)
     }
 
     return new Response(JSON.stringify({ ok: true, action, tokens }), {
       headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
     })
   } catch (err) {
+    console.error("toggle-report-link failed", err)
     return new Response(JSON.stringify({ error: String((err as Error)?.message ?? err) }), {
       status: 500,
       headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
