@@ -81,8 +81,9 @@ export async function upsertAttendanceRows(rows: AttendanceRow[]): Promise<void>
 }
 
 // 등록 1건의 출석만 Notion에서 다시 조회해서 attendance_records에 반영한다. 보고서 발송 직전
-// 재동기화(send-report)와 야간 점검(nightly-report-sync-audit)에서 사용한다. 대상이 등록 1건으로
-// 한정되어 있어 전체 등록 수가 늘어나도 이 함수 한 번의 조회 범위는 커지지 않는다.
+// 재동기화(send-report)에서 사용한다. 대상이 등록 1건으로 한정되어 있어 전체 등록 수가 늘어나도
+// 이 함수 한 번의 조회 범위는 커지지 않는다. (2026-09-26: 함께 쓰던 야간 점검
+// nightly-report-sync-audit는 매시간 증분 동기화·발송 직전 강제 재동기화와 중복되어 삭제됨.)
 export async function syncAttendanceForRegistration(registrationId: string): Promise<number> {
   const pages = await queryAllPages(DS_ATTENDANCE, {
     property: "등록",
