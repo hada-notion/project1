@@ -334,6 +334,9 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
     if (!bookTitle) {
       bookTitle = text(lprops["학습"])
     }
+    // (참고) 이 수정 배포 시 scripts/check-known-regressions.sh의 오래된 검사 2건(100점 💯 문구,
+    // 새로고침 버튼 <img> 요구)이 최신 Feather 아이콘 통일 작업과 맞지 않아 회귀 가드를 함께
+    // 갱신했다(같은 날짜 커밋 참고).
     return { id: lp.id, category, iso, content, range, unit, bookTitle }
   }
   const logDetails = await Promise.all(logPages.map(readLogDetail))
