@@ -35,6 +35,8 @@ const PROP_SESSION_CLASS = "클래스"
 
 const PROP_ATTENDANCE_REGISTRATION = "등록"
 export const PROP_ATTENDANCE_SESSION = "수업" // 출석(학원) DB의 수업 relation (limit 1) — index.ts가 클릭된 페이지 판별에 씀
+const PROP_ATTENDANCE_DATETIME = "수업일시" // 출석(학원) DB 자신의 날짜 속성 (수업 없이도 항상 채워져 있음)
+const PROP_ATTENDANCE_CLASS = "클래스" // 출석(학원) DB 자신의 클래스 relation (수업 없이도 채워져 있음)
 
 const PROP_REGISTRATION_BOOKS = "진도교재"
 
@@ -52,6 +54,10 @@ const PROP_RECORD_ATTENDANCE = "출석"
 const PROP_RECORD_REGISTRATION = "등록"
 const PROP_RECORD_SESSION = "수업"
 const PROP_RECORD_CATEGORY = "구분"
+// (2026-09-27, 그룹 진도 보강 지원) 그룹 진도 학생이 결석 후 보강으로 별도 진도를 이행했을 때
+// 자동으로 체크되는 checkbox. 진도교재(학원) DB의 "진행도" 계산에서 이 값이 true인 학습기록은
+// 제외된다 (그 학생 본인의 실제 진도만 반영되도록).
+const PROP_RECORD_MAKEUP = "보강"
 
 // (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) "학습기록 생성중" checkbox를 "학습기록 상태"(select)
 // + "학습기록 처리 시작 시각"(date)로 전환. 수업/출석/진도교재(학원) 3개 DB 모두 같은 속성 이름을
@@ -305,20 +311,117 @@ export async function finishCreateLearningRecord(sessionId: string): Promise<unk
 		return { ok: true, sessionId, created }
 }
 
+// (2026-09-27, 그룹 진도 보강 지원) 그룹 진도로 진행되는 반에서 학생이 결석한 뒤, 학원 내에서
+// 개인적으로 보강(별도 진도 이행)을 했을 때 쓰는 경로. 이 학생의 출석은 그 날의 실제 수업(세션)과
+// 연결되어 있지 않으므로(수업 relation이 비어 있음) 세션 로스터 전체를 대상으로 하는
+// finishCreateLearningRecord와는 완전히 별개로, 이 출석 건 자신의 "등록"(limit 1) 하나만을 대상으로
+// 학습기록을 생성한다. 수업 relation은 비워두고, 생성되는 학습기록마다 "보강" checkbox를 켜서
+// 진도교재의 "진행도" 계산(다른 학생들의 정상 수업 학습기록만 반영하도록)에서 자동으로 제외되게 한다.
+export async function finishCreateLearningRecordForAttendance(attendanceId: string): Promise<unknown> {
+	const attendancePage = await getPage(attendanceId)
+	const registrationIds = dedupe(relIds(attendancePage, PROP_ATTENDANCE_REGISTRATION))
+	const registrationId = registrationIds[0]
+	if (!registrationId) {
+		return { message: "attendance_has_no_registration", attendanceId }
+	}
+
+	const registrationPage = await getPage(registrationId)
+	const bookIds = dedupe(relIds(registrationPage, PROP_REGISTRATION_BOOKS))
+	if (bookIds.length === 0) {
+		return { message: "no_books_found", attendanceId }
+	}
+
+	const bookPages = await mapWithConcurrency(bookIds, 6, (id) => getPage(id))
+	const checkedBookPages = bookPages.filter((p) => checkboxValue(p, PROP_BOOK_TODAY))
+	if (checkedBookPages.length === 0) {
+		return { message: "no_books_marked_today", attendanceId }
+	}
+
+	const attendanceDate = dateStart(attendancePage, PROP_ATTENDANCE_DATETIME)
+	const attendanceClassIds = relIds(attendancePage, PROP_ATTENDANCE_CLASS)
+	const className = attendanceClassIds[0]
+		? getTitle(await getPage(attendanceClassIds[0]))
+		: ""
+
+	const created = await mapWithConcurrency(checkedBookPages, 3, async (bookPage) => {
+		const bookId = bookPage.id as string
+		await setBookGenRunning(bookId, true)
+		try {
+			const regularBookIds = relIds(bookPage, PROP_BOOK_REGULAR_BOOK)
+			const regularBookId = regularBookIds[0] ?? null
+
+			const regularBookPage = regularBookId ? await getPage(regularBookId) : null
+			const subjectIds = regularBookPage ? relIds(regularBookPage, PROP_REGULAR_BOOK_SUBJECT) : []
+			const regularBookTitle = regularBookPage ? getTitle(regularBookPage) : ""
+
+			const dateLabel = attendanceDate ? formatKoreanDateLabel(attendanceDate) : ""
+			const classPart = className ? `(${className})` : ""
+			const title = [`[보강]`, `${regularBookTitle}${classPart}`, dateLabel]
+				.filter(Boolean)
+				.join(" ")
+				.trim()
+
+			// finishCreateLearningRecord와 동일한 이유로, 체크 해제를 학습기록 생성보다 먼저 한다
+			// (재시도 안전성 -- 위쪽 finishCreateLearningRecord의 2026-09-18 밤 주석 참고).
+			await updatePageProperties(bookId, {
+				[PROP_BOOK_TODAY]: { checkbox: false },
+			})
+
+			const createProps: JsonRecord = {
+				[PROP_RECORD_TITLE]: { title: [{ text: { content: title } }] },
+				[PROP_RECORD_BOOK]: { relation: [{ id: bookId }] },
+				[PROP_RECORD_ATTENDANCE]: { relation: [{ id: attendanceId }] },
+				[PROP_RECORD_REGISTRATION]: { relation: [{ id: registrationId }] },
+				[PROP_RECORD_CATEGORY]: { select: { name: "학습" } },
+				[PROP_RECORD_MAKEUP]: { checkbox: true },
+			}
+			if (regularBookId) {
+				createProps[PROP_RECORD_REGULAR_BOOK] = { relation: [{ id: regularBookId }] }
+			}
+			if (subjectIds.length > 0) {
+				createProps[PROP_RECORD_SUBJECT] = { relation: subjectIds.map((id) => ({ id })) }
+			}
+
+			const createdPage = await createPage(DS_STUDY_RECORD, createProps)
+
+			await setBookGenDone(bookId)
+
+			return {
+				bookId,
+				recordId: createdPage.id as string,
+				mode: "makeup",
+				registrationId,
+			}
+		} catch (err) {
+			await setBookGenError(bookId, (err as Error)?.message ?? String(err))
+			throw err
+		}
+	})
+
+	return { ok: true, attendanceId, created }
+}
+
 // process-sync-queue 워커가 target: "create-learning-record" 작업을 처리할 때 호출하는 진입점.
 // statusTargetIds는 index.ts가 이미 "⏳ 대기열"로 표시해 둔 페이지 id들(클릭된 페이지 + 실제 수업
 // 페이지)이다. (2026-09-22, Phase 6) 실제로 이 항목을 집어서 처리를 시작하는 지금 여기서
 // markRunning("🔄 작업중")으로 갱신해야, 동시에 여러 건이 큐에 쌓여 있어도 실제 처리 중인 것만
 // "작업중"으로 구분되어 보인다.
 export async function processCreateLearningRecordQueueItem(payload: {
-	sessionId: string
+	sessionId?: string
+	attendanceId?: string
 	statusTargetIds: string[]
 }): Promise<void> {
+	// (2026-09-27, 그룹 진도 보강 지원) attendanceId가 있으면(= index.ts가 수업 없는 출석을 감지한
+	// 경우) 세션 로스터 전체를 대상으로 하는 기존 경로 대신, 그 출석 하나만을 위한 단일 학생 경로를
+	// 사용한다. 둘 다 있을 수는 없다(index.ts가 둘 중 하나만 채워서 넘긴다).
+	const label = payload.sessionId ?? payload.attendanceId ?? "unknown"
 	try {
 		await Promise.all(payload.statusTargetIds.map((id) => setRecordGenRunning(id, true)))
-		const created = await finishCreateLearningRecord(payload.sessionId)
+		const created = payload.attendanceId
+			? await finishCreateLearningRecordForAttendance(payload.attendanceId)
+			: await finishCreateLearningRecord(payload.sessionId as string)
 		await Promise.all(payload.statusTargetIds.map((id) => setRecordGenDone(id)))
-		console.log("create-learning-record (queue) finished", payload.sessionId, created)
+		console.log("create-learning-record (queue) finished", label, created)
 	} catch (err) {
 		console.error("create-learning-record (queue) failed", err)
 		await Promise.all(
