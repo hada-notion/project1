@@ -117,8 +117,10 @@ if grep -q 'content: text(props\\[\"학습활동\"\\])' supabase/functions/_shar
   echo "❌ reportCacheBuilder.ts: 내부 학습활동 페이지명이 학생 화면 데이터로 다시 노출됩니다."
   fail=1
 fi
-if ! grep -q 'renderLogMetaRows' student_report_part1.js || ! grep -q '💯 ' student_report_part1.js; then
-  echo "❌ 학생 리포트: 디자인 문서의 단원·내용 줄 분리/100점 💯 규칙이 빠졌습니다."
+# [FIX, 2026-09-27] "100점 💯" 규칙은 이후 디자인 결정으로 폐기됐다(만점 축하 이모지를 아예
+# 표시하지 않기로 함, DESIGN 문서 12장 아이콘 규칙 참고). 그 문구를 다시 요구하지 않는다.
+if ! grep -q 'renderLogMetaRows' student_report_part1.js; then
+  echo "❌ 학생 리포트: 디자인 문서의 단원·내용 줄 분리 규칙이 빠졌습니다."
   fail=1
 fi
 if grep -q '내용: \\${note}' student_report_part1.js; then
@@ -144,9 +146,12 @@ if ! grep -q '_privateGrades' supabase/functions/get-report-fast/index.ts; then
   fail=1
 fi
 
-# 10) 전역 새로고침 버튼은 기기별 이모지 대신 지정된 이미지 아이콘을 사용한다.
-if grep -q '>🔄</button>' student_report.html || ! grep -q 'global-sync-fab.*aria-label="새로고침".*<img' student_report.html; then
-  echo "❌ 학생 리포트: 전역 새로고침 버튼의 이미지 아이콘 또는 접근성 라벨이 빠졌습니다."
+# 10) 전역 새로고침 버튼은 기기별 이모지 대신 지정된 아이콘을 사용한다.
+# [FIX, 2026-09-27] Feather 아이콘 통일 작업으로 <img> 기반 아이콘을 인라인 <svg>로 교체했다
+# (DESIGN 문서 12장 아이콘 규칙 참고). 아이콘 형식이 아니라 이모지가 다시 쓰이는지, 접근성
+# 라벨이 남아있는지만 확인한다.
+if grep -q '>🔄</button>' student_report.html || ! grep -q 'global-sync-fab.*aria-label="새로고침".*<svg' student_report.html; then
+  echo "❌ 학생 리포트: 전역 새로고침 버튼의 아이콘 또는 접근성 라벨이 빠졌습니다."
   fail=1
 fi
 
