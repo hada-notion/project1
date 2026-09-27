@@ -341,23 +341,38 @@ function buildReportCalendarPicker() {
     <div class="report-picker-help">${esc(selectedRange)}</div>
   `
 }
-// 월간 피커도 일간·주간과 동일한 "달력" 톤(월 이동 헤더 + 버튼 그리드)으로 보여준다.
-// 선택 가능한 달이 REPORT_MONTH_LOOKBACK+1개뿐이라 한 줄 그리드로 표시하고, 현재 달엔 "오늘" 점 표시를 그대로 재사용한다.
+// 월간 피커도 일간·주간과 동일하게 실제 달력(요일 헤더 + 날짜 칸)을 보여준다.
+// 다만 특정 날짜를 고를 필요가 없으므로 날짜 칸은 클릭 불가로 두고, 헤더의 ‹ › 로만 이전/다음 달로 이동한다(이동 즉시 선택 반영).
 function buildReportMonthPicker() {
-  const months = Array.from({ length: REPORT_MONTH_LOOKBACK + 1 }, (_, offset) => ({ offset, ...reportMonthValue(offset) }))
-  const years = [...new Set(months.map((v) => v.y))]
-  const yearLabel = years.length > 1 ? `${Math.min(...years)}~${Math.max(...years)}년` : `${years[0]}년`
+  const { y, m } = reportMonthValue(reportOffset)
+  const first = new Date(y, m - 1, 1)
+  const lastDay = new Date(y, m, 0).getDate()
+  const leading = (first.getDay() + 6) % 7
+  const cells = []
+  for (let i = 0; i < leading; i++) cells.push('<div class="report-picker-day empty"></div>')
+  for (let day = 1; day <= lastDay; day++) {
+    const date = `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`
+    const today = date === MOCK_TODAY
+    cells.push(`<div class="report-picker-day static ${today ? "today" : ""}">${day}</div>`)
+  }
   return `
     <div class="report-picker-month-nav">
-      <span></span>
-      <strong>${esc(yearLabel)}</strong>
-      <span></span>
+      <button class="cal-nav-btn" ${reportOffset >= REPORT_MONTH_LOOKBACK ? "disabled" : ""} onclick="navigateReportMonthPicker(1)">‹</button>
+      <strong>${y}년 ${m}월</strong>
+      <button class="cal-nav-btn" ${reportOffset <= 0 ? "disabled" : ""} onclick="navigateReportMonthPicker(-1)">›</button>
     </div>
-    <div class="report-picker-grid report-picker-grid-month">
-      ${months.map(({ offset, m }) => `<button class="report-picker-day month-cell ${offset === reportOffset ? "selected" : ""} ${offset === 0 ? "today" : ""}" onclick="selectReportMonth(${offset})">${m}월</button>`).join("")}
+    <div class="report-picker-grid">
+      ${["월", "화", "수", "목", "금", "토", "일"].map((v) => `<div class="report-picker-dow">${v}</div>`).join("")}
+      ${cells.join("")}
     </div>
-    <div class="report-picker-help">${esc(`${reportMonthValue(reportOffset).y}년 ${reportMonthValue(reportOffset).m}월`)}</div>
+    <div class="report-picker-help">${esc(`${y}년 ${m}월`)}</div>
   `
+}
+// 월 피커의 ‹ › 는 이동 즉시 실제 선택(reportOffset)을 바꾼다. 뒤에 있는 보고서 본문도 같이 갱신하고, 모달은 열어둔 채 달력만 새로 그린다.
+function navigateReportMonthPicker(delta) {
+  reportOffset = Math.max(0, Math.min(REPORT_MONTH_LOOKBACK, reportOffset + delta))
+  renderApp()
+  refreshReportPeriodPicker()
 }
 function openReportPeriodPicker() {
   const modal = document.getElementById("report-period-modal")
@@ -365,7 +380,7 @@ function openReportPeriodPicker() {
   const title = document.getElementById("report-period-modal-title")
   if (!modal || !body || !title) return
   reportPickerMonthOffset = reportPickerSelectedMonthOffset()
-  title.textContent = reportPeriod === "day" ? "날짜 선택" : reportPeriod === "week" ? "주차 선택" : "월 선택"
+  title.textContent = reportPeriod === "day" ? "날짜 선택" : reportPeriod === "week" ? "주차 선택" : "월 이동"
   body.innerHTML = reportPeriod === "month" ? buildReportMonthPicker() : buildReportCalendarPicker()
   modal.classList.add("active")
 }
@@ -386,11 +401,6 @@ function selectReportPickerDate(date) {
   } else {
     reportOffset = Math.max(0, Math.min(REPORT_WEEK_LOOKBACK, reportWeekOffsetForDate(date)))
   }
-  closeReportPeriodPicker()
-  renderApp()
-}
-function selectReportMonth(offset) {
-  reportOffset = Math.max(0, Math.min(REPORT_MONTH_LOOKBACK, Number(offset) || 0))
   closeReportPeriodPicker()
   renderApp()
 }
