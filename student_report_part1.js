@@ -76,11 +76,15 @@ function scorePillText(correct, total) {
   return `${pct}점 (${correct ?? 0}/${total})`
 }
 // 학습기록 카드의 단원·내용은 각각 독립된 줄로 표시한다.
-// 단원/마감/날짜에는 불릿 라벨을 쓰고, 내용은 원문만 그대로 보여준다.
+// 단원은 "1-1." 같은 번호 패턴 앞에서 잘라 하나씩 별도 줄(불릿)로 보여준다 (단원이 하나뿐이어도 동일하게 처리).
+// 마감/날짜에도 같은 불릿 스타일을 쓰고, 내용은 원문만 그대로 보여준다.
 function renderLogMetaRows(unit, note, extraRows = []) {
-  const unitRow = unit
-    ? `<div class="log-context">${esc(`\u00a0\u00a0• 단원: ${unit}`)}</div>`
-    : ""
+  const unitParts = unit
+    ? unit.split(/(?=\d+-\d+\.)/).map((s) => s.trim()).filter(Boolean)
+    : []
+  const unitRow = unitParts
+    .map((part) => `<div class="log-context">${esc(`\u00a0\u00a0• ${part}`)}</div>`)
+    .join("")
   const noteRow = note ? `<div class="log-note">${esc(note)}</div>` : ""
   const extras = extraRows
     .filter(Boolean)
