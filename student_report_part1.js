@@ -421,7 +421,7 @@ function renderBookDetail() {
     <div class="reg-detail-page">
       <div class="reg-header-bar">
         <div class="reg-header-top">
-          <button class="reg-back-btn" onclick="closeBookDetail()" aria-label="뒤로가기"><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 3 2 12l9 9M2 12h20"/></svg></button>
+          <button class="reg-back-btn" onclick="closeBookDetail()" aria-label="뒤로가기"><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg></button>
           <div class="reg-breadcrumb">
             <span class="crumb" onclick="goIntro()">${esc(STUDENT.student_name)}</span>
             <span class="crumb-sep">›</span>
