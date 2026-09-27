@@ -233,9 +233,13 @@ body {
 .reg-breadcrumb .crumb-sep { display: inline-flex; align-items: center; line-height: 1; opacity: 0.6; flex-shrink: 0; }
 .reg-head-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 10px; }
 .reg-head-row.stacked { flex-direction: column; gap: 2px; }
-.reg-emoji { font-size: 22px; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; border-radius: 8px; overflow: hidden; flex-shrink: 0; }
-.reg-head-row.stacked .reg-emoji { font-size: 40px; width: 56px; height: 56px; margin-bottom: 6px; border-radius: 10px; }
+.reg-emoji { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; border-radius: 8px; overflow: hidden; flex-shrink: 0; }
+.reg-head-row.stacked .reg-emoji { width: 56px; height: 56px; margin-bottom: 6px; border-radius: 10px; }
 .reg-emoji img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; }
+.cover-fallback-icon { width: 60%; height: 60%; display: inline-flex; align-items: center; justify-content: center; opacity: 0.55; }
+.cover-fallback-icon svg { width: 100%; height: 100%; display: block; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.inline-icon { width: 15px; height: 15px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; margin-right: 4px; vertical-align: -2px; }
+.inline-icon svg { width: 100%; height: 100%; display: block; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .reg-title { font-size: clamp(18px, 5vw, 24px); font-weight: 800; }
 .reg-head-row.stacked .reg-title { font-size: clamp(22px, 6vw, 32px); margin-bottom: 4px; }
 .reg-cover-wrap { text-align: center; margin: 4px 0 12px; }
@@ -378,7 +382,8 @@ body {
 .log-divider { border-top: 1px solid #f1f0f6; margin: 10px -16px 0; }
 .log-extra { padding: 10px 16px 0; margin: 0 -16px; }
 .log-extra .feed-body { margin-top: 0; padding-top: 0; border-top: none; }
-.log-icon-emoji { font-size: 15px; line-height: 1; height: 17px; width: 100%; display: flex; align-items: center; justify-content: center; }
+.log-icon-emoji { line-height: 1; height: 17px; width: 17px; display: flex; align-items: center; justify-content: center; }
+.log-icon-emoji svg { width: 100%; height: 100%; display: block; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .log-icon-label { font-size: 9px; font-weight: 700; line-height: 1; height: 10px; width: 100%; display: flex; align-items: center; justify-content: center; letter-spacing: -0.2px; }
 .log-card.학습 .log-icon { background: var(--info-soft); color: var(--info); }
 .log-card.과제 .log-icon { background: var(--warning-soft); color: var(--warning); }
@@ -438,7 +443,8 @@ body {
 .modal-overlay.active { display: flex; }
 .modal-sheet { background: #fff; width: 100%; max-width: 480px; max-height: 85vh; overflow-y: auto; border-radius: 20px 20px 0 0; padding: 20px; }
 .modal-sheet h3 { margin: 0 0 14px; font-size: 17px; display: flex; justify-content: space-between; align-items: center; }
-.modal-close { background: #f0f0f0; border: none; border-radius: 50%; width: 28px; height: 28px; font-size: 14px; cursor: pointer; }
+.modal-close { background: #f0f0f0; border: none; border-radius: 50%; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; color: #666; cursor: pointer; }
+.modal-close svg { width: 14px; height: 14px; display: block; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .period-picker-trigger { appearance: none; border: none; background: transparent; color: inherit; font-family: inherit; padding: 6px 8px; border-radius: 10px; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
 .period-picker-trigger:active { background: var(--brand-soft); }
 .report-picker-month-nav { display: grid; grid-template-columns: 40px 1fr 40px; align-items: center; text-align: center; margin-bottom: 12px; }
@@ -456,10 +462,12 @@ body {
 .report-month-picker { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .report-month-tile { appearance: none; position: relative; border: 1px solid var(--brand-border); border-radius: 14px; background: var(--brand-tint); padding: 16px 10px; color: #333; display: grid; justify-items: center; gap: 3px; cursor: pointer; font-family: inherit; }
 .report-month-tile.active { border-color: var(--brand-deep); background: var(--brand-soft); color: var(--brand-deep); }
-.report-month-icon { font-size: 24px; }
+.report-month-icon { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; }
+.report-month-icon svg { width: 100%; height: 100%; display: block; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .report-month-tile strong { font-size: 16px; }
 .report-month-tile small { color: var(--text-subtle); font-size: 11px; }
-.report-month-check { position: absolute; right: 10px; top: 8px; color: var(--brand-deep); font-weight: 800; }
+.report-month-check { position: absolute; right: 10px; top: 8px; width: 16px; height: 16px; color: var(--brand-deep); display: inline-flex; }
+.report-month-check svg { width: 100%; height: 100%; display: block; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
 .view-toggle { display: flex; gap: 6px; margin-bottom: 16px; }
 .view-toggle button { flex: 1; padding: 8px 0; border-radius: 10px; border: 1px solid #eee; background: #f7f7f9; color: var(--text-muted); font-size: 13px; font-weight: 600; cursor: pointer; }
 .view-toggle button.active { background: var(--brand-deep); color: #fff; border-color: var(--brand-deep); }
@@ -666,21 +674,21 @@ body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
 
 <div class="modal-overlay" id="schedule-day-modal" onclick="if(event.target===this) closeScheduleDayModal()">
   <div class="modal-sheet">
-    <h3><span id="schedule-day-modal-title"></span><button class="modal-close" onclick="closeScheduleDayModal()">✕</button></h3>
+    <h3><span id="schedule-day-modal-title"></span><button class="modal-close" onclick="closeScheduleDayModal()"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button></h3>
     <div id="schedule-day-modal-body"></div>
   </div>
 </div>
 
 <div class="modal-overlay" id="test-detail-modal" onclick="if(event.target===this) closeTestDetailModal()">
   <div class="modal-sheet">
-    <h3><span id="test-detail-modal-title"></span><button class="modal-close" onclick="closeTestDetailModal()">✕</button></h3>
+    <h3><span id="test-detail-modal-title"></span><button class="modal-close" onclick="closeTestDetailModal()"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button></h3>
     <div id="test-detail-modal-body"></div>
   </div>
 </div>
 
 <div class="modal-overlay" id="report-period-modal" onclick="if(event.target===this) closeReportPeriodPicker()">
   <div class="modal-sheet">
-    <h3><span id="report-period-modal-title">기간 선택</span><button class="modal-close" onclick="closeReportPeriodPicker()">✕</button></h3>
+    <h3><span id="report-period-modal-title">기간 선택</span><button class="modal-close" onclick="closeReportPeriodPicker()"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button></h3>
     <div id="report-period-modal-body"></div>
   </div>
 </div>

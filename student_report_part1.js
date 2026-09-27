@@ -385,13 +385,13 @@ function renderBookDetail() {
   const book = books.find((b) => normBookTitle(b.title) === targetTitle) || {}
   const items = []
   ;((r.study_logs) || []).filter((l) => normBookTitle(l.book) === targetTitle).forEach((l) => items.push({
-    type: "학습", icon: "📖", date: l.date, book: l.book, range: l.range, unit: l.unit, note: l.note, pill: null, photo: l.photo, body: l.body,
+    type: "학습", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`, date: l.date, book: l.book, range: l.range, unit: l.unit, note: l.note, pill: null, photo: l.photo, body: l.body,
   }))
   ;((r.homework) || []).filter((h) => normBookTitle(h.book) === targetTitle).forEach((h) => items.push({
-    type: "과제", icon: "📝", date: h.date || h.due, book: h.book, range: h.range, unit: h.unit, note: h.note || h.title, pill: h.status, pillTone: homeworkPillTone(h.status), photo: null, body: null,
+    type: "과제", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>`, date: h.date || h.due, book: h.book, range: h.range, unit: h.unit, note: h.note || h.title, pill: h.status, pillTone: homeworkPillTone(h.status), photo: null, body: null,
   }))
   ;((r.tests) || []).filter((t) => normBookTitle(t.book) === targetTitle).forEach((t) => items.push({
-    type: "평가", icon: "📄", date: t.date, book: t.book, range: t.range, unit: t.unit, note: t.note || t.title, pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), photo: null, body: null,
+    type: "평가", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`, date: t.date, book: t.book, range: t.range, unit: t.unit, note: t.note || t.title, pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), photo: null, body: null,
   }))
   const sorted = items.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
   const studiedUnitKeys = new Set()
@@ -433,10 +433,10 @@ function renderBookDetail() {
           </div>
         </div>
         <div class="reg-cover-wrap">
-          <div class="reg-cover-img">${book.cover ? `<img src="${esc(book.cover)}" alt="${esc(selectedBookTitle)}">` : "📘"}</div>
+          <div class="reg-cover-img">${book.cover ? `<img src="${esc(book.cover)}" alt="${esc(selectedBookTitle)}">` : `<span class="cover-fallback-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></span>`}</div>
         </div>
         <div class="reg-head-row">
-          <div class="reg-emoji">📘</div>
+          <div class="reg-emoji"><span class="cover-fallback-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></span></div>
           <div class="reg-title">${esc(selectedBookTitle)}</div>
         </div>
         <div class="reg-sub-badges">
@@ -447,12 +447,12 @@ function renderBookDetail() {
       <div class="reg-tab-content">
         <div class="book-cover-card">
           <div class="book-cover-top">
-            <div class="book-cover-card-img">${book.cover ? `<img src="${esc(book.cover)}" alt="${esc(selectedBookTitle)}">` : "📘"}</div>
+            <div class="book-cover-card-img">${book.cover ? `<img src="${esc(book.cover)}" alt="${esc(selectedBookTitle)}">` : `<span class="cover-fallback-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></span>`}</div>
             <div class="book-cover-card-info">
               <div class="book-cover-info-row">
                 <span class="info-label">단원목록</span>
                 <ul class="unit-list">
-                  ${unitList.length ? unitList.map((u) => `<li>${esc(u.text)}${u.done ? " ✅" : ""}</li>`).join("") : `<li class="empty">-</li>`}
+                  ${unitList.length ? unitList.map((u) => `<li>${esc(u.text)}${u.done ? ' <span class="inline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg></span>' : ""}</li>`).join("") : `<li class="empty">-</li>`}
                 </ul>
               </div>
             </div>
@@ -618,8 +618,13 @@ function normalizeCategoryName(category) {
     .trim()
 }
 const NOTICE_CATEGORY_COLORS = { "휴원": "#9b9a97", "학원 일정": "#337ea9", "학사 일정": "#e03e3e", "할일": "#448361" }
-const NOTICE_CATEGORY_EMOJI = { "휴원": "💤", "학원 일정": "📆", "학사 일정": "🏫", "할일": "✅" }
-// 할일(✅)은 강사/직원용 내부 항목이므로 학생에게는 절대 노출하지 않는다.
+const NOTICE_CATEGORY_ICON = {
+  "휴원": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>',
+  "학원 일정": '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>',
+  "학사 일정": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>',
+  "할일": '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>',
+}
+// 할일은 강사/직원용 내부 항목이므로 학생에게는 절대 노출하지 않는다.
 function getStudentVisibleNotices() {
   return STUDENT.notices.filter((n) => normalizeCategoryName(n.category) !== "할일")
 }
@@ -673,7 +678,7 @@ function openScheduleDay(dateStr) {
   document.getElementById("schedule-day-modal-body").innerHTML = dayNotices.length ? dayNotices.map((n) => `
     <div class="list-item">
       <div class="title"><span class="cal-dot" style="background:${NOTICE_CATEGORY_COLORS[normalizeCategoryName(n.category)] || "#999"}"></span>${esc(n.title)}</div>
-      <div class="meta">${esc(`${NOTICE_CATEGORY_EMOJI[normalizeCategoryName(n.category)] || ""} ${normalizeCategoryName(n.category) || "안내"}`.trim())}</div>
+      <div class="meta"><span class="inline-icon">${NOTICE_CATEGORY_ICON[normalizeCategoryName(n.category)] || ""}</span>${esc(normalizeCategoryName(n.category) || "안내")}</div>
     </div>
   `).join("") : '<div class="empty">이 날짜에는 일정이 없습니다.</div>'
   document.getElementById("schedule-day-modal").classList.add("active")

@@ -139,8 +139,8 @@ function renderGlobalSyncToast(message) {
   const el = document.getElementById("global-sync-toast")
   if (!el) return
   if (globalSyncToastTimer) { clearTimeout(globalSyncToastTimer); globalSyncToastTimer = null }
-  if (!message) { el.textContent = ""; el.classList.remove("show"); return }
-  el.textContent = message
+  if (!message) { el.innerHTML = ""; el.classList.remove("show"); return }
+  el.innerHTML = message
   el.classList.add("show")
   globalSyncToastTimer = setTimeout(() => { el.classList.remove("show") }, 3500)
 }
@@ -159,7 +159,7 @@ async function requestGlobalSync() {
     for (const id of ids) await requestSyncForRegistrationId(id)
     await loadReportFromServer()
     renderApp()
-    renderGlobalSyncToast("✅ 최신 정보로 갱신했어요")
+    renderGlobalSyncToast('<span class="inline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg></span>최신 정보로 갱신했어요')
   } catch (e) {
     renderGlobalSyncToast("동기화에 실패했어요. 잠시 후 다시 시도해주세요")
   } finally {
@@ -341,7 +341,7 @@ function buildReportCalendarPicker() {
 function buildReportMonthPicker() {
   return `<div class="report-month-picker">${Array.from({ length: REPORT_MONTH_LOOKBACK + 1 }, (_, offset) => {
     const { y, m } = reportMonthValue(offset)
-    return `<button class="report-month-tile ${offset === reportOffset ? "active" : ""}" onclick="selectReportMonth(${offset})"><span class="report-month-icon">📅</span><strong>${m}월</strong><small>${y}년</small>${offset === reportOffset ? '<span class="report-month-check">✓</span>' : ""}</button>`
+    return `<button class="report-month-tile ${offset === reportOffset ? "active" : ""}" onclick="selectReportMonth(${offset})"><span class="report-month-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg></span><strong>${m}월</strong><small>${y}년</small>${offset === reportOffset ? '<span class="report-month-check"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg></span>' : ""}</button>`
   }).join("")}</div>`
 }
 function openReportPeriodPicker() {
@@ -511,12 +511,12 @@ function buildReportTabHtml(r) {
     </div>
     <div class="report-donut-row">
       <div class="donut-card">
-        <div class="donut-title">✅ 출석률</div>
+        <div class="donut-title"><span class="inline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg></span>출석률</div>
         <div class="donut" style="background: conic-gradient(#1e9e5c 0% ${attRate}%, #eee ${attRate}% 100%)"><div class="donut-hole">${attRate}%</div></div>
         <div class="donut-count-below">(${presentCount}/${countedAttendanceRows.length})</div>
       </div>
       <div class="donut-card">
-        <div class="donut-title">📝 과제이행률</div>
+        <div class="donut-title"><span class="inline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg></span>과제이행률</div>
         <div class="donut" style="background: conic-gradient(#6b5d4d 0% ${hwRate}%, #eee ${hwRate}% 100%)"><div class="donut-hole">${hwRate}%</div></div>
         <div class="donut-count-below">(${doneHomework}/${homeworkItems.length})</div>
       </div>
@@ -581,11 +581,11 @@ function buildDailyBodyHtml(r, date) {
   return `
     <div class="status-box-row">
       <div class="status-box">
-        <div class="label">✅ 출석상태</div>
+        <div class="label"><span class="inline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg></span>출석상태</div>
         <span class="badge ${esc(attendanceRow ? attendanceRow.status : "해당 없음")}">${esc(attendanceRow ? attendanceRow.status : "해당 없음")}</span>
       </div>
       <div class="status-box">
-        <div class="label">📝 과제상태</div>
+        <div class="label"><span class="inline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg></span>과제상태</div>
         ${homeworkDayEntry ? (() => { const info = homeworkStatusInfo(homeworkDayEntry.status); return `<span class="badge ${info.cls}">${info.text}</span>` })() : `<span class="badge">해당 없음</span>`}
       </div>
     </div>
@@ -658,7 +658,7 @@ function renderDetail() {
         const filtered = books.filter((b) => normalizeBookStatus(b.status) === bookStatusTab)
         return `<div class="book-cards-wrap"><div class="book-cards">${filtered.length ? filtered.map((b) => `
         <div class="book-card" onclick="openBookStudy('${esc(b.title).replace(/'/g, "&#39;")}')">
-          <div class="cover">${b.cover ? `<img src="${esc(b.cover)}" alt="${esc(b.title)}">` : "📘"}</div>
+          <div class="cover">${b.cover ? `<img src="${esc(b.cover)}" alt="${esc(b.title)}">` : `<span class="cover-fallback-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></span>`}</div>
           <div class="info-overlay">
             <div class="title">${esc(b.title)}</div>
             ${b.progress != null ? `<div class="progress-track"><div class="progress-fill" style="width:${b.progress}%"></div></div><div class="progress-label">${b.progress}%</div>` : ""}
@@ -681,9 +681,9 @@ function renderDetail() {
       <div class="section-hint">학습 · 과제 · 평가 기록을 최신순으로 보여줍니다</div>
       ${(() => {
         const items = []
-        studyLogs.forEach((l) => items.push({ type: "학습", icon: "📖", date: l.date, title: [l.book, l.range].filter(Boolean).join(" · ") || "학습 기록", unit: l.unit, note: l.note, photo: l.photo, body: l.body, book: l.book }))
-        homework.forEach((h) => items.push({ type: "과제", icon: "📝", date: h.date || h.due, title: [h.book, h.range].filter(Boolean).join(" · "), unit: h.unit, note: h.note, pill: h.status, pillTone: homeworkPillTone(h.status), book: h.book }))
-        tests.forEach((t) => items.push({ type: "평가", icon: "📄", date: t.date, title: [t.book, t.range].filter(Boolean).join(" · "), unit: t.unit, note: t.note, pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), book: t.book }))
+        studyLogs.forEach((l) => items.push({ type: "학습", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`, date: l.date, title: [l.book, l.range].filter(Boolean).join(" · ") || "학습 기록", unit: l.unit, note: l.note, photo: l.photo, body: l.body, book: l.book }))
+        homework.forEach((h) => items.push({ type: "과제", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>`, date: h.date || h.due, title: [h.book, h.range].filter(Boolean).join(" · "), unit: h.unit, note: h.note, pill: h.status, pillTone: homeworkPillTone(h.status), book: h.book }))
+        tests.forEach((t) => items.push({ type: "평가", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`, date: t.date, title: [t.book, t.range].filter(Boolean).join(" · "), unit: t.unit, note: t.note, pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), book: t.book }))
         const sorted = items.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
         const groups = []
         sorted.forEach((l) => {
@@ -781,7 +781,7 @@ async function initApp() {
   app.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:80vh;color:#8a8a8a;font-size:15px;">불러오는 중...</div>'
   await loadReportFromServer()
   if (DATA_ERROR || !STUDENT) {
-    app.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:80vh;gap:12px;color:#666;font-size:15px;text-align:center;padding:0 24px;"><div style="font-size:32px;">⚠️</div><div>' + esc(DATA_ERROR || "데이터를 불러올 수 없어요.") + '</div></div>'
+    app.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:80vh;gap:12px;color:#666;font-size:15px;text-align:center;padding:0 24px;"><div style="width:32px;height:32px;color:#c77;"><svg viewBox="0 0 24 24" aria-hidden="true" style="width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12" y2="17"></line></svg></div><div>' + esc(DATA_ERROR || "데이터를 불러올 수 없어요.") + '</div></div>'
     return
   }
   renderApp()
