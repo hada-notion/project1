@@ -679,12 +679,7 @@ function renderDetail() {
   const tests = r.tests || []
   const comments = r.teacher_comments || []
   const studyLogs = r.study_logs || []
-  const tabs = [
-    { id: "books", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>`, label: "교재" },
-    { id: "calendar", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`, label: "캘린더" },
-    { id: "study", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`, label: "학습기록" },
-    { id: "report", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>`, label: "보고서" },
-  ]
+  const tabs = regTabsList()
   if (!tabs.some((t) => t.id === regTab)) regTab = "books"
   const tabBodies = {
     books: `
@@ -781,9 +776,7 @@ function renderDetail() {
       </div>
       <div class="reg-tab-content">${tabBodies[regTab]}</div>
     </div>
-    <div class="reg-tabbar">
-      ${tabs.map((t) => `<button class="reg-tab-btn ${regTab === t.id ? "active" : ""}" onclick="setRegTab('${t.id}')"><span class="tab-icon">${t.icon}</span>${esc(t.label)}</button>`).join("")}
-    </div>
+    ${regTabbarHtml(regTab, false)}
   `
 }
 
@@ -814,7 +807,7 @@ function renderApp() {
   }
   // 하단 탭바가 있는 등록 상세에는 안전 여백을 적용하고,
   // 등록/교재 상세에서는 새로고침 버튼을 상단 헤더 오른쪽에 배치한다.
-  document.body.classList.toggle("has-tabbar", view === "detail")
+  document.body.classList.toggle("has-tabbar", view === "detail" || view === "book")
   document.body.classList.toggle("has-detail-header", view === "detail" || view === "book")
 }
 
