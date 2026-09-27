@@ -341,11 +341,23 @@ function buildReportCalendarPicker() {
     <div class="report-picker-help">${esc(selectedRange)}</div>
   `
 }
+// 월간 피커도 일간·주간과 동일한 "달력" 톤(월 이동 헤더 + 버튼 그리드)으로 보여준다.
+// 선택 가능한 달이 REPORT_MONTH_LOOKBACK+1개뿐이라 한 줄 그리드로 표시하고, 현재 달엔 "오늘" 점 표시를 그대로 재사용한다.
 function buildReportMonthPicker() {
-  return `<div class="report-month-picker">${Array.from({ length: REPORT_MONTH_LOOKBACK + 1 }, (_, offset) => {
-    const { y, m } = reportMonthValue(offset)
-    return `<button class="report-month-tile ${offset === reportOffset ? "active" : ""}" onclick="selectReportMonth(${offset})"><span class="report-month-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg></span><strong>${m}월</strong><small>${y}년</small>${offset === reportOffset ? '<span class="report-month-check"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg></span>' : ""}</button>`
-  }).join("")}</div>`
+  const months = Array.from({ length: REPORT_MONTH_LOOKBACK + 1 }, (_, offset) => ({ offset, ...reportMonthValue(offset) }))
+  const years = [...new Set(months.map((v) => v.y))]
+  const yearLabel = years.length > 1 ? `${Math.min(...years)}~${Math.max(...years)}년` : `${years[0]}년`
+  return `
+    <div class="report-picker-month-nav">
+      <span></span>
+      <strong>${esc(yearLabel)}</strong>
+      <span></span>
+    </div>
+    <div class="report-picker-grid report-picker-grid-month">
+      ${months.map(({ offset, m }) => `<button class="report-picker-day month-cell ${offset === reportOffset ? "selected" : ""} ${offset === 0 ? "today" : ""}" onclick="selectReportMonth(${offset})">${m}월</button>`).join("")}
+    </div>
+    <div class="report-picker-help">${esc(`${reportMonthValue(reportOffset).y}년 ${reportMonthValue(reportOffset).m}월`)}</div>
+  `
 }
 function openReportPeriodPicker() {
   const modal = document.getElementById("report-period-modal")
