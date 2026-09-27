@@ -452,13 +452,16 @@ body {
 .report-picker-month-nav strong { font-size: 16px; }
 .report-picker-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
 .report-picker-dow { color: var(--text-subtle); font-size: 11px; font-weight: 700; text-align: center; padding: 5px 0; }
-.report-picker-day { appearance: none; aspect-ratio: 1; min-width: 0; border: 0; border-radius: 10px; background: var(--brand-tint); color: #333; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; position: relative; display: flex; align-items: center; justify-content: center; }
-.report-picker-day:disabled { background: transparent; color: #d4d2dc; cursor: default; }
-.report-picker-day.today::after { content: ""; position: absolute; width: 4px; height: 4px; border-radius: 50%; background: var(--brand-deep); left: calc(50% - 2px); bottom: 4px; }
-.report-picker-day.selected { background: var(--brand-deep); color: #fff; }
-.report-picker-day.selected.today::after { background: #fff; }
-.report-picker-day.selected-week { border-radius: 8px; background: var(--brand-soft); color: var(--brand-deep); }
-.report-picker-day.selected-week:first-of-type { border-radius: 10px; }
+.report-picker-dow.sat { color: var(--info); }
+.report-picker-dow.sun { color: var(--danger); }
+.report-picker-day { appearance: none; aspect-ratio: 1; min-width: 0; border: 0; border-radius: 10px; background: #fff; color: #333; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; position: relative; display: flex; align-items: center; justify-content: center; }
+.report-picker-day.sat { color: var(--info); }
+.report-picker-day.sun { color: var(--danger); }
+.report-picker-day.outside { color: #cbc6bc; }
+.report-picker-day.unavailable { color: #d4d2dc; cursor: default; }
+.report-picker-day:disabled { cursor: default; }
+.report-picker-day.current { background: var(--brand-soft); }
+.report-picker-day.chosen { box-shadow: inset 0 0 0 2px var(--brand-mid); }
 .report-picker-help { min-height: 18px; margin-top: 12px; color: #777; font-size: 12px; text-align: center; }
 .report-picker-day.static { cursor: default; }
 .view-toggle { display: flex; gap: 6px; margin-bottom: 16px; }
@@ -599,10 +602,15 @@ body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
 .cal-summary-item.partial .num { color: var(--warning); }
 .attendance-calendar { background: #fff; border-radius: 14px; padding: clamp(8px, min(4vw, 3.6vh), 38px); box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
 .cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); font-size: clamp(12px, 2vw, 15px); color: var(--text-subtle); text-align: center; margin-bottom: 6px; }
+.cal-weekdays > div.sat { color: var(--info); }
+.cal-weekdays > div.sun { color: var(--danger); }
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: clamp(1px, min(1vw, 1vh), 10px); }
 .cal-cell { aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: clamp(8px, min(2.9vw, 2.9vh), 22px); border-radius: 8px; position: relative; }
 .cal-cell.has-event { background: var(--brand-tint); color: #333; font-weight: 700; cursor: pointer; }
 .cal-cell.has-event:active { background: var(--brand-soft); }
+.cal-cell.sat:not(.has-event) { color: var(--info); }
+.cal-cell.sun:not(.has-event) { color: var(--danger); }
+.cal-cell.outside { color: #cbc6bc; }
 .cal-dots { display: flex; gap: 3px; margin-top: 3px; }
 .cal-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--brand-deep); flex-shrink: 0; }
 .list-item .title { display: flex; align-items: center; gap: 6px; }

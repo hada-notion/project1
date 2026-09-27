@@ -664,8 +664,11 @@ function buildScheduleCalendarHtml() {
   const y = base.getFullYear()
   const mo = base.getMonth() + 1
   const monthKey = `${y}-${String(mo).padStart(2, "0")}`
-  const startWeekday = new Date(y, mo - 1, 1).getDay()
+  // 다른 캘린더들과 동일하게 월요일 시작으로 통일한다.
+  const leading = (new Date(y, mo - 1, 1).getDay() + 6) % 7
   const daysInMonth = new Date(y, mo, 0).getDate()
+  const trailing = (7 - ((leading + daysInMonth) % 7)) % 7
+  const firstCellDate = addDaysStr(`${y}-${String(mo).padStart(2, "0")}-01`, -leading)
   const byDay = {}
   notices.filter((n) => n.date && n.date.startsWith(monthKey)).forEach((n) => {
     const d = Number(n.date.slice(8, 10))
@@ -673,13 +676,16 @@ function buildScheduleCalendarHtml() {
     byDay[d].push(n)
   })
   let cells = ""
-  for (let i = 0; i < startWeekday; i++) cells += '<div class="cal-cell"></div>'
-  for (let d = 1; d <= daysInMonth; d++) {
-    const evts = byDay[d]
-    const dateStr = `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`
-    const today = dateStr === MOCK_TODAY ? "today" : ""
+  for (let i = 0; i < leading + daysInMonth + trailing; i++) {
+    const dateStr = addDaysStr(firstCellDate, i)
+    const d = Number(dateStr.slice(8, 10))
+    const outside = !dateStr.startsWith(monthKey)
+    const dow = new Date(dateStr + "T00:00:00").getDay()
+    const weekendClass = dow === 6 ? "sat" : dow === 0 ? "sun" : ""
+    const evts = outside ? null : byDay[d]
+    const today = !outside && dateStr === MOCK_TODAY ? "today" : ""
     const dots = evts ? evts.slice(0, 3).map((n) => `<span class="cal-dot" style="background:${NOTICE_CATEGORY_COLORS[normalizeCategoryName(n.category)] || "#999"}"></span>`).join("") : ""
-    cells += `<div class="cal-cell ${evts ? "has-event" : ""} ${today}" ${evts ? `onclick="openScheduleDay('${dateStr}')"` : ""}><span>${d}</span>${evts ? `<span class="cal-dots">${dots}</span>` : ""}</div>`
+    cells += `<div class="cal-cell ${evts ? "has-event" : ""} ${today} ${outside ? "outside" : ""} ${weekendClass}" ${evts ? `onclick="openScheduleDay('${dateStr}')"` : ""}><span>${d}</span>${evts ? `<span class="cal-dots">${dots}</span>` : ""}</div>`
   }
   return `
     <div class="schedule-cal-wrap">
@@ -692,7 +698,7 @@ function buildScheduleCalendarHtml() {
             <button class="cal-nav-btn" onclick="navigateScheduleMonth(1)">›</button>
           </div>
         </div>
-        <div class="cal-weekdays">${["일", "월", "화", "수", "목", "금", "토"].map((w) => `<div>${w}</div>`).join("")}</div>
+        <div class="cal-weekdays">${["월", "화", "수", "목", "금", "토", "일"].map((w, i) => `<div class="${i === 5 ? "sat" : i === 6 ? "sun" : ""}">${w}</div>`).join("")}</div>
         <div class="cal-grid">${cells}</div>
       </div>
     </div>

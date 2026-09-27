@@ -305,25 +305,35 @@ function reportPeriodButtonLabel() {
   const { y, m } = reportMonthValue(reportOffset)
   return `${y}년 ${m}월`
 }
+// 토/일 글자색을 구분해 요일을 헷갈리지 않게 한다. 0=일요일 ... 6=토요일 (Date.getDay() 기준)
+function weekendClassForDow(dow) {
+  return dow === 6 ? "sat" : dow === 0 ? "sun" : ""
+}
 function buildReportCalendarPicker() {
   const { y, m } = reportMonthValue(reportPickerMonthOffset)
   const first = new Date(y, m - 1, 1)
   const lastDay = new Date(y, m, 0).getDate()
   const leading = (first.getDay() + 6) % 7
+  const trailing = (7 - ((leading + lastDay) % 7)) % 7
+  const firstCellDate = addDaysStr(`${y}-${String(m).padStart(2, "0")}-01`, -leading)
   const currentMonday = mondayOfWeek(MOCK_TODAY)
   const selectedMonday = addDaysStr(currentMonday, -7 * reportOffset)
   const selectedDay = reportDayDate || MOCK_TODAY
   const cells = []
-  for (let i = 0; i < leading; i++) cells.push('<div class="report-picker-day empty"></div>')
-  for (let day = 1; day <= lastDay; day++) {
-    const date = `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`
+  for (let i = 0; i < leading + lastDay + trailing; i++) {
+    const date = addDaysStr(firstCellDate, i)
+    const day = Number(date.slice(8, 10))
+    const outside = !date.startsWith(`${y}-${String(m).padStart(2, "0")}`)
+    const dow = new Date(date + "T00:00:00").getDay()
     const weekOffset = reportWeekOffsetForDate(date)
-    const enabled = reportPeriod === "day"
+    const rangeOk = reportPeriod === "day"
       ? date >= reportDayEarliest() && date <= MOCK_TODAY
       : weekOffset >= 0 && weekOffset <= REPORT_WEEK_LOOKBACK
+    const enabled = !outside && rangeOk
     const selected = reportPeriod === "day" ? date === selectedDay : mondayOfWeek(date) === selectedMonday
-    const today = date === MOCK_TODAY
-    cells.push(`<button class="report-picker-day ${selected ? "selected" : ""} ${reportPeriod === "week" && selected ? "selected-week" : ""} ${today ? "today" : ""}" ${enabled ? `onclick="selectReportPickerDate('${date}')"` : "disabled"}>${day}</button>`)
+    const current = reportPeriod === "day" ? date === MOCK_TODAY : mondayOfWeek(date) === currentMonday
+    const classes = ["report-picker-day", weekendClassForDow(dow), outside ? "outside" : "", !outside && !rangeOk ? "unavailable" : "", current ? "current" : "", selected ? "chosen" : ""].filter(Boolean).join(" ")
+    cells.push(`<button class="${classes}" ${enabled ? `onclick="selectReportPickerDate('${date}')"` : "disabled"}>${day}</button>`)
   }
   const selectedRange = reportPeriod === "week"
     ? `${reportWeekLabel(selectedMonday)} · ${selectedMonday.slice(5).replace("-", ".")}~${addDaysStr(selectedMonday, 6).slice(5).replace("-", ".")}`
@@ -335,7 +345,7 @@ function buildReportCalendarPicker() {
       <button class="cal-nav-btn" ${reportPickerMonthOffset <= 0 ? "disabled" : ""} onclick="navigateReportPickerMonth(-1)">›</button>
     </div>
     <div class="report-picker-grid">
-      ${["월", "화", "수", "목", "금", "토", "일"].map((v) => `<div class="report-picker-dow">${v}</div>`).join("")}
+      ${["월", "화", "수", "목", "금", "토", "일"].map((v, i) => `<div class="report-picker-dow ${i === 5 ? "sat" : i === 6 ? "sun" : ""}">${v}</div>`).join("")}
       ${cells.join("")}
     </div>
     <div class="report-picker-help">${esc(selectedRange)}</div>
@@ -348,12 +358,18 @@ function buildReportMonthPicker() {
   const first = new Date(y, m - 1, 1)
   const lastDay = new Date(y, m, 0).getDate()
   const leading = (first.getDay() + 6) % 7
+  const trailing = (7 - ((leading + lastDay) % 7)) % 7
+  const firstCellDate = addDaysStr(`${y}-${String(m).padStart(2, "0")}-01`, -leading)
+  const isCurrentMonthView = reportOffset === 0 // 실제 "이번달"을 보고 있는 경우에만 연한색 배경을 깐다
   const cells = []
-  for (let i = 0; i < leading; i++) cells.push('<div class="report-picker-day empty"></div>')
-  for (let day = 1; day <= lastDay; day++) {
-    const date = `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`
-    const today = date === MOCK_TODAY
-    cells.push(`<div class="report-picker-day static ${today ? "today" : ""}">${day}</div>`)
+  for (let i = 0; i < leading + lastDay + trailing; i++) {
+    const date = addDaysStr(firstCellDate, i)
+    const day = Number(date.slice(8, 10))
+    const outside = !date.startsWith(`${y}-${String(m).padStart(2, "0")}`)
+    const dow = new Date(date + "T00:00:00").getDay()
+    // 월간 피커는 보여주는 달 전체가 곧 "선택"이므로, 그 달에 속한 실제 날짜엔 전부 테두리를 준다.
+    const classes = ["report-picker-day", "static", weekendClassForDow(dow), outside ? "outside" : "", !outside && isCurrentMonthView ? "current" : "", !outside ? "chosen" : ""].filter(Boolean).join(" ")
+    cells.push(`<div class="${classes}">${day}</div>`)
   }
   return `
     <div class="report-picker-month-nav">
@@ -362,7 +378,7 @@ function buildReportMonthPicker() {
       <button class="cal-nav-btn" ${reportOffset <= 0 ? "disabled" : ""} onclick="navigateReportMonthPicker(-1)">›</button>
     </div>
     <div class="report-picker-grid">
-      ${["월", "화", "수", "목", "금", "토", "일"].map((v) => `<div class="report-picker-dow">${v}</div>`).join("")}
+      ${["월", "화", "수", "목", "금", "토", "일"].map((v, i) => `<div class="report-picker-dow ${i === 5 ? "sat" : i === 6 ? "sun" : ""}">${v}</div>`).join("")}
       ${cells.join("")}
     </div>
     <div class="report-picker-help">${esc(`${y}년 ${m}월`)}</div>
