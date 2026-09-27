@@ -452,7 +452,7 @@ body {
 .report-picker-month-nav strong { font-size: 16px; }
 .report-picker-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
 .report-picker-dow { color: var(--text-subtle); font-size: 11px; font-weight: 700; text-align: center; padding: 5px 0; }
-.report-picker-day { appearance: none; aspect-ratio: 1; min-width: 0; border: 0; border-radius: 10px; background: var(--brand-tint); color: #333; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; position: relative; }
+.report-picker-day { appearance: none; aspect-ratio: 1; min-width: 0; border: 0; border-radius: 10px; background: var(--brand-tint); color: #333; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; position: relative; display: flex; align-items: center; justify-content: center; }
 .report-picker-day:disabled { background: transparent; color: #d4d2dc; cursor: default; }
 .report-picker-day.today::after { content: ""; position: absolute; width: 4px; height: 4px; border-radius: 50%; background: var(--brand-deep); left: calc(50% - 2px); bottom: 4px; }
 .report-picker-day.selected { background: var(--brand-deep); color: #fff; }
