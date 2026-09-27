@@ -1,4 +1,4 @@
-import { queryAllPages } from "./notionClient.ts"
+import { queryAllPages, getBlockChildren, mapWithConcurrency } from "./notionClient.ts"
 import { parseTokenValue } from "./adminShared.ts"
 import {
   text,
@@ -30,6 +30,46 @@ function sinceIsoMonthsAgo(months: number): string {
 
 function todayIsoSeoul(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" })
+}
+
+// 학습기록 페이지 "본문"(블록)을 학부모 리포트 피드용 부록으로 변환한다. 프론트엔드
+// normalizeFeedBody(student_report_part1.js)가 기대하는 { type: "text"|"image"|"video", ... }
+// 형태와 그대로 맞춘다. 지원하지 않는 블록 타입(표, 임베드 등)은 조용히 건너뛴다 -- 리포트 피드는
+// "기록한 글/사진"만 보여주면 되고, 모든 노션 블록 타입을 완벽히 재현할 필요는 없다.
+function richTextPlain(arr: any[] | undefined): string {
+  return (arr ?? []).map((t: any) => t?.plain_text ?? "").join("").trim()
+}
+function blocksToFeedBody(blocks: any[]): unknown[] {
+  const items: unknown[] = []
+  for (const b of blocks ?? []) {
+    const type = b?.type
+    if (!type) continue
+    if (type === "image" || type === "video") {
+      const media = b[type]
+      const url = media?.type === "external" ? media.external?.url : media?.file?.url
+      if (!url) continue
+      items.push({ type, url: String(url), caption: richTextPlain(media?.caption) })
+      continue
+    }
+    const richText = b[type]?.rich_text
+    if (Array.isArray(richText)) {
+      const t = richTextPlain(richText)
+      if (t) items.push({ type: "text", text: t, style: type })
+    }
+  }
+  return items
+}
+
+// 실패해도(권한/삭제/타임아웃 등) 리포트 캐시 생성 전체를 막지 않는다 -- 본문은 "있으면 좋은"
+// 부록이라, 실패 시 조용히 빈 배열로 넘어가고 경고만 남긴다(로드맵: 본문 동기화 리스크 검토 참고).
+async function readPageBodyBlocks(pageId: string): Promise<unknown[]> {
+  try {
+    const blocks = await getBlockChildren(pageId)
+    return blocksToFeedBody(blocks)
+  } catch (err) {
+    console.warn(`학습기록 본문(블록) 조회 실패 - 빈 본문으로 계속 진행(${pageId}):`, (err as Error)?.message ?? err)
+    return []
+  }
 }
 
 function stripLeadingEmoji(s: string): string {
@@ -344,11 +384,18 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
 
   const pastLogDetails = logDetails.filter((l) => (l.iso ?? "").slice(0, 10) <= todayIso && (l.iso ?? "") >= sinceIso)
 
-  const study_logs = pastLogDetails
+  // 화면에 실제로 보여줄 최근 12건만 본문(블록)을 가져온다 -- 그보다 오래된 건 어차피 안 보이므로
+  // 조회할 필요가 없다. 동시성은 4~6개로 제한해서(mapWithConcurrency), Notion API에 한꺼번에
+  // 너무 많은 블록 조회 요청을 쏘지 않게 한다(리포트 발송 병목 검토 참고).
+  const studyLogCandidates = pastLogDetails
     .filter((l) => l.category === "학습")
     .sort((a, b) => ((a.iso ?? "") < (b.iso ?? "") ? 1 : -1))
     .slice(0, 12)
-    .map((l) => ({ iso: l.iso, date: fmtDateKr(l.iso), book: l.bookTitle, range: l.range, unit: l.unit, note: l.content, body: [] as unknown[] }))
+  const studyLogBodies = new Map(
+    await mapWithConcurrency(studyLogCandidates, 6, async (l) => [l.id, await readPageBodyBlocks(l.id)] as const),
+  )
+  const study_logs = studyLogCandidates
+    .map((l) => ({ iso: l.iso, date: fmtDateKr(l.iso), book: l.bookTitle, range: l.range, unit: l.unit, note: l.content, body: studyLogBodies.get(l.id) ?? [] }))
 
   const activityPages = await shareQueriedPages(
     await queryAllPages(DS_STUDY_ACTIVITY, {

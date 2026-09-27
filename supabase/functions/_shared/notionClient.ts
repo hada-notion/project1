@@ -194,6 +194,32 @@ export async function getPage(pageId: string) {
 	return res.json()
 }
 
+// 페이지 "본문"(블록) 목록을 커서를 따라가며 가져온다. 학습기록 페이지 본문을 학부모 리포트
+// 피드에 부록으로 보여주는 데 쓴다 (readPageBodyBlocks, reportCacheBuilder.ts). 한 페이지가
+// 비정상적으로 블록이 많은 극단적인 경우까지 대비해, 최대 MAX_PAGES(3페이지 = 최대 300블록)까지만
+// 따라가고 멈춘다 -- 리포트 카드에 쓰기엔 그 이상은 어차피 과하다.
+const BLOCK_CHILDREN_MAX_PAGES = 3
+export async function getBlockChildren(blockId: string): Promise<any[]> {
+	const all: any[] = []
+	let cursor: string | undefined = undefined
+	let pageCount = 0
+	do {
+		const params = new URLSearchParams({ page_size: "100" })
+		if (cursor) params.set("start_cursor", cursor)
+		const res = await fetchWithRetry(`${NOTION_API}/blocks/${blockId}/children?${params.toString()}`, {
+			headers: notionHeaders(),
+		})
+		if (!res.ok) {
+			throw new Error(`get block children ${blockId} failed: ${res.status} ${await res.text()}`)
+		}
+		const data = await res.json()
+		all.push(...(data.results ?? []))
+		cursor = data.has_more ? data.next_cursor : undefined
+		pageCount += 1
+	} while (cursor && pageCount < BLOCK_CHILDREN_MAX_PAGES)
+	return all
+}
+
 export async function updatePageProperties(pageId: string, properties: Record<string, unknown>) {
 	const res = await fetchWithRetry(`${NOTION_API}/pages/${pageId}`, {
 		method: "PATCH",
