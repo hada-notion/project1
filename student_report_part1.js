@@ -445,6 +445,7 @@ let reportPeriod = "week" // "week" | "month" | "day"
 let reportOffset = 0 // 0 = current period, 1 = previous period, etc.
 let reportDayDate = null // used when reportPeriod === "day"
 let bookStatusTab = "진행중" // "진행중" | "완료" | "예정"
+let studyLogFilter = "전체" // "전체" | "학습" | "과제" | "평가" -- 학습기록 탭 필터(디자인 통일 목적, 기본값은 전체)
 // Computes today date in Asia/Seoul time (not UTC) so it is correct before 9am KST.
 function todayIsoInSeoul() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -656,6 +657,10 @@ function renderBookDetail() {
 }
 function setBookStatusTab(status) {
   bookStatusTab = status
+  renderApp()
+}
+function setStudyLogFilter(filter) {
+  studyLogFilter = filter
   renderApp()
 }
 function setRegTab(tab) {

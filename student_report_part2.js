@@ -719,13 +719,20 @@ function renderDetail() {
     study: `
       <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg></span>학습기록 타임라인</h2>
       <div class="section-hint">학습 · 과제 · 평가 기록을 최신순으로 보여줍니다</div>
+      <div class="seg-toggle">
+        <button class="${studyLogFilter === "전체" ? "active" : ""}" onclick="setStudyLogFilter('전체')">전체</button>
+        <button class="${studyLogFilter === "학습" ? "active" : ""}" onclick="setStudyLogFilter('학습')">학습</button>
+        <button class="${studyLogFilter === "과제" ? "active" : ""}" onclick="setStudyLogFilter('과제')">과제</button>
+        <button class="${studyLogFilter === "평가" ? "active" : ""}" onclick="setStudyLogFilter('평가')">평가</button>
+      </div>
       <div class="feed-narrow-wrap">
       ${(() => {
         const items = []
         studyLogs.forEach((l) => items.push({ type: "학습", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`, date: l.date, title: [l.book, l.range].filter(Boolean).join(" · ") || "학습 기록", unit: l.unit, note: l.note, photo: l.photo, body: l.body, book: l.book }))
         homework.forEach((h) => items.push({ type: "과제", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>`, date: h.date || h.due, title: [h.book, h.range].filter(Boolean).join(" · "), unit: h.unit, note: h.note, pill: h.status, pillTone: homeworkPillTone(h.status), book: h.book }))
         tests.forEach((t) => items.push({ type: "평가", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`, date: t.date, title: [t.book, t.range].filter(Boolean).join(" · "), unit: t.unit, note: t.note, pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), book: t.book }))
-        const sorted = items.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+        const filtered = studyLogFilter === "전체" ? items : items.filter((it) => it.type === studyLogFilter)
+        const sorted = filtered.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
         const groups = []
         sorted.forEach((l) => {
           const last = groups[groups.length - 1]
