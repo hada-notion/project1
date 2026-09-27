@@ -579,9 +579,9 @@ body.has-tabbar .reg-tab-content { padding-bottom: calc(96px + env(safe-area-ins
 body.has-tabbar .global-sync-toast { bottom: calc(130px + env(safe-area-inset-bottom, 0px)); }
 .schedule-cal-wrap { width: 100%; margin: 0 auto; max-width: min(var(--content-w), 68vh); overflow: hidden; }
 .attendance-cal-wrap { width: 100%; margin: 0 auto; max-width: min(var(--content-w), 62vh); overflow: hidden; transition: max-width 0.24s ease; }
-/* 학습기록 탭의 피드(기록 카드 목록)만 좁고 가운데 정렬되게 보여준다. 제목/안내문은 다른
-   탭들과 동일하게 원래 폭(reg-tab-content)을 그대로 쓴다. */
-.study-narrow-wrap { width: 100%; max-width: 640px; margin: 0 auto; }
+/* 학습기록·보고서 탭의 본문(피드/카드들)만 좁고 가운데 정렬되게 보여준다. 제목/안내문은
+   다른 탭들과 동일하게 원래 폭(reg-tab-content)을 그대로 쓴다. */
+.feed-narrow-wrap { width: 100%; max-width: 640px; margin: 0 auto; }
 
 body.reg-expanded .attendance-cal-wrap { max-width: min(var(--content-w), 43vh); }
 body.reg-expanded .attendance-calendar { padding: clamp(6px, min(3vw, 2.2vh), 18px); }

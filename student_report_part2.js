@@ -526,6 +526,7 @@ function buildReportTabHtml(r) {
     return `
       <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg></span>보고서</h2>
       <div class="section-hint">주간·월간·일간 학습 리포트를 확인하세요</div>
+      <div class="feed-narrow-wrap">
       ${segToggleHtml}
       <div class="cal-month-nav">
         <button class="cal-nav-btn" ${dayDate <= reportDayEarliest() ? "disabled" : ""} onclick="navigateReportDay(1)">‹</button>
@@ -536,11 +537,13 @@ function buildReportTabHtml(r) {
         </div>
       </div>
       ${buildDailyBodyHtml(r, dayDate)}
+      </div>
     `
   }
   return `
     <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg></span>보고서</h2>
     <div class="section-hint">주간·월간·일간 학습 리포트를 확인하세요</div>
+    <div class="feed-narrow-wrap">
     ${segToggleHtml}
     <div class="cal-month-nav">
       <button class="cal-nav-btn" ${reportOffset >= (reportPeriod === "week" ? REPORT_WEEK_LOOKBACK : REPORT_MONTH_LOOKBACK) ? "disabled" : ""} onclick="navigateReportPeriod(1)">‹</button>
@@ -573,6 +576,7 @@ function buildReportTabHtml(r) {
         const matched = reportComments.filter((c) => c.kind === kind && c.start && (c.end || c.start) >= rangeStart && c.start <= rangeEnd)
         return matched.length ? matched.map((c) => `<div class="list-item"><div>${esc(c.comment)}</div></div>`).join("") : `<div class="list-item empty-hint">아직 등록된 한마디가 없어요</div>`
       })()}
+    </div>
     </div>
   `
 }
@@ -713,9 +717,9 @@ function renderDetail() {
       <div class="attendance-cal-wrap" id="reg-cal-area">${buildRegCalendarHtml(r, calMode)}</div>
     `,
     study: `
-      <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg></span>진도 학습기록 타임라인</h2>
+      <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg></span>학습기록 타임라인</h2>
       <div class="section-hint">학습 · 과제 · 평가 기록을 최신순으로 보여줍니다</div>
-      <div class="study-narrow-wrap">
+      <div class="feed-narrow-wrap">
       ${(() => {
         const items = []
         studyLogs.forEach((l) => items.push({ type: "학습", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`, date: l.date, title: [l.book, l.range].filter(Boolean).join(" · ") || "학습 기록", unit: l.unit, note: l.note, photo: l.photo, body: l.body, book: l.book }))
