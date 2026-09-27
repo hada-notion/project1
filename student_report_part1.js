@@ -567,7 +567,7 @@ function basicInfoBodyHtml() {
     <div class="info-detail-row"><span class="label">학년</span><span>${esc(s.grade)}</span></div>
     <div class="info-detail-row"><span class="label">성별</span><span>${esc(s.gender)}</span></div>
     <div class="info-detail-row"><span class="label">생년월일</span><span>${esc(s.birthdate)}</span></div>
-    <div class="info-detail-row"><span class="label">형제자매</span><span>${s.siblings.length ? s.siblings.map((sib) => sib.token ? `<a href="?token=${encodeURIComponent(sib.token)}" class="sibling-link">${esc(sib.name)}</a>` : esc(sib.name)).join(", ") : "-"}</span></div>
+    <div class="info-detail-row"><span class="label">형제자매</span><span>${s.siblings.length ? s.siblings.map((sib) => sib.token ? `<a href="?token=${encodeURIComponent(sib.token)}" class="sibling-link">${esc(sib.name)}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>` : esc(sib.name)).join(", ") : "-"}</span></div>
     <div class="info-detail-row"><span class="label">학생 연락처</span><span>${esc(s.student_phone)}</span></div>
     <div class="info-detail-row"><span class="label">어머니 연락처</span><span>${esc(s.mother_phone)}</span></div>
     <div class="info-detail-row"><span class="label">아버지 연락처</span><span>${esc(s.father_phone)}</span></div>
