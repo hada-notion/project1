@@ -84,6 +84,16 @@ export async function upsertAttendanceRows(rows: AttendanceRow[]): Promise<void>
 // 재동기화(send-report)에서 사용한다. 대상이 등록 1건으로 한정되어 있어 전체 등록 수가 늘어나도
 // 이 함수 한 번의 조회 범위는 커지지 않는다. (2026-09-26: 함께 쓰던 야간 점검
 // nightly-report-sync-audit는 매시간 증분 동기화·발송 직전 강제 재동기화와 중복되어 삭제됨.)
+//
+// [FIX, 2026-09-27] 이 함수는 Notion에서 "등록"이 이 학생인 출석을 매번 새로 전부 가져오므로, 그
+// 목록에 없는(= Notion에서 삭제된) 기존 attendance_records 행도 여기서 바로 감지해서 지울 수 있다.
+// 전에는 upsert만 하고 삭제는 전혀 하지 않아서, Notion에서 출석/수업을 삭제해도(버튼이든 직접
+// 트래시로 보내든) attendance_records에는 그 행이 그대로 남았다 -- 워크스페이스 전체를 훑는 일일
+// reconcile cron(sync-attendance mode:"reconcile")이 돌기 전까지는 학부모 리포트 캘린더에 이미
+// 지운 수업이 계속 보이는 원인이었다(사용자 보고, 2026-09-27: 금요일 수업을 삭제했는데 캘린더에서
+// 안 사라짐 -- "학생 페이지 동기화" 버튼도 이 함수를 거치므로 강제 동기화로도 못 고쳐졌음). 이
+// 함수는 이미 등록 1건으로 범위가 좁아 전체 reconcile처럼 무겁지 않으므로, 매번 같은 등록의 기존
+// 행과 diff해서 지우는 것을 기본 동작으로 만든다.
 export async function syncAttendanceForRegistration(registrationId: string): Promise<number> {
   const pages = await queryAllPages(DS_ATTENDANCE, {
     property: "등록",
@@ -95,7 +105,27 @@ export async function syncAttendanceForRegistration(registrationId: string): Pro
     if (row) rows.push(row)
   }
   await upsertAttendanceRows(rows)
+
+  const freshIds = new Set(rows.map((r) => r.notion_page_id))
+  const existingIds = await selectAttendanceIdsByRegistrationId(registrationId)
+  const idsToDelete = Array.from(existingIds).filter((id) => !freshIds.has(id))
+  if (idsToDelete.length > 0) await deleteAttendanceRowsByIds(idsToDelete)
+
   return rows.length
+}
+
+// 위 syncAttendanceForRegistration의 삭제 감지용: 이 등록에 대해 Supabase에 이미 저장된
+// notion_page_id 목록만 가져온다 (전체 워크스페이스를 훑는 selectAllAttendanceIds와 달리 등록 1건
+// 범위로 한정되어 가볍다).
+async function selectAttendanceIdsByRegistrationId(registrationId: string): Promise<Set<string>> {
+  requireSupabaseEnv()
+  const res = await fetchSupabaseWithRetry(
+    `${SB_URL}/rest/v1/attendance_records?registration_id=eq.${encodeURIComponent(registrationId)}&select=notion_page_id`,
+    { headers: { apikey: SB_SERVICE_ROLE_KEY, Authorization: `Bearer ${SB_SERVICE_ROLE_KEY}` } },
+  )
+  if (!res.ok) throw new Error(`attendance_records id 목록 조회 실패(등록 범위): ${res.status} ${await res.text()}`)
+  const rows: { notion_page_id: string }[] = await res.json()
+  return new Set(rows.map((r) => r.notion_page_id))
 }
 
 // sync-report-cache가 등록 1건의 리포트를 조립할 때 사용. sinceIso 이후(수업일시 기준) 출석만 가져온다.
