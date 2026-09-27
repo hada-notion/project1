@@ -17,6 +17,28 @@ function pickClassColorEmoji(seed) {
   }
   return CLASS_COLOR_EMOJIS[hash % CLASS_COLOR_EMOJIS.length]
 }
+function seedHash(seed) {
+  const str = String(seed || "")
+  let hash = 0
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * 31 + str.charCodeAt(i)) >>> 0
+  }
+  return hash
+}
+// 통합 시간표에서 클래스마다 서로 다른 색상 배경을 안정적으로 배정한다 (같은 클래스명이면 항상 같은 색).
+const CLASS_COLOR_PALETTE = [
+  { bg: "#f3e8fd", fg: "#7c3aed" },
+  { bg: "#dbeafe", fg: "#1d4ed8" },
+  { bg: "#dcfce7", fg: "#15803d" },
+  { bg: "#ffedd5", fg: "#c2410c" },
+  { bg: "#fee2e2", fg: "#b91c1c" },
+  { bg: "#fef9c3", fg: "#a16207" },
+  { bg: "#ede4da", fg: "#78350f" },
+  { bg: "#e2e8f0", fg: "#475569" },
+]
+function pickClassColorPalette(seed) {
+  return CLASS_COLOR_PALETTE[seedHash(seed) % CLASS_COLOR_PALETTE.length]
+}
 // 노션 "진행상태" 원본값은 "진행 중" / "완료" / "다음 교재"처럼 공백·이모지가 들어갈 수 있어서,
 // 공백과 이모지를 지우고 UI 필터 값(진행중 / 완료 / 예정)으로 매핑한다.
 function normalizeBookStatus(rawStatus) {
@@ -333,11 +355,11 @@ function closeMenu() { document.getElementById("menu").classList.remove("active"
 function renderMenuBody() {
   document.getElementById("menu-body").innerHTML = `
     <div class="menu-item-header ${expandedSection === "basic" ? "active" : ""}" onclick="toggleSection('basic')">
-      <span class="icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg></span><span style="flex:1">기본정보</span><span class="menu-item-chevron">${expandedSection === "basic" ? `<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="17 11 12 6 7 11"></polyline><polyline points="17 18 12 13 7 18"></polyline></svg>` : `<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="7 13 12 18 17 13"></polyline><polyline points="7 6 12 11 17 6"></polyline></svg>`}</span>
+      <span class="icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg></span><span style="flex:1">기본정보</span><span class="menu-item-chevron">${expandedSection === "basic" ? `<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="18 15 12 9 6 15"></polyline></svg>` : `<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>`}</span>
     </div>
     ${expandedSection === "basic" ? `<div class="menu-item-body">${basicInfoBodyHtml()}</div>` : ""}
     <div class="menu-item-header ${expandedSection === "registrations" ? "active" : ""}" onclick="toggleSection('registrations')">
-      <span class="icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></span><span style="flex:1">등록 클래스</span><span class="menu-item-chevron">${expandedSection === "registrations" ? `<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="17 11 12 6 7 11"></polyline><polyline points="17 18 12 13 7 18"></polyline></svg>` : `<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="7 13 12 18 17 13"></polyline><polyline points="7 6 12 11 17 6"></polyline></svg>`}</span>
+      <span class="icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></span><span style="flex:1">등록 클래스</span><span class="menu-item-chevron">${expandedSection === "registrations" ? `<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="18 15 12 9 6 15"></polyline></svg>` : `<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>`}</span>
     </div>
     ${expandedSection === "registrations" ? `<div class="menu-item-body">${registrationsBodyHtml()}</div>` : ""}
   `

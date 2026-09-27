@@ -26,7 +26,10 @@ function buildWeekGridHtml(regs) {
       ${DAYS.map((d) => `
         <div class="week-col">
           <div class="day-label">${d}</div>
-          ${byDay[d].length ? byDay[d].map((s) => `<div class="week-slot"><div class="slot-time">${esc(s.start)}</div>${esc(s.class_name)}</div>`).join("") : ""}
+          ${byDay[d].length ? byDay[d].map((s) => {
+            const p = pickClassColorPalette(s.class_name)
+            return `<div class="week-slot" style="background:${p.bg};color:${p.fg}"><div class="slot-time">${esc(s.start)}</div>${esc(s.class_name)}</div>`
+          }).join("") : ""}
         </div>
       `).join("")}
     </div>
@@ -60,9 +63,9 @@ function renderIntro() {
       </div>
       <div class="snap-section timetable-section" id="timetable-section">
         <button class="hamburger-btn dark" onclick="openMenu()" aria-label="메뉴 열기"><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg></button>
-        <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg></span>통합 시간표</h2>
+        <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"></path></svg></span>통합 시간표</h2>
         <div class="tt-hint">현재 수강중인 반들만 요일별로 합쳐서 보여줍니다</div>
-        ${buildWeekGridHtml(s.registrations)}
+        <div class="tt-card">${buildWeekGridHtml(s.registrations)}</div>
         <div class="up-hint" onclick="scrollToIntro()"><span class="chevron"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="17 11 12 6 7 11"></polyline><polyline points="17 18 12 13 7 18"></polyline></svg></span>이전으로</div>
         <div class="swipe-hint" onclick="scrollToSchedule()">일정 보기<span class="chevron"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="7 13 12 18 17 13"></polyline><polyline points="7 6 12 11 17 6"></polyline></svg></span></div>
       </div>
