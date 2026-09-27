@@ -36,7 +36,8 @@ function todayIsoSeoul(): string {
 // normalizeFeedBody(student_report_part1.js)가 기대하는 { type: "text"|"image"|"video"|"divider", ... }
 // 형태와 그대로 맞춘다. 실제 노션에서 흔히 쓰는 블록(제목1~3/글머리·번호 목록/할 일/인용/콜아웃/
 // 코드/구분선)과 굵게·기울임·취소선·밑줄·인라인 코드·색상 같은 텍스트 서식(annotations)까지 살려서
-// 내려준다. 표/임베드/토글(하위 블록) 등 지원하지 않는 것은 조용히 건너뛴다 -- 리포트 피드는
+// 내려준다. 표(table)도 지원한다. 임베드/토글/동기화 블록(하위 블록 재귀 조회가 필요한 것들)
+// 등은 조용히 건너뛴다 -- 리포트 피드는
 // "기록한 글/사진"만 보여주면 되고, 모든 노션 블록을 완벽히 재현할 필요는 없다. 실제 HTML 조립은
 // (XSS 이스케이프 책임을 한 곳에 두기 위해) 프론트엔드 esc()가 있는 곳에서 한다 -- 여기서는
 // 텍스트와 서식 정보만 구조화해서 내려준다.
@@ -70,11 +71,35 @@ function textBlockItem(type: string, richText: any[] | undefined, extra: Record<
   if (!t) return null
   return { type: "text", style: type, text: t, spans, ...extra }
 }
-function blocksToFeedBody(blocks: any[]): unknown[] {
+async function blocksToFeedBody(blocks: any[]): Promise<unknown[]> {
   const items: unknown[] = []
   for (const b of blocks ?? []) {
     const type = b?.type
     if (!type) continue
+    if (type === "table") {
+      // 표는 자기 자신이 아니라 하위 table_row 블록에 실제 셀 내용이 있으므로 한 단계 더
+      // 가져와야 한다. 표 개수는 본문 하나당 보통 0~2개뿐이라 순차 조회로도 충분하다.
+      let rows: unknown[] = []
+      if (b.has_children) {
+        try {
+          const rowBlocks = await getBlockChildren(b.id)
+          rows = (rowBlocks ?? [])
+            .filter((r: any) => r?.type === "table_row")
+            .map((r: any) => (r.table_row?.cells ?? []).map((cell: any[]) => richTextSpans(cell)))
+        } catch (err) {
+          console.warn(`표 블록의 행 조회 실패 - 건너뜀(${b.id}):`, (err as Error)?.message ?? err)
+        }
+      }
+      if (rows.length) {
+        items.push({
+          type: "table",
+          rows,
+          hasColumnHeader: !!b.table?.has_column_header,
+          hasRowHeader: !!b.table?.has_row_header,
+        })
+      }
+      continue
+    }
     if (type === "image" || type === "video") {
       const media = b[type]
       const url = media?.type === "external" ? media.external?.url : media?.file?.url
@@ -118,7 +143,7 @@ function blocksToFeedBody(blocks: any[]): unknown[] {
 async function readPageBodyBlocks(pageId: string): Promise<unknown[]> {
   try {
     const blocks = await getBlockChildren(pageId)
-    return blocksToFeedBody(blocks)
+    return await blocksToFeedBody(blocks)
   } catch (err) {
     console.warn(`학습기록 본문(블록) 조회 실패 - 빈 본문으로 계속 진행(${pageId}):`, (err as Error)?.message ?? err)
     return []

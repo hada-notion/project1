@@ -130,6 +130,14 @@ function normalizeFeedBody(rawBody) {
         return { type: "video", url: String(b.url), caption: String(b.caption || "") }
       }
       if (b.type === "divider") return { type: "divider" }
+      if (b.type === "table" && Array.isArray(b.rows) && b.rows.length) {
+        return {
+          type: "table",
+          hasColumnHeader: !!b.hasColumnHeader,
+          hasRowHeader: !!b.hasRowHeader,
+          rows: b.rows.map((row) => (Array.isArray(row) ? row.map((cell) => normalizeFeedSpans(cell, "")) : [])),
+        }
+      }
       const t = String(b.text || "").trim()
       if (!t) return null
       return {
@@ -221,6 +229,26 @@ function buildFeedBodyHtml(body) {
       parts.push(`<hr class="feed-divider">`)
       return
     }
+    if (it.type === "table") {
+      flushImages()
+      flushList()
+      const rows = it.rows || []
+      const rowsHtml = rows
+        .map((cells, ri) => {
+          const isHeaderRow = it.hasColumnHeader && ri === 0
+          const cellsHtml = cells
+            .map((cellSpans, ci) => {
+              const isHeaderCol = it.hasRowHeader && ci === 0
+              const tag = isHeaderRow || isHeaderCol ? "th" : "td"
+              return `<${tag}>${renderFeedSpans(cellSpans)}</${tag}>`
+            })
+            .join("")
+          return `<tr>${cellsHtml}</tr>`
+        })
+        .join("")
+      parts.push(`<div class="feed-table-wrap"><table class="feed-table">${rowsHtml}</table></div>`)
+      return
+    }
     flushImages()
     const style = it.style || ""
     if (style === "bulleted_list_item" || style === "numbered_list_item") {
@@ -234,6 +262,7 @@ function buildFeedBodyHtml(body) {
     if (style === "heading_1") parts.push(`<div class="feed-heading feed-h1">${renderFeedSpans(it.spans)}</div>`)
     else if (style === "heading_2") parts.push(`<div class="feed-heading feed-h2">${renderFeedSpans(it.spans)}</div>`)
     else if (style === "heading_3") parts.push(`<div class="feed-heading feed-h3">${renderFeedSpans(it.spans)}</div>`)
+    else if (style === "heading_4") parts.push(`<div class="feed-heading feed-h4">${renderFeedSpans(it.spans)}</div>`)
     else if (style === "quote") parts.push(`<div class="feed-quote">${renderFeedSpans(it.spans)}</div>`)
     else if (style === "to_do") parts.push(`<div class="feed-todo${it.checked ? " checked" : ""}"><span class="feed-todo-box">${it.checked ? "☑" : "☐"}</span><span>${renderFeedSpans(it.spans)}</span></div>`)
     else if (style === "callout") parts.push(`<div class="feed-callout">${it.icon ? `<span class="feed-callout-icon">${esc(it.icon)}</span>` : ""}<span>${renderFeedSpans(it.spans)}</span></div>`)
