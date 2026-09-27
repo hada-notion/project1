@@ -328,6 +328,12 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
       const bp = await cachedGetPage(bookId)
       bookTitle = text(bp.properties["교재명"])
     }
+    // [FIX, 2026-09-27] 진도교재/교재를 연결하지 않은 학습기록(그룹 진도 보강 이행 확인 등 단순 기록)은
+    // bookTitle이 비어서 화면에 "학습 기록"이라는 일반 문구로만 표시됐다. 이 경우 학습기록 페이지
+    // 자신의 제목("학습" 속성, 예: "보강 이행")을 대신 써서 실제로 적은 제목이 보이게 한다.
+    if (!bookTitle) {
+      bookTitle = text(lprops["학습"])
+    }
     return { id: lp.id, category, iso, content, range, unit, bookTitle }
   }
   const logDetails = await Promise.all(logPages.map(readLogDetail))
