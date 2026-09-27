@@ -33,11 +33,42 @@ function todayIsoSeoul(): string {
 }
 
 // 학습기록 페이지 "본문"(블록)을 학부모 리포트 피드용 부록으로 변환한다. 프론트엔드
-// normalizeFeedBody(student_report_part1.js)가 기대하는 { type: "text"|"image"|"video", ... }
-// 형태와 그대로 맞춘다. 지원하지 않는 블록 타입(표, 임베드 등)은 조용히 건너뛴다 -- 리포트 피드는
-// "기록한 글/사진"만 보여주면 되고, 모든 노션 블록 타입을 완벽히 재현할 필요는 없다.
+// normalizeFeedBody(student_report_part1.js)가 기대하는 { type: "text"|"image"|"video"|"divider", ... }
+// 형태와 그대로 맞춘다. 실제 노션에서 흔히 쓰는 블록(제목1~3/글머리·번호 목록/할 일/인용/콜아웃/
+// 코드/구분선)과 굵게·기울임·취소선·밑줄·인라인 코드·색상 같은 텍스트 서식(annotations)까지 살려서
+// 내려준다. 표/임베드/토글(하위 블록) 등 지원하지 않는 것은 조용히 건너뛴다 -- 리포트 피드는
+// "기록한 글/사진"만 보여주면 되고, 모든 노션 블록을 완벽히 재현할 필요는 없다. 실제 HTML 조립은
+// (XSS 이스케이프 책임을 한 곳에 두기 위해) 프론트엔드 esc()가 있는 곳에서 한다 -- 여기서는
+// 텍스트와 서식 정보만 구조화해서 내려준다.
 function richTextPlain(arr: any[] | undefined): string {
   return (arr ?? []).map((t: any) => t?.plain_text ?? "").join("").trim()
+}
+function richTextSpans(arr: any[] | undefined): unknown[] {
+  return (arr ?? [])
+    .map((t: any) => {
+      const spanText = String(t?.plain_text ?? "")
+      if (!spanText) return null
+      const a = t?.annotations ?? {}
+      const color = typeof a.color === "string" && a.color !== "default" ? a.color : undefined
+      const href = t?.href || t?.text?.link?.url || undefined
+      return {
+        text: spanText,
+        bold: !!a.bold,
+        italic: !!a.italic,
+        strikethrough: !!a.strikethrough,
+        underline: !!a.underline,
+        code: !!a.code,
+        color,
+        href,
+      }
+    })
+    .filter(Boolean)
+}
+function textBlockItem(type: string, richText: any[] | undefined, extra: Record<string, unknown> = {}): unknown | null {
+  const spans = richTextSpans(richText)
+  const t = richTextPlain(richText)
+  if (!t) return null
+  return { type: "text", style: type, text: t, spans, ...extra }
 }
 function blocksToFeedBody(blocks: any[]): unknown[] {
   const items: unknown[] = []
@@ -51,10 +82,32 @@ function blocksToFeedBody(blocks: any[]): unknown[] {
       items.push({ type, url: String(url), caption: richTextPlain(media?.caption) })
       continue
     }
+    if (type === "divider") {
+      items.push({ type: "divider" })
+      continue
+    }
+    if (type === "to_do") {
+      const item = textBlockItem(type, b.to_do?.rich_text, { checked: !!b.to_do?.checked })
+      if (item) items.push(item)
+      continue
+    }
+    if (type === "callout") {
+      const icon = b.callout?.icon?.type === "emoji" ? b.callout.icon.emoji : undefined
+      const item = textBlockItem(type, b.callout?.rich_text, icon ? { icon } : {})
+      if (item) items.push(item)
+      continue
+    }
+    if (type === "code") {
+      const item = textBlockItem(type, b.code?.rich_text, { language: String(b.code?.language || "") })
+      if (item) items.push(item)
+      continue
+    }
+    // paragraph / heading_1 / heading_2 / heading_3 / quote / bulleted_list_item / numbered_list_item는
+    // 노션 API에서 블록 타입과 같은 이름의 속성 아래 rich_text를 그대로 두므로 공용 경로로 처리한다.
     const richText = b[type]?.rich_text
     if (Array.isArray(richText)) {
-      const t = richTextPlain(richText)
-      if (t) items.push({ type: "text", text: t, style: type })
+      const item = textBlockItem(type, richText)
+      if (item) items.push(item)
     }
   }
   return items

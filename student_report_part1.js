@@ -93,7 +93,31 @@ function renderLogMetaRows(unit, note, extraRows = []) {
   return unitRow + noteRow + extras
 }
 // 노션 학습기록 "페이지 본문"을 피드용 부록으로 정리한다.
-// Edge Function 이 body: [{ type: "text" | "image", text?, url?, caption? }] 로 내려준다.
+// Edge Function 이 body: [{ type: "text"|"image"|"video"|"divider", text?, spans?, style?, ... }] 로
+// 내려준다. spans는 [{ text, bold, italic, strikethrough, underline, code, color, href }] 형태의
+// 인라인 서식 조각들이다 (없으면 text를 그대로 서식 없이 보여준다).
+function normalizeFeedSpans(rawSpans, fallbackText) {
+  if (!Array.isArray(rawSpans) || !rawSpans.length) {
+    return fallbackText ? [{ text: fallbackText }] : []
+  }
+  return rawSpans
+    .map((s) => {
+      if (!s) return null
+      const t = String(s.text || "")
+      if (!t) return null
+      return {
+        text: t,
+        bold: !!s.bold,
+        italic: !!s.italic,
+        strikethrough: !!s.strikethrough,
+        underline: !!s.underline,
+        code: !!s.code,
+        color: s.color ? String(s.color) : "",
+        href: s.href ? String(s.href) : "",
+      }
+    })
+    .filter(Boolean)
+}
 function normalizeFeedBody(rawBody) {
   if (!Array.isArray(rawBody)) return []
   return rawBody
@@ -105,11 +129,37 @@ function normalizeFeedBody(rawBody) {
       if (b.type === "video" && b.url) {
         return { type: "video", url: String(b.url), caption: String(b.caption || "") }
       }
+      if (b.type === "divider") return { type: "divider" }
       const t = String(b.text || "").trim()
       if (!t) return null
-      return { type: "text", text: t, style: String(b.style || "") }
+      return {
+        type: "text",
+        text: t,
+        style: String(b.style || ""),
+        spans: normalizeFeedSpans(b.spans, t),
+        checked: !!b.checked,
+        icon: b.icon ? String(b.icon) : "",
+        language: b.language ? String(b.language) : "",
+      }
     })
     .filter(Boolean)
+}
+// 인라인 서식(spans)을 안전하게 이스케이프한 HTML로 조립한다 (굵게/기울임/취소선/밑줄/인라인
+// 코드/색상/링크). esc()로 사용자 텍스트를 이스케이프한 뒤에만 태그를 씌우므로 XSS 걱정이 없다.
+function renderFeedSpans(spans) {
+  return (spans || [])
+    .map((s) => {
+      let html = esc(s.text).replace(/\n/g, "<br>")
+      if (s.code) html = `<code>${html}</code>`
+      if (s.bold) html = `<b>${html}</b>`
+      if (s.italic) html = `<i>${html}</i>`
+      if (s.strikethrough) html = `<s>${html}</s>`
+      if (s.underline) html = `<u>${html}</u>`
+      if (s.color) html = `<span class="feed-color-${esc(s.color).replace(/[^a-z_]/g, "")}">${html}</span>`
+      if (s.href) html = `<a href="${esc(s.href)}" target="_blank" rel="noopener noreferrer">${html}</a>`
+      return html
+    })
+    .join("")
 }
 
 // 유튜브/비메오 링크는 iframe 임베드로, 그 외(직접 업로드된 mp4 등)는 <video> 태그로 재생한다.
@@ -130,11 +180,15 @@ function buildFeedVideoHtml(vid) {
 
 // 피드 본문 렌더링: 글 + 사진을 인스타그램 피드처럼 보여준다.
 // 이미지 1장은 크게, 2장 이상은 그리드로 배치한다.
+// 노션 블록 스타일별 렌더링. 글머리/번호 목록은 연속된 항목을 하나의 <ul>/<ol>로 묶어야
+// 진짜 목록처럼 보이므로, 목록 버퍼를 따로 두고 다른 타입이 나오면 그때 한 번에 닫는다.
 function buildFeedBodyHtml(body) {
   const items = normalizeFeedBody(body)
   if (!items.length) return ""
   const parts = []
   let imageBuffer = []
+  let listBuffer = []
+  let listTag = ""
   const flushImages = () => {
     if (!imageBuffer.length) return
     const cls = imageBuffer.length === 1 ? "feed-images single" : "feed-images"
@@ -143,23 +197,54 @@ function buildFeedBodyHtml(body) {
       .join("")}</div>`)
     imageBuffer = []
   }
+  const flushList = () => {
+    if (!listBuffer.length) return
+    parts.push(`<${listTag} class="feed-list">${listBuffer.join("")}</${listTag}>`)
+    listBuffer = []
+    listTag = ""
+  }
   items.forEach((it) => {
     if (it.type === "image") {
+      flushList()
       imageBuffer.push(it)
       return
     }
     if (it.type === "video") {
       flushImages()
+      flushList()
       parts.push(buildFeedVideoHtml(it))
       return
     }
+    if (it.type === "divider") {
+      flushImages()
+      flushList()
+      parts.push(`<hr class="feed-divider">`)
+      return
+    }
     flushImages()
-    if (it.style === "heading") parts.push(`<div class="feed-heading">${esc(it.text)}</div>`)
-    else if (it.style === "bullet") parts.push(`<div class="feed-bullet">${esc(it.text)}</div>`)
-    else if (it.style === "quote") parts.push(`<div class="feed-quote">${esc(it.text)}</div>`)
-    else parts.push(`<div class="feed-para">${esc(it.text)}</div>`)
+    const style = it.style || ""
+    if (style === "bulleted_list_item" || style === "numbered_list_item") {
+      const tag = style === "bulleted_list_item" ? "ul" : "ol"
+      if (listTag && listTag !== tag) flushList()
+      listTag = tag
+      listBuffer.push(`<li>${renderFeedSpans(it.spans)}</li>`)
+      return
+    }
+    flushList()
+    if (style === "heading_1") parts.push(`<div class="feed-heading feed-h1">${renderFeedSpans(it.spans)}</div>`)
+    else if (style === "heading_2") parts.push(`<div class="feed-heading feed-h2">${renderFeedSpans(it.spans)}</div>`)
+    else if (style === "heading_3") parts.push(`<div class="feed-heading feed-h3">${renderFeedSpans(it.spans)}</div>`)
+    else if (style === "quote") parts.push(`<div class="feed-quote">${renderFeedSpans(it.spans)}</div>`)
+    else if (style === "to_do") parts.push(`<div class="feed-todo${it.checked ? " checked" : ""}"><span class="feed-todo-box">${it.checked ? "☑" : "☐"}</span><span>${renderFeedSpans(it.spans)}</span></div>`)
+    else if (style === "callout") parts.push(`<div class="feed-callout">${it.icon ? `<span class="feed-callout-icon">${esc(it.icon)}</span>` : ""}<span>${renderFeedSpans(it.spans)}</span></div>`)
+    else if (style === "code") parts.push(`<pre class="feed-code"><code>${esc(it.text)}</code></pre>`)
+    // 옛 데이터(마이그레이션 전 style="heading"/"bullet")와도 호환되게 유지한다.
+    else if (style === "heading") parts.push(`<div class="feed-heading feed-h3">${renderFeedSpans(it.spans)}</div>`)
+    else if (style === "bullet") parts.push(`<div class="feed-bullet">${renderFeedSpans(it.spans)}</div>`)
+    else parts.push(`<div class="feed-para">${renderFeedSpans(it.spans)}</div>`)
   })
   flushImages()
+  flushList()
   return `<div class="feed-body">${parts.join("")}</div>`
 }
 
