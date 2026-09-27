@@ -692,7 +692,7 @@ function renderDetail() {
       <div class="seg-toggle">
         <button class="${bookStatusTab === "진행중" ? "active" : ""}" onclick="setBookStatusTab('진행중')">진행중인 교재</button>
         <button class="${bookStatusTab === "완료" ? "active" : ""}" onclick="setBookStatusTab('완료')">완료된 교재</button>
-        <button class="${bookStatusTab === "예정" ? "active" : ""}" onclick="setBookStatusTab('예정')">다음교재</button>
+        <button class="${bookStatusTab === "예정" ? "active" : ""}" onclick="setBookStatusTab('예정')">다음 교재</button>
       </div>
       ${(() => {
         const filtered = books.filter((b) => normalizeBookStatus(b.status) === bookStatusTab)
