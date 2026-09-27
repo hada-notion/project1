@@ -51,7 +51,7 @@ function scorePillTone(correct, total) {
 function scorePillText(correct, total) {
   if (!total) return `정답 ${correct ?? 0} / 0`
   const pct = Math.round(((correct ?? 0) / total) * 100)
-  return `${pct >= 100 ? "💯 " : ""}${pct}점 (${correct ?? 0}/${total})`
+  return `${pct}점 (${correct ?? 0}/${total})`
 }
 // 학습기록 카드의 단원·내용은 각각 독립된 줄로 표시한다.
 // 단원/마감/날짜에는 불릿 라벨을 쓰고, 내용은 원문만 그대로 보여준다.
