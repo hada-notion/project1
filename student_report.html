@@ -44,7 +44,7 @@
   :root { --content-w: clamp(560px, 55vw, 820px); --content-w-wide: clamp(640px, 60vw, 1080px); }
 }
 html, body { margin: 0; height: 100%; }
-html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; overflow-y: auto; scrollbar-gutter: stable; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; overflow-y: auto; }
 body { overscroll-behavior-y: none; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
@@ -224,7 +224,7 @@ body {
 
 /* ===== 등록 상세 - 덱스2 스와이프 섹션 ===== */
 .reg-header-section { background: var(--brand-primary); color: var(--brand-on-primary); text-align: center; }
-.reg-header-top { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; max-width: min(var(--content-w-wide), 640px); margin-left: auto; margin-right: auto; }
+.reg-header-top { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .reg-back-btn { flex-shrink: 0; background: transparent; color: var(--brand-on-primary); border: none; width: 44px; height: 44px; padding: 7px; border-radius: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .reg-breadcrumb { display: none; flex: 1; min-width: 0; align-items: center; gap: 4px; font-size: 14px; font-weight: 700; line-height: 1; flex-wrap: nowrap; overflow: hidden; text-align: left; }
 .reg-breadcrumb .crumb { display: inline-flex; align-items: center; line-height: 1; cursor: pointer; opacity: 0.9; white-space: nowrap; }
