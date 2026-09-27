@@ -209,7 +209,7 @@ body {
 .up-hint .chevron svg { width: 100%; height: 100%; display: block; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 /* ===== 등록 상세(메인) 페이지 ===== */
-.detail-page { max-width: var(--content-w-wide); margin: 0 auto; padding: 16px; padding-bottom: 60px; }
+.detail-page { max-width: min(var(--content-w-wide), 640px); margin: 0 auto; padding: 16px; padding-bottom: 60px; }
 .header {
   background: var(--brand-primary);
   color: var(--brand-on-primary);
@@ -224,7 +224,7 @@ body {
 
 /* ===== 등록 상세 - 덱스2 스와이프 섹션 ===== */
 .reg-header-section { background: var(--brand-primary); color: var(--brand-on-primary); text-align: center; }
-.reg-header-top { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.reg-header-top { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; max-width: min(var(--content-w-wide), 640px); margin-left: auto; margin-right: auto; }
 .reg-back-btn { flex-shrink: 0; background: transparent; color: var(--brand-on-primary); border: none; width: 44px; height: 44px; padding: 7px; border-radius: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .reg-breadcrumb { display: none; flex: 1; min-width: 0; align-items: center; gap: 4px; font-size: 14px; font-weight: 700; line-height: 1; flex-wrap: nowrap; overflow: hidden; text-align: left; }
 .reg-breadcrumb .crumb { display: inline-flex; align-items: center; line-height: 1; cursor: pointer; opacity: 0.9; white-space: nowrap; }
@@ -273,7 +273,7 @@ body {
 /* ===== 등록 상세 - 덱스2 하단 탭 방식 ===== */
 .reg-detail-page { min-height: 100vh; background: var(--canvas); padding-bottom: 78px; -webkit-overflow-scrolling: touch; }
 .reg-header-bar { position: sticky; top: 0; z-index: 55; background: var(--brand-primary); color: var(--brand-on-primary); text-align: center; padding: 14px 14px 14px; will-change: padding; }
-.reg-tab-content { max-width: var(--content-w-wide); margin: 0 auto; padding: 18px clamp(4px, 3vw, 16px) 24px; }
+.reg-tab-content { max-width: min(var(--content-w-wide), 640px); margin: 0 auto; padding: 18px clamp(4px, 3vw, 16px) 24px; }
 .reg-tab-content h2 { font-size: 17px; margin: 0 0 4px; color: #333; display: flex; align-items: center; gap: 6px; }
 .reg-tab-content .section-hint { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
 .status-box-row { display: flex; gap: 10px; margin-bottom: 14px; }
@@ -330,7 +330,7 @@ body {
 .attendance-section { background: linear-gradient(160deg, #eef4ff, #dbe9ff); }
 .study-section { background: linear-gradient(160deg, #eefaf1, #dcf3e3); }
 .tasks-section { background: linear-gradient(160deg, #fff2e6, #ffe6d6); }
-.book-cards-wrap { width: 100%; max-width: var(--content-w-wide); }
+.book-cards-wrap { width: 100%; max-width: min(var(--content-w-wide), 640px); }
 .tasks-section .card { max-width: var(--content-w); margin-left: auto; margin-right: auto; }
 
 .card { background: #fff; border-radius: 14px; padding: 18px; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
@@ -503,7 +503,7 @@ body {
 .menu-nav-item { display: flex; align-items: center; gap: 10px; padding: 14px 6px; border-bottom: 1px solid #f2f2f2; font-size: 15px; font-weight: 600; cursor: pointer; }
 .menu-nav-item .icon { font-size: 18px; }
 
-.sub-page { max-width: var(--content-w-wide); margin: 0 auto; padding: 16px; padding-bottom: 60px; }
+.sub-page { max-width: min(var(--content-w-wide), 640px); margin: 0 auto; padding: 16px; padding-bottom: 60px; }
 .sub-page h2 { font-size: 17px; margin: 0 0 4px; color: #333; display: flex; align-items: center; gap: 6px; }
 .sub-page .section-hint { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
 .header-plain { padding: 4px 0 12px; }
@@ -578,9 +578,9 @@ body.has-tabbar .reg-tab-content { padding-bottom: calc(96px + env(safe-area-ins
 .global-sync-toast.show { opacity: 1; transform: translateY(0); }
 body.has-tabbar .global-sync-toast { bottom: calc(130px + env(safe-area-inset-bottom, 0px)); }
 .schedule-cal-wrap { width: 100%; margin: 0 auto; max-width: min(var(--content-w), 68vh); overflow: hidden; }
-.attendance-cal-wrap { width: 100%; margin: 0 auto; max-width: min(var(--content-w), 62vh); overflow: hidden; transition: max-width 0.24s ease; }
+.attendance-cal-wrap { width: 100%; margin: 0 auto; max-width: min(var(--content-w), 640px); overflow: hidden; transition: max-width 0.24s ease; }
 /* 학습기록 탭도 캘린더 탭과 같은 너비로 맞춰서(제목 포함) 좁고 가운데 정렬되게 보여준다 */
-.study-narrow-wrap { width: 100%; max-width: var(--content-w); margin: 0 auto; }
+.study-narrow-wrap { width: 100%; max-width: min(var(--content-w), 640px); margin: 0 auto; }
 
 body.reg-expanded .attendance-cal-wrap { max-width: min(var(--content-w), 43vh); }
 body.reg-expanded .attendance-calendar { padding: clamp(6px, min(3vw, 2.2vh), 18px); }
