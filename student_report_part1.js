@@ -333,11 +333,11 @@ function closeMenu() { document.getElementById("menu").classList.remove("active"
 function renderMenuBody() {
   document.getElementById("menu-body").innerHTML = `
     <div class="menu-item-header ${expandedSection === "basic" ? "active" : ""}" onclick="toggleSection('basic')">
-      <span class="icon">👤</span><span style="flex:1">기본정보</span><span class="menu-item-chevron">${expandedSection === "basic" ? "▲" : "▼"}</span>
+      <span class="icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg></span><span style="flex:1">기본정보</span><span class="menu-item-chevron">${expandedSection === "basic" ? `<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="17 11 12 6 7 11"></polyline><polyline points="17 18 12 13 7 18"></polyline></svg>` : `<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="7 13 12 18 17 13"></polyline><polyline points="7 6 12 11 17 6"></polyline></svg>`}</span>
     </div>
     ${expandedSection === "basic" ? `<div class="menu-item-body">${basicInfoBodyHtml()}</div>` : ""}
     <div class="menu-item-header ${expandedSection === "registrations" ? "active" : ""}" onclick="toggleSection('registrations')">
-      <span class="icon">🏛️</span><span style="flex:1">등록 클래스</span><span class="menu-item-chevron">${expandedSection === "registrations" ? "▲" : "▼"}</span>
+      <span class="icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></span><span style="flex:1">등록 클래스</span><span class="menu-item-chevron">${expandedSection === "registrations" ? `<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="17 11 12 6 7 11"></polyline><polyline points="17 18 12 13 7 18"></polyline></svg>` : `<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="7 13 12 18 17 13"></polyline><polyline points="7 6 12 11 17 6"></polyline></svg>`}</span>
     </div>
     ${expandedSection === "registrations" ? `<div class="menu-item-body">${registrationsBodyHtml()}</div>` : ""}
   `
@@ -463,7 +463,7 @@ function renderBookDetail() {
             <div class="progress-label">진도 ${book.progress}%</div>
           </div>` : ""}
         </div>
-        <h2>📖 학습기록</h2>
+        <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg></span>학습기록</h2>
         <div class="section-hint">이 교재와 관련된 학습 · 과제 · 평가 기록을 최근순으로 보여줍니다</div>
         ${(() => {
           const groups = []

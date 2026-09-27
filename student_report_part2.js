@@ -3,7 +3,7 @@ function renderSchedulePage() {
     <div class="sub-page">
       <div class="header-plain"><button class="back-btn-plain" onclick="goIntro()" aria-label="뒤로가기"><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg></button></div>
       <div class="card">
-        <h2>📅 일정정보</h2>
+        <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg></span>일정정보</h2>
         <div class="view-toggle">
           <button class="${scheduleView === "list" ? "active" : ""}" onclick="setScheduleView('list')">리스트로 보기</button>
           <button class="${scheduleView === "calendar" ? "active" : ""}" onclick="setScheduleView('calendar')">캘린더로 보기</button>
@@ -56,22 +56,22 @@ function renderIntro() {
             </div>
           `).join("")}
         </div>
-        <div class="swipe-hint" onclick="scrollToTimetable()">통합 시간표 보기<span class="chevron">⌄</span></div>
+        <div class="swipe-hint" onclick="scrollToTimetable()">통합 시간표 보기<span class="chevron"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="7 13 12 18 17 13"></polyline><polyline points="7 6 12 11 17 6"></polyline></svg></span></div>
       </div>
       <div class="snap-section timetable-section" id="timetable-section">
         <button class="hamburger-btn dark" onclick="openMenu()" aria-label="메뉴 열기"><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg></button>
-        <h2>🗓️ 통합 시간표</h2>
+        <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg></span>통합 시간표</h2>
         <div class="tt-hint">현재 수강중인 반들만 요일별로 합쳐서 보여줍니다</div>
         ${buildWeekGridHtml(s.registrations)}
-        <div class="up-hint" onclick="scrollToIntro()"><span class="chevron">⌃</span>이전으로</div>
-        <div class="swipe-hint" onclick="scrollToSchedule()">일정 보기<span class="chevron">⌄</span></div>
+        <div class="up-hint" onclick="scrollToIntro()"><span class="chevron"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="17 11 12 6 7 11"></polyline><polyline points="17 18 12 13 7 18"></polyline></svg></span>이전으로</div>
+        <div class="swipe-hint" onclick="scrollToSchedule()">일정 보기<span class="chevron"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="7 13 12 18 17 13"></polyline><polyline points="7 6 12 11 17 6"></polyline></svg></span></div>
       </div>
       <div class="snap-section schedule-section" id="schedule-section">
         <button class="hamburger-btn dark" onclick="openMenu()" aria-label="메뉴 열기"><svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg></button>
-        <h2>📅 일정</h2>
+        <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg></span>일정</h2>
         <div class="section-hint">학원 공지와 상담 일정을 확인하세요</div>
         <div id="schedule-cal-area" style="width:100%">${buildScheduleCalendarHtml()}</div>
-        <div class="up-hint" onclick="scrollToTimetable()"><span class="chevron">⌃</span>이전으로</div>
+        <div class="up-hint" onclick="scrollToTimetable()"><span class="chevron"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="17 11 12 6 7 11"></polyline><polyline points="17 18 12 13 7 18"></polyline></svg></span>이전으로</div>
       </div>
     </div>
   `
@@ -483,7 +483,7 @@ function buildReportTabHtml(r) {
   if (reportPeriod === "day") {
     const dayDate = reportDayDate || MOCK_TODAY
     return `
-      <h2>📊 보고서</h2>
+      <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg></span>보고서</h2>
       <div class="section-hint">주간·월간·일간 학습 리포트를 확인하세요</div>
       ${segToggleHtml}
       <div class="cal-month-nav">
@@ -498,7 +498,7 @@ function buildReportTabHtml(r) {
     `
   }
   return `
-    <h2>📊 보고서</h2>
+    <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg></span>보고서</h2>
     <div class="section-hint">주간·월간·일간 학습 리포트를 확인하세요</div>
     ${segToggleHtml}
     <div class="cal-month-nav">
@@ -522,11 +522,11 @@ function buildReportTabHtml(r) {
       </div>
     </div>
     <div class="card">
-      <h2>📄 평가 기록</h2>
+      <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span>평가 기록</h2>
       ${buildTestTrendChartHtml(computeTestTrendPoints(tests, reportPeriod, reportOffset))}
     </div>
     <div class="card">
-      <h2>💬 선생님 한마디</h2>
+      <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></span>선생님 한마디</h2>
       ${(() => {
         const kind = reportPeriod === "week" ? "주간 보고서" : "월간 보고서"
         const matched = reportComments.filter((c) => c.kind === kind && c.start && (c.end || c.start) >= rangeStart && c.start <= rangeEnd)
@@ -591,7 +591,7 @@ function buildDailyBodyHtml(r, date) {
     </div>
 
     <div class="card">
-      <h2>📖 오늘 학습 내용</h2>
+      <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg></span>오늘 학습 내용</h2>
       ${todaysLogs.length ? todaysLogs.map((l) => `
         <div class="log-row 학습">
           <div class="log-title-row"><div class="log-title">${esc([l.book, l.range].filter(Boolean).join(" · ") || "학습 기록")}</div></div>
@@ -602,7 +602,7 @@ function buildDailyBodyHtml(r, date) {
     </div>
 
     <div class="card">
-      <h2>📝 다음과제</h2>
+      <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg></span>다음과제</h2>
       ${nextHomework ? `
         <div class="log-row 과제">
           <div class="log-title-row"><div class="log-title">${esc([nextHomework.book, nextHomework.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${homeworkPillTone(nextHomework.status)}">${esc(nextHomework.status)}</span></div>
@@ -612,7 +612,7 @@ function buildDailyBodyHtml(r, date) {
     </div>
 
     <div class="card">
-      <h2>📄 평가</h2>
+      <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span>평가</h2>
       ${todaysTests.length ? todaysTests.map((t) => `
         <div class="log-row 평가">
           <div class="log-title-row"><div class="log-title">${esc([t.book, t.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${scorePillTone(t.correct ?? 0, t.total ?? 0)}">${scorePillText(t.correct ?? 0, t.total ?? 0)}</span></div>
@@ -624,7 +624,7 @@ function buildDailyBodyHtml(r, date) {
     </div>
 
     <div class="card">
-      <h2>💬 선생님 코멘트</h2>
+      <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></span>선생님 코멘트</h2>
       ${comment ? `<div class="list-item"><div>${esc(comment.text)}</div></div>` : '<div class="empty">등록된 코멘트가 없습니다.</div>'}
     </div>
   `
@@ -647,7 +647,7 @@ function renderDetail() {
   if (!tabs.some((t) => t.id === regTab)) regTab = "books"
   const tabBodies = {
     books: `
-      <h2>📚 진도 교재</h2>
+      <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></span>진도 교재</h2>
       <div class="section-hint">진행상황별로 교재를 볼 수 있어요</div>
       <div class="seg-toggle">
         <button class="${bookStatusTab === "진행중" ? "active" : ""}" onclick="setBookStatusTab('진행중')">진행중인 교재</button>
@@ -668,7 +668,7 @@ function renderDetail() {
       })()}
     `,
     calendar: `
-      <h2>🗓️ 캘린더</h2>
+      <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg></span>캘린더</h2>
       <div class="section-hint">날짜를 탭하면 데일리 리포트를 볼 수 있어요</div>
       <div class="seg-toggle">
         <button class="${calMode === "attendance" ? "active" : ""}" onclick="setCalMode('attendance')">출결 현황</button>
@@ -677,7 +677,7 @@ function renderDetail() {
       <div class="attendance-cal-wrap" id="reg-cal-area">${buildRegCalendarHtml(r, calMode)}</div>
     `,
     study: `
-      <h2>📖 진도 학습기록 타임라인</h2>
+      <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg></span>진도 학습기록 타임라인</h2>
       <div class="section-hint">학습 · 과제 · 평가 기록을 최신순으로 보여줍니다</div>
       ${(() => {
         const items = []
