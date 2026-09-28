@@ -637,13 +637,20 @@ function buildDailyBodyHtml(r, date) {
 
     <div class="card">
       <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg></span>오늘 학습 내용</h2>
-      ${todaysLogs.length ? todaysLogs.map((l) => `
+      ${todaysLogs.length ? todaysLogs.map((l) => {
+        const meta = renderLogMetaRows(l.unit, l.note)
+        const bodyHtml = buildFeedBodyHtml(l.body)
+        const hasExtra = !!bodyHtml
+        const chevronBtn = hasExtra ? `<button type="button" class="log-extra-chevron" onclick="toggleLogExtra(this)" aria-label="펼치기"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>` : ""
+        const metaHtml = (meta || chevronBtn) ? `<div class="log-meta">${meta}${chevronBtn}</div>` : ""
+        const extraHtml = hasExtra ? `<div class="log-extra">${bodyHtml}</div>` : ""
+        return `
         <div class="log-row 학습">
           <div class="log-title-row"><div class="log-title">${esc([l.book, l.range].filter(Boolean).join(" · ") || "학습 기록")}</div></div>
-          ${renderLogMetaRows(l.unit, l.note)}
-          ${buildFeedBodyHtml(l.body)}
+          ${metaHtml}${extraHtml}
         </div>
-      `).join("") : '<div class="empty">이 날짜에 기록된 학습 내용이 없습니다.</div>'}
+      `
+      }).join("") : '<div class="empty">이 날짜에 기록된 학습 내용이 없습니다.</div>'}
     </div>
 
     <div class="card">
