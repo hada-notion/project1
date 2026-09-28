@@ -78,32 +78,30 @@ function scorePillText(correct, total) {
 // 학습기록 카드의 단원·내용은 각각 독립된 줄로 표시한다.
 // 단원은 "1-1." 같은 번호 패턴 앞에서 잘라 하나씩 별도 줄(불릿)로 보여준다 (단원이 하나뿐이어도 동일하게 처리).
 // 마감/날짜에도 같은 불릿 스타일을 쓰고, 내용은 원문만 그대로 보여준다.
-// 줄 수가 많아지면(단원 여러 개 + 내용 + 보강 등) 아이콘(44px) 높이보다 아래로 삐져나와
-// 카드가 어색해 보이므로, 앞 2줄만 기본으로 보이고 나머지는 "더보기"로 접어둔다.
-const LOG_META_COLLAPSE_THRESHOLD = 2
 function renderLogMetaRows(unit, note, extraRows = []) {
-  const unitParts = unit
-    ? unit.split(/(?=\d+-\d+\.)/).map((s) => s.trim()).filter(Boolean)
-    : []
-  const rows = unitParts.map((part) => `<div class="log-context">${esc(`\u00a0\u00a0• ${part}`)}</div>`)
-  if (note) rows.push(`<div class="log-note">${esc(note)}</div>`)
-  extraRows
+  const unitRow = unit
+    ? unit
+        .split(/(?=\d+-\d+\.)/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((part) => `<div class="log-context">${esc(`\u00a0\u00a0• ${part}`)}</div>`)
+        .join("")
+    : ""
+  const noteRow = note ? `<div class="log-note">${esc(note)}</div>` : ""
+  const extras = extraRows
     .filter(Boolean)
-    .forEach((row) => rows.push(`<div class="log-context">${esc(`\u00a0\u00a0• ${row}`)}</div>`))
-  if (!rows.length) return ""
-  if (rows.length <= LOG_META_COLLAPSE_THRESHOLD) return rows.join("")
-  const visible = rows.slice(0, LOG_META_COLLAPSE_THRESHOLD).join("")
-  const hidden = rows.slice(LOG_META_COLLAPSE_THRESHOLD).join("")
-  return `${visible}<div class="log-meta-more">${hidden}</div><button type="button" class="log-meta-toggle" onclick="toggleLogMeta(this)">더보기 ▾</button>`
+    .map((row) => `<div class="log-context">${esc(`\u00a0\u00a0• ${row}`)}</div>`)
+    .join("")
+  return unitRow + noteRow + extras
 }
-// renderLogMetaRows()가 접어둔 나머지 줄을 펼치고/접는다. 버튼 바로 앞 형제(.log-meta-more)를
-// 보여주거나 숨기고, 버튼 문구도 그에 맞춰 바꾼다.
-function toggleLogMeta(btn) {
-  const more = btn.previousElementSibling
-  if (!more) return
-  const show = !more.classList.contains("show")
-  more.classList.toggle("show", show)
-  btn.textContent = show ? "접기 ▴" : "더보기 ▾"
+// 학습기록 카드의 본문(사진/노션 기록)은 기본으로 접어두고, "기록 보기"를 눌러야 펼쳐진다.
+// 버튼 바로 다음 형제(.log-extra)를 보여주거나 숨기고, 버튼 문구도 그에 맞춰 바꾼다.
+function toggleLogExtra(btn) {
+  const extra = btn.nextElementSibling
+  if (!extra) return
+  const show = !extra.classList.contains("show")
+  extra.classList.toggle("show", show)
+  btn.textContent = show ? "접기 ▴" : "기록 보기 ▾"
 }
 // 노션 학습기록 "페이지 본문"을 피드용 부록으로 정리한다.
 // Edge Function 이 body: [{ type: "text"|"image"|"video"|"divider", text?, spans?, style?, ... }] 로
@@ -656,7 +654,7 @@ function renderBookDetail() {
                     ${renderLogMetaRows(l.unit, l.note)}
                   </div>
                 </div>
-                ${(l.photo || (l.body && buildFeedBodyHtml(l.body))) ? `<div class="log-divider"></div><div class="log-extra">${l.photo ? `<img class="log-photo" src="${esc(l.photo)}" />` : ""}${buildFeedBodyHtml(l.body)}</div>` : ""}
+                ${(l.photo || (l.body && buildFeedBodyHtml(l.body))) ? `<div class="log-divider"></div><button type="button" class="log-extra-toggle" onclick="toggleLogExtra(this)">기록 보기 ▾</button><div class="log-extra">${l.photo ? `<img class="log-photo" src="${esc(l.photo)}" />` : ""}${buildFeedBodyHtml(l.body)}</div>` : ""}
                 </div>
               `).join("")}
             </div>
