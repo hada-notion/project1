@@ -605,9 +605,13 @@ function formatDateLabel(date) {
   return `${y}년 ${m}월 ${d}일 (${weekday})`
 }
 
-function findNextHomework(r, date) {
-  const upcoming = (r.homework || []).filter((h) => h.due && h.due >= date).sort((a, b) => (a.due || "").localeCompare(b.due || ""))
-  return upcoming[0] || null
+// 다음과제 카드는 "마감이 가장 이른, 아직 지나지 않은 과제"를 보여준다. 같은 날짜에 마감인
+// 과제가 여러 건이면(교재별로 각각 내주는 경우) 전부 함께 보여줘야 한다.
+function findNextHomeworkItems(r, date) {
+  const upcoming = (r.homework || []).filter((h) => h.due && h.due >= date)
+  if (!upcoming.length) return []
+  const minDue = upcoming.reduce((min, h) => (h.due < min ? h.due : min), upcoming[0].due)
+  return upcoming.filter((h) => h.due === minDue)
 }
 
 function findLatestComment(r, date) {
@@ -616,10 +620,15 @@ function findLatestComment(r, date) {
 
 function buildDailyBodyHtml(r, date) {
   const attendanceRow = (r.attendance_rows || []).find((a) => a.date === date)
-  const homeworkDayEntry = (r.homework_days || []).find((h) => h.date === date)
-  const homeworkStatusInfo = (status) => (status === "완료" ? { text: "제출", cls: "제출" } : status === "부분완료" ? { text: "부분완료", cls: "부분완료" } : { text: "미제출", cls: "미제출" })
+  // 과제상태는 "그날 수업이 있었는지"가 아니라 "그날이 마감일인 과제가 있는지" 기준으로 판단한다.
+  const dueTodayHomework = (r.homework || []).filter((h) => String(h.due || "").slice(0, 10) === date)
+  const homeworkStatusToday = dueTodayHomework.length
+    ? dueTodayHomework.every((h) => h.status === "제출") ? { text: "제출", cls: "제출" }
+      : dueTodayHomework.some((h) => h.status === "제출") ? { text: "부분완료", cls: "부분완료" }
+      : { text: "미제출", cls: "미제출" }
+    : null
   const todaysLogs = (r.study_logs || []).filter((l) => l.date === date)
-  const nextHomework = findNextHomework(r, date)
+  const nextHomeworkItems = findNextHomeworkItems(r, date)
   const todaysTests = (r.tests || []).filter((t) => String(t.date || "").slice(0, 10) === date)
   const comment = findLatestComment(r, date)
 
@@ -629,9 +638,9 @@ function buildDailyBodyHtml(r, date) {
         <div class="label"><span class="inline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg></span>출석상태</div>
         <span class="badge ${esc(attendanceRow ? attendanceRow.status : "해당 없음")}">${esc(attendanceRow ? attendanceRow.status : "해당 없음")}</span>
       </div>
-      <div class="status-box${homeworkDayEntry ? " clickable" : ""}"${homeworkDayEntry ? ` onclick="showHomeworkDayModal('${date}')"` : ""}>
+      <div class="status-box${homeworkStatusToday ? " clickable" : ""}"${homeworkStatusToday ? ` onclick="showHomeworkDayModal('${date}')"` : ""}>
         <div class="label"><span class="inline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg></span>과제상태</div>
-        ${homeworkDayEntry ? (() => { const info = homeworkStatusInfo(homeworkDayEntry.status); return `<span class="badge ${info.cls}">${info.text}</span>` })() : `<span class="badge">해당 없음</span>`}
+        ${homeworkStatusToday ? `<span class="badge ${homeworkStatusToday.cls}">${homeworkStatusToday.text}</span>` : `<span class="badge">해당 없음</span>`}
       </div>
     </div>
 
@@ -655,12 +664,12 @@ function buildDailyBodyHtml(r, date) {
 
     <div class="card">
       <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg></span>다음과제</h2>
-      ${nextHomework ? `
+      ${nextHomeworkItems.length ? nextHomeworkItems.map((nextHomework) => `
         <div class="log-row 과제">
           <div class="log-title-row"><div class="log-title">${esc([nextHomework.book, nextHomework.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${homeworkPillTone(nextHomework.status)}">${esc(nextHomework.status)}</span></div>
           ${renderLogMetaRows(nextHomework.unit, nextHomework.note, [`마감: ${withDow(nextHomework.due)}`])}
         </div>
-      ` : '<div class="empty">예정된 과제가 없습니다.</div>'}
+      `).join("") : '<div class="empty">예정된 과제가 없습니다.</div>'}
     </div>
 
     <div class="card">

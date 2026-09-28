@@ -517,7 +517,7 @@ function openRegistration(token) {
   selectedBookTitle = null
   calMode = "attendance"
   regCalMonthIndex = 0
-  reportPeriod = "week"
+  reportPeriod = "day"
   reportOffset = 0
   reportDayDate = null
   view = "detail"

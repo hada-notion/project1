@@ -399,6 +399,10 @@ body {
    그대로 쓰면 어긋난다. 행 안쪽으로만 살짝 여백을 주는 형태로 대신한다. */
 .log-row .log-extra { padding: 8px 10px; margin: 6px 0 0; border-radius: 8px; }
 .log-row .log-extra.show { border-radius: 8px; }
+/* 보고서(일간) 화면에서 학습/과제/평가 항목의 제목→첫 줄 간격을 통일한다. 과제·평가 항목은
+   renderLogMetaRows()가 .log-title-row 바로 뒤에 붙어 margin-bottom: 4px 만 적용되는데,
+   학습 항목만 .log-meta 래퍼(margin-top: 10px)를 추가로 거쳐 간격이 더 벌어져 보였다. */
+.log-row .log-meta { margin-top: 0; }
 .log-icon-emoji { line-height: 1; height: 17px; width: 17px; display: flex; align-items: center; justify-content: center; }
 .log-icon-emoji svg { width: 100%; height: 100%; display: block; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .log-icon-label { font-size: 9px; font-weight: 700; line-height: 1; height: 10px; width: 100%; display: flex; align-items: center; justify-content: center; letter-spacing: -0.2px; }
