@@ -70,10 +70,14 @@ function makePageCache() {
   }
 }
 
-async function fetchClassNameMap(): Promise<Map<string, string>> {
-  const rows = await queryAllPages(DS_CLASS)
+// [CHANGED, 2026-09-28] 서류를 조회할 때마다 클래스(학원) DB 전체를 훑는 게 느려서(사용자 체감
+// 로딩 지연 원인), 실제로 등장하는 등록 건들에 연결된 클래스만 getPage로 골라 가져오도록 바꿨다.
+// 클래스 전체 목록이 필요한 건 "동기화" 버튼(action:"meta")뿐이다.
+async function fetchClassNamesFor(registrations: any[], getCachedPage: (id: string) => Promise<any>): Promise<Map<string, string>> {
+  const classIds = [...new Set(registrations.map((r) => firstRelationId(r, PROP_REG_CLASS)).filter((id): id is string => !!id))]
+  const pages = await Promise.all(classIds.map((id) => getCachedPage(id)))
   const map = new Map<string, string>()
-  for (const row of rows) map.set(row.id, titleOf(row, PROP_CLASS_TITLE))
+  classIds.forEach((id, i) => map.set(id, pages[i] ? titleOf(pages[i], PROP_CLASS_TITLE) : ""))
   return map
 }
 
@@ -123,7 +127,9 @@ async function buildAttendance(body: any) {
   const { periodStart, periodEnd } = body
   if (!periodStart || !periodEnd) throw new Error("periodStart/periodEnd가 필요합니다")
   const filter = buildRegistrationFilter({ ...body, periodStart: undefined, periodEnd: undefined })
-  const [registrations, classNameMap] = await Promise.all([queryAllPages(DS_REGISTRATION, filter), fetchClassNameMap()])
+  const registrations = await queryAllPages(DS_REGISTRATION, filter)
+  const getCachedPage = makePageCache()
+  const classNameMap = await fetchClassNamesFor(registrations, getCachedPage)
   const regIds = registrations.map((r: any) => r.id)
   const attendanceRows = await queryAttendanceForRegistrations(regIds, periodStart, periodEnd)
 
@@ -157,8 +163,9 @@ async function buildAttendance(body: any) {
 
 async function buildStudentRegister(body: any) {
   const filter = buildRegistrationFilter(body)
-  const [registrations, classNameMap] = await Promise.all([queryAllPages(DS_REGISTRATION, filter), fetchClassNameMap()])
+  const registrations = await queryAllPages(DS_REGISTRATION, filter)
   const getCachedPage = makePageCache()
+  const classNameMap = await fetchClassNamesFor(registrations, getCachedPage)
   const rows = await Promise.all(
     registrations.map(async (reg: any) => {
       const studentId = firstRelationId(reg, PROP_REG_STUDENT)

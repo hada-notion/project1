@@ -119,8 +119,10 @@
         <div class="field"><label>클래스</label><select id="f-class"><option value="">전체</option></select></div>
         <div class="field"><label>학생</label><select id="f-student"><option value="">전체</option></select></div>
         <div class="field"><label>검색(이름)</label><input type="text" id="f-search" placeholder="학생 이름"></div>
+        <button id="btn-sync" title="클래스·학생 명단만 빠르게 불러옵니다">🔄 명단 동기화</button>
         <button id="btn-query">조회</button>
       </div>
+      <div id="sync-status" style="margin-top:6px;font-size:12px;color:var(--text-secondary)">클래스·학생 명단이 아직 동기화되지 않았습니다. [🔄 명단 동기화]를 먼저 눌러주세요.</div>
       <div id="doc-status" style="margin-top:8px"></div>
     </div>
 
@@ -153,7 +155,7 @@
   async function showAppScreen() {
     document.getElementById("login-screen").style.display = "none";
     document.getElementById("app-screen").style.display = "flex";
-    await loadMeta();
+    loadMetaFromCache();
     setDefaultDates();
   }
   document.getElementById("logout-btn").addEventListener("click", () => {
@@ -220,19 +222,61 @@
     document.getElementById("f-end").value = last;
   }
 
-  async function loadMeta() {
+  // [NEW] 클래스(학원) DB·등록(학원) DB 전체를 훑는 건 느리므로, 조회할 때마다 자동으로 하지
+  // 않고 [🔄 명단 동기화] 버튼을 눌렀을 때만 한 번 불러와 localStorage에 캐시해둔다. 캐시가
+  // 있으면 재접속 시에도 즉시 드롭다운을 채운다 (실제 수강 등록 변경 시에는 다시 동기화 필요).
+  const META_CACHE_KEY = "legal_docs_meta_cache";
+
+  function fillMetaSelects(meta) {
+    const classSel = document.getElementById("f-class");
+    const studentSel = document.getElementById("f-student");
+    classSel.innerHTML = '<option value="">전체</option>';
+    studentSel.innerHTML = '<option value="">전체</option>';
+    (meta.classes || []).forEach((c) => {
+      const opt = document.createElement("option"); opt.value = c.id; opt.textContent = c.name; classSel.appendChild(opt);
+    });
+    (meta.students || []).forEach((s) => {
+      const opt = document.createElement("option"); opt.value = s.id; opt.textContent = s.name; studentSel.appendChild(opt);
+    });
+  }
+
+  function setSyncStatusText(savedAt) {
+    const el = document.getElementById("sync-status");
+    if (!savedAt) {
+      el.textContent = "클래스·학생 명단이 아직 동기화되지 않았습니다. [🔄 명단 동기화]를 먼저 눌러주세요.";
+      return;
+    }
+    el.textContent = `마지막 동기화: ${new Date(savedAt).toLocaleString("ko-KR")} (클래스·학생 명단이 바뀌었으면 다시 동기화하세요)`;
+  }
+
+  function loadMetaFromCache() {
+    try {
+      const cached = JSON.parse(localStorage.getItem(META_CACHE_KEY) || "null");
+      if (cached && cached.meta) {
+        fillMetaSelects(cached.meta);
+        setSyncStatusText(cached.savedAt);
+        return;
+      }
+    } catch (err) { console.error("캐시된 명단 읽기 실패", err); }
+    setSyncStatusText(null);
+  }
+
+  async function syncMeta() {
+    const btn = document.getElementById("btn-sync");
+    btn.disabled = true; btn.textContent = "동기화 중...";
     try {
       const meta = await callFn({ action: "meta" });
-      const classSel = document.getElementById("f-class");
-      const studentSel = document.getElementById("f-student");
-      (meta.classes || []).forEach((c) => {
-        const opt = document.createElement("option"); opt.value = c.id; opt.textContent = c.name; classSel.appendChild(opt);
-      });
-      (meta.students || []).forEach((s) => {
-        const opt = document.createElement("option"); opt.value = s.id; opt.textContent = s.name; studentSel.appendChild(opt);
-      });
-    } catch (err) { console.error("메타 로딩 실패", err); }
+      const savedAt = Date.now();
+      localStorage.setItem(META_CACHE_KEY, JSON.stringify({ meta, savedAt }));
+      fillMetaSelects(meta);
+      setSyncStatusText(savedAt);
+    } catch (err) {
+      document.getElementById("sync-status").textContent = "동기화 실패: " + err.message;
+    } finally {
+      btn.disabled = false; btn.textContent = "🔄 명단 동기화";
+    }
   }
+  document.getElementById("btn-sync").addEventListener("click", syncMeta);
 
   function esc(s) { return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
   function won(n) { return (n || 0).toLocaleString("ko-KR") + "원"; }
