@@ -84,13 +84,13 @@ function renderLogMetaRows(unit, note, extraRows = []) {
         .split(/(?=\d+-\d+\.)/)
         .map((s) => s.trim())
         .filter(Boolean)
-        .map((part) => `<div class="log-context">${esc(`\u00a0\u00a0• ${part}`)}</div>`)
+        .map((part) => `<div class="log-context">${esc(`• ${part}`)}</div>`)
         .join("")
     : ""
   const noteRow = note ? `<div class="log-note">${esc(note)}</div>` : ""
   const extras = extraRows
     .filter(Boolean)
-    .map((row) => `<div class="log-context">${esc(`\u00a0\u00a0• ${row}`)}</div>`)
+    .map((row) => `<div class="log-context">${esc(`• ${row}`)}</div>`)
     .join("")
   return unitRow + noteRow + extras
 }
