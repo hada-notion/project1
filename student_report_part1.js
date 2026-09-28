@@ -363,7 +363,9 @@ function mapRegistration(reg) {
       return { date: kstDate || (rawDate ? String(rawDate).slice(0, 10) : null), weekday: a.weekday || "", status: a.status || "" }
     }),
     study_logs: (reg.study_logs || []).map((s) => ({ book: s.book || "", range: s.range || "", unit: s.unit || "", date: s.iso || null, note: s.note || "", body: normalizeFeedBody(s.body) })),
-    homework: (reg.homework || []).map((h) => ({ title: h.title || "", book: h.book || "", range: h.range || "", unit: h.unit || "", note: h.note || "", due: h.due_iso || null, status: h.status || "미제출" })),
+    // classDate(수업일)는 백엔드가 h.iso로 내려주지만 지금까지 프론트에서 버려지고 있었다. "다음과제"를
+    // 마감일이 아니라 수업일(그 과제를 실제로 내준 날) 기준으로 판단하려면 이 값이 있어야 한다.
+    homework: (reg.homework || []).map((h) => ({ title: h.title || "", book: h.book || "", range: h.range || "", unit: h.unit || "", note: h.note || "", due: h.due_iso || null, classDate: isoToKstDate(h.iso) || null, status: h.status || "미제출" })),
     homework_days: (reg.homework_days || []).map((h) => ({ date: h.date || null, status: h.status || "미완료", submitted: h.submitted ?? 0, total: h.total ?? 0 })),
     tests: (reg.tests || []).map((t) => ({ title: t.title || "", book: t.book || "", range: t.range || "", unit: t.unit || "", note: t.note || "", date: t.iso || null, correct: t.correct ?? 0, total: t.total ?? 0 })),
     teacher_comments: (reg.teacher_comments || []).map((c) => ({ text: c.text || "", date: c.iso || null, by: c.by || "" })),

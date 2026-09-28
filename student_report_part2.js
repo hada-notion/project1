@@ -608,7 +608,9 @@ function formatDateLabel(date) {
 // 다음과제 카드는 "마감이 가장 이른, 아직 지나지 않은 과제"를 보여준다. 같은 날짜에 마감인
 // 과제가 여러 건이면(교재별로 각각 내주는 경우) 전부 함께 보여줘야 한다.
 function findNextHomeworkItems(r, date) {
-  const upcoming = (r.homework || []).filter((h) => h.due && h.due >= date)
+  // 아직 수업일이 되지 않은(=아직 내주지 않은) 과제는 "다음과제"에 나오면 안 된다. classDate가 없는
+  // 옛 캐시 데이터는(수업일 정보가 없던 시절 기록) 하위호환을 위해 그대로 포함시킨다.
+  const upcoming = (r.homework || []).filter((h) => h.due && h.due >= date && (!h.classDate || h.classDate <= date))
   if (!upcoming.length) return []
   const minDue = upcoming.reduce((min, h) => (h.due < min ? h.due : min), upcoming[0].due)
   return upcoming.filter((h) => h.due === minDue)
