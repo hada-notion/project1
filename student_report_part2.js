@@ -646,7 +646,7 @@ function buildDailyBodyHtml(r, date) {
         const extraHtml = hasExtra ? `<div class="log-extra">${bodyHtml}</div>` : ""
         return `
         <div class="log-row 학습">
-          <div class="log-title-row"><span class="log-row-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg></span><div class="log-title">${esc([l.book, l.range].filter(Boolean).join(" · ") || "학습 기록")}</div></div>
+          <div class="log-title-row"><div class="log-title">${esc([l.book, l.range].filter(Boolean).join(" · ") || "학습 기록")}</div></div>
           ${metaHtml}${extraHtml}
         </div>
       `
@@ -657,7 +657,7 @@ function buildDailyBodyHtml(r, date) {
       <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg></span>다음과제</h2>
       ${nextHomework ? `
         <div class="log-row 과제">
-          <div class="log-title-row"><span class="log-row-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg></span><div class="log-title">${esc([nextHomework.book, nextHomework.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${homeworkPillTone(nextHomework.status)}">${esc(nextHomework.status)}</span></div>
+          <div class="log-title-row"><div class="log-title">${esc([nextHomework.book, nextHomework.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${homeworkPillTone(nextHomework.status)}">${esc(nextHomework.status)}</span></div>
           ${renderLogMetaRows(nextHomework.unit, nextHomework.note, [`마감: ${withDow(nextHomework.due)}`])}
         </div>
       ` : '<div class="empty">예정된 과제가 없습니다.</div>'}
@@ -667,11 +667,12 @@ function buildDailyBodyHtml(r, date) {
       <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span>평가</h2>
       ${todaysTests.length ? todaysTests.map((t) => `
         <div class="log-row 평가">
-          <div class="log-title-row"><span class="log-row-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span><div class="log-title">${esc([t.book, t.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${scorePillTone(t.correct ?? 0, t.total ?? 0)}">${scorePillText(t.correct ?? 0, t.total ?? 0)}</span></div>
+          <div class="log-title-row"><div class="log-title">${esc([t.book, t.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${scorePillTone(t.correct ?? 0, t.total ?? 0)}">${scorePillText(t.correct ?? 0, t.total ?? 0)}</span></div>
           ${renderLogMetaRows(t.unit, t.note)}
         </div>
       `).join("") : '<div class="empty">이 날짜에 기록된 평가가 없습니다.</div>'}
       <div class="feed-divider"></div>
+      <div class="log-title">최근 평가 추이</div>
       ${buildTestTrendChartHtml(computeRecentTestPoints(r.tests || [], date, 3))}
     </div>
 
@@ -711,7 +712,7 @@ function renderDetail() {
             ${b.progress != null ? `<div class="progress-track"><div class="progress-fill" style="width:${b.progress}%"></div></div><div class="progress-label">${b.progress}%</div>` : ""}
           </div>
         </div>
-      `).join("") : `<div class="empty">${bookStatusTab} 교재가 없습니다.</div>`}</div></div>`
+      `).join("") : `<div class="empty" style="grid-column: 1 / -1;">${bookStatusTab} 교재가 없습니다.</div>`}</div></div>`
       })()}
     `,
     calendar: `
