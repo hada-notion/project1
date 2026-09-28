@@ -570,7 +570,7 @@ function renderBookDetail() {
     type: "학습", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`, date: l.date, book: l.book, range: l.range, unit: l.unit, note: l.note, pill: null, photo: l.photo, body: l.body,
   }))
   ;((r.homework) || []).filter((h) => normBookTitle(h.book) === targetTitle).forEach((h) => items.push({
-    type: "과제", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>`, date: h.date || h.due, book: h.book, range: h.range, unit: h.unit, note: h.note || h.title, pill: h.status, pillTone: homeworkPillTone(h.status), photo: null, body: null,
+    type: "과제", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>`, date: h.classDate || h.due, due: h.due, book: h.book, range: h.range, unit: h.unit, note: h.note || h.title, pill: h.status, pillTone: homeworkPillTone(h.status), photo: null, body: null,
   }))
   ;((r.tests) || []).filter((t) => normBookTitle(t.book) === targetTitle).forEach((t) => items.push({
     type: "평가", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`, date: t.date, book: t.book, range: t.range, unit: t.unit, note: t.note || t.title, pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), photo: null, body: null,
@@ -674,7 +674,7 @@ function renderBookDetail() {
                   </div>
                 </div>
                 ${(() => {
-                  const meta = renderLogMetaRows(l.unit, l.note)
+                  const meta = renderLogMetaRows(l.unit, l.note, l.type === "과제" && l.due ? [`마감: ${withDow(l.due)}`] : [])
                   const hasExtra = l.photo || (l.body && buildFeedBodyHtml(l.body))
                   const chevronBtn = hasExtra ? `<button type="button" class="log-extra-chevron" onclick="toggleLogExtra(this)" aria-label="펼치기"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>` : ""
                   const metaHtml = (meta || chevronBtn) ? `<div class="log-meta">${meta}${chevronBtn}</div>` : ""
@@ -933,4 +933,21 @@ function showHomeworkDayModal(date) {
 }
 function closeHomeworkDayModal() {
   document.getElementById("homework-detail-modal").classList.remove("active")
+}
+// 주간·월간 보고서의 "과제이행률" 도넛을 누르면 그 기간에 마감인 과제 목록을 모달로 보여준다.
+// (일일 보고서의 과제상태 모달과 같은 카드 스타일을 재사용한다.)
+function showHomeworkPeriodModal(rangeStart, rangeEnd, label) {
+  const r = STUDENT.registrations.find((x) => x.token === selectedToken)
+  if (!r) return
+  const items = (r.homework || []).filter((h) => h.due && h.due >= rangeStart && h.due <= rangeEnd)
+  document.getElementById("homework-detail-modal-title").textContent = label
+  document.getElementById("homework-detail-modal-body").innerHTML = items.length
+    ? items.map((h) => `
+      <div class="log-row 과제">
+        <div class="log-title-row"><div class="log-title">${esc([h.book, h.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${homeworkPillTone(h.status)}">${esc(h.status)}</span></div>
+        ${renderLogMetaRows(h.unit, h.note, [`마감: ${withDow(h.due)}`])}
+      </div>
+    `).join("")
+    : `<div class="log-row 과제"><div class="log-note">해당 기간에 마감인 과제가 없습니다.</div></div>`
+  document.getElementById("homework-detail-modal").classList.add("active")
 }

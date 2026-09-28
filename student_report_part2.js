@@ -559,9 +559,9 @@ function buildReportTabHtml(r) {
         <div class="donut" style="background: conic-gradient(#1e9e5c 0% ${attRate}%, #eee ${attRate}% 100%)"><div class="donut-hole">${attRate}%</div></div>
         <div class="donut-count-below">(${presentCount}/${countedAttendanceRows.length})</div>
       </div>
-      <div class="donut-card">
+      <div class="donut-card clickable" onclick="showHomeworkPeriodModal('${rangeStart}','${rangeEnd}','${esc(periodLabel)} 과제이행률')">
         <div class="donut-title"><span class="inline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg></span>과제이행률</div>
-        <div class="donut" style="background: conic-gradient(#6b5d4d 0% ${hwRate}%, #eee ${hwRate}% 100%)"><div class="donut-hole">${hwRate}%</div></div>
+        <div class="donut" style="background: conic-gradient(#3478f6 0% ${hwRate}%, #eee ${hwRate}% 100%)"><div class="donut-hole">${hwRate}%</div></div>
         <div class="donut-count-below">(${doneHomework}/${homeworkItems.length})</div>
       </div>
     </div>
@@ -607,10 +607,12 @@ function formatDateLabel(date) {
 
 // 다음과제 카드는 "마감이 가장 이른, 아직 지나지 않은 과제"를 보여준다. 같은 날짜에 마감인
 // 과제가 여러 건이면(교재별로 각각 내주는 경우) 전부 함께 보여줘야 한다.
+// 오늘 마감인 과제는 이미 위쪽 "과제상태" 칸에서 보여주고 있으므로, 여기서는 마감일이 오늘보다
+// 뒤인(아직 오지 않은) 과제만 "다음" 과제로 취급한다.
 function findNextHomeworkItems(r, date) {
   // 아직 수업일이 되지 않은(=아직 내주지 않은) 과제는 "다음과제"에 나오면 안 된다. classDate가 없는
   // 옛 캐시 데이터는(수업일 정보가 없던 시절 기록) 하위호환을 위해 그대로 포함시킨다.
-  const upcoming = (r.homework || []).filter((h) => h.due && h.due >= date && (!h.classDate || h.classDate <= date))
+  const upcoming = (r.homework || []).filter((h) => h.due && h.due > date && (!h.classDate || h.classDate <= date))
   if (!upcoming.length) return []
   const minDue = upcoming.reduce((min, h) => (h.due < min ? h.due : min), upcoming[0].due)
   return upcoming.filter((h) => h.due === minDue)
@@ -748,7 +750,7 @@ function renderDetail() {
       ${(() => {
         const items = []
         studyLogs.forEach((l) => items.push({ type: "학습", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`, date: l.date, title: [l.book, l.range].filter(Boolean).join(" · ") || "학습 기록", unit: l.unit, note: l.note, photo: l.photo, body: l.body, book: l.book }))
-        homework.forEach((h) => items.push({ type: "과제", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>`, date: h.date || h.due, title: [h.book, h.range].filter(Boolean).join(" · "), unit: h.unit, note: h.note, pill: h.status, pillTone: homeworkPillTone(h.status), book: h.book }))
+        homework.forEach((h) => items.push({ type: "과제", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>`, date: h.classDate || h.due, due: h.due, title: [h.book, h.range].filter(Boolean).join(" · "), unit: h.unit, note: h.note, pill: h.status, pillTone: homeworkPillTone(h.status), book: h.book }))
         tests.forEach((t) => items.push({ type: "평가", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`, date: t.date, title: [t.book, t.range].filter(Boolean).join(" · "), unit: t.unit, note: t.note, pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), book: t.book }))
         const filtered = studyLogFilter === "전체" ? items : items.filter((it) => it.type === studyLogFilter)
         const sorted = filtered.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
@@ -769,7 +771,7 @@ function renderDetail() {
                   </div>
                 </div>
                 ${(() => {
-                  const meta = renderLogMetaRows(l.unit, l.note)
+                  const meta = renderLogMetaRows(l.unit, l.note, l.type === "과제" && l.due ? [`마감: ${withDow(l.due)}`] : [])
                   const hasExtra = l.photo || (l.body && buildFeedBodyHtml(l.body))
                   const chevronBtn = hasExtra ? `<button type="button" class="log-extra-chevron" onclick="toggleLogExtra(this)" aria-label="펼치기"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>` : ""
                   const metaHtml = (meta || chevronBtn) ? `<div class="log-meta">${meta}${chevronBtn}</div>` : ""
