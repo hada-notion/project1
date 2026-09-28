@@ -625,6 +625,7 @@ function renderBookDetail() {
         </div>
       </div>
       <div class="reg-tab-content">
+        <div class="feed-narrow-wrap">
         <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></span>${esc(selectedBookTitle)}</h2>
         <div class="book-cover-card">
           <div class="book-cover-top">
@@ -652,7 +653,6 @@ function renderBookDetail() {
           <button class="${bookLogFilter === "과제" ? "active" : ""}" onclick="setBookLogFilter('과제')">과제</button>
           <button class="${bookLogFilter === "평가" ? "active" : ""}" onclick="setBookLogFilter('평가')">평가</button>
         </div>
-        <div class="feed-narrow-wrap">
         ${(() => {
           const filteredSorted = bookLogFilter === "전체" ? sorted : sorted.filter((l) => l.type === bookLogFilter)
           const groups = []
