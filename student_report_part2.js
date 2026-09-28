@@ -244,8 +244,8 @@ function navigateReportPeriod(delta) {
   reportOffset = Math.max(0, Math.min(maxOffset, reportOffset + delta))
   renderApp()
 }
-const REPORT_MONTH_LOOKBACK = 3
-const REPORT_WEEK_LOOKBACK = 12
+const REPORT_MONTH_LOOKBACK = 6
+const REPORT_WEEK_LOOKBACK = 26
 function reportDayEarliest() {
   const [y, m] = MOCK_TODAY.split("-").map(Number)
   const d = new Date(y, m - 1 - REPORT_MONTH_LOOKBACK, 1)
@@ -671,7 +671,7 @@ function buildDailyBodyHtml(r, date) {
       ${nextHomeworkItems.length ? nextHomeworkItems.map((nextHomework) => `
         <div class="log-row 과제">
           <div class="log-title-row"><div class="log-title">${esc([nextHomework.book, nextHomework.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${homeworkPillTone(nextHomework.status)}">${esc(nextHomework.status)}</span></div>
-          ${renderLogMetaRows(nextHomework.unit, nextHomework.note, [`마감: ${withDow(nextHomework.due)}`])}
+          ${renderLogMetaRows(nextHomework.unit, nextHomework.note, [nextHomework.classDate ? `출제: ${withDow(nextHomework.classDate)}` : null, `마감: ${withDow(nextHomework.due)}`].filter(Boolean))}
         </div>
       `).join("") : '<div class="empty">예정된 과제가 없습니다.</div>'}
     </div>
@@ -750,7 +750,7 @@ function renderDetail() {
       ${(() => {
         const items = []
         studyLogs.forEach((l) => items.push({ type: "학습", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`, date: l.date, title: [l.book, l.range].filter(Boolean).join(" · ") || "학습 기록", unit: l.unit, note: l.note, photo: l.photo, body: l.body, book: l.book }))
-        homework.forEach((h) => items.push({ type: "과제", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>`, date: h.classDate || h.due, due: h.due, title: [h.book, h.range].filter(Boolean).join(" · "), unit: h.unit, note: h.note, pill: h.status, pillTone: homeworkPillTone(h.status), book: h.book }))
+        homework.forEach((h) => items.push({ type: "과제", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>`, date: h.classDate || h.due, due: h.due, classDate: h.classDate, title: [h.book, h.range].filter(Boolean).join(" · "), unit: h.unit, note: h.note, pill: h.status, pillTone: homeworkPillTone(h.status), book: h.book }))
         tests.forEach((t) => items.push({ type: "평가", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`, date: t.date, title: [t.book, t.range].filter(Boolean).join(" · "), unit: t.unit, note: t.note, pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), book: t.book }))
         const filtered = studyLogFilter === "전체" ? items : items.filter((it) => it.type === studyLogFilter)
         const sorted = filtered.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
@@ -771,7 +771,7 @@ function renderDetail() {
                   </div>
                 </div>
                 ${(() => {
-                  const meta = renderLogMetaRows(l.unit, l.note, l.type === "과제" && l.due ? [`마감: ${withDow(l.due)}`] : [])
+                  const meta = renderLogMetaRows(l.unit, l.note, l.type === "과제" ? [l.classDate ? `출제: ${withDow(l.classDate)}` : null, l.due ? `마감: ${withDow(l.due)}` : null].filter(Boolean) : [])
                   const hasExtra = l.photo || (l.body && buildFeedBodyHtml(l.body))
                   const chevronBtn = hasExtra ? `<button type="button" class="log-extra-chevron" onclick="toggleLogExtra(this)" aria-label="펼치기"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>` : ""
                   const metaHtml = (meta || chevronBtn) ? `<div class="log-meta">${meta}${chevronBtn}</div>` : ""
