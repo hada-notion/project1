@@ -620,7 +620,7 @@ function buildDailyBodyHtml(r, date) {
   const homeworkStatusInfo = (status) => (status === "완료" ? { text: "제출", cls: "제출" } : status === "부분완료" ? { text: "부분완료", cls: "부분완료" } : { text: "미제출", cls: "미제출" })
   const todaysLogs = (r.study_logs || []).filter((l) => l.date === date)
   const nextHomework = findNextHomework(r, date)
-  const todaysTests = (r.tests || []).filter((t) => t.date === date)
+  const todaysTests = (r.tests || []).filter((t) => String(t.date || "").slice(0, 10) === date)
   const comment = findLatestComment(r, date)
 
   return `
@@ -629,7 +629,7 @@ function buildDailyBodyHtml(r, date) {
         <div class="label"><span class="inline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg></span>출석상태</div>
         <span class="badge ${esc(attendanceRow ? attendanceRow.status : "해당 없음")}">${esc(attendanceRow ? attendanceRow.status : "해당 없음")}</span>
       </div>
-      <div class="status-box">
+      <div class="status-box${homeworkDayEntry ? " clickable" : ""}"${homeworkDayEntry ? ` onclick="showHomeworkDayModal('${date}')"` : ""}>
         <div class="label"><span class="inline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg></span>과제상태</div>
         ${homeworkDayEntry ? (() => { const info = homeworkStatusInfo(homeworkDayEntry.status); return `<span class="badge ${info.cls}">${info.text}</span>` })() : `<span class="badge">해당 없음</span>`}
       </div>

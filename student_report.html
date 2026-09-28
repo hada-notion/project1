@@ -278,6 +278,7 @@ body {
 .reg-tab-content .section-hint { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
 .status-box-row { display: flex; gap: 10px; margin-bottom: 14px; }
 .status-box { flex: 1; background: #fff; border-radius: 14px; padding: 16px 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); text-align: center; }
+.status-box.clickable { cursor: pointer; }
 .status-box .label { font-size: 15px; font-weight: 700; color: #333; margin-bottom: 10px; }
 .reg-tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; display: flex; background: #fff; box-shadow: 0 -2px 10px rgba(0,0,0,0.08); padding: 6px clamp(4px, 2vw, 16px) calc(6px + env(safe-area-inset-bottom, 0px)); }
 .reg-tab-btn { flex: 1; background: none; border: none; padding: 8px 2px; font-size: 11px; font-weight: 600; color: var(--text-subtle); display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; border-radius: 10px; }
@@ -392,7 +393,7 @@ body {
 /* 펼친 영역의 배경이 카드 하단 여백까지 이어지도록, 카드 자체 패딩(14px)만큼 아래로 더
    늘리고(음수 마진) 그만큼 자체 패딩을 줘서 카드 하단에 흰 여백이 남지 않게 한다. */
 .log-extra { display: none; padding: 10px 16px 14px; margin: 0 -16px -14px; }
-.log-extra.show { display: block; background: var(--brand-tint); border-radius: 14px; }
+.log-extra.show { display: block; background: var(--brand-tint); border-radius: 0 0 14px 14px; }
 .log-extra .feed-body { margin-top: 0; padding-top: 0; border-top: none; }
 /* 보고서(일간) 화면의 학습 항목(.log-row)은 카드 자체 테두리가 없어 위 카드용 여백 규칙을
    그대로 쓰면 어긋난다. 행 안쪽으로만 살짝 여백을 주는 형태로 대신한다. */
@@ -732,6 +733,13 @@ body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
   <div class="modal-sheet">
     <h3><span id="test-detail-modal-title"></span><button class="modal-close" onclick="closeTestDetailModal()"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button></h3>
     <div id="test-detail-modal-body"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="homework-detail-modal" onclick="if(event.target===this) closeHomeworkDayModal()">
+  <div class="modal-sheet">
+    <h3><span id="homework-detail-modal-title"></span><button class="modal-close" onclick="closeHomeworkDayModal()"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button></h3>
+    <div id="homework-detail-modal-body"></div>
   </div>
 </div>
 

@@ -914,3 +914,21 @@ function showTestDetailModal(i) {
 function closeTestDetailModal() {
   document.getElementById("test-detail-modal").classList.remove("active")
 }
+function showHomeworkDayModal(date) {
+  const r = STUDENT.registrations.find((x) => x.token === selectedToken)
+  if (!r) return
+  const items = (r.homework || []).filter((h) => String(h.due || "").slice(0, 10) === date)
+  document.getElementById("homework-detail-modal-title").textContent = formatDateLabel(date)
+  document.getElementById("homework-detail-modal-body").innerHTML = items.length
+    ? items.map((h) => `
+      <div class="log-row 과제">
+        <div class="log-title-row"><div class="log-title">${esc([h.book, h.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${homeworkPillTone(h.status)}">${esc(h.status)}</span></div>
+        ${renderLogMetaRows(h.unit, h.note)}
+      </div>
+    `).join("")
+    : `<div class="log-row 과제"><div class="log-note">이 날짜에 마감인 과제가 없습니다.</div></div>`
+  document.getElementById("homework-detail-modal").classList.add("active")
+}
+function closeHomeworkDayModal() {
+  document.getElementById("homework-detail-modal").classList.remove("active")
+}
