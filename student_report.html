@@ -386,8 +386,9 @@ body {
 .log-divider { border-top: 1px solid #f1f0f6; margin: 10px 0 0; }
 /* 본문(사진/노션 기록)은 기본으로 접어두고, "기록 보기"를 눌러야 펼쳐진다. */
 .log-extra-toggle { display: block; width: 100%; text-align: left; background: none; border: none; padding: 10px 0 0; margin: 0; font-size: 12px; font-weight: 600; color: var(--brand-deep); cursor: pointer; }
-.log-extra { display: none; padding: 10px 16px 0; margin: 0 -16px; }
-.log-extra.show { display: block; }
+.log-extra { display: none; padding: 10px 16px 12px; margin: 0 -16px; }
+/* 펼쳤을 때 살짝 다른 배경색을 줘서 "펼쳐진 영역"이라는 느낌을 준다. */
+.log-extra.show { display: block; background: var(--brand-tint); border-radius: 0 0 14px 14px; }
 .log-extra .feed-body { margin-top: 0; padding-top: 0; border-top: none; }
 .log-icon-emoji { line-height: 1; height: 17px; width: 17px; display: flex; align-items: center; justify-content: center; }
 .log-icon-emoji svg { width: 100%; height: 100%; display: block; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }

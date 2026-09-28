@@ -87,7 +87,15 @@ function renderLogMetaRows(unit, note, extraRows = []) {
         .map((part) => `<div class="log-context">${esc(`• ${part}`)}</div>`)
         .join("")
     : ""
-  const noteRow = note ? `<div class="log-note">${esc(note)}</div>` : ""
+  // 선생님이 노트에 줄마다 앞에 공백/불릿을 직접 타이핑해두는 경우가 있어(예: "  • 보강1"),
+  // 단원 목록 불릿과 들여쓰기가 안 맞아 보인다. 줄마다 앞뒤 공백을 정리해 항상 같은 들여쓰기로 보이게 한다.
+  const normalizedNote = note
+    ? note
+        .split("\n")
+        .map((line) => line.trim())
+        .join("\n")
+    : ""
+  const noteRow = normalizedNote ? `<div class="log-note">${esc(normalizedNote)}</div>` : ""
   const extras = extraRows
     .filter(Boolean)
     .map((row) => `<div class="log-context">${esc(`• ${row}`)}</div>`)
