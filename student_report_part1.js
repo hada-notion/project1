@@ -467,6 +467,7 @@ let reportOffset = 0 // 0 = current period, 1 = previous period, etc.
 let reportDayDate = null // used when reportPeriod === "day"
 let bookStatusTab = "진행중" // "진행중" | "완료" | "예정"
 let studyLogFilter = "전체" // "전체" | "학습" | "과제" | "평가" -- 학습기록 탭 필터(디자인 통일 목적, 기본값은 전체)
+let bookLogFilter = "전체" // "전체" | "학습" | "과제" | "평가" -- 교재 상세 페이지 학습기록 필터(학습기록 탭과 별도 상태로 관리)
 // Computes today date in Asia/Seoul time (not UTC) so it is correct before 9am KST.
 function todayIsoInSeoul() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -526,6 +527,7 @@ function openRegistration(token) {
 
 function openBookStudy(title) {
   selectedBookTitle = normBookTitle(title)
+  bookLogFilter = "전체"
   view = "book"
   renderApp()
   window.scrollTo({ top: 0 })
@@ -623,6 +625,7 @@ function renderBookDetail() {
         </div>
       </div>
       <div class="reg-tab-content">
+        <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></span>${esc(selectedBookTitle)}</h2>
         <div class="book-cover-card">
           <div class="book-cover-top">
             <div class="book-cover-card-img">${book.cover ? `<img src="${esc(book.cover)}" alt="${esc(selectedBookTitle)}">` : `<span class="cover-fallback-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></span>`}</div>
@@ -643,9 +646,17 @@ function renderBookDetail() {
         </div>
         <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg></span>학습기록</h2>
         <div class="section-hint">이 교재와 관련된 학습 · 과제 · 평가 기록을 최근순으로 보여줍니다</div>
+        <div class="seg-toggle">
+          <button class="${bookLogFilter === "전체" ? "active" : ""}" onclick="setBookLogFilter('전체')">전체</button>
+          <button class="${bookLogFilter === "학습" ? "active" : ""}" onclick="setBookLogFilter('학습')">학습</button>
+          <button class="${bookLogFilter === "과제" ? "active" : ""}" onclick="setBookLogFilter('과제')">과제</button>
+          <button class="${bookLogFilter === "평가" ? "active" : ""}" onclick="setBookLogFilter('평가')">평가</button>
+        </div>
+        <div class="feed-narrow-wrap">
         ${(() => {
+          const filteredSorted = bookLogFilter === "전체" ? sorted : sorted.filter((l) => l.type === bookLogFilter)
           const groups = []
-          sorted.forEach((l) => {
+          filteredSorted.forEach((l) => {
             const last = groups[groups.length - 1]
             if (last && last.date === l.date) { last.items.push(l) } else { groups.push({ date: l.date, items: [l] }) }
           })
@@ -674,6 +685,7 @@ function renderBookDetail() {
             </div>
           `).join("") : `<div class="empty">이 교재와 관련된 기록이 없습니다.</div>`
         })()}
+        </div>
       </div>
       </div>
     </div>
@@ -686,6 +698,10 @@ function setBookStatusTab(status) {
 }
 function setStudyLogFilter(filter) {
   studyLogFilter = filter
+  renderApp()
+}
+function setBookLogFilter(filter) {
+  bookLogFilter = filter
   renderApp()
 }
 function setRegTab(tab) {
