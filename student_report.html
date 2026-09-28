@@ -380,7 +380,13 @@ body {
 .log-row:last-child { margin-bottom: 0; }
 .log-top { display: flex; gap: 12px; align-items: flex-start; min-height: 44px; }
 .log-icon { flex-shrink: 0; width: 44px; height: 44px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
-.log-divider { border-top: 1px solid #f1f0f6; margin: 10px -16px 0; }
+/* 카드 제목/메타 영역과 본문(사진·노션 기록)을 나누는 구조용 구분선. 노션 본문 안의 실제
+   구분선 블록(.feed-divider, 콘텐츠라 카드 끝까지 꽉 차게 둠)과 헷갈리지 않도록, 이 구분선은
+   카드 안쪽 여백만큼 짧게 둔다(음수 마진으로 카드 끝까지 안 늘림). */
+.log-divider { border-top: 1px solid #f1f0f6; margin: 10px 0 0; }
+.log-meta-more { display: none; }
+.log-meta-more.show { display: block; }
+.log-meta-toggle { display: block; background: none; border: none; padding: 0; margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--brand-deep); cursor: pointer; }
 .log-extra { padding: 10px 16px 0; margin: 0 -16px; }
 .log-extra .feed-body { margin-top: 0; padding-top: 0; border-top: none; }
 .log-icon-emoji { line-height: 1; height: 17px; width: 17px; display: flex; align-items: center; justify-content: center; }
