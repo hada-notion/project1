@@ -375,17 +375,20 @@ body {
 .cal-hint { font-size: 11px; color: #bbb; text-align: center; margin-top: 6px; padding-bottom: 4px; }
 
 /* 학습기록 카드 공통 스타일 (학습/과제/평가 공통 사용) */
-.log-card { background: #fff; border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.log-card { position: relative; background: #fff; border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
 .log-row { display: flex; flex-direction: column; margin-bottom: 12px; }
 .log-row:last-child { margin-bottom: 0; }
 .log-top { display: flex; gap: 12px; align-items: center; min-height: 44px; }
 .log-icon { flex-shrink: 0; width: 44px; height: 44px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
 /* 본문(사진/노션 기록)은 기본으로 접어두고, 우측 하단 화살표 아이콘을 눌러야 펼쳐진다.
    펼치면 배경색이 살짝 바뀌면서 구분되므로 별도 구분선은 두지 않는다. */
-.log-divider-row { display: flex; justify-content: flex-end; margin-top: 10px; }
-.log-extra-chevron { flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--brand-border); background: #fff; display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; color: var(--brand-deep); transition: transform 0.15s ease; }
+/* 접혀 있을 때는 카드 자체 패딩(우측 16px/하단 14px) 안에 겹쳐서 띄워두면, 펼치기
+   아이콘이 있어도 없어도 카드 높이(레이아웃 흐름)가 똑같이 유지된다(별도 줄로 두면
+   그만큼 카드가 더 커짐). 펼쳤을 때는 펼쳐진 내용 바로 아래로 내려와(HTML 순서상
+   .log-extra 다음) 우측 정렬로 자연스럽게 이어진다. */
+.log-extra-chevron { position: absolute; right: 16px; bottom: 14px; flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--brand-border); background: #fff; display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; color: var(--brand-deep); transition: transform 0.15s ease; }
 .log-extra-chevron svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.log-extra-chevron.open { transform: rotate(180deg); }
+.log-extra-chevron.open { position: static; margin: 10px 0 0 auto; transform: rotate(180deg); }
 /* 펼친 영역의 배경이 카드 하단 여백까지 이어지도록, 카드 자체 패딩(14px)만큼 아래로 더
    늘리고(음수 마진) 그만큼 자체 패딩을 줘서 카드 하단에 흰 여백이 남지 않게 한다. */
 .log-extra { display: none; padding: 10px 16px 14px; margin: 0 -16px -14px; }
