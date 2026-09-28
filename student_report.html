@@ -378,7 +378,7 @@ body {
 .log-card { background: #fff; border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
 .log-row { display: flex; flex-direction: column; margin-bottom: 12px; }
 .log-row:last-child { margin-bottom: 0; }
-.log-top { display: flex; gap: 12px; align-items: flex-start; min-height: 44px; }
+.log-top { display: flex; gap: 12px; align-items: center; min-height: 44px; }
 .log-icon { flex-shrink: 0; width: 44px; height: 44px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
 /* 카드 제목/메타 영역과 본문(사진·노션 기록)을 나누는 구조용 구분선. 노션 본문 안의 실제
    구분선 블록(.feed-divider, 콘텐츠라 카드 끝까지 꽉 차게 둠)과 헷갈리지 않도록, 이 구분선은
@@ -396,9 +396,14 @@ body {
 .log-card.과제 .log-icon { background: var(--warning-soft); color: var(--warning); }
 .log-card.평가 .log-icon { background: var(--success-soft); color: var(--success); }
 .log-body { flex: 1; min-width: 0; }
-.log-title-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.log-body .log-title { margin-bottom: 0; }
+/* 상태뱃지는 제목 옆이 아니라 아이콘 칸 안에서 제목 바로 아래 줄에 놓는다(아이콘·제목·뱃지가 한 헤더로 보이도록). */
+.log-badge-row { margin-top: 4px; }
+.log-title-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .log-title-row .log-title { margin-bottom: 0; }
 .log-title { font-weight: 700; font-size: 14px; color: var(--text-primary); margin-bottom: 4px; }
+/* 단원/노트 등 메타정보는 아이콘 옆이 아니라 헤더(아이콘+제목+뱃지) 밑으로 내려서, 아이콘 들여쓰기 없이 카드 왼쪽에 맞춘다. */
+.log-meta { margin-top: 10px; }
 .log-context { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; white-space: pre-wrap; }
 .log-context:last-child { margin-bottom: 6px; }
 .log-pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 999px; }

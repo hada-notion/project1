@@ -746,13 +746,11 @@ function renderDetail() {
                 <div class="log-top">
                   <div class="log-icon"><span class="log-icon-emoji">${l.icon}</span><span class="log-icon-label">${l.type}</span></div>
                   <div class="log-body">
-                    <div class="log-title-row">
-                      <div class="log-title">${esc(l.title)}</div>
-                      ${l.pill ? `<span class="log-pill ${l.pillTone || ""}">${esc(l.pill)}</span>` : ""}
-                    </div>
-                    ${renderLogMetaRows(l.unit, l.note)}
+                    <div class="log-title">${esc(l.title)}</div>
+                    ${l.pill ? `<div class="log-badge-row"><span class="log-pill ${l.pillTone || ""}">${esc(l.pill)}</span></div>` : ""}
                   </div>
                 </div>
+                ${(() => { const meta = renderLogMetaRows(l.unit, l.note); return meta ? `<div class="log-meta">${meta}</div>` : "" })()}
                 ${(l.photo || (l.body && buildFeedBodyHtml(l.body))) ? `<div class="log-divider"></div><button type="button" class="log-extra-toggle" onclick="toggleLogExtra(this)">기록 보기 ▾</button><div class="log-extra">${l.photo ? `<img class="log-photo" src="${esc(l.photo)}" />` : ""}${buildFeedBodyHtml(l.body)}</div>` : ""}
               </div>
             `).join("")}
