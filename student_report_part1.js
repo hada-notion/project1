@@ -102,9 +102,9 @@ function renderLogMetaRows(unit, note, extraRows = []) {
     .join("")
   return unitRow + noteRow + extras
 }
-// 학습기록 카드의 본문(사진/노션 기록)은 기본으로 접어두고, 구분선 오른쪽 화살표 아이콘을
-// 눌러야 펼쳐진다. 아이콘은 구분선과 같은 줄(.log-divider-row)에 있고, 본문(.log-extra)은
-// 그 줄의 다음 형제이다. 펼치면 화살표를 180도 돌려서 방향을 뒤집는다.
+// 학습기록 카드의 본문(사진/노션 기록)은 기본으로 접어두고, 우측 하단 화살표 아이콘을
+// 눌러야 펼쳐진다. 아이콘은 .log-divider-row 안에 있고, 본문(.log-extra)은 그 다음 형제이다.
+// 펼치면 화살표를 180도 돌려서 방향을 뒤집는다.
 function toggleLogExtra(btn) {
   const row = btn.closest(".log-divider-row")
   const extra = row && row.nextElementSibling
@@ -662,7 +662,7 @@ function renderBookDetail() {
                   </div>
                 </div>
                 ${(() => { const meta = renderLogMetaRows(l.unit, l.note); return meta ? `<div class="log-meta">${meta}</div>` : "" })()}
-                ${(l.photo || (l.body && buildFeedBodyHtml(l.body))) ? `<div class="log-divider-row"><div class="log-divider"></div><button type="button" class="log-extra-chevron" onclick="toggleLogExtra(this)" aria-label="펼치기"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button></div><div class="log-extra">${l.photo ? `<img class="log-photo" src="${esc(l.photo)}" />` : ""}${buildFeedBodyHtml(l.body)}</div>` : ""}
+                ${(l.photo || (l.body && buildFeedBodyHtml(l.body))) ? `<div class="log-divider-row"><button type="button" class="log-extra-chevron" onclick="toggleLogExtra(this)" aria-label="펼치기"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button></div><div class="log-extra">${l.photo ? `<img class="log-photo" src="${esc(l.photo)}" />` : ""}${buildFeedBodyHtml(l.body)}</div>` : ""}
                 </div>
               `).join("")}
             </div>

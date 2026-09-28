@@ -380,20 +380,15 @@ body {
 .log-row:last-child { margin-bottom: 0; }
 .log-top { display: flex; gap: 12px; align-items: center; min-height: 44px; }
 .log-icon { flex-shrink: 0; width: 44px; height: 44px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
-/* 카드 제목/메타 영역과 본문(사진·노션 기록)을 나누는 구조용 구분선. 노션 본문 안의 실제
-   구분선 블록(.feed-divider, 콘텐츠라 카드 끝까지 꽉 차게 둠)과 헷갈리지 않도록, 이 구분선은
-   카드 안쪽 여백만큼 짧게 둔다(음수 마진으로 카드 끝까지 안 늘림). */
-.log-divider { border-top: 1px solid #f1f0f6; margin: 0; }
-/* 본문(사진/노션 기록)은 기본으로 접어두고, 구분선 오른쪽의 화살표 아이콘을 눌러야
-   펼쳐진다("접기/기록 보기" 같은 글자 대신 아이콘 하나로 표시). */
-.log-divider-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
-.log-divider-row .log-divider { flex: 1; }
+/* 본문(사진/노션 기록)은 기본으로 접어두고, 우측 하단 화살표 아이콘을 눌러야 펼쳐진다.
+   펼치면 배경색이 살짝 바뀌면서 구분되므로 별도 구분선은 두지 않는다. */
+.log-divider-row { display: flex; justify-content: flex-end; margin-top: 10px; }
 .log-extra-chevron { flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--brand-border); background: #fff; display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; color: var(--brand-deep); transition: transform 0.15s ease; }
 .log-extra-chevron svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .log-extra-chevron.open { transform: rotate(180deg); }
-/* 카드 안에 또 카드가 있는 느낌이 나지 않도록, 둥근 박스나 그림자 없이 구분선 아래
-   배경색만 살짝 다르게 줘서 "펼쳐진 영역"을 나눈다(카드 끝까지 배경을 이어 붙임). */
-.log-extra { display: none; padding: 10px 16px 0; margin: 0 -16px; }
+/* 펼친 영역의 배경이 카드 하단 여백까지 이어지도록, 카드 자체 패딩(14px)만큼 아래로 더
+   늘리고(음수 마진) 그만큼 자체 패딩을 줘서 카드 하단에 흰 여백이 남지 않게 한다. */
+.log-extra { display: none; padding: 10px 16px 14px; margin: 0 -16px -14px; }
 .log-extra.show { display: block; background: var(--brand-tint); border-radius: 0 0 14px 14px; }
 .log-extra .feed-body { margin-top: 0; padding-top: 0; border-top: none; }
 .log-icon-emoji { line-height: 1; height: 17px; width: 17px; display: flex; align-items: center; justify-content: center; }
