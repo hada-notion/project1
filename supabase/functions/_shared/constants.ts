@@ -56,6 +56,10 @@ export const DS_TEXTBOOK_PAYMENT = Deno.env.get("DATA_SOURCE_TEXTBOOK_PAYMENT_ID
 export const DS_TIMETABLE = Deno.env.get("DATA_SOURCE_TIMETABLE_ID")! // 시간표(학원) DB
 export const DS_TUITION = Deno.env.get("DATA_SOURCE_TUITION_ID")! // 수강료(학원) DB
 export const DS_REPORT = Deno.env.get("DATA_SOURCE_REPORT_ID")! // 보고서(학원) DB
+// (2026-09-28, 법정 서류 출력 기능 추가) get-legal-document-data가 현금출납부/교습비등 영수증
+// 원부를 만들 때 조회하는 결제(학원) DB. Supabase Secrets에 DATA_SOURCE_PAYMENT_ID를 등록해야 한다
+// (메뉴얼 "이식 체크리스트" 참고). 아직 등록 전이면 이 상수를 쓰는 함수만 500 오류를 낸다.
+export const DS_PAYMENT = Deno.env.get("DATA_SOURCE_PAYMENT_ID") ?? ""
 
 // 출석(학원) DB 속성
 export const PROP_ATTENDANCE_TITLE = "출석"

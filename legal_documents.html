@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>법정 서류 출력</title>
+<style>
+  :root {
+    --text-primary: #2C2C2B;
+    --text-secondary: #7D7A75;
+    --canvas: #FFFFFF;
+    --surface: #F9F8F7;
+    --surface-2: #F0EFED;
+    --border: #E6E5E3;
+    --blue: #2783DE;
+    --blue-soft: #E5F2FC;
+    --red: #E56458;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--surface);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--text-primary);
+    font-size: 14px;
+  }
+  #login-screen {
+    display: none; min-height: 100vh; align-items: center; justify-content: center; flex-direction: column;
+  }
+  #login-screen .box {
+    background: var(--canvas); border: 1px solid var(--border); border-radius: 12px; padding: 32px;
+    width: min(90vw, 320px); display: flex; flex-direction: column; gap: 10px;
+  }
+  #login-screen h1 { font-size: 16px; margin: 0 0 8px; text-align: center; }
+  #login-input, #login-btn { padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); font-size: 14px; }
+  #login-btn { background: var(--blue); color: #fff; border: none; cursor: pointer; }
+  .login-error { color: var(--red); font-size: 12px; min-height: 14px; text-align: center; }
+
+  #app-screen { display: none; flex-direction: column; min-height: 100vh; }
+  header.app-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px; background: var(--canvas); border-bottom: 1px solid var(--border);
+  }
+  header.app-header h1 { font-size: 16px; margin: 0; }
+  header.app-header button { background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 13px; }
+
+  main { padding: 20px; display: flex; flex-direction: column; gap: 16px; max-width: 1200px; width: 100%; margin: 0 auto; }
+
+  .panel { background: var(--canvas); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+
+  .doc-type-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+  .doc-type-tabs button {
+    padding: 8px 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2);
+    cursor: pointer; font-size: 13px; color: var(--text-primary);
+  }
+  .doc-type-tabs button.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+
+  .filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; margin-top: 14px; }
+  .filters .field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-secondary); }
+  .filters input, .filters select {
+    padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border); font-size: 13px; min-width: 140px;
+  }
+  .filters button {
+    padding: 9px 18px; border-radius: 6px; border: none; background: var(--blue); color: #fff; cursor: pointer; font-size: 13px;
+  }
+
+  .toolbar { display: flex; gap: 8px; justify-content: flex-end; }
+  .toolbar button {
+    padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); cursor: pointer; font-size: 13px;
+  }
+
+  #doc-status { font-size: 13px; color: var(--text-secondary); }
+
+  #print-area { background: #fff; padding: 24px; }
+  #print-area h2 { text-align: center; font-size: 18px; margin: 0 0 4px; }
+  #print-area .doc-sub { text-align: center; font-size: 12px; color: var(--text-secondary); margin-bottom: 16px; }
+  table.doc-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.doc-table th, table.doc-table td { border: 1px solid #999; padding: 4px 6px; text-align: center; }
+  table.doc-table th { background: #f2f2f2; }
+  table.doc-table td.name-cell, table.doc-table th.name-cell { text-align: left; white-space: nowrap; }
+  .legend { margin-top: 10px; font-size: 12px; color: var(--text-secondary); }
+  .sign-line { margin-top: 40px; text-align: right; font-size: 13px; }
+
+  @media print {
+    header.app-header, .panel:not(#print-panel), .toolbar { display: none !important; }
+    body { background: #fff; }
+    main { padding: 0; max-width: none; }
+    #print-panel { border: none; padding: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="box">
+    <h1>🔒 법정 서류 출력 (관리자용)</h1>
+    <input type="password" id="login-input" placeholder="관리자 비밀번호" autocomplete="current-password">
+    <button id="login-btn" onclick="submitLogin()">로그인</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<div id="app-screen">
+  <header class="app-header">
+    <h1>📑 법정 서류 출력</h1>
+    <button id="logout-btn">로그아웃</button>
+  </header>
+  <main>
+    <div class="panel">
+      <div class="doc-type-tabs" id="doc-type-tabs">
+        <button data-type="attendance" class="active">수강생 출석부</button>
+        <button data-type="student-register">수강생 대장</button>
+        <button data-type="receipt-ledger">교습비등 영수증 원부</button>
+        <button data-type="cash-journal">현금출납부</button>
+      </div>
+      <div class="filters">
+        <div class="field"><label>시작일</label><input type="date" id="f-start"></div>
+        <div class="field"><label>종료일</label><input type="date" id="f-end"></div>
+        <div class="field"><label>클래스</label><select id="f-class"><option value="">전체</option></select></div>
+        <div class="field"><label>학생</label><select id="f-student"><option value="">전체</option></select></div>
+        <div class="field"><label>검색(이름)</label><input type="text" id="f-search" placeholder="학생 이름"></div>
+        <button id="btn-query">조회</button>
+      </div>
+      <div id="doc-status" style="margin-top:8px"></div>
+    </div>
+
+    <div class="toolbar">
+      <button id="btn-print">🖨️ 인쇄(PDF)</button>
+      <button id="btn-word">⬇️ Word로 다운로드</button>
+    </div>
+
+    <div class="panel" id="print-panel">
+      <div id="print-area">
+        <p style="text-align:center;color:#999">위에서 서류 종류와 기간을 선택한 뒤 [조회]를 눌러주세요.</p>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+  const SUPABASE_URL = "https://twczhsxybkcvjkdfdxvs.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR3Y3poc3h5YmtjdmprZGZkeHZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyOTcwMDQsImV4cCI6MjEwMzg3MzAwNH0.t7Ltb_iSYqE4gHSoGSm-OlpiLjGqIcgrhzGJ-t56EDc";
+  const ADMIN_KEY_STORAGE = "admin_key";
+  function getAdminKey() { return localStorage.getItem(ADMIN_KEY_STORAGE) || ""; }
+
+  function showLoginScreen(errorMsg) {
+    document.getElementById("login-screen").style.display = "flex";
+    document.getElementById("app-screen").style.display = "none";
+    document.getElementById("login-error").textContent = errorMsg || "";
+    document.getElementById("login-input").value = "";
+    setTimeout(() => document.getElementById("login-input").focus(), 50);
+  }
+  async function showAppScreen() {
+    document.getElementById("login-screen").style.display = "none";
+    document.getElementById("app-screen").style.display = "flex";
+    await loadMeta();
+    setDefaultDates();
+  }
+  document.getElementById("logout-btn").addEventListener("click", () => {
+    if (!confirm("로그아웃 하시겠습니까?")) return;
+    localStorage.removeItem(ADMIN_KEY_STORAGE);
+    showLoginScreen();
+  });
+
+  async function callFn(body) {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/get-legal-document-data`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-key": getAdminKey(),
+        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+        "apikey": SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify(body),
+    });
+    if (res.status === 401) { showLoginScreen("비밀번호가 올바르지 않습니다."); throw new Error("인증 실패"); }
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || `서버 오류: ${res.status}`);
+    return json;
+  }
+
+  async function submitLogin() {
+    const input = document.getElementById("login-input");
+    const key = input.value.trim();
+    const btn = document.getElementById("login-btn");
+    const errEl = document.getElementById("login-error");
+    if (!key) { errEl.textContent = "비밀번호를 입력하세요."; return; }
+    btn.disabled = true; btn.textContent = "확인 중..."; errEl.textContent = "";
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/list-students`, {
+        headers: { "x-admin-key": key, "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "apikey": SUPABASE_ANON_KEY },
+      });
+      if (res.status === 401) { errEl.textContent = "비밀번호가 올바르지 않습니다."; btn.disabled = false; btn.textContent = "로그인"; return; }
+      if (!res.ok) throw new Error(`서버 오류: ${res.status}`);
+      localStorage.setItem(ADMIN_KEY_STORAGE, key);
+      await showAppScreen();
+    } catch (err) {
+      errEl.textContent = "로그인에 실패했습니다: " + err.message;
+    } finally {
+      btn.disabled = false; btn.textContent = "로그인";
+    }
+  }
+  document.getElementById("login-input").addEventListener("keydown", (e) => { if (e.key === "Enter") submitLogin(); });
+
+  let currentDocType = "attendance";
+  document.getElementById("doc-type-tabs").addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-type]");
+    if (!btn) return;
+    document.querySelectorAll("#doc-type-tabs button").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentDocType = btn.dataset.type;
+  });
+
+  function setDefaultDates() {
+    const now = new Date(Date.now() + 9 * 60 * 60 * 1000);
+    const y = now.getUTCFullYear(), m = now.getUTCMonth();
+    const first = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
+    const last = new Date(Date.UTC(y, m + 1, 0)).toISOString().slice(0, 10);
+    document.getElementById("f-start").value = first;
+    document.getElementById("f-end").value = last;
+  }
+
+  async function loadMeta() {
+    try {
+      const meta = await callFn({ action: "meta" });
+      const classSel = document.getElementById("f-class");
+      const studentSel = document.getElementById("f-student");
+      (meta.classes || []).forEach((c) => {
+        const opt = document.createElement("option"); opt.value = c.id; opt.textContent = c.name; classSel.appendChild(opt);
+      });
+      (meta.students || []).forEach((s) => {
+        const opt = document.createElement("option"); opt.value = s.id; opt.textContent = s.name; studentSel.appendChild(opt);
+      });
+    } catch (err) { console.error("메타 로딩 실패", err); }
+  }
+
+  function esc(s) { return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+  function won(n) { return (n || 0).toLocaleString("ko-KR") + "원"; }
+
+  function renderAttendance(data) {
+    const days = data.dateList.map((d) => d.slice(8, 10));
+    let html = `<h2>수강생 출석부</h2><div class="doc-sub">${esc(data.periodStart)} ~ ${esc(data.periodEnd)}</div>`;
+    html += `<table class="doc-table"><thead><tr><th class="name-cell">클래스</th><th class="name-cell">성명</th>`;
+    days.forEach((d) => (html += `<th>${d}</th>`));
+    html += `</tr></thead><tbody>`;
+    data.students.forEach((s) => {
+      html += `<tr><td class="name-cell">${esc(s.className)}</td><td class="name-cell">${esc(s.studentName)}</td>`;
+      data.dateList.forEach((d) => (html += `<td>${esc(s.days[d] || "")}</td>`));
+      html += `</tr>`;
+    });
+    html += `</tbody></table><div class="legend">○ 출석 · × 결석 · △ 보강 (교습기간 3개월 이상 수강생 대상, 학원법 시행규칙 별표2 — 3년간 보관)</div>`;
+    return html;
+  }
+
+  function renderStudentRegister(data) {
+    let html = `<h2>수강생 대장</h2><div class="doc-sub">별지 제25호서식 준용 (3년간 보관)</div>`;
+    html += `<table class="doc-table"><thead><tr><th>클래스</th><th>성명</th><th>생년월일</th><th>성별</th><th>학생 연락처</th><th>보호자 연락처</th><th>등록일</th><th>종료일</th></tr></thead><tbody>`;
+    data.rows.forEach((r) => {
+      html += `<tr><td>${esc(r.className)}</td><td class="name-cell">${esc(r.studentName)}</td><td>${esc(r.birthDate)}</td><td>${esc(r.gender)}</td><td>${esc(r.studentPhone)}</td><td>${esc(r.parentPhone)}</td><td>${esc(r.enrollDate)}</td><td>${esc(r.endDate)}</td></tr>`;
+    });
+    html += `</tbody></table>`;
+    return html;
+  }
+
+  function renderReceiptLedger(data) {
+    let html = `<h2>교습비등 영수증 원부</h2><div class="doc-sub">별지 제24호서식 준용 (5년간 보관)</div>`;
+    html += `<table class="doc-table"><thead><tr><th>일련번호</th><th>납부일자</th><th>납부자(성명)</th><th>등록번호</th><th>생년월일</th><th>교습과목</th><th>교습비</th><th>기타경비</th><th>비고</th></tr></thead><tbody>`;
+    let total = 0;
+    data.rows.forEach((r) => {
+      total += r.amount;
+      html += `<tr><td>${r.serialNo}</td><td>${esc(r.paymentDate)}</td><td class="name-cell">${esc(r.payerName)}</td><td>${esc(r.registrationNo)}</td><td>${esc(r.birthDate)}</td><td>${esc(r.subject)}</td><td>${won(r.amount)}</td><td>${won(r.etcExpense)}</td><td>${esc(r.note)}</td></tr>`;
+    });
+    html += `</tbody></table><div class="legend">합계: ${won(total)}</div><div class="sign-line">위와 같이 교습비등을 받았음을 확인함. &nbsp;&nbsp;&nbsp; 원장 (서명 또는 인)</div>`;
+    return html;
+  }
+
+  function renderCashJournal(data) {
+    let html = `<h2>현금출납부</h2><div class="doc-sub">현금 입·출금 기록 (5년간 보관)</div>`;
+    html += `<table class="doc-table"><thead><tr><th>날짜</th><th>구분</th><th>내용</th><th>비고</th><th>금액</th><th>잔액</th></tr></thead><tbody>`;
+    data.rows.forEach((r) => {
+      html += `<tr><td>${esc(r.date)}</td><td>${esc(r.type)}</td><td class="name-cell">${esc(r.title)}</td><td>${esc(r.note)}</td><td>${won(r.amount)}</td><td>${won(r.balance)}</td></tr>`;
+    });
+    html += `</tbody></table>`;
+    return html;
+  }
+
+  document.getElementById("btn-query").addEventListener("click", async () => {
+    const statusEl = document.getElementById("doc-status");
+    const printArea = document.getElementById("print-area");
+    statusEl.textContent = "조회 중...";
+    const body = {
+      docType: currentDocType,
+      periodStart: document.getElementById("f-start").value,
+      periodEnd: document.getElementById("f-end").value,
+      classId: document.getElementById("f-class").value || undefined,
+      studentId: document.getElementById("f-student").value || undefined,
+      search: document.getElementById("f-search").value.trim() || undefined,
+    };
+    try {
+      const data = await callFn(body);
+      let html = "";
+      if (currentDocType === "attendance") html = renderAttendance(data);
+      else if (currentDocType === "student-register") html = renderStudentRegister(data);
+      else if (currentDocType === "receipt-ledger") html = renderReceiptLedger(data);
+      else if (currentDocType === "cash-journal") html = renderCashJournal(data);
+      printArea.innerHTML = html;
+      statusEl.textContent = "조회 완료";
+    } catch (err) {
+      statusEl.textContent = "조회 실패: " + err.message;
+    }
+  });
+
+  document.getElementById("btn-print").addEventListener("click", () => window.print());
+
+  document.getElementById("btn-word").addEventListener("click", () => {
+    const content = document.getElementById("print-area").innerHTML;
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+      <head><meta charset="utf-8"><style>
+        table{border-collapse:collapse;width:100%;font-size:12px} td,th{border:1px solid #999;padding:4px 6px;text-align:center}
+        h2{text-align:center} .doc-sub{text-align:center;color:#666;font-size:12px}
+      </style></head><body>${content}</body></html>`;
+    const blob = new Blob(['\ufeff', html], { type: "application/msword" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `법정서류_${currentDocType}_${document.getElementById("f-start").value}.doc`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  if (getAdminKey()) { showAppScreen(); } else { showLoginScreen(); }
+</script>
+</body>
+</html>
