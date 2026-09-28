@@ -102,11 +102,12 @@ function renderLogMetaRows(unit, note, extraRows = []) {
     .join("")
   return unitRow + noteRow + extras
 }
-// 학습기록 카드의 본문(사진/노션 기록)은 기본으로 접어두고, 우측 하단 화살표 아이콘을
-// 눌러야 펼쳐진다. 접혀 있을 때는 카드 패딩 안에 겹쳐 떠 있어 카드 높이에 영향이 없고,
-// 펼치면(.open) 화살표가 뒤집히고 위치도 본문(.log-extra, 바로 앞 형제) 아래로 내려간다.
+// 학습기록 카드의 본문(사진/노션 기록)은 기본으로 접어두고, 메타정보 영역(.log-meta) 안에
+// 겹쳐 떠 있는 화살표 아이콘을 눌러야 펼쳐진다. 화살표는 메타정보 우측 끝에 고정되어 있어
+// 펼치기 전/후 위치가 바뀌지 않고, 카드 높이에도 영향을 주지 않는다. 펼치면(.open) 화살표만 뒤집힌다.
 function toggleLogExtra(btn) {
-  const extra = btn.previousElementSibling
+  const metaBox = btn.closest(".log-meta")
+  const extra = metaBox && metaBox.nextElementSibling
   if (!extra) return
   const show = !extra.classList.contains("show")
   extra.classList.toggle("show", show)
@@ -660,8 +661,14 @@ function renderBookDetail() {
                     ${l.pill ? `<div class="log-badge-row"><span class="log-pill ${l.pillTone || ""}">${esc(l.pill)}</span></div>` : ""}
                   </div>
                 </div>
-                ${(() => { const meta = renderLogMetaRows(l.unit, l.note); return meta ? `<div class="log-meta">${meta}</div>` : "" })()}
-                ${(l.photo || (l.body && buildFeedBodyHtml(l.body))) ? `<div class="log-extra">${l.photo ? `<img class="log-photo" src="${esc(l.photo)}" />` : ""}${buildFeedBodyHtml(l.body)}</div><button type="button" class="log-extra-chevron" onclick="toggleLogExtra(this)" aria-label="펼치기"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>` : ""}
+                ${(() => {
+                  const meta = renderLogMetaRows(l.unit, l.note)
+                  const hasExtra = l.photo || (l.body && buildFeedBodyHtml(l.body))
+                  const chevronBtn = hasExtra ? `<button type="button" class="log-extra-chevron" onclick="toggleLogExtra(this)" aria-label="펼치기"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>` : ""
+                  const metaHtml = (meta || chevronBtn) ? `<div class="log-meta">${meta}${chevronBtn}</div>` : ""
+                  const extraHtml = hasExtra ? `<div class="log-extra">${l.photo ? `<img class="log-photo" src="${esc(l.photo)}" />` : ""}${buildFeedBodyHtml(l.body)}</div>` : ""
+                  return metaHtml + extraHtml
+                })()}
                 </div>
               `).join("")}
             </div>

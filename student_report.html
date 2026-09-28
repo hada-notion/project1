@@ -380,15 +380,15 @@ body {
 .log-row:last-child { margin-bottom: 0; }
 .log-top { display: flex; gap: 12px; align-items: center; min-height: 44px; }
 .log-icon { flex-shrink: 0; width: 44px; height: 44px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
-/* 본문(사진/노션 기록)은 기본으로 접어두고, 우측 하단 화살표 아이콘을 눌러야 펼쳐진다.
-   펼치면 배경색이 살짝 바뀌면서 구분되므로 별도 구분선은 두지 않는다. */
-/* 접혀 있을 때는 카드 자체 패딩(우측 16px/하단 14px) 안에 겹쳐서 띄워두면, 펼치기
-   아이콘이 있어도 없어도 카드 높이(레이아웃 흐름)가 똑같이 유지된다(별도 줄로 두면
-   그만큼 카드가 더 커짐). 펼쳤을 때는 펼쳐진 내용 바로 아래로 내려와(HTML 순서상
-   .log-extra 다음) 우측 정렬로 자연스럽게 이어진다. */
-.log-extra-chevron { position: absolute; right: 16px; bottom: 14px; flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--brand-border); background: #fff; display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; color: var(--brand-deep); transition: transform 0.15s ease; }
+/* 본문(사진/노션 기록)은 기본으로 접어두고, 메타정보(.log-meta) 우측 끝에 겹쳐 떠 있는
+   화살표 아이콘을 눌러야 펼쳐진다. 펼치면 배경색이 살짝 바뀌면서 구분되므로 별도
+   구분선은 두지 않는다. */
+/* 화살표는 .log-meta 안에 절대 위치로 겹쳐 놓아(메타정보 마지막 줄 옆 빈 공간에 배치),
+   펼치기 전/후 같은 위치에 고정된다. 별도 줄로 두면 그만큼 카드가 커지므로, 겹쳐 두면
+   아이콘이 있어도 없어도 카드 높이(레이아웃 흐름)가 똑같이 유지된다. */
+.log-extra-chevron { position: absolute; right: 0; bottom: 0; flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--brand-border); background: #fff; display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; color: var(--brand-deep); transition: transform 0.15s ease; }
 .log-extra-chevron svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.log-extra-chevron.open { position: static; margin: 10px 0 0 auto; transform: rotate(180deg); }
+.log-extra-chevron.open { transform: rotate(180deg); }
 /* 펼친 영역의 배경이 카드 하단 여백까지 이어지도록, 카드 자체 패딩(14px)만큼 아래로 더
    늘리고(음수 마진) 그만큼 자체 패딩을 줘서 카드 하단에 흰 여백이 남지 않게 한다. */
 .log-extra { display: none; padding: 10px 16px 14px; margin: 0 -16px -14px; }
@@ -408,7 +408,7 @@ body {
 .log-title-row .log-title { margin-bottom: 0; }
 .log-title { font-weight: 700; font-size: 14px; color: var(--text-primary); margin-bottom: 4px; }
 /* 단원/노트 등 메타정보는 아이콘 옆이 아니라 헤더(아이콘+제목+뱃지) 밑으로 내려서, 아이콘 들여쓰기 없이 카드 왼쪽에 맞춘다. */
-.log-meta { margin-top: 10px; }
+.log-meta { margin-top: 10px; position: relative; }
 .log-context { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; white-space: pre-wrap; }
 .log-context:last-child { margin-bottom: 6px; }
 .log-pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 999px; }
@@ -559,19 +559,6 @@ body {
 .global-sync-fab.syncing svg { animation: global-sync-spin 0.9s linear infinite; }
 @keyframes global-sync-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 body.has-tabbar .global-sync-fab { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
-body.has-detail-header .global-sync-fab {
-  top: 6px;
-  right: 10px;
-  bottom: auto;
-  width: 44px;
-  height: 44px;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  color: var(--brand-deep);
-}
-body.has-detail-header .global-sync-fab svg { width: 20px; height: 20px; }
-body.has-detail-header .reg-header-top { padding-right: 44px; box-sizing: border-box; }
 body.has-tabbar .reg-tab-content { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
 .global-sync-toast {
   position: fixed;

@@ -750,8 +750,14 @@ function renderDetail() {
                     ${l.pill ? `<div class="log-badge-row"><span class="log-pill ${l.pillTone || ""}">${esc(l.pill)}</span></div>` : ""}
                   </div>
                 </div>
-                ${(() => { const meta = renderLogMetaRows(l.unit, l.note); return meta ? `<div class="log-meta">${meta}</div>` : "" })()}
-                ${(l.photo || (l.body && buildFeedBodyHtml(l.body))) ? `<div class="log-extra">${l.photo ? `<img class="log-photo" src="${esc(l.photo)}" />` : ""}${buildFeedBodyHtml(l.body)}</div><button type="button" class="log-extra-chevron" onclick="toggleLogExtra(this)" aria-label="펼치기"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>` : ""}
+                ${(() => {
+                  const meta = renderLogMetaRows(l.unit, l.note)
+                  const hasExtra = l.photo || (l.body && buildFeedBodyHtml(l.body))
+                  const chevronBtn = hasExtra ? `<button type="button" class="log-extra-chevron" onclick="toggleLogExtra(this)" aria-label="펼치기"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>` : ""
+                  const metaHtml = (meta || chevronBtn) ? `<div class="log-meta">${meta}${chevronBtn}</div>` : ""
+                  const extraHtml = hasExtra ? `<div class="log-extra">${l.photo ? `<img class="log-photo" src="${esc(l.photo)}" />` : ""}${buildFeedBodyHtml(l.body)}</div>` : ""
+                  return metaHtml + extraHtml
+                })()}
               </div>
             `).join("")}
           </div>
