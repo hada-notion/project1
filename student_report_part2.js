@@ -753,7 +753,7 @@ function renderDetail() {
                     ${renderLogMetaRows(l.unit, l.note)}
                   </div>
                 </div>
-                ${(l.photo || (l.body && buildFeedBodyHtml(l.body))) ? `<div class="log-divider"></div><div class="log-extra">${l.photo ? `<img class="log-photo" src="${esc(l.photo)}" />` : ""}${buildFeedBodyHtml(l.body)}</div>` : ""}
+                ${(l.photo || (l.body && buildFeedBodyHtml(l.body))) ? `<div class="log-divider"></div><button type="button" class="log-extra-toggle" onclick="toggleLogExtra(this)">기록 보기 ▾</button><div class="log-extra">${l.photo ? `<img class="log-photo" src="${esc(l.photo)}" />` : ""}${buildFeedBodyHtml(l.body)}</div>` : ""}
               </div>
             `).join("")}
           </div>
