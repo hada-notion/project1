@@ -668,8 +668,7 @@ function renderBookDetail() {
                   <div class="log-top">
                   <div class="log-icon"><span class="log-icon-emoji">${l.icon}</span><span class="log-icon-label">${l.type}</span></div>
                   <div class="log-body">
-                    <div class="log-title">${esc([l.book, l.range].filter(Boolean).join(" · ") || "기록")}</div>
-                    ${l.pill ? `<div class="log-badge-row"><span class="log-pill ${l.pillTone || ""}">${esc(l.pill)}</span></div>` : ""}
+                    <div class="log-title-row"><div class="log-title">${esc([l.book, l.range].filter(Boolean).join(" · ") || "기록")}</div>${l.pill ? `<span class="log-pill ${l.pillTone || ""}">${esc(l.pill)}</span>` : ""}</div>
                   </div>
                 </div>
                 ${(() => {

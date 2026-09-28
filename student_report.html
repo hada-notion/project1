@@ -407,9 +407,16 @@ body {
 .log-body { flex: 1; min-width: 0; }
 .log-body .log-title { margin-bottom: 0; }
 /* 상태뱃지는 제목 옆이 아니라 아이콘 칸 안에서 제목 바로 아래 줄에 놓는다(아이콘·제목·뱃지가 한 헤더로 보이도록). */
-.log-badge-row { margin-top: 4px; }
 .log-title-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .log-title-row .log-title { margin-bottom: 0; }
+/* 보고서(일간) 화면의 학습/과제/평가 항목은 카드 하나 안에 아이콘 없는 리스트로 나열돼 있어,
+   아이콘이 있는 학습기록 카드와 이질감이 있다. 제목 앞에 같은 종류의 작은 아이콘만 붙여서
+   같은 시각 체계라는 느낌만 최소한으로 살린다(카드 중첩 없이). */
+.log-row-icon { flex-shrink: 0; width: 15px; height: 15px; display: flex; align-items: center; justify-content: center; }
+.log-row-icon svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.log-row.학습 .log-row-icon { color: var(--info); }
+.log-row.과제 .log-row-icon { color: var(--warning); }
+.log-row.평가 .log-row-icon { color: var(--success); }
 .log-title { font-weight: 700; font-size: 14px; color: var(--text-primary); margin-bottom: 4px; }
 /* 단원/노트 등 메타정보는 아이콘 옆이 아니라 헤더(아이콘+제목+뱃지) 밑으로 내려서, 아이콘 들여쓰기 없이 카드 왼쪽에 맞춘다. */
 .log-meta { margin-top: 10px; position: relative; }
