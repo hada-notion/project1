@@ -130,9 +130,10 @@ async function processStudent(studentId: string, studentPage: any) {
   const guardianRelation = richText(studentPage, "학생과의 관계")
 
   try {
-    if (studentPage.properties?.["개인정보 동의"]?.checkbox !== true) {
-      throw new Error("개인정보 동의를 확인한 뒤 발송해주세요.")
-    }
+    // (2026-09-30 제거) 관리자가 상담 문의를 폼이 아니라 DB에 직접 입력한 경우(전화 상담 등)
+    // "개인정보 동의"가 비어있는 게 정상인데, 이 조건이 "접수안내 발송" 버튼 경로까지 항상 막고
+    // 있었다. 폼 제출 경로는 Notion Form 자체의 "개인정보 동의" 필수(required) 설정으로 계속
+    // 보호되므로, 이 함수 단의 중복 검증은 삭제한다.
     if (!recipientType) throw new Error("우선 연락 대상을 선택해주세요.")
 
     const config = await getConfig()
