@@ -7,7 +7,13 @@
 //   Notion에서 학생마다 다시 읽지 않는다. 체인이 끝나면 실행 캐시를 삭제한다.
 // - 한 학생이 실패해도 이름과 오류를 남기고 다음 학생을 계속 처리한다.
 
-import { createSendLogEntry, getBotUserId, notionGetPage, resolveAdminKeyFromRequest } from "../_shared/adminShared.ts"
+import {
+  createSendLogEntry,
+  extractErrorMessage,
+  getBotUserId,
+  notionGetPage,
+  resolveAdminKeyFromRequest,
+} from "../_shared/adminShared.ts"
 import {
   getFormulaText,
   getEffectiveAdminKey,
@@ -35,7 +41,85 @@ const corsHeaders = {
 const FUNCTIONS_BASE = `${Deno.env.get("SB_URL") ?? ""}/functions/v1`
 const CONTINUATION_FLAG = "isContinuation"
 const CHAIN_BUDGET_MS = 30 * 60 * 1000
-const CONTINUATION_TIMEOUT_MS = 30_000
+// [2026-09-30] send-selected-notifications의 FETCH_TIMEOUT_MS(60초)와 맞춤.
+const CONTINUATION_TIMEOUT_MS = 60_000
+
+// [2026-09-30] send-selected-notifications와 같은 전역 잠금 패턴을 도입한다 -- 같은 반에 대해
+// "보고서 일괄 전송" 버튼을 여러 번 누르면 체인이 겹쳐 실행될 수 있었다. 잠금 키는 서로 다른
+// 함수끼리 겹치지 않도록 별도로 둔다.
+const GLOBAL_LOCK_KEY = ["send_class_daily_reports_lock"]
+const LOCK_TTL_MS = 5 * 60 * 1000
+const LOCK_WAIT_TIMEOUT_MS = 10 * 60 * 1000
+const LOCK_POLL_INTERVAL_MS = 2000
+
+// deno-lint-ignore no-explicit-any
+type AnyKv = any
+let kvInstance: AnyKv | null | undefined = undefined
+async function getKvSafe(): Promise<AnyKv | null> {
+  if (kvInstance !== undefined) return kvInstance
+  try {
+    kvInstance = await (Deno as AnyKv).openKv()
+  } catch (_e) {
+    kvInstance = null
+  }
+  return kvInstance
+}
+
+class InMemoryMutex {
+  private locked = false
+  private queue: Array<() => void> = []
+  acquire(): Promise<{ waited: boolean }> {
+    if (!this.locked) {
+      this.locked = true
+      return Promise.resolve({ waited: false })
+    }
+    return new Promise((resolve) => {
+      this.queue.push(() => resolve({ waited: true }))
+    })
+  }
+  release(): void {
+    const next = this.queue.shift()
+    if (next) next()
+    else this.locked = false
+  }
+}
+const inMemoryLock = new InMemoryMutex()
+
+async function acquireGlobalLock(): Promise<{ waited: boolean; usingKv: boolean }> {
+  const kv = await getKvSafe()
+  if (!kv) {
+    const { waited } = await inMemoryLock.acquire()
+    return { waited, usingKv: false }
+  }
+  const startedAt = Date.now()
+  let waited = false
+  while (true) {
+    const res = await kv
+      .atomic()
+      .check({ key: GLOBAL_LOCK_KEY, versionstamp: null })
+      .set(GLOBAL_LOCK_KEY, { startedAt: Date.now() }, { expireIn: LOCK_TTL_MS })
+      .commit()
+    if (res.ok) return { waited, usingKv: true }
+    waited = true
+    if (Date.now() - startedAt > LOCK_WAIT_TIMEOUT_MS) {
+      throw new Error("다른 반의 보고서 일괄전송이 끝나기를 기다리다 시간 초과(10분)되었습니다. 잠시 후 다시 시도해주세요.")
+    }
+    await new Promise((resolve) => setTimeout(resolve, LOCK_POLL_INTERVAL_MS))
+  }
+}
+
+async function releaseGlobalLock(usingKv: boolean): Promise<void> {
+  if (!usingKv) {
+    inMemoryLock.release()
+    return
+  }
+  try {
+    const kv = await getKvSafe()
+    if (kv) await kv.delete(GLOBAL_LOCK_KEY)
+  } catch (err) {
+    console.error("전역 잠금 해제 실패:", (err as Error).message)
+  }
+}
 
 const CLASS_BULK_SEND_STATUS_SPEC: StatusSpec = {
   statusProp: "보고서 일괄전송 상태",
@@ -108,7 +192,7 @@ async function sendOneStudentReport(
         title: studentName || "일일 보고서",
         category: "일일 보고서",
         status: "실패",
-        failReason: String((sendErr as any)?.message ?? sendErr),
+        failReason: extractErrorMessage(sendErr),
       })
       throw sendErr
     }
@@ -128,7 +212,7 @@ async function sendOneStudentReport(
     await setAttendanceReportSendingFlag(attendanceId, false)
     return { studentName }
   } catch (err) {
-    await setAttendanceReportLastError(attendanceId, String((err as any)?.message ?? err))
+    await setAttendanceReportLastError(attendanceId, extractErrorMessage(err))
     await setAttendanceReportSendingFlag(attendanceId, false)
     throw err
   }
@@ -180,46 +264,56 @@ async function finishChain(state: ChainState, message: string | null): Promise<v
 }
 
 async function processOneAndContinue(state: ChainState, adminKey: string): Promise<void> {
-  if (Date.now() - state.chainStartedAt > CHAIN_BUDGET_MS) {
-    await finishChain(
-      state,
-      `전체 처리 한도(${Math.round(CHAIN_BUDGET_MS / 60000)}분)를 초과했습니다. 완료 ${state.successCount}명, 실패 ${state.failedNames.length}명. 버튼을 다시 눌러 남은 학생을 이어서 처리하세요.`,
-    )
-    return
-  }
-
-  const attendanceId = state.remainingAttendanceIds.shift()
-  if (!attendanceId) {
-    await finishChain(state, finalMessage(state))
-    return
-  }
-
+  let lockAcquired = false
+  let lockUsingKv = false
   try {
-    const result = await sendOneStudentReport(attendanceId, state.runKey, state.clickerUserId)
-    if (result.skipped) state.skippedNames.push(result.studentName)
-    else state.successCount++
-  } catch (_err) {
-    let name = "(알 수 없음)"
-    try {
-      const page = await notionGetPage(attendanceId)
-      name = getFormulaText(page, "학생이름(보고서)") || name
-    } catch (_e) {
-      // 이름을 못 읽어도 다음 학생 처리는 계속한다.
+    const { usingKv } = await acquireGlobalLock()
+    lockAcquired = true
+    lockUsingKv = usingKv
+
+    if (Date.now() - state.chainStartedAt > CHAIN_BUDGET_MS) {
+      await finishChain(
+        state,
+        `전체 처리 한도(${Math.round(CHAIN_BUDGET_MS / 60000)}분)를 초과했습니다. 완료 ${state.successCount}명, 실패 ${state.failedNames.length}명. 버튼을 다시 눌러 남은 학생을 이어서 처리하세요.`,
+      )
+      return
     }
-    state.failedNames.push(name)
-  }
 
-  if (!state.remainingAttendanceIds.length) {
-    await finishChain(state, finalMessage(state))
-    return
-  }
+    const attendanceId = state.remainingAttendanceIds.shift()
+    if (!attendanceId) {
+      await finishChain(state, finalMessage(state))
+      return
+    }
 
-  // 다음 호출이 시작될 때 markRunning으로 시작 시각을 갱신한다. 여기서도 중복 갱신하면
-  // 학생마다 Notion PATCH가 두 번 발생하므로 호출 접수 시점의 한 번만 사용한다.
-  try {
-    await callNext(state, adminKey)
-  } catch (err) {
-    await finishChain(state, `체인 중단: ${(err as Error).message}. 버튼을 다시 누르면 전송 완료 학생은 건너뛰고 이어서 처리합니다.`)
+    try {
+      const result = await sendOneStudentReport(attendanceId, state.runKey, state.clickerUserId)
+      if (result.skipped) state.skippedNames.push(result.studentName)
+      else state.successCount++
+    } catch (_err) {
+      let name = "(알 수 없음)"
+      try {
+        const page = await notionGetPage(attendanceId)
+        name = getFormulaText(page, "학생이름(보고서)") || name
+      } catch (_e) {
+        // 이름을 못 읽어도 다음 학생 처리는 계속한다.
+      }
+      state.failedNames.push(name)
+    }
+
+    if (!state.remainingAttendanceIds.length) {
+      await finishChain(state, finalMessage(state))
+      return
+    }
+
+    // 다음 호출이 시작될 때 markRunning으로 시작 시각을 갱신한다. 여기서도 중복 갱신하면
+    // 학생마다 Notion PATCH가 두 번 발생하므로 호출 접수 시점의 한 번만 사용한다.
+    try {
+      await callNext(state, adminKey)
+    } catch (err) {
+      await finishChain(state, `체인 중단: ${(err as Error).message}. 버튼을 다시 누르면 전송 완료 학생은 건너뛰고 이어서 처리합니다.`)
+    }
+  } finally {
+    if (lockAcquired) await releaseGlobalLock(lockUsingKv)
   }
 }
 

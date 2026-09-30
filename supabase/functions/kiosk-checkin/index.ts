@@ -309,7 +309,7 @@ Deno.serve(async (req: Request) => {
                 },
                 disableSms: false,
               },
-            })
+            }, { allowDuplicates: true })
           }
           await createSendLogEntry({
             registrationId,

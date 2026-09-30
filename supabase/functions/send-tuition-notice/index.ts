@@ -108,7 +108,7 @@ async function sendAlimtalk(
       variables,
       disableSms: false,
     },
-  })
+  }, { allowDuplicates: true })
 }
 
 Deno.serve(async (req) => {

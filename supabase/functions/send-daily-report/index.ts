@@ -12,7 +12,13 @@
 //   대신 전송로그(학원) DB 행에 "출석" 관계형과 "발송자" 인물 속성을 채워서, 출석 DB의 수식이 그 값을 읽어
 //   자동으로 계산하도록 합니다.
 
-import { createSendLogEntry, getBotUserId, notionGetPage, resolveAdminKeyFromRequest } from "../_shared/adminShared.ts"
+import {
+  createSendLogEntry,
+  extractErrorMessage,
+  getBotUserId,
+  notionGetPage,
+  resolveAdminKeyFromRequest,
+} from "../_shared/adminShared.ts"
 import {
   getFormulaText,
   getEffectiveAdminKey,
@@ -116,7 +122,7 @@ Deno.serve(async (req) => {
           title: studentName || "일일 보고서",
           category: "일일 보고서",
           status: "실패",
-          failReason: String((sendErr as any)?.message ?? sendErr),
+          failReason: extractErrorMessage(sendErr),
         })
         throw sendErr
       }
@@ -138,7 +144,7 @@ Deno.serve(async (req) => {
       console.log("send-daily-report finished:", attendanceId, JSON.stringify({ access_token, reportUrl, sendResult }))
     } catch (err) {
       console.error("send-daily-report background 처리 실패:", attendanceId, (err as Error).message)
-      await setAttendanceReportLastError(attendanceId, String((err as any)?.message ?? err))
+      await setAttendanceReportLastError(attendanceId, extractErrorMessage(err))
       await setAttendanceReportSendingFlag(attendanceId, false)
     }
   })

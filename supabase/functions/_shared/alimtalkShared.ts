@@ -222,7 +222,7 @@ export async function sendDailyReportAlimtalk(payload: {
         variables: payload.variables,
         disableSms: false,
       },
-    }))
+    }, { allowDuplicates: true }))
   }
   return results
 }
