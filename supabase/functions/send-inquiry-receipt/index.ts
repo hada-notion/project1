@@ -235,29 +235,30 @@ Deno.serve(async (req: Request) => {
     })
   }
 
-  try {
-    const studentPage = await notionGetPage(studentId)
-    const status = studentPage.properties?.[STATUS_PROP]?.select?.name ?? ""
-    if (status === "✅ 완료") {
-      return new Response(JSON.stringify({ ok: true, message: "already_sent", studentId }), {
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      })
-    }
-    if (status === "🔄 작업중") {
-      return new Response(JSON.stringify({ ok: true, message: "already_processing", studentId }), {
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      })
-    }
+  // Notion 자동화/버튼에는 즉시 202를 반환한다. 학생 페이지 조회나 상태 PATCH를 응답 전에
+  // 기다리면 Notion API의 일시적 5xx/지연이 웹훅 실패로 전파되어 자동화가 일시 중지될 수 있다.
+  // 실제 조회·중복 확인·상태 변경·발송은 모두 백그라운드에서 처리한다.
+  runInBackground(async () => {
+    try {
+      const studentPage = await notionGetPage(studentId)
+      const status = studentPage.properties?.[STATUS_PROP]?.select?.name ?? ""
+      if (status === "✅ 완료") {
+        console.log(`[${FUNCTION_NAME}] 이미 발송 완료되어 건너뜀:`, studentId)
+        return
+      }
+      if (status === "🔄 작업중") {
+        console.log(`[${FUNCTION_NAME}] 이미 처리 중이어서 건너뜀:`, studentId)
+        return
+      }
 
-    await setStatus(studentId, "🔄 작업중")
-    runInBackground(() => processStudent(studentId, studentPage))
-    return respondAccepted({ studentId })
-  } catch (err) {
-    const message = extractErrorMessage(err)
-    await setStatus(studentId, "⚠️ 오류", message).catch(() => {})
-    return new Response(JSON.stringify({ error: message }), {
-      status: 500,
-      headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-    })
-  }
+      await setStatus(studentId, "🔄 작업중")
+      await processStudent(studentId, studentPage)
+    } catch (err) {
+      const message = extractErrorMessage(err)
+      await setStatus(studentId, "⚠️ 오류", message).catch(() => {})
+      console.error(`[${FUNCTION_NAME}] 백그라운드 처리 실패:`, studentId, message)
+    }
+  })
+
+  return respondAccepted({ studentId })
 })
