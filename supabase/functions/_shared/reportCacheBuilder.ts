@@ -498,6 +498,8 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
         logDetailById.set(learningRecordId, source)
       }
       return {
+        id: ap.id,
+        learningRecordId,
         category: text(props["구분"]),
         dueIso: dateStartOf(props["과제 마감일"]),
         classIso,
@@ -516,23 +518,43 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
   // 오늘의 과제/평가가 미래 값으로 오인되어 제외된다. 서울 기준 날짜로 통일해 비교한다.
   const activityClassDate = (a: { classIso: string | null }) => kstDateOf(a.classIso)
 
-  const homeworkAll = activities
-    .filter((a) => {
-      const classDate = activityClassDate(a)
-      return a.category === "과제" && classDate && classDate >= sinceIso && classDate <= todayIso
-    })
-    .map((a) => ({
-      title: "",
-      book: a.bookTitle,
-      range: a.range,
-      unit: a.unit,
-      note: a.content,
-      iso: a.classIso,
-      date: fmtDateKr(a.classIso),
-      due_iso: a.dueIso,
-      due: a.dueIso ? fmtDateKr(a.dueIso) : "",
-      status: a.status || "미제출",
-    }))
+  const homeworkActivities = activities.filter((a) => {
+    const classDate = activityClassDate(a)
+    return a.category === "과제" && classDate && classDate >= sinceIso && classDate <= todayIso
+  })
+  const testActivities = activities.filter((a) => {
+    const classDate = activityClassDate(a)
+    return a.category === "평가" && classDate && classDate >= sinceIso && classDate <= todayIso
+  })
+
+  // 화면에 실제 표시되는 과제·평가 각 6건만 본문을 가져온다. 학습기록 본문은 반 전체가
+  // 공유하는 원본 자료이고, 학습활동 본문은 학생별 풀이·정답 결과물이다. 같은 학습기록을
+  // 여러 활동이 가리켜도 한 번만 조회하도록 원본 ID를 중복 제거한다.
+  const displayedActivities = [...homeworkActivities.slice(0, 6), ...testActivities.slice(0, 6)]
+  const displayedSourceIds = Array.from(
+    new Set(displayedActivities.map((a) => a.learningRecordId).filter((id): id is string => Boolean(id))),
+  )
+  const activityPageBodies = new Map(
+    await mapWithConcurrency(displayedActivities, 6, async (a) => [a.id, await readPageBodyBlocks(a.id)] as const),
+  )
+  const sourcePageBodies = new Map(
+    await mapWithConcurrency(displayedSourceIds, 6, async (id) => [id, await readPageBodyBlocks(id)] as const),
+  )
+
+  const homeworkAll = homeworkActivities.map((a) => ({
+    title: "",
+    book: a.bookTitle,
+    range: a.range,
+    unit: a.unit,
+    note: a.content,
+    iso: a.classIso,
+    date: fmtDateKr(a.classIso),
+    due_iso: a.dueIso,
+    due: a.dueIso ? fmtDateKr(a.dueIso) : "",
+    status: a.status || "미제출",
+    source_body: a.learningRecordId ? (sourcePageBodies.get(a.learningRecordId) ?? []) : [],
+    activity_body: activityPageBodies.get(a.id) ?? [],
+  }))
   const homework = homeworkAll.slice(0, 6)
 
   // [FIX, 2026-09-19] 아래 slice(0, 10)는 UTC 기준 날짜라, 자정 근처(KST 00시~09시)에 만들어진
@@ -556,11 +578,7 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
       return { date: day, status, submitted, total }
     })
 
-  const tests = activities
-    .filter((a) => {
-      const classDate = activityClassDate(a)
-      return a.category === "평가" && classDate && classDate >= sinceIso && classDate <= todayIso
-    })
+  const tests = testActivities
     .slice(0, 6)
     .map((a) => ({
       title: "",
@@ -572,6 +590,8 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
       date: fmtDateKr(a.classIso),
       correct: a.correct,
       total: a.total,
+      source_body: a.learningRecordId ? (sourcePageBodies.get(a.learningRecordId) ?? []) : [],
+      activity_body: activityPageBodies.get(a.id) ?? [],
     }))
 
   return {

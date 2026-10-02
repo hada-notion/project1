@@ -652,7 +652,7 @@ function buildDailyBodyHtml(r, date) {
       <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg></span>오늘 학습 내용</h2>
       ${todaysLogs.length ? todaysLogs.map((l) => {
         const meta = renderLogMetaRows(l.unit, l.note)
-        const bodyHtml = buildFeedBodyHtml(l.body)
+        const bodyHtml = buildLogBodyHtml(l)
         const hasExtra = !!bodyHtml
         const chevronBtn = hasExtra ? `<button type="button" class="log-extra-chevron" onclick="toggleLogExtra(this)" aria-label="펼치기"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>` : ""
         const metaHtml = (meta || chevronBtn) ? `<div class="log-meta">${meta}${chevronBtn}</div>` : ""
@@ -668,22 +668,34 @@ function buildDailyBodyHtml(r, date) {
 
     <div class="card">
       <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg></span>다음과제</h2>
-      ${nextHomeworkItems.length ? nextHomeworkItems.map((nextHomework) => `
+      ${nextHomeworkItems.length ? nextHomeworkItems.map((nextHomework) => {
+        const meta = renderLogMetaRows(nextHomework.unit, nextHomework.note, [nextHomework.classDate ? `출제: ${withDow(nextHomework.classDate)}` : null, `마감: ${withDow(nextHomework.due)}`].filter(Boolean))
+        const bodyHtml = buildLogBodyHtml(nextHomework)
+        const chevronBtn = bodyHtml ? `<button type="button" class="log-extra-chevron" onclick="toggleLogExtra(this)" aria-label="펼치기"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>` : ""
+        const metaHtml = (meta || chevronBtn) ? `<div class="log-meta">${meta}${chevronBtn}</div>` : ""
+        const extraHtml = bodyHtml ? `<div class="log-extra">${bodyHtml}</div>` : ""
+        return `
         <div class="log-row 과제">
           <div class="log-title-row"><div class="log-title">${esc([nextHomework.book, nextHomework.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${homeworkPillTone(nextHomework.status)}">${esc(nextHomework.status)}</span></div>
-          ${renderLogMetaRows(nextHomework.unit, nextHomework.note, [nextHomework.classDate ? `출제: ${withDow(nextHomework.classDate)}` : null, `마감: ${withDow(nextHomework.due)}`].filter(Boolean))}
-        </div>
-      `).join("") : '<div class="empty">예정된 과제가 없습니다.</div>'}
+          ${metaHtml}${extraHtml}
+        </div>`
+      }).join("") : '<div class="empty">예정된 과제가 없습니다.</div>'}
     </div>
 
     <div class="card">
       <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span>평가</h2>
-      ${todaysTests.length ? todaysTests.map((t) => `
+      ${todaysTests.length ? todaysTests.map((t) => {
+        const meta = renderLogMetaRows(t.unit, t.note)
+        const bodyHtml = buildLogBodyHtml(t)
+        const chevronBtn = bodyHtml ? `<button type="button" class="log-extra-chevron" onclick="toggleLogExtra(this)" aria-label="펼치기"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>` : ""
+        const metaHtml = (meta || chevronBtn) ? `<div class="log-meta">${meta}${chevronBtn}</div>` : ""
+        const extraHtml = bodyHtml ? `<div class="log-extra">${bodyHtml}</div>` : ""
+        return `
         <div class="log-row 평가">
           <div class="log-title-row"><div class="log-title">${esc([t.book, t.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${scorePillTone(t.correct ?? 0, t.total ?? 0)}">${scorePillText(t.correct ?? 0, t.total ?? 0)}</span></div>
-          ${renderLogMetaRows(t.unit, t.note)}
-        </div>
-      `).join("") : '<div class="empty">이 날짜에 기록된 평가가 없습니다.</div>'}
+          ${metaHtml}${extraHtml}
+        </div>`
+      }).join("") : '<div class="empty">이 날짜에 기록된 평가가 없습니다.</div>'}
       <div class="feed-divider"></div>
       <div class="log-title">최근 평가 추이</div>
       ${buildTestTrendChartHtml(computeRecentTestPoints(r.tests || [], date, 3))}
@@ -750,8 +762,8 @@ function renderDetail() {
       ${(() => {
         const items = []
         studyLogs.forEach((l) => items.push({ type: "학습", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`, date: l.date, title: [l.book, l.range].filter(Boolean).join(" · ") || "학습 기록", unit: l.unit, note: l.note, photo: l.photo, body: l.body, book: l.book }))
-        homework.forEach((h) => items.push({ type: "과제", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>`, date: h.classDate || h.due, due: h.due, classDate: h.classDate, title: [h.book, h.range].filter(Boolean).join(" · "), unit: h.unit, note: h.note, pill: h.status, pillTone: homeworkPillTone(h.status), book: h.book }))
-        tests.forEach((t) => items.push({ type: "평가", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`, date: t.date, title: [t.book, t.range].filter(Boolean).join(" · "), unit: t.unit, note: t.note, pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), book: t.book }))
+        homework.forEach((h) => items.push({ type: "과제", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>`, date: h.classDate || h.due, due: h.due, classDate: h.classDate, title: [h.book, h.range].filter(Boolean).join(" · "), unit: h.unit, note: h.note, pill: h.status, pillTone: homeworkPillTone(h.status), book: h.book, sourceBody: h.sourceBody, activityBody: h.activityBody }))
+        tests.forEach((t) => items.push({ type: "평가", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`, date: t.date, title: [t.book, t.range].filter(Boolean).join(" · "), unit: t.unit, note: t.note, pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), book: t.book, sourceBody: t.sourceBody, activityBody: t.activityBody }))
         const filtered = studyLogFilter === "전체" ? items : items.filter((it) => it.type === studyLogFilter)
         const sorted = filtered.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
         const groups = []
@@ -772,10 +784,11 @@ function renderDetail() {
                 </div>
                 ${(() => {
                   const meta = renderLogMetaRows(l.unit, l.note, l.type === "과제" ? [l.classDate ? `출제: ${withDow(l.classDate)}` : null, l.due ? `마감: ${withDow(l.due)}` : null].filter(Boolean) : [])
-                  const hasExtra = l.photo || (l.body && buildFeedBodyHtml(l.body))
+                  const bodyHtml = buildLogBodyHtml(l)
+                  const hasExtra = l.photo || !!bodyHtml
                   const chevronBtn = hasExtra ? `<button type="button" class="log-extra-chevron" onclick="toggleLogExtra(this)" aria-label="펼치기"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>` : ""
                   const metaHtml = (meta || chevronBtn) ? `<div class="log-meta">${meta}${chevronBtn}</div>` : ""
-                  const extraHtml = hasExtra ? `<div class="log-extra">${l.photo ? `<img class="log-photo" src="${esc(l.photo)}" />` : ""}${buildFeedBodyHtml(l.body)}</div>` : ""
+                  const extraHtml = hasExtra ? `<div class="log-extra">${l.photo ? `<img class="log-photo" src="${esc(l.photo)}" />` : ""}${bodyHtml}</div>` : ""
                   return metaHtml + extraHtml
                 })()}
               </div>
