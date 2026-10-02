@@ -2,6 +2,7 @@
 // TODO(아이콘 소스 규칙): 일부 아이콘은 HTML에 직접 박힌 이모지이고, 일부는 노션 페이지 아이콘을 가져와야 함. 추후 아이콘 소스를 하나의 변수/규칙으로 통일하는 규칙을 정해야 함 (아직 미정).
 let STUDENT = null
 let DATA_ERROR = null
+let REPORT_ACCESS_TOKEN = ""
 
 const SUPABASE_URL = "https://twczhsxybkcvjkdfdxvs.supabase.co"
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR3Y3poc3h5YmtjdmprZGZkeHZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyOTcwMDQsImV4cCI6MjEwMzg3MzAwNH0.t7Ltb_iSYqE4gHSoGSm-OlpiLjGqIcgrhzGJ-t56EDc"
@@ -150,6 +151,15 @@ function normalizeFeedBody(rawBody) {
       if (b.type === "video" && b.url) {
         return { type: "video", url: String(b.url), caption: String(b.caption || "") }
       }
+      if ((b.type === "pdf" || b.type === "file") && (b.blockId || b.url)) {
+        return {
+          type: b.type,
+          blockId: String(b.blockId || ""),
+          url: String(b.url || ""),
+          name: String(b.name || (b.type === "pdf" ? "PDF 문서" : "첨부 파일")),
+          caption: String(b.caption || ""),
+        }
+      }
       if (b.type === "divider") return { type: "divider" }
       if (b.type === "table" && Array.isArray(b.rows) && b.rows.length) {
         return {
@@ -207,6 +217,53 @@ function buildFeedVideoHtml(vid) {
   return `<div class="feed-video">${inner}${vid.caption ? `<div class="feed-video-caption">${esc(vid.caption)}</div>` : ""}</div>`
 }
 
+// 보고서 캐시에 포함된 blockId가 현재 토큰의 데이터에 실제로 속하는지 서버에서 확인한 뒤,
+// Notion 블록을 다시 조회해 만료되지 않은 최신 파일 URL을 연다.
+async function openReportFile(blockId, button) {
+  const safeBlockId = String(blockId || "").replace(/[^a-zA-Z0-9-]/g, "")
+  if (!safeBlockId || !REPORT_ACCESS_TOKEN) return
+  const popup = window.open("about:blank", "_blank")
+  const oldHtml = button ? button.innerHTML : ""
+  if (button) {
+    button.disabled = true
+    button.textContent = "파일 준비 중..."
+  }
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/get-report-file`, {
+      method: "POST",
+      headers: {
+        "apikey": SUPABASE_ANON_KEY,
+        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ token: REPORT_ACCESS_TOKEN, blockId: safeBlockId }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data.url) throw new Error(data.error || `HTTP ${res.status}`)
+    if (popup) popup.location.replace(data.url)
+    else window.location.href = data.url
+  } catch (err) {
+    if (popup) popup.close()
+    alert("파일을 열 수 없습니다. 보고서를 동기화한 뒤 다시 시도해주세요.")
+    console.error("openReportFile failed", err)
+  } finally {
+    if (button) {
+      button.disabled = false
+      button.innerHTML = oldHtml
+    }
+  }
+}
+function buildFeedFileHtml(file) {
+  const isPdf = file.type === "pdf"
+  const safeBlockId = String(file.blockId || "").replace(/[^a-zA-Z0-9-]/g, "")
+  const icon = isPdf ? "PDF" : "FILE"
+  const actionLabel = isPdf ? "PDF 열기·인쇄" : "파일 열기·다운로드"
+  const action = safeBlockId
+    ? `<button type="button" class="feed-file-action" onclick="openReportFile('${safeBlockId}', this)">${actionLabel}</button>`
+    : `<a class="feed-file-action" href="${esc(file.url)}" target="_blank" rel="noopener noreferrer">${actionLabel}</a>`
+  return `<div class="feed-file-card"><div class="feed-file-icon ${isPdf ? "pdf" : ""}">${icon}</div><div class="feed-file-info"><div class="feed-file-name">${esc(file.name)}</div>${file.caption && file.caption !== file.name ? `<div class="feed-file-caption">${esc(file.caption)}</div>` : ""}${action}</div></div>`
+}
+
 // 피드 본문 렌더링: 글 + 사진을 인스타그램 피드처럼 보여준다.
 // 이미지 1장은 크게, 2장 이상은 그리드로 배치한다.
 // 노션 블록 스타일별 렌더링. 글머리/번호 목록은 연속된 항목을 하나의 <ul>/<ol>로 묶어야
@@ -242,6 +299,12 @@ function buildFeedBodyHtml(body) {
       flushImages()
       flushList()
       parts.push(buildFeedVideoHtml(it))
+      return
+    }
+    if (it.type === "pdf" || it.type === "file") {
+      flushImages()
+      flushList()
+      parts.push(buildFeedFileHtml(it))
       return
     }
     if (it.type === "divider") {
@@ -421,6 +484,7 @@ function mapReportToStudent(r) {
 
 async function loadReportFromServer() {
   const token = new URLSearchParams(window.location.search).get("token")
+  REPORT_ACCESS_TOKEN = token || ""
   if (!token) {
     DATA_ERROR = "링크가 올바르지 않아요. 받으신 링크를 다시 확인해주세요"
     return

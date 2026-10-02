@@ -100,11 +100,23 @@ async function blocksToFeedBody(blocks: any[]): Promise<unknown[]> {
       }
       continue
     }
-    if (type === "image" || type === "video") {
+    if (type === "image" || type === "video" || type === "pdf" || type === "file") {
       const media = b[type]
       const url = media?.type === "external" ? media.external?.url : media?.file?.url
       if (!url) continue
-      items.push({ type, url: String(url), caption: richTextPlain(media?.caption) })
+      const caption = richTextPlain(media?.caption)
+      if (type === "pdf" || type === "file") {
+        const fallbackName = type === "pdf" ? "PDF 문서" : "첨부 파일"
+        items.push({
+          type,
+          blockId: String(b.id || ""),
+          url: String(url),
+          name: String(media?.name || caption || fallbackName),
+          caption,
+        })
+      } else {
+        items.push({ type, url: String(url), caption })
+      }
       continue
     }
     if (type === "divider") {

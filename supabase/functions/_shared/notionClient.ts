@@ -194,6 +194,16 @@ export async function getPage(pageId: string) {
 	return res.json()
 }
 
+// Notion 업로드 파일 URL은 만료되므로, 학부모가 파일을 여는 순간 블록을 다시 조회해
+// 최신 서명 URL을 발급받는 get-report-file 함수에서 사용한다.
+export async function getBlock(blockId: string) {
+	const res = await fetchWithRetry(`${NOTION_API}/blocks/${blockId}`, { headers: notionHeaders() })
+	if (!res.ok) {
+		throw new Error(`get block ${blockId} failed: ${res.status} ${await res.text()}`)
+	}
+	return res.json()
+}
+
 // 페이지 "본문"(블록) 목록을 커서를 따라가며 가져온다. 학습기록 페이지 본문을 학부모 리포트
 // 피드에 부록으로 보여주는 데 쓴다 (readPageBodyBlocks, reportCacheBuilder.ts). 한 페이지가
 // 비정상적으로 블록이 많은 극단적인 경우까지 대비해, 최대 MAX_PAGES(3페이지 = 최대 300블록)까지만

@@ -208,6 +208,25 @@ if ! grep -q 'registrationId, primaryPhone: parentPhone' supabase/functions/send
   fail=1
 fi
 
+# 17) Notion 업로드 PDF/파일은 만료 URL을 캐시에만 의존하면 안 된다. blockId를 저장하고,
+#     학생 보고서 토큰으로 접근 권한을 검증한 뒤 최신 URL을 발급하는 함수를 유지한다.
+if ! grep -q 'type === "pdf" || type === "file"' supabase/functions/_shared/reportCacheBuilder.ts; then
+  echo "❌ reportCacheBuilder.ts: PDF/파일 블록 수집이 빠졌습니다."
+  fail=1
+fi
+if ! grep -q 'blockId: String(b.id' supabase/functions/_shared/reportCacheBuilder.ts; then
+  echo "❌ reportCacheBuilder.ts: 만료 URL 갱신에 필요한 파일 blockId가 없습니다."
+  fail=1
+fi
+if ! grep -q 'containsBlockId(row.registration_detail' supabase/functions/get-report-file/index.ts; then
+  echo "❌ get-report-file: 보고서 토큰의 파일 접근 권한 검증이 빠졌습니다."
+  fail=1
+fi
+if ! grep -q 'get-report-file' student_report_part1.js; then
+  echo "❌ student_report_part1.js: 최신 파일 URL 요청 코드가 빠졌습니다."
+  fail=1
+fi
+
 if [ "$fail" != 0 ]; then
   echo ""
   echo "회귀 가드 실패 -- 위 문제를 고친 뒤 다시 배포하세요."
