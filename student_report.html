@@ -680,11 +680,11 @@ body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
 .feed-images.single { grid-template-columns: 1fr; }
 .feed-figure { margin: 0; }
 .feed-img { width: 100%; aspect-ratio: 1 / 1; max-height: 320px; object-fit: cover; border-radius: 12px; display: block; background: #f0f0f4; cursor: zoom-in; }
-.feed-images.single .feed-img { aspect-ratio: auto; height: auto; max-height: 420px; object-fit: contain; background: #fafafa; }
+.feed-images.single .feed-img { aspect-ratio: auto; height: auto; max-height: none; object-fit: contain; background: #fafafa; }
 .feed-figure figcaption { font-size: 11px; color: var(--text-subtle); margin-top: 4px; text-align: center; }
 .feed-video { margin: 8px 0; }
 .feed-video iframe { width: 100%; aspect-ratio: 16 / 9; border-radius: 12px; display: block; border: 0; }
-.feed-video video { width: 100%; max-height: 420px; border-radius: 12px; display: block; background: #000; }
+.feed-video video { width: 100%; height: auto; max-height: none; object-fit: contain; border-radius: 12px; display: block; background: #000; }
 .feed-video-caption { font-size: 11px; color: var(--text-subtle); margin-top: 4px; text-align: center; }
 .feed-divider { border-top: 1px solid #f1f0f6; margin: 12px 0; }
 .feed-lightbox { position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; padding: 16px; cursor: zoom-out; }
