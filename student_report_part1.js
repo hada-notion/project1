@@ -593,7 +593,7 @@ function renderBookDetail() {
   const book = books.find((b) => normBookTitle(b.title) === targetTitle) || {}
   const items = []
   ;((r.study_logs) || []).filter((l) => normBookTitle(l.book) === targetTitle).forEach((l) => items.push({
-    type: "학습", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`, date: l.date, book: l.book, range: l.range, unit: l.unit, note: l.note, pill: null, photo: l.photo, body: l.body,
+    type: "학습", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`, date: l.date, book: l.book, range: l.range, unit: l.unit, note: l.note, pill: null, photo: l.photo, body: l.body, sourceBody: l.sourceBody, activityBody: l.activityBody,
   }))
   ;((r.homework) || []).filter((h) => normBookTitle(h.book) === targetTitle).forEach((h) => items.push({
     type: "과제", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>`, date: h.classDate || h.due, due: h.due, classDate: h.classDate, book: h.book, range: h.range, unit: h.unit, note: h.note || h.title, pill: h.status, pillTone: homeworkPillTone(h.status), photo: null, sourceBody: h.sourceBody, activityBody: h.activityBody,
