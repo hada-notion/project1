@@ -60,7 +60,7 @@ const PROP_ACTIVITY_ASSIGNMENT_STATUS = "과제상태"
 
 export const CATEGORY_ASSIGNMENT = "과제"
 export const CATEGORY_EVALUATION = "평가"
-const ASSIGNMENT_STATUS_NOT_SUBMITTED = "🔴 밌제출"
+const ASSIGNMENT_STATUS_NOT_SUBMITTED = "🔴 미제출"
 
 const PROP_SHARED_LAST_ERROR = "마지막 오류"
 
