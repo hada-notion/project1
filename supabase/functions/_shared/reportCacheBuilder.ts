@@ -527,10 +527,21 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
     return a.category === "평가" && classDate && classDate >= sinceIso && classDate <= todayIso
   })
 
-  // 화면에 실제 표시되는 과제·평가 각 6건만 본문을 가져온다. 학습기록 본문은 반 전체가
-  // 공유하는 원본 자료이고, 학습활동 본문은 학생별 풀이·정답 결과물이다. 같은 학습기록을
-  // 여러 활동이 가리켜도 한 번만 조회하도록 원본 ID를 중복 제거한다.
-  const displayedActivities = [...homeworkActivities.slice(0, 6), ...testActivities.slice(0, 6)]
+  // 화면에 실제 표시되는 학습 12건·과제 6건·평가 6건의 학생별 학습활동 본문만 가져온다.
+  // 학습기록 본문은 반 전체가 공유하는 원본 자료이고, 학습활동 본문은 학생별 풀이·필기·답안이다.
+  const studyActivityByRecordId = new Map(
+    activities
+      .filter((a) => a.category === "학습" && a.learningRecordId)
+      .map((a) => [a.learningRecordId as string, a]),
+  )
+  const displayedStudyActivities = studyLogCandidates
+    .map((l) => studyActivityByRecordId.get(l.id))
+    .filter((a): a is (typeof activities)[number] => Boolean(a))
+  const displayedActivities = [
+    ...displayedStudyActivities,
+    ...homeworkActivities.slice(0, 6),
+    ...testActivities.slice(0, 6),
+  ]
   const displayedSourceIds = Array.from(
     new Set(displayedActivities.map((a) => a.learningRecordId).filter((id): id is string => Boolean(id))),
   )
@@ -540,6 +551,15 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
   const sourcePageBodies = new Map(
     await mapWithConcurrency(displayedSourceIds, 6, async (id) => [id, await readPageBodyBlocks(id)] as const),
   )
+  const studyLogsWithActivity = study_logs.map((log, index) => {
+    const source = studyLogCandidates[index]
+    const activity = source ? studyActivityByRecordId.get(source.id) : undefined
+    return {
+      ...log,
+      source_body: log.body,
+      activity_body: activity ? (activityPageBodies.get(activity.id) ?? []) : [],
+    }
+  })
 
   const homeworkAll = homeworkActivities.map((a) => ({
     title: "",
@@ -597,7 +617,7 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
   return {
     attendance_summary,
     attendance_rows,
-    study_logs,
+    study_logs: studyLogsWithActivity,
     homework,
     homework_days,
     tests,

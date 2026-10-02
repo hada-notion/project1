@@ -144,10 +144,10 @@ const TARGETS: Array<{ label: string; dataSourceId: string; spec: StatusSpec }> 
 	{ label: "교재비(카트):삭제", dataSourceId: DS_TEXTBOOK_CART, spec: CASCADE_DELETE_STATUS_SPEC },
 	{ label: "교재배부:삭제", dataSourceId: DS_TEXTBOOK_DISTRIBUTION, spec: CASCADE_DELETE_STATUS_SPEC },
 	{ label: "교재결제:삭제", dataSourceId: DS_TEXTBOOK_PAYMENT, spec: CASCADE_DELETE_STATUS_SPEC },
-	// (2026-09-22, Phase 3) create-assignment("출제" 버튼)의 "출제 처리중" checkbox -> 상태 전환.
-	// 마스터플랜 표엔 "학습활동 DB 출제 처리중"으로 적혀 있었으나, 실제 버튼/속성은 학습기록 DB에
+	// (2026-09-22, Phase 3) create-assignment("학습활동 생성" 버튼)의 활동 생성 상태 -> 상태 전환.
+	// 마스터플랜 표엔 "학습활동 DB 활동 생성 상태"으로 적혀 있었으나, 실제 버튼/속성은 학습기록 DB에
 	// 있다 (createAssignmentTarget.ts 상단 주석 참고).
-	{ label: "학습기록:출제", dataSourceId: DS_LEARNING_RECORD, spec: ASSIGNMENT_GEN_STATUS_SPEC },
+	{ label: "학습기록:활동생성", dataSourceId: DS_LEARNING_RECORD, spec: ASSIGNMENT_GEN_STATUS_SPEC },
 	// (2026-09-22, Phase 3) sync-textbook-distribution의 from-cart 라우트("진도교재 담기" 버튼)의
 	// "담기 처리중" checkbox -> 상태 전환.
 	{ label: "교재비(카트):담기", dataSourceId: DS_TEXTBOOK_CART, spec: CART_STATUS_SPEC },

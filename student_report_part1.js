@@ -298,19 +298,27 @@ function buildFeedBodyHtml(body) {
   return `<div class="feed-body">${parts.join("")}</div>`
 }
 
-// 과제·평가 펼침 영역은 공통 원본(학습기록 본문)과 학생별 결과물(학습활동 본문)을
-// 위아래로 보여준다. 둘 다 있을 때만 가운데 구분선을 넣고, 한쪽이 비면 있는 본문만 표시한다.
-function buildCombinedFeedBodyHtml(sourceBody, activityBody) {
+// 학습기록의 공통 원본과 학생별 학습활동 결과를 유형별 명칭으로 구분한다.
+// 양쪽이 모두 있을 때만 구분선을 넣고, 한쪽이 비면 존재하는 영역과 라벨만 표시한다.
+const FEED_SECTION_LABELS = {
+  "학습": { source: "수업 자료", activity: "학습 결과" },
+  "과제": { source: "출제 내용", activity: "제출 내용" },
+  "평가": { source: "평가 문항", activity: "풀이·답안" },
+}
+function buildCombinedFeedBodyHtml(sourceBody, activityBody, type) {
   const sourceHtml = buildFeedBodyHtml(sourceBody)
   const activityHtml = buildFeedBodyHtml(activityBody)
-  if (!sourceHtml) return activityHtml
-  if (!activityHtml) return sourceHtml
-  return `<div class="feed-combined">${sourceHtml}<hr class="feed-source-activity-divider">${activityHtml}</div>`
+  if (!sourceHtml && !activityHtml) return ""
+  const labels = FEED_SECTION_LABELS[type] || { source: "제공 내용", activity: "학습 결과" }
+  const sourceSection = sourceHtml ? `<section class="feed-section"><div class="feed-section-label">${esc(labels.source)}</div>${sourceHtml}</section>` : ""
+  const activitySection = activityHtml ? `<section class="feed-section"><div class="feed-section-label">${esc(labels.activity)}</div>${activityHtml}</section>` : ""
+  const divider = sourceHtml && activityHtml ? `<hr class="feed-source-activity-divider">` : ""
+  return `<div class="feed-combined">${sourceSection}${divider}${activitySection}</div>`
 }
 function buildLogBodyHtml(log) {
   if (!log) return ""
   if ((log.sourceBody && log.sourceBody.length) || (log.activityBody && log.activityBody.length)) {
-    return buildCombinedFeedBodyHtml(log.sourceBody, log.activityBody)
+    return buildCombinedFeedBodyHtml(log.sourceBody, log.activityBody, log.type)
   }
   return buildFeedBodyHtml(log.body)
 }
@@ -380,12 +388,12 @@ function mapRegistration(reg) {
       return { date: kstDate || (rawDate ? String(rawDate).slice(0, 10) : null), weekday: a.weekday || "", status: a.status || "" }
     }),
     // 학습·과제·평가를 같은 수업일로 묶을 수 있도록 시각 포함 ISO 값을 모두 KST 날짜로 통일한다.
-    study_logs: (reg.study_logs || []).map((s) => ({ book: s.book || "", range: s.range || "", unit: s.unit || "", date: isoToKstDate(s.iso) || (s.iso ? String(s.iso).slice(0, 10) : null), note: s.note || "", body: normalizeFeedBody(s.body) })),
+    study_logs: (reg.study_logs || []).map((s) => ({ type: "학습", book: s.book || "", range: s.range || "", unit: s.unit || "", date: isoToKstDate(s.iso) || (s.iso ? String(s.iso).slice(0, 10) : null), note: s.note || "", body: normalizeFeedBody(s.body), sourceBody: normalizeFeedBody(s.source_body || s.body), activityBody: normalizeFeedBody(s.activity_body) })),
     // classDate(수업일)는 백엔드가 h.iso로 내려주지만 지금까지 프론트에서 버려지고 있었다. "다음과제"를
     // 마감일이 아니라 수업일(그 과제를 실제로 내준 날) 기준으로 판단하려면 이 값이 있어야 한다.
-    homework: (reg.homework || []).map((h) => ({ title: h.title || "", book: h.book || "", range: h.range || "", unit: h.unit || "", note: h.note || "", due: h.due_iso || null, classDate: isoToKstDate(h.iso) || null, status: h.status || "미제출", sourceBody: normalizeFeedBody(h.source_body), activityBody: normalizeFeedBody(h.activity_body) })),
+    homework: (reg.homework || []).map((h) => ({ type: "과제", title: h.title || "", book: h.book || "", range: h.range || "", unit: h.unit || "", note: h.note || "", due: h.due_iso || null, classDate: isoToKstDate(h.iso) || null, status: h.status || "미제출", sourceBody: normalizeFeedBody(h.source_body), activityBody: normalizeFeedBody(h.activity_body) })),
     homework_days: (reg.homework_days || []).map((h) => ({ date: h.date || null, status: h.status || "미완료", submitted: h.submitted ?? 0, total: h.total ?? 0 })),
-    tests: (reg.tests || []).map((t) => ({ title: t.title || "", book: t.book || "", range: t.range || "", unit: t.unit || "", note: t.note || "", date: isoToKstDate(t.iso) || (t.iso ? String(t.iso).slice(0, 10) : null), correct: t.correct ?? 0, total: t.total ?? 0, sourceBody: normalizeFeedBody(t.source_body), activityBody: normalizeFeedBody(t.activity_body) })),
+    tests: (reg.tests || []).map((t) => ({ type: "평가", title: t.title || "", book: t.book || "", range: t.range || "", unit: t.unit || "", note: t.note || "", date: isoToKstDate(t.iso) || (t.iso ? String(t.iso).slice(0, 10) : null), correct: t.correct ?? 0, total: t.total ?? 0, sourceBody: normalizeFeedBody(t.source_body), activityBody: normalizeFeedBody(t.activity_body) })),
     teacher_comments: (reg.teacher_comments || []).map((c) => ({ text: c.text || "", date: c.iso || null, by: c.by || "" })),
     // 주간/월간 보고서: 보고서(학원) DB 자체의 "선생님 한마디"를 보고서 구분·학습 기간과 함께 보관한다.
     report_comments: (reg.report_comments || []).map((c) => ({ kind: c.kind || "", start: c.start || null, end: c.end || c.start || null, comment: c.comment || "" })),
