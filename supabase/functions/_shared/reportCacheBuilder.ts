@@ -512,8 +512,15 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
     }),
   )
 
+  // classIso는 시각이 포함된 ISO 문자열이고 todayIso는 날짜만 있는 문자열이므로 그대로 비교하면
+  // 오늘의 과제/평가가 미래 값으로 오인되어 제외된다. 서울 기준 날짜로 통일해 비교한다.
+  const activityClassDate = (a: { classIso: string | null }) => kstDateOf(a.classIso)
+
   const homeworkAll = activities
-    .filter((a) => a.category === "과제" && a.classIso && a.classIso >= sinceIso && a.classIso <= todayIso)
+    .filter((a) => {
+      const classDate = activityClassDate(a)
+      return a.category === "과제" && classDate && classDate >= sinceIso && classDate <= todayIso
+    })
     .map((a) => ({
       title: "",
       book: a.bookTitle,
@@ -550,7 +557,10 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
     })
 
   const tests = activities
-    .filter((a) => a.category === "평가" && a.classIso && a.classIso >= sinceIso && a.classIso <= todayIso)
+    .filter((a) => {
+      const classDate = activityClassDate(a)
+      return a.category === "평가" && classDate && classDate >= sinceIso && classDate <= todayIso
+    })
     .slice(0, 6)
     .map((a) => ({
       title: "",
