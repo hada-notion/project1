@@ -44,9 +44,9 @@
   header.app-header h1 { font-size: 16px; margin: 0; }
   header.app-header button { background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 13px; }
 
-  main { padding: 20px; display: flex; flex-direction: column; gap: 16px; max-width: 1200px; width: 100%; margin: 0 auto; }
+  main { padding: 20px; display: flex; flex-direction: column; gap: 16px; max-width: none; width: 100%; min-width: 0; margin: 0 auto; }
 
-  .panel { background: var(--canvas); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .panel { min-width: 0; background: var(--canvas); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
 
   .doc-type-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
   .doc-type-tabs button {
@@ -90,8 +90,43 @@
   .receipt-copy h3 { text-align:center; }
   .receipt-copy p { font-size:12px; line-height:1.8; }
   .receipt-copy .doc-table { margin:20px 0; }
-  @media(max-width:650px) { .receipt-pair {grid-template-columns:1fr;} #print-area {padding:12px;overflow-x:auto;} }
+  .table-scroll-hint { margin:6px 0; font-size:12px; color:var(--text-secondary); }
+  @media screen {
+    #print-panel, #print-area { min-width:0; max-width:100%; }
+    .table-scroll { width:100%; max-width:100%; overflow-x:auto; overscroll-behavior-x:contain; -webkit-overflow-scrolling:touch; }
+    .table-scroll:focus-visible { outline:2px solid var(--blue); outline-offset:3px; }
+    .table-scroll .doc-table { font-size:13px; }
+    .table-scroll .doc-table th, .table-scroll .doc-table td { padding:8px 10px; }
+    .table-scroll .doc-table th { white-space:nowrap; }
+    .table-scroll .doc-table:not(.attendance-table) { min-width:calc(var(--columns, 6) * 120px); }
+    .table-scroll .doc-table:not(.attendance-table) td { min-width:96px; max-width:360px; overflow-wrap:anywhere; }
+    .attendance-table { --subject-width:96px; --course-width:220px; --name-width:104px; table-layout:fixed; border-collapse:separate !important; border-spacing:0;
+      min-width:calc(var(--subject-width) + var(--course-width) + var(--name-width) + var(--day-count) * 48px); }
+    .attendance-table col:nth-child(1) { width:var(--subject-width); }
+    .attendance-table col:nth-child(2) { width:var(--course-width); }
+    .attendance-table col:nth-child(3) { width:var(--name-width); }
+    .table-scroll .attendance-table th, .table-scroll .attendance-table td { border-width:0 1px 1px 0; padding:8px 6px; }
+    .attendance-table tr > :first-child { border-left-width:1px !important; }
+    .attendance-table thead tr:first-child > th { border-top-width:1px; }
+    .table-scroll .attendance-table tr > :nth-child(-n+3) { position:sticky; z-index:2; background:#fff; white-space:normal; word-break:keep-all; overflow-wrap:anywhere; }
+    .table-scroll .attendance-table thead tr > :nth-child(-n+3) { z-index:3; background:#f2f2f2; }
+    .attendance-table tr > :nth-child(1) { left:0; }
+    .attendance-table tr > :nth-child(2) { left:var(--subject-width); }
+    .attendance-table tr > :nth-child(3) { left:calc(var(--subject-width) + var(--course-width)); box-shadow:3px 0 4px -3px #666; }
+    .attendance-table tr > :nth-child(n+4) { white-space:nowrap; }
+  }
+  @media screen and (max-width:650px) {
+    main { padding:12px; }
+    .panel { padding:12px; }
+    #print-area { padding:12px; }
+    .receipt-pair { grid-template-columns:1fr; }
+    .attendance-table { --subject-width:64px; --course-width:128px; --name-width:72px; }
+    .table-scroll .doc-table { font-size:12px; }
+    .toolbar { flex-wrap:wrap; }
+  }
   @media print {
+    .table-scroll { overflow:visible !important; width:auto; max-width:none; }
+    .table-scroll-hint { display:none !important; }
     .receipt-pair {grid-template-columns:1fr 1fr;}
     .receipt-page:last-child {break-after:auto;}
     thead {display:table-header-group;}
@@ -330,7 +365,7 @@
   function billingText(r) { return r.billingStart ? `${r.billingStart} ~ ${r.billingEnd || r.billingStart}` : "미입력"; }
   function renderAttendance(data) {
     let html = `<h2>수강생 출석부</h2><div class="doc-sub">${esc(data.periodStart)} ~ ${esc(data.periodEnd)}</div>` + warningsHtml(data);
-    html += `<table class="doc-table"><thead><tr><th>교습과목</th><th>신고 반명(교습과정)</th><th>성명</th>`;
+    html += `<table class="doc-table attendance-table" style="--day-count:${data.dateList.length}"><colgroup><col><col><col><col span="${data.dateList.length}"></colgroup><thead><tr><th>교습과목</th><th>신고 반명(교습과정)</th><th>성명</th>`;
     data.dateList.forEach(d=>html+=`<th>${esc(d.slice(5))}</th>`);
     html += `</tr></thead><tbody>`;
     data.students.forEach(r=>{html+=`<tr><td>${field(r.subject)}</td><td>${field(r.className)}</td><td class="name-cell">${field(r.studentName)}</td>`;data.dateList.forEach(d=>html+=`<td>${esc(r.days[d] || "")}</td>`);html+=`</tr>`;});
@@ -375,6 +410,22 @@
     return html;
   }
 
+  // Screen-only scroll surfaces. Formal receipt copies and all export data remain unchanged.
+  function prepareTableScrolling() {
+    const area=document.getElementById("print-area");
+    area.querySelectorAll("table.doc-table").forEach(table=>{
+      if(table.closest(".receipt-copy") || table.parentElement.classList.contains("table-scroll"))return;
+      const wrapper=document.createElement("div");
+      wrapper.className="table-scroll";wrapper.tabIndex=0;wrapper.setAttribute("role","region");
+      wrapper.setAttribute("aria-label",table.classList.contains("attendance-table") ? "수강생 출석부 — 좌우 스크롤, 교습과목·신고명·성명 고정" : "서류 표 — 좌우 스크롤");
+      wrapper.style.setProperty("--columns",table.rows[0]?.cells.length || 6);
+      table.before(wrapper);wrapper.appendChild(table);
+      const hint=document.createElement("div");hint.className="table-scroll-hint";
+      hint.textContent=table.classList.contains("attendance-table") ? "표가 화면보다 넓으면 좌우로 스크롤하세요. 교습과목·신고명·성명은 왼쪽에 고정됩니다." : "표가 화면보다 넓으면 표 안에서 좌우로 스크롤하세요.";
+      wrapper.before(hint);
+    });
+  }
+
   document.getElementById("btn-query").addEventListener("click", async () => {
     const statusEl = document.getElementById("doc-status");
     const printArea = document.getElementById("print-area");
@@ -404,6 +455,7 @@
       else if (body.docType === "receipt-ledger") html = renderReceiptLedger(data, body.receiptLayout);
       else if (body.docType === "cash-journal") html = renderCashJournal(data);
       printArea.innerHTML = html;
+      prepareTableScrolling();
       const legalNames = [...new Set((data.students || data.rows || []).map(r=>r.className).filter(Boolean))];
       const legalFilterLabel = `신고 교습과정: ${legalNames.join(", ") || "미입력"} · ${body.studentId ? targetLabel : "전체 학생"}${body.search ? " · 검색: "+body.search : ""}`;
       loadedDocument = { data, query: { ...body }, filterLabel: body.docType === "cash-journal" ? filterLabel : legalFilterLabel, targetLabel };
@@ -419,6 +471,7 @@
     if(loadedDocument?.query.docType !== "receipt-ledger")return;
     loadedDocument.query.receiptLayout=document.getElementById("receipt-layout").value;
     document.getElementById("print-area").innerHTML=renderReceiptLedger(loadedDocument.data,loadedDocument.query.receiptLayout);
+    prepareTableScrolling();
   });
   document.getElementById("btn-print").addEventListener("click", () => window.print());
 
