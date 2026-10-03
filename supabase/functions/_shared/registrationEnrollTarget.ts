@@ -38,6 +38,8 @@ import {
 import { getPage, updatePageProperties, relIds, titleText, todaySeoulDate, mapWithConcurrency } from "./notionClient.ts"
 import { type StatusSpec } from "./statusTracking.ts"
 
+import { ensureStudentRegistrationNumber } from "./legalDocumentNumbers.ts"
+
 const PROP_CLASS_TIMETABLE = "시간표" // 클래스(학원) DB의 시간표 relation
 
 // (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) "등록 처리중" 체크박스 → "등록 상태"(select) +
@@ -51,6 +53,11 @@ export const ENROLL_STATUS_SPEC: StatusSpec = {
 export async function processEnrollForRegistration(pageId: string, log: string[]) {
 	const reg = await getPage(pageId)
 	const regName = titleText(reg, PROP_TITLE)
+	const studentId = relIds(reg.properties["학생정보"])[0]
+	if (!studentId) throw new Error("학생정보를 연결하세요 (등록번호 발급 대상 확인 필요)")
+	if (!relIds(reg.properties[PROP_CLASS]).length) throw new Error("클래스를 선택하세요")
+	const studentNumber = await ensureStudentRegistrationNumber(studentId)
+	log.push(`등록번호 ${studentNumber} 유지/발급 완료 (학생 기준 고정)`)
 
 	const updates: Record<string, unknown> = {}
 
