@@ -268,7 +268,7 @@ async function buildReceiptLedger(body: any) {
   const birth=seoulDate(student?.properties?.["생년월일"]?.date?.start ?? "")
   if(!billing?.start)warnings.add("청구기간 미입력 결제가 있습니다. 납부일을 교습기간으로 대체하지 않았습니다.")
   if(!birth)warnings.add("생년월일 미입력 결제가 있습니다.")
-  rows.push({paymentId:p.id,serialNo:await reserveLegalNumber("receipt",p.id),paymentDate:seoulDate(p.properties?.[PROP_PAYMENT_DATE]?.date?.start ?? ""),payerName:titleOf(student,"학생이름"),registrationNo:no,birthDate:birth,subject:course.subject,className:course.className,
+  rows.push({paymentId:p.id,serialNo:await reserveLegalNumber("receipt",p.id),paymentDate:seoulDate(p.properties?.[PROP_PAYMENT_DATE]?.date?.start ?? ""),payerName:titleOf(student,"학생이름"),registrationNo:no,birthDate:birth,classId:course.classId,subject:course.subject,className:course.className,
    billingStart:seoulDate(billing?.start ?? ""),billingEnd:seoulDate(billing?.end || billing?.start || ""),billingMonth:billing?.start?.slice(0,7) ?? "",amount,etcExpense:etc,paidAmount:paid,note:plainText(p.properties?.[PROP_PAYMENT_NOTE])})
  }
  warnings.add("환불·취소 전용 상태/원거래 연결 및 발행자/서명 정보는 아직 없습니다. 원부·영수증 출력은 대조·보완용 초안이며 확정 발급 전 확인이 필요합니다.")

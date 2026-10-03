@@ -110,7 +110,7 @@
 
   .warnings { border:1px solid #e5bd74; background:#fff7e7; padding:10px 12px; margin-bottom:16px; font-size:12px; line-height:1.6; }
   .attendance-class { margin-bottom:32px; }
-  .class-register { break-inside:avoid; margin-bottom:24px; }
+  .class-register, .class-receipt-list { margin-bottom:24px; }
   .class-register h3 { font-size:14px; margin:12px 0; }
   table.register-table { table-layout:fixed; }
   table.register-table th, table.register-table td { text-align:center; vertical-align:middle; }
@@ -162,6 +162,9 @@
     .table-scroll-hint { display:none !important; }
     .receipt-pair {grid-template-columns:1fr 1fr;}
     .receipt-page:last-child {break-after:auto;}
+    .class-register + .class-register, .class-receipt-list + .class-receipt-list { break-before:page; page-break-before:always; }
+    .class-register, .class-receipt-list { break-inside:auto; }
+    .class-register h2, .class-register h3, .class-receipt-list h2, .class-receipt-list h3 { break-after:avoid; }
     .attendance-class + .attendance-class { break-before:page; page-break-before:always; }
     .attendance-class h2 { break-after:avoid; }
     .attendance-class .doc-sub { break-after:avoid; }
@@ -469,13 +472,14 @@
     return [...groups.values()];
   }
   function renderStudentRegister(data, title) {
-    let html=`<h2>${esc(title)}</h2><div class="doc-sub">별지 제25호서식 항목 기준 · 3년 보관</div>`+warningsHtml(data);
+    let html=warningsHtml(data);
+    if(!registerGroups(data).length)html+=`<h2>${esc(title)}</h2><div class="doc-sub">별지 제25호서식 항목 기준 · 3년 보관</div>`;
     registerGroups(data).forEach(g=>{
-      html+=`<section class="class-register"><h3>반명: ${field(g.className)} &nbsp; 교습과목: ${field(g.subject)}</h3><table class="doc-table register-table"><colgroup>${REGISTER_COLUMN_RATIOS.map(width=>`<col style="width:${width}%">`).join("")}</colgroup><thead><tr><th>등록번호</th><th>성명</th><th>주소</th><th>전화번호</th><th>입원 연월일</th><th>퇴원 연월일</th></tr></thead><tbody>`;
+      html+=`<section class="class-register"><h2>${esc(title)}</h2><div class="doc-sub">별지 제25호서식 항목 기준 · 3년 보관</div><h3>반명: ${field(g.className)} &nbsp; 교습과목: ${field(g.subject)}</h3><table class="doc-table register-table"><colgroup>${REGISTER_COLUMN_RATIOS.map(width=>`<col style="width:${width}%">`).join("")}</colgroup><thead><tr><th>등록번호</th><th>성명</th><th>주소</th><th>전화번호</th><th>입원 연월일</th><th>퇴원 연월일</th></tr></thead><tbody>`;
       g.rows.forEach(r=>html+=`<tr><td>${field(r.registrationNo)}</td><td>${field(r.studentName)}</td><td>${field(r.address)}</td><td>${field(r.phone)}</td><td>${field(r.enrollDate)}</td><td>${esc(r.endDate)}</td></tr>`);
-      html+=`</tbody></table></section>`;
+      html+=`</tbody></table><div class="legend">전화번호: 학생 → 지정 우선 연락처 → 다른 등록 연락처(어머니·아버지·기타 보호자 순) → 누락 안내. 입원/퇴원 날짜는 등록 건의 등록일/종료일 기준입니다.</div></section>`;
     });
-    return html+`<div class="legend">전화번호: 학생 → 지정 우선 연락처 → 다른 등록 연락처(어머니·아버지·기타 보호자 순) → 누락 안내. 입원/퇴원 날짜는 등록 건의 등록일/종료일 기준입니다.</div>`;
+    return html;
   }
   function receiptCopy(r, title) {
     return `<div class="receipt-copy"><h3>${esc(title)}</h3><p>일련번호: ${field(r.serialNo)} &nbsp; 연월(분기): ${field(r.billingMonth)}<br>교습기간: ${esc(billingText(r))}<br>신고 교습과정: ${field(r.className)}</p><table class="doc-table"><tr><th>등록(신고)번호</th><td>${field(r.registrationNo)}</td></tr><tr><th>성명</th><td>${field(r.payerName)}</td></tr><tr><th>생년월일</th><td>${field(r.birthDate)}</td></tr><tr><th>교습과목</th><td>${field(r.subject)}</td></tr><tr><th>교습비</th><td>${money(r.amount)}</td></tr><tr><th>기타경비</th><td>${money(r.etcExpense)}</td></tr></table><p>위와 같이 영수하였음을 증명합니다.<br>${field(r.paymentDate)}</p><p>학원설립·운영자, 교습자<br>또는 개인과외교습자 __________________ (서명 또는 인)</p><p><b>대조·보완용 초안 — 누락 항목/환불·취소와 발행자 서명 확인 필요</b></p></div>`;
@@ -483,9 +487,20 @@
   function renderReceiptLedger(data, layout="list", snapshot) {
     let html=`<h2>${esc(documentTitle(snapshot))}</h2><div class="doc-sub">별지 제24호서식 항목 기반 초안 · 원부 5년 보관</div>`+warningsHtml(data);
     if(layout==="form") return html+data.rows.map(r=>`<section class="receipt-page"><div class="receipt-pair">${receiptCopy(r,documentTitle(snapshot))}${receiptCopy(r,documentTitle(snapshot,"교습비등 영수증"))}</div></section>`).join("");
+    const groups=new Map();
+    data.rows.forEach(r=>{const key=r.classId || JSON.stringify([r.className || "",r.subject || ""]);
+      if(!groups.has(key))groups.set(key,{className:r.className,subject:r.subject,rows:[]});groups.get(key).rows.push(r);
+    });
+    // Repeat the existing document title and class context at the start of every printed class.
+    html=warningsHtml(data);
+    if(!groups.size)return html+`<h2>${esc(documentTitle(snapshot))}</h2><div class="doc-sub">조회 결과가 없습니다.</div>`;
+    groups.forEach(g=>{
+      html+=`<section class="class-receipt-list"><h2>${esc(documentTitle(snapshot))}</h2><div class="doc-sub">별지 제24호서식 항목 기반 초안 · 원부 5년 보관</div><h3>반명: ${field(g.className)} &nbsp; 교습과목: ${field(g.subject)}</h3>`;
     html+=`<table class="doc-table"><thead><tr><th>일련번호</th><th>납부일자</th><th>납부자(성명)</th><th>등록번호</th><th>생년월일</th><th>교습과목</th><th>신고 교습과정</th><th>교습기간</th><th>교습비</th><th>기타경비</th><th>결제금액</th><th>비고</th></tr></thead><tbody>`;
-    data.rows.forEach(r=>html+=`<tr><td>${field(r.serialNo)}</td><td>${esc(r.paymentDate)}</td><td class="name-cell">${field(r.payerName)}</td><td>${field(r.registrationNo)}</td><td>${esc(r.birthDate)}</td><td>${field(r.subject)}</td><td>${field(r.className)}</td><td>${esc(billingText(r))}</td><td>${money(r.amount)}</td><td>${money(r.etcExpense)}</td><td>${money(r.paidAmount)}</td><td class="note-cell">${esc(r.note)}</td></tr>`);
-    return html+`</tbody></table><div class="legend">조회 전체 결제금액 합계: ${won(data.rows.reduce((sum,r)=>sum+(r.paidAmount ?? 0),0))}<br>교습비/기타경비 미확인은 0원과 다릅니다. 목록은 관리용이며 원부·영수증 서식으로 전환해 개별 인쇄할 수 있습니다.</div>`;
+    g.rows.forEach(r=>html+=`<tr><td>${field(r.serialNo)}</td><td>${esc(r.paymentDate)}</td><td class="name-cell">${field(r.payerName)}</td><td>${field(r.registrationNo)}</td><td>${esc(r.birthDate)}</td><td>${field(r.subject)}</td><td>${field(r.className)}</td><td>${esc(billingText(r))}</td><td>${money(r.amount)}</td><td>${money(r.etcExpense)}</td><td>${money(r.paidAmount)}</td><td class="note-cell">${esc(r.note)}</td></tr>`);
+      html+=`</tbody></table><div class="legend">반별 결제금액 합계: ${won(g.rows.reduce((sum,r)=>sum+(r.paidAmount ?? 0),0))}<br>교습비/기타경비 미확인은 0원과 다릅니다. 목록은 관리용이며 원부·영수증 서식으로 전환해 개별 인쇄할 수 있습니다.</div></section>`;
+    });
+    return html+`<div class="legend">조회 전체 결제금액 합계: ${won(data.rows.reduce((sum,r)=>sum+(r.paidAmount ?? 0),0))}</div>`;
   }
 
   function renderCashJournal(data, title) {
