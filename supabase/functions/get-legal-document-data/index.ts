@@ -1,7 +1,8 @@
 // POST /functions/v1/get-legal-document-data
 // 법정 서류(수강생 출석부/수강생 대장/교습비등 영수증 원부/현금출납부) 화면(legal_documents.html)이
 // 호출하는 조회 전용 함수. 학원법 시행규칙 별표2(장부·서류 비치 의무) 대응.
-// action:"meta" -> 필터용 클래스/학생 목록만 반환. 그 외에는 body.docType에 따라 자료를 만든다.
+// action:"classes" -> 클래스만, action:"students" + classId -> 해당 반 학생만 반환.
+// action:"meta"는 이전 화면 호환용. 그 외에는 body.docType에 따라 자료를 만든다.
 //
 // [FIX, 2026-09-28] 처음 작성할 때 adminShared.ts의 notionQueryDatabase/notionQueryDatabaseAll/
 // notionGetPage(구버전 NOTION_VERSION="2022-06-28", /v1/databases/{id}/query 엔드포인트)를 썼는데,
@@ -72,7 +73,7 @@ function makePageCache() {
 
 // [CHANGED, 2026-09-28] 서류를 조회할 때마다 클래스(학원) DB 전체를 훑는 게 느려서(사용자 체감
 // 로딩 지연 원인), 실제로 등장하는 등록 건들에 연결된 클래스만 getPage로 골라 가져오도록 바꿨다.
-// 클래스 전체 목록이 필요한 건 "동기화" 버튼(action:"meta")뿐이다.
+// 클래스 전체 목록은 화면 초기 로딩(action:"classes")에서만 필요하다.
 async function fetchClassNamesFor(registrations: any[], getCachedPage: (id: string) => Promise<any>): Promise<Map<string, string>> {
   const classIds = [...new Set(registrations.map((r) => firstRelationId(r, PROP_REG_CLASS)).filter((id): id is string => !!id))]
   const pages = await Promise.all(classIds.map((id) => getCachedPage(id)))
@@ -278,6 +279,33 @@ async function buildCashJournal(body: any) {
   return { rows }
 }
 
+async function buildClasses() {
+  const classes = await queryAllPages(DS_CLASS)
+  return {
+    classes: classes.map((c: any) => ({ id: c.id, name: titleOf(c, PROP_CLASS_TITLE) }))
+      .sort((a, b) => a.name.localeCompare(b.name, "ko")),
+  }
+}
+
+async function buildClassStudents(classId: unknown) {
+  if (typeof classId !== "string" || !/^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.test(classId)) {
+    throw new Error("올바른 classId가 필요합니다")
+  }
+  // 서버에서 선택한 클래스만 필터링한다. 전체 등록 DB와 학생 DB를 불러오지 않는다.
+  // 관계 속성의 첫 25건 제한에 의존하지 않고 queryAllPages로 해당 반 전체를 가져온다.
+  const registrations = await queryAllPages(DS_REGISTRATION, {
+    property: PROP_REG_CLASS, relation: { contains: classId },
+  })
+  const students = new Map<string, { id: string; name: string }>()
+  for (const reg of registrations) {
+    const id = firstRelationId(reg, PROP_REG_STUDENT)
+    // 등록 ID를 학생 ID로 대신 반환하면 학생정보 필터가 맞지 않으므로 제외한다.
+    if (!id) continue
+    students.set(id, { id, name: titleOf(reg, PROP_REG_TITLE) || anyTitle(reg) })
+  }
+  return { students: [...students.values()].sort((a, b) => a.name.localeCompare(b.name, "ko")) }
+}
+
 async function buildMeta() {
   const [classes, registrations] = await Promise.all([queryAllPages(DS_CLASS), queryAllPages(DS_REGISTRATION)])
   return {
@@ -298,7 +326,11 @@ Deno.serve(async (req: Request) => {
   try {
     const body = await req.json().catch(() => ({}))
     let result: unknown
-    if (body.action === "meta") {
+    if (body.action === "classes") {
+      result = await buildClasses()
+    } else if (body.action === "students") {
+      result = await buildClassStudents(body.classId)
+    } else if (body.action === "meta") {
       result = await buildMeta()
     } else {
       switch (body.docType) {

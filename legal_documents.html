@@ -116,13 +116,12 @@
       <div class="filters">
         <div class="field"><label>시작일</label><input type="date" id="f-start"></div>
         <div class="field"><label>종료일</label><input type="date" id="f-end"></div>
-        <div class="field"><label>클래스</label><select id="f-class"><option value="">전체</option></select></div>
-        <div class="field"><label>학생</label><select id="f-student"><option value="">전체</option></select></div>
+        <div class="field"><label>클래스</label><select id="f-class"><option value="">전체 클래스</option></select></div>
+        <div class="field"><label>학생</label><select id="f-student" disabled><option value="">클래스를 먼저 선택하세요</option></select></div>
         <div class="field"><label>검색(이름)</label><input type="text" id="f-search" placeholder="학생 이름"></div>
-        <button id="btn-sync" title="클래스·학생 명단만 빠르게 불러옵니다">🔄 명단 동기화</button>
         <button id="btn-query">조회</button>
       </div>
-      <div id="sync-status" style="margin-top:6px;font-size:12px;color:var(--text-secondary)">클래스·학생 명단이 아직 동기화되지 않았습니다. [🔄 명단 동기화]를 먼저 눌러주세요.</div>
+      <div style="margin-top:6px;font-size:12px;color:var(--text-secondary)"><span id="meta-status" role="status" aria-live="polite"></span> <button id="btn-meta-retry" type="button" hidden>재시도</button></div>
       <div id="doc-status" style="margin-top:8px"></div>
     </div>
 
@@ -146,17 +145,18 @@
   function getAdminKey() { return localStorage.getItem(ADMIN_KEY_STORAGE) || ""; }
 
   function showLoginScreen(errorMsg) {
+    metaRequestId++;
     document.getElementById("login-screen").style.display = "flex";
     document.getElementById("app-screen").style.display = "none";
     document.getElementById("login-error").textContent = errorMsg || "";
     document.getElementById("login-input").value = "";
     setTimeout(() => document.getElementById("login-input").focus(), 50);
   }
-  async function showAppScreen() {
+  async function showAppScreen(initialClasses) {
     document.getElementById("login-screen").style.display = "none";
     document.getElementById("app-screen").style.display = "flex";
-    loadMetaFromCache();
     setDefaultDates();
+    await loadClasses(initialClasses);
   }
   document.getElementById("logout-btn").addEventListener("click", () => {
     if (!confirm("로그아웃 하시겠습니까?")) return;
@@ -189,13 +189,17 @@
     if (!key) { errEl.textContent = "비밀번호를 입력하세요."; return; }
     btn.disabled = true; btn.textContent = "확인 중..."; errEl.textContent = "";
     try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/list-students`, {
-        headers: { "x-admin-key": key, "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "apikey": SUPABASE_ANON_KEY },
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/get-legal-document-data`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-key": key, "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "apikey": SUPABASE_ANON_KEY },
+        body: JSON.stringify({ action: "classes" }),
       });
-      if (res.status === 401) { errEl.textContent = "비밀번호가 올바르지 않습니다."; btn.disabled = false; btn.textContent = "로그인"; return; }
-      if (!res.ok) throw new Error(`서버 오류: ${res.status}`);
+      if (res.status === 401) { errEl.textContent = "비밀번호가 올바르지 않습니다."; return; }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `서버 오류: ${res.status}`);
+      if (!Array.isArray(data.classes)) throw new Error("클래스 목록을 확인할 수 없습니다.");
       localStorage.setItem(ADMIN_KEY_STORAGE, key);
-      await showAppScreen();
+      await showAppScreen(data.classes);
     } catch (err) {
       errEl.textContent = "로그인에 실패했습니다: " + err.message;
     } finally {
@@ -222,61 +226,76 @@
     document.getElementById("f-end").value = last;
   }
 
-  // [NEW] 클래스(학원) DB·등록(학원) DB 전체를 훑는 건 느리므로, 조회할 때마다 자동으로 하지
-  // 않고 [🔄 명단 동기화] 버튼을 눌렀을 때만 한 번 불러와 localStorage에 캐시해둔다. 캐시가
-  // 있으면 재접속 시에도 즉시 드롭다운을 채운다 (실제 수강 등록 변경 시에는 다시 동기화 필요).
-  const META_CACHE_KEY = "legal_docs_meta_cache";
+  // 초기에는 클래스만 조회하고, 반 선택 시 그 반의 학생만 조회한다.
+  let metaRequestId = 0;
+  let retryMeta = null;
+  const classSel = document.getElementById("f-class");
+  const studentSel = document.getElementById("f-student");
+  const queryBtn = document.getElementById("btn-query");
+  const retryBtn = document.getElementById("btn-meta-retry");
 
-  function fillMetaSelects(meta) {
-    const classSel = document.getElementById("f-class");
-    const studentSel = document.getElementById("f-student");
-    classSel.innerHTML = '<option value="">전체</option>';
-    studentSel.innerHTML = '<option value="">전체</option>';
-    (meta.classes || []).forEach((c) => {
-      const opt = document.createElement("option"); opt.value = c.id; opt.textContent = c.name; classSel.appendChild(opt);
-    });
-    (meta.students || []).forEach((s) => {
-      const opt = document.createElement("option"); opt.value = s.id; opt.textContent = s.name; studentSel.appendChild(opt);
-    });
+  function setMetaStatus(message, retry = null) {
+    document.getElementById("meta-status").textContent = message;
+    retryMeta = retry;
+    retryBtn.hidden = !retry;
   }
-
-  function setSyncStatusText(savedAt) {
-    const el = document.getElementById("sync-status");
-    if (!savedAt) {
-      el.textContent = "클래스·학생 명단이 아직 동기화되지 않았습니다. [🔄 명단 동기화]를 먼저 눌러주세요.";
+  function resetStudents(label) {
+    studentSel.replaceChildren(new Option(label, ""));
+    studentSel.disabled = true;
+  }
+  function appendOptions(select, rows) {
+    rows.forEach((row) => select.add(new Option(row.name, row.id)));
+  }
+  async function loadClasses(initialClasses) {
+    const requestId = ++metaRequestId;
+    classSel.disabled = true;
+    classSel.replaceChildren(new Option("클래스 불러오는 중…", ""));
+    resetStudents("클래스를 먼저 선택하세요");
+    queryBtn.disabled = true;
+    setMetaStatus("클래스 불러오는 중…");
+    try {
+      const classes = initialClasses || (await callFn({ action: "classes" })).classes;
+      if (requestId !== metaRequestId) return;
+      if (!Array.isArray(classes)) throw new Error("클래스 목록을 확인할 수 없습니다.");
+      classSel.replaceChildren(new Option("전체 클래스", ""));
+      appendOptions(classSel, classes);
+      classSel.disabled = false;
+      queryBtn.disabled = false;
+      setMetaStatus(`클래스 ${classes.length}개 · 반을 선택하면 해당 반 학생을 불러옵니다.`);
+    } catch (err) {
+      if (requestId !== metaRequestId) return;
+      classSel.replaceChildren(new Option("클래스 로딩 실패", ""));
+      setMetaStatus("클래스 로딩 실패: " + err.message, () => loadClasses());
+    }
+  }
+  async function loadClassStudents() {
+    const requestId = ++metaRequestId;
+    const classId = classSel.value;
+    resetStudents(classId ? "학생 불러오는 중…" : "클래스를 먼저 선택하세요");
+    if (!classId) {
+      queryBtn.disabled = false;
+      setMetaStatus("전체 클래스 조회가 가능합니다. 반을 선택하면 해당 반 학생을 불러옵니다.");
       return;
     }
-    el.textContent = `마지막 동기화: ${new Date(savedAt).toLocaleString("ko-KR")} (클래스·학생 명단이 바뀌었으면 다시 동기화하세요)`;
-  }
-
-  function loadMetaFromCache() {
+    queryBtn.disabled = true;
+    setMetaStatus("해당 반 학생 불러오는 중…");
     try {
-      const cached = JSON.parse(localStorage.getItem(META_CACHE_KEY) || "null");
-      if (cached && cached.meta) {
-        fillMetaSelects(cached.meta);
-        setSyncStatusText(cached.savedAt);
-        return;
-      }
-    } catch (err) { console.error("캐시된 명단 읽기 실패", err); }
-    setSyncStatusText(null);
-  }
-
-  async function syncMeta() {
-    const btn = document.getElementById("btn-sync");
-    btn.disabled = true; btn.textContent = "동기화 중...";
-    try {
-      const meta = await callFn({ action: "meta" });
-      const savedAt = Date.now();
-      localStorage.setItem(META_CACHE_KEY, JSON.stringify({ meta, savedAt }));
-      fillMetaSelects(meta);
-      setSyncStatusText(savedAt);
+      const data = await callFn({ action: "students", classId });
+      if (requestId !== metaRequestId || classSel.value !== classId) return;
+      if (!Array.isArray(data.students)) throw new Error("학생 목록을 확인할 수 없습니다.");
+      studentSel.replaceChildren(new Option("전체 학생", ""));
+      appendOptions(studentSel, data.students);
+      studentSel.disabled = data.students.length === 0;
+      queryBtn.disabled = false;
+      setMetaStatus(data.students.length ? `해당 반 학생 ${data.students.length}명` : "해당 반에 등록된 학생이 없습니다.");
     } catch (err) {
-      document.getElementById("sync-status").textContent = "동기화 실패: " + err.message;
-    } finally {
-      btn.disabled = false; btn.textContent = "🔄 명단 동기화";
+      if (requestId !== metaRequestId || classSel.value !== classId) return;
+      resetStudents("학생 로딩 실패");
+      setMetaStatus("학생 로딩 실패: " + err.message, loadClassStudents);
     }
   }
-  document.getElementById("btn-sync").addEventListener("click", syncMeta);
+  classSel.addEventListener("change", loadClassStudents);
+  retryBtn.addEventListener("click", () => { if (retryMeta) retryMeta(); });
 
   function esc(s) { return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
   function won(n) { return (n || 0).toLocaleString("ko-KR") + "원"; }
