@@ -60,6 +60,8 @@
   .filters input, .filters select {
     padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border); font-size: 13px; min-width: 140px;
   }
+  .filters .fixed-select-field { flex:0 0 180px; width:180px; min-width:180px; }
+  .filters .fixed-select-field select { width:100%; min-width:0; max-width:100%; height:36px; }
   .filters button {
     padding: 9px 18px; border-radius: 6px; border: none; background: var(--blue); color: #fff; cursor: pointer; font-size: 13px;
   }
@@ -94,6 +96,10 @@
   .receipt-copy h3 { text-align:center; }
   .receipt-copy p { font-size:12px; line-height:1.8; }
   .receipt-copy .doc-table { margin:20px 0; }
+  .attendance-details { margin-top:16px; border:1px solid var(--border); border-radius:8px; padding:12px; background:var(--surface); }
+  .attendance-details > summary { cursor:pointer; font-size:14px; font-weight:600; }
+  .attendance-details > summary:focus-visible { outline:2px solid var(--blue); outline-offset:4px; }
+  .attendance-details-body { margin-top:12px; }
   .table-scroll-hint { margin:6px 0; font-size:12px; color:var(--text-secondary); }
   @media screen {
     #print-panel, #print-area { min-width:0; max-width:100%; }
@@ -131,6 +137,7 @@
     .toolbar { flex-wrap:wrap; }
   }
   @media print {
+    .attendance-details { display:none !important; }
     .table-scroll { overflow:visible !important; width:auto; max-width:none; }
     .table-scroll-hint { display:none !important; }
     .receipt-pair {grid-template-columns:1fr 1fr;}
@@ -172,8 +179,8 @@
       <div class="filters">
         <div class="field"><label>시작일</label><input type="date" id="f-start"></div>
         <div class="field"><label>종료일</label><input type="date" id="f-end"></div>
-        <div class="field"><label>클래스</label><select id="f-class"><option value="">전체 클래스</option></select></div>
-        <div class="field"><label>학생</label><select id="f-student" disabled><option value="">클래스를 먼저 선택하세요</option></select></div>
+        <div class="field fixed-select-field"><label>클래스</label><select id="f-class"><option value="">전체 클래스</option></select></div>
+        <div class="field fixed-select-field"><label>학생</label><select id="f-student" disabled><option value="">클래스를 먼저 선택하세요</option></select></div>
         <div class="field"><label>검색(이름)</label><input type="text" id="f-search" placeholder="학생 이름"></div>
         <button id="btn-query">조회</button>
       </div>
@@ -377,7 +384,7 @@
     data.students.forEach(r=>{html+=`<tr><td>${field(r.subject)}</td><td>${field(r.className)}</td><td class="name-cell">${field(r.studentName)}</td>`;data.dateList.forEach(d=>html+=`<td>${esc(r.days[d] || "")}</td>`);html+=`</tr>`;});
     html += `</tbody></table><div class="legend">○ 출석 · × 결석 · △ 보강 · · 예정/미체크 · 공란: 수업 기록 없음<br>등록별 별도 행이며, 같은 등록에 하루 여러 수업이 있으면 시간순으로 / 구분합니다. 등하원 체크를 수업 출석으로 대체하지 않습니다.</div>`;
     const sessions = data.students.flatMap(r=>(r.sessions || []).map(v=>({...v,...{className:r.className,studentName:r.studentName,registrationNo:r.registrationNo}})));
-    if(sessions.length) html += `<h3>수업별 상세 내역</h3><table class="doc-table"><thead><tr><th>신고 반명</th><th>성명</th><th>등록번호</th><th>수업일</th><th>시각</th><th>출석 상태</th></tr></thead><tbody>${sessions.map(v=>`<tr><td>${field(v.className)}</td><td>${field(v.studentName)}</td><td>${field(v.registrationNo)}</td><td>${esc(v.date)}</td><td>${esc(v.time)}</td><td>${esc(v.symbol)} ${esc(v.status)}</td></tr>`).join("")}</tbody></table>`;
+    if(sessions.length) html += `<details class="attendance-details"><summary>수업별 상세 내역 보기 (${sessions.length}건)</summary><div class="attendance-details-body"><table class="doc-table"><thead><tr><th>신고 반명</th><th>성명</th><th>등록번호</th><th>수업일</th><th>시각</th><th>출석 상태</th></tr></thead><tbody>${sessions.map(v=>`<tr><td>${field(v.className)}</td><td>${field(v.studentName)}</td><td>${field(v.registrationNo)}</td><td>${esc(v.date)}</td><td>${esc(v.time)}</td><td>${esc(v.symbol)} ${esc(v.status)}</td></tr>`).join("")}</tbody></table></div></details>`;
     return html;
   }
   const REGISTER_COLUMN_RATIOS = [8, 12, 38, 16, 13, 13];
