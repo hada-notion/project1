@@ -109,6 +109,7 @@
   .sign-line { margin-top: 40px; text-align: right; font-size: 13px; }
 
   .warnings { border:1px solid #e5bd74; background:#fff7e7; padding:10px 12px; margin-bottom:16px; font-size:12px; line-height:1.6; }
+  .attendance-class { margin-bottom:32px; }
   .class-register { break-inside:avoid; margin-bottom:24px; }
   .class-register h3 { font-size:14px; margin:12px 0; }
   table.register-table { table-layout:fixed; }
@@ -133,29 +134,25 @@
     .table-scroll .doc-table:not(.attendance-table) td { min-width:96px; max-width:360px; overflow-wrap:anywhere; }
     .table-scroll .register-table { min-width:900px !important; }
     .table-scroll table.doc-table.register-table td { min-width:0; max-width:none; }
-    .attendance-table { --subject-width:96px; --course-width:220px; --name-width:104px; --day-width:80px; table-layout:fixed; border-collapse:separate !important; border-spacing:0;
-      min-width:calc(var(--subject-width) + var(--course-width) + var(--name-width) + var(--day-count) * var(--day-width)); }
-    .attendance-table col:nth-child(1) { width:var(--subject-width); }
-    .attendance-table col:nth-child(2) { width:var(--course-width); }
-    .attendance-table col:nth-child(3) { width:var(--name-width); }
+    .attendance-table { --name-width:104px; --day-width:80px; table-layout:fixed; border-collapse:separate !important; border-spacing:0;
+      min-width:calc(var(--name-width) + var(--day-count) * var(--day-width)); }
+    .attendance-table col:first-child { width:var(--name-width); }
     .table-scroll .attendance-table th, .table-scroll .attendance-table td { border-width:0 1px 1px 0; padding:8px 6px; }
     .attendance-table tr > :first-child { border-left-width:1px !important; }
     .attendance-table thead tr:first-child > th { border-top-width:1px; }
-    .table-scroll .attendance-table tr > :nth-child(-n+3) { position:sticky; z-index:2; background:#fff; white-space:normal; word-break:keep-all; overflow-wrap:anywhere; }
-    .table-scroll .attendance-table thead tr > :nth-child(-n+3) { z-index:3; background:#f2f2f2; }
-    .attendance-table tr > :nth-child(1) { left:0; }
-    .attendance-table tr > :nth-child(2) { left:var(--subject-width); }
-    .attendance-table tr > :nth-child(3) { left:calc(var(--subject-width) + var(--course-width)); box-shadow:3px 0 4px -3px #666; }
-    .attendance-table tr > :nth-child(n+4) { white-space:nowrap; }
-    .table-scroll table.attendance-table th.has-column-tools:nth-child(n+4) { white-space:nowrap; }
-    .attendance-table th:nth-child(n+4) .head-label { white-space:nowrap; overflow-wrap:normal; word-break:normal; }
+    .table-scroll .attendance-table tr > :first-child { position:sticky; z-index:2; background:#fff; white-space:normal; word-break:keep-all; overflow-wrap:anywhere; }
+    .table-scroll .attendance-table thead tr > :first-child { z-index:3; background:#f2f2f2; }
+    .attendance-table tr > :first-child { left:0; box-shadow:3px 0 4px -3px #666; }
+    .attendance-table tr > :nth-child(n+2) { white-space:nowrap; }
+    .table-scroll table.attendance-table th.has-column-tools:nth-child(n+2) { white-space:nowrap; }
+    .attendance-table th:nth-child(n+2) .head-label { white-space:nowrap; overflow-wrap:normal; word-break:normal; }
   }
   @media screen and (max-width:650px) {
     main { padding:12px; }
     .panel { padding:12px; }
     #print-area { padding:12px; }
     .receipt-pair { grid-template-columns:1fr; }
-    .attendance-table { --subject-width:64px; --course-width:128px; --name-width:72px; }
+    .attendance-table { --name-width:88px; }
     .table-scroll .doc-table { font-size:12px; }
     .toolbar { flex-wrap:wrap; }
   }
@@ -165,6 +162,15 @@
     .table-scroll-hint { display:none !important; }
     .receipt-pair {grid-template-columns:1fr 1fr;}
     .receipt-page:last-child {break-after:auto;}
+    .attendance-class + .attendance-class { break-before:page; page-break-before:always; }
+    .attendance-class h2 { break-after:avoid; }
+    .attendance-class .doc-sub { break-after:avoid; }
+    table.attendance-table { table-layout:fixed; width:100%; font-size:9px; }
+    .attendance-table col:first-child { width:26mm; }
+    .table-scroll .attendance-table th, .table-scroll .attendance-table td { padding:4px 1px; text-align:center; }
+    .attendance-table th { white-space:nowrap; }
+    .attendance-table td { overflow-wrap:anywhere; }
+    .attendance-table td:first-child { white-space:normal; word-break:keep-all; }
     thead {display:table-header-group;}
     tr {break-inside:avoid;}
 
@@ -424,13 +430,35 @@
   function field(value) { return value === null || value === undefined || value === "" ? "미입력" : esc(value); }
   function money(value) { return value === null || value === undefined ? "미확인" : won(value); }
   function billingText(r) { return r.billingStart ? `${r.billingStart} ~ ${r.billingEnd || r.billingStart}` : "미입력"; }
-  function renderAttendance(data, title) {
-    let html = `<h2>${esc(title)}</h2><div class="doc-sub">${esc(data.periodStart)} ~ ${esc(data.periodEnd)}</div>` + warningsHtml(data);
-    html += `<table class="doc-table attendance-table" style="--day-count:${data.dateList.length}"><colgroup><col><col><col><col span="${data.dateList.length}"></colgroup><thead><tr><th>교습과목</th><th>신고 반명(교습과정)</th><th>성명</th>`;
-    data.dateList.forEach(d=>html+=`<th>${esc(d.slice(5))}</th>`);
-    html += `</tr></thead><tbody>`;
-    data.students.forEach(r=>{html+=`<tr><td>${field(r.subject)}</td><td>${field(r.className)}</td><td class="name-cell">${field(r.studentName)}</td>`;data.dateList.forEach(d=>html+=`<td>${esc(r.days[d] || "")}</td>`);html+=`</tr>`;});
-    html += `</tbody></table><div class="legend">○ 출석 · × 결석 · △ 보강 · · 예정/미체크 · 공란: 수업 기록 없음<br>등록별 별도 행이며, 같은 등록에 하루 여러 수업이 있으면 시간순으로 / 구분합니다. 등하원 체크를 수업 출석으로 대체하지 않습니다.</div>`;
+  const ATTENDANCE_NOTE="○ 출석 · × 결석 · △ 보강 · · 예정/미체크 · 공란: 수업 기록 없음. 등록별 별도 행, 복수 수업은 시간순 / 구분. 등하원 체크를 수업 출석으로 대체하지 않습니다.";
+  function attendanceGroups(data) {
+    const groups=new Map();
+    (data.students || []).forEach(r=>{
+      // Actual class identity, not the reported label: distinct classes may share a legal course name.
+      const key=r.classId || JSON.stringify([r.className || "",r.subject || ""]);
+      if(!groups.has(key))groups.set(key,{classId:r.classId,className:r.className,subject:r.subject,rows:[]});
+      groups.get(key).rows.push(r);
+    });
+    return [...groups.values()];
+  }
+  function attendanceGroupTitle(group) {
+    return `수강생 출석부(${group.className || "신고 반명 미입력"}, ${group.subject || "교습과목 미입력"})`;
+  }
+  function attendanceSubtitle(snapshot) {
+    return snapshot.query.studentId ? `선택 학생: ${snapshot.targetLabel || "학생 이름 미입력"}` : "";
+  }
+  function renderAttendance(data, snapshot) {
+    let html=warningsHtml(data);
+    const groups=attendanceGroups(data);
+    if(!groups.length)return `<h2>${esc(documentTitle(snapshot))}</h2><div class="doc-sub">${esc(data.periodStart)} ~ ${esc(data.periodEnd)}</div>${html}<p class="doc-sub">조회 결과가 없습니다.</p>`;
+    groups.forEach(g=>{
+      html+=`<section class="attendance-class"><h2>${esc(attendanceGroupTitle(g))}</h2><div class="doc-sub">${esc(data.periodStart)} ~ ${esc(data.periodEnd)}${snapshot.query.studentId ? "<br>"+esc(attendanceSubtitle(snapshot)) : ""}</div>`;
+      html+=`<table class="doc-table attendance-table" style="--day-count:${data.dateList.length}"><colgroup><col><col span="${data.dateList.length}"></colgroup><thead><tr><th>성명</th>`;
+      data.dateList.forEach(d=>html+=`<th>${esc(d.slice(5))}</th>`);
+      html+=`</tr></thead><tbody>`;
+      g.rows.forEach(r=>{html+=`<tr><td class="name-cell">${field(r.studentName)}</td>`;data.dateList.forEach(d=>html+=`<td>${esc(r.days[d] || "")}</td>`);html+=`</tr>`;});
+      html+=`</tbody></table><div class="legend">${esc(ATTENDANCE_NOTE)}</div></section>`;
+    });
     return html;
   }
   const REGISTER_COLUMN_RATIOS = [8, 12, 38, 16, 13, 13];
@@ -476,11 +504,11 @@
       if(table.closest(".receipt-copy") || table.parentElement.classList.contains("table-scroll"))return;
       const wrapper=document.createElement("div");
       wrapper.className="table-scroll";wrapper.tabIndex=0;wrapper.setAttribute("role","region");
-      wrapper.setAttribute("aria-label",table.classList.contains("attendance-table") ? "수강생 출석부 — 좌우 스크롤, 교습과목·신고명·성명 고정" : "서류 표 — 좌우 스크롤");
+      wrapper.setAttribute("aria-label",table.classList.contains("attendance-table") ? "수강생 출석부 — 좌우 스크롤, 성명 고정" : "서류 표 — 좌우 스크롤");
       wrapper.style.setProperty("--columns",table.rows[0]?.cells.length || 6);
       table.before(wrapper);wrapper.appendChild(table);
       const hint=document.createElement("div");hint.className="table-scroll-hint";
-      hint.textContent=table.classList.contains("attendance-table") ? "표가 화면보다 넓으면 좌우로 스크롤하세요. 교습과목·신고명·성명은 왼쪽에 고정됩니다." : "표가 화면보다 넓으면 표 안에서 좌우로 스크롤하세요.";
+      hint.textContent=table.classList.contains("attendance-table") ? "표가 화면보다 넓으면 좌우로 스크롤하세요. 성명은 왼쪽에 고정됩니다." : "표가 화면보다 넓으면 표 안에서 좌우로 스크롤하세요.";
       wrapper.before(hint);
     });
   }
@@ -524,7 +552,7 @@
   }
   function documentHtml(snapshot){
     const {data,query}=snapshot;
-    if(query.docType==="attendance")return renderAttendance(data,documentTitle(snapshot));
+    if(query.docType==="attendance")return renderAttendance(data,snapshot);
     if(query.docType==="student-register")return renderStudentRegister(data,documentTitle(snapshot));
     if(query.docType==="receipt-ledger")return renderReceiptLedger(data,query.receiptLayout,snapshot);
     return renderCashJournal(data,documentTitle(snapshot));
@@ -673,11 +701,11 @@
     const title=DOCUMENT_TITLES[query.docType];if(!title)throw new Error("지원하지 않는 서류입니다.");
     const names=new Set();
     function uniqueName(label){const base=String(label).replace(/[\[\]\*?:/\\]/g,"_").slice(0,25) || "미입력";let name=base,n=1;while(names.has(name))name=base.slice(0,25)+"_"+(++n);names.add(name);return name;}
-    function tableSheet(label,heading,headers,widths,rows,{dates=[],money=[],freeze=0,note="",subtitle=filterLabel,warning=data.warnings || [],alignments=null,autoHeight=false}={}){
+    function tableSheet(label,heading,headers,widths,rows,{dates=[],money=[],freeze=0,note="",subtitle=filterLabel,warning=data.warnings || [],alignments=null,autoHeight=false,exactHeading=false}={}){
       const ws=wb.addWorksheet(uniqueName(label),{views:[{state:"frozen",ySplit:5,xSplit:freeze,showGridLines:false}],pageSetup:{paperSize:9,orientation:"landscape",fitToPage:true,fitToWidth:1,fitToHeight:0,printTitlesRow:"1:5",horizontalCentered:true,margins:{left:0.25,right:0.25,top:0.4,bottom:0.4,header:0.2,footer:0.2}}});
       ws.columns=widths.map(width=>({width}));const count=headers.length,lastCol=ws.getColumn(count).letter;
       for(const r of [1,2,3])ws.mergeCells(r,1,r,count);
-      ws.getCell("A1").value=documentTitle(snapshot,heading);ws.getCell("A1").numFmt="@";ws.getCell("A1").font={name:"Malgun Gothic",size:18,bold:true};ws.getCell("A1").alignment={horizontal:"center",vertical:"middle",wrapText:true};
+      ws.getCell("A1").value=exactHeading ? heading : documentTitle(snapshot,heading);ws.getCell("A1").numFmt="@";ws.getCell("A1").font={name:"Malgun Gothic",size:18,bold:true};ws.getCell("A1").alignment={horizontal:"center",vertical:"middle",wrapText:true};
       const titleUnits=Array.from(String(ws.getCell("A1").value)).reduce((n,c)=>n+(/[^\x00-\x7f]/.test(c)?2:1),0);
       const titleLines=Math.max(1,Math.ceil(titleUnits*(18/11)/Math.max(1,widths.reduce((n,w)=>n+w,0)-4)));
       ws.getRow(1).height=titleLines===1 ? 32 : Math.min(409,titleLines*28+8);
@@ -686,7 +714,7 @@
       for(const r of [2,3]){ws.getCell(r,1).font={name:"Malgun Gothic",size:10,color:{argb:"FF666666"}};ws.getCell(r,1).alignment={wrapText:true,vertical:"middle"};}
       ws.getRow(5).values=headers;ws.getRow(5).height=34;
       ws.getRow(5).eachCell(c=>{c.font={name:"Malgun Gothic",size:10,bold:true};c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFE5F2FC"}};c.alignment={horizontal:"center",vertical:"middle",wrapText:true};c.border={bottom:{style:"thin",color:{argb:"FF999999"}}};});
-      rows.forEach((values,i)=>{const r=ws.getRow(i+6);r.values=values;r.height=32;r.eachCell({includeEmpty:true},(c,j)=>{c.font={name:"Malgun Gothic",size:10};c.alignment={vertical:"middle",wrapText:true,horizontal:alignments?.[j-1] || "center"};c.border={bottom:{style:"hair",color:{argb:"FFDDDDDD"}}};if(typeof c.value==="number")c.numFmt="0";if(dates.includes(j))c.numFmt="yyyy-mm-dd";if(money.includes(j))c.numFmt='#,##0"원"';if(typeof c.value==="string")c.numFmt="@";if(query.docType==="attendance"&&freeze===3&&j>3)c.alignment.horizontal="center";});
+      rows.forEach((values,i)=>{const r=ws.getRow(i+6);r.values=values;r.height=32;r.eachCell({includeEmpty:true},(c,j)=>{c.font={name:"Malgun Gothic",size:10};c.alignment={vertical:"middle",wrapText:true,horizontal:alignments?.[j-1] || "center"};c.border={bottom:{style:"hair",color:{argb:"FFDDDDDD"}}};if(typeof c.value==="number")c.numFmt="0";if(dates.includes(j))c.numFmt="yyyy-mm-dd";if(money.includes(j))c.numFmt='#,##0"원"';if(typeof c.value==="string")c.numFmt="@";if(query.docType==="attendance"&&freeze===1&&j>1)c.alignment.horizontal="center";});
         if(autoHeight){
           const lineCount=Math.max(1,...values.map((value,j)=>{
             if(typeof value!=="string")return 1;
@@ -704,8 +732,11 @@
       return ws;
     }
     if(query.docType==="attendance"){
-      const ws=tableSheet(title,title,["교습과목","신고 반명(교습과정)","성명",...data.dateList],[14,24,14,...data.dateList.map(()=>8)],data.students.map(r=>[excelText(r.subject),excelText(r.className),excelText(r.studentName),...data.dateList.map(d=>excelText(r.days[d] || ""))]),{freeze:3,note:"○ 출석 · × 결석 · △ 보강 · · 예정/미체크 · 공란: 수업 기록 없음. 등록별 별도 행, 복수 수업은 시간순 / 구분."});
-      data.dateList.forEach((d,i)=>{ws.getCell(5,i+4).value=excelDate(d);ws.getCell(5,i+4).numFmt="mm-dd";});
+      const groups=attendanceGroups(data);
+      (groups.length ? groups : [{className:snapshot.query.classId ? snapshot.selectedLegalName : "조회 결과 없음",subject:"",rows:[]}]).forEach(g=>{
+        const ws=tableSheet(g.className || "신고명 미입력",groups.length ? attendanceGroupTitle(g) : documentTitle(snapshot),["성명",...data.dateList],[14,...data.dateList.map(()=>8)],g.rows.map(r=>[excelText(r.studentName),...data.dateList.map(d=>excelText(r.days[d] || ""))]),{freeze:1,exactHeading:true,subtitle:attendanceSubtitle(snapshot) || "등록별 별도 행",note:ATTENDANCE_NOTE});
+        data.dateList.forEach((d,i)=>{ws.getCell(5,i+2).value=excelDate(d);ws.getCell(5,i+2).numFmt="mm-dd";});
+      });
     }else if(query.docType==="student-register"){
       const groups=registerGroups(data);
       (groups.length?groups:[{className:"조회 결과 없음",subject:"",rows:[]}]).forEach(g=>tableSheet(g.className || "신고명 미입력",title,["등록번호","성명","주소","전화번호","입원 연월일","퇴원 연월일"],REGISTER_COLUMN_RATIOS.map(width=>Number((width*1.2).toFixed(1))),g.rows.map(r=>[optionalNumber(r.registrationNo),excelText(r.studentName),excelText(r.address),excelText(r.phone),excelDate(r.enrollDate),excelDate(r.endDate)]),{dates:[5,6],alignments:["center","center","left","center","center","center"],autoHeight:true,subtitle:`반명: ${g.className || "미입력"} · 교습과목: ${g.subject || "미입력"}`,note:"별지 제25호서식 항목 기준 · 3년 보관. 전화번호: 학생 → 지정 우선 연락처 → 다른 등록 연락처(어머니·아버지·기타 보호자 순) → 누락 안내."}));
