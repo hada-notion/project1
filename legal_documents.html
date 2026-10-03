@@ -133,8 +133,8 @@
     .table-scroll .doc-table:not(.attendance-table) td { min-width:96px; max-width:360px; overflow-wrap:anywhere; }
     .table-scroll .register-table { min-width:900px !important; }
     .table-scroll table.doc-table.register-table td { min-width:0; max-width:none; }
-    .attendance-table { --subject-width:96px; --course-width:220px; --name-width:104px; table-layout:fixed; border-collapse:separate !important; border-spacing:0;
-      min-width:calc(var(--subject-width) + var(--course-width) + var(--name-width) + var(--day-count) * 48px); }
+    .attendance-table { --subject-width:96px; --course-width:220px; --name-width:104px; --day-width:80px; table-layout:fixed; border-collapse:separate !important; border-spacing:0;
+      min-width:calc(var(--subject-width) + var(--course-width) + var(--name-width) + var(--day-count) * var(--day-width)); }
     .attendance-table col:nth-child(1) { width:var(--subject-width); }
     .attendance-table col:nth-child(2) { width:var(--course-width); }
     .attendance-table col:nth-child(3) { width:var(--name-width); }
@@ -147,6 +147,8 @@
     .attendance-table tr > :nth-child(2) { left:var(--subject-width); }
     .attendance-table tr > :nth-child(3) { left:calc(var(--subject-width) + var(--course-width)); box-shadow:3px 0 4px -3px #666; }
     .attendance-table tr > :nth-child(n+4) { white-space:nowrap; }
+    .table-scroll table.attendance-table th.has-column-tools:nth-child(n+4) { white-space:nowrap; }
+    .attendance-table th:nth-child(n+4) .head-label { white-space:nowrap; overflow-wrap:normal; word-break:normal; }
   }
   @media screen and (max-width:650px) {
     main { padding:12px; }
