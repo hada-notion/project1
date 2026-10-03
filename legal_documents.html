@@ -71,7 +71,32 @@
     padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); cursor: pointer; font-size: 13px;
   }
 
-  #doc-status { font-size: 13px; color: var(--text-secondary); }
+  #doc-status { font-size:13px; color:var(--text-secondary); overflow-wrap:anywhere; }
+  .query-actions { display:flex; align-items:center; gap:12px; flex-wrap:wrap; min-height:36px; min-width:0; max-width:100%; }
+  #btn-query { min-width:92px; height:36px; display:inline-flex; gap:7px; align-items:center; justify-content:center; }
+  #btn-query:disabled { cursor:wait; opacity:.75; }
+  .query-spinner { display:inline-block; animation:query-spin 1s linear infinite; }
+  @keyframes query-spin { to { transform:rotate(360deg); } }
+  @media(prefers-reduced-motion:reduce) { .query-spinner { animation:none; } }
+  .export-note { align-self:center; font-size:12px; color:var(--text-secondary); }
+  .doc-pane[hidden] { display:none !important; }
+  table.doc-table td.note-cell { text-align:left; white-space:normal; overflow-wrap:anywhere; }
+  .column-action { padding:2px 3px; margin-left:3px; border:0; border-radius:4px; background:transparent; color:var(--blue); cursor:pointer; font-size:12px; line-height:1.2; }
+  .column-action:hover, .column-action:focus-visible { background:var(--blue-soft); }
+  .table-scroll table.doc-table th.has-column-tools { white-space:normal; }
+  .head-label { display:inline-block; }
+  .view-summary { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:8px 0 16px; font-size:12px; color:var(--text-secondary); }
+  .view-summary button { border:1px solid var(--border); border-radius:5px; background:#fff; padding:4px 8px; cursor:pointer; }
+  .column-menu { position:fixed; z-index:1000; width:260px; max-width:calc(100vw - 16px); max-height:calc(100vh - 16px); overflow:auto; padding:14px; border:1px solid var(--border); border-radius:10px; box-shadow:0 4px 20px #0002; background:#fff; font-size:13px; }
+  .column-menu[hidden] { display:none; }
+  .column-menu h3 { margin:0 0 10px; font-size:14px; }
+  .column-menu label { display:block; margin-top:12px; color:var(--text-secondary); }
+  .column-menu input, .column-menu select { display:block; width:100%; margin-top:5px; border:1px solid var(--border); border-radius:5px; padding:7px; font-size:13px; }
+  .column-menu .sort-actions { display:flex; gap:6px; flex-wrap:wrap; }
+  .column-menu button { padding:6px 8px; border:1px solid var(--border); border-radius:5px; background:var(--surface); cursor:pointer; }
+  .column-menu .menu-close { float:right; }
+  .column-menu .menu-reset { margin-top:12px; }
+
 
   #print-area { background: #fff; padding: 24px; }
   #print-area h2 { text-align: center; font-size: 18px; margin: 0 0 4px; }
@@ -79,7 +104,7 @@
   table.doc-table { width: 100%; border-collapse: collapse; font-size: 12px; }
   table.doc-table th, table.doc-table td { border: 1px solid #999; padding: 4px 6px; text-align: center; }
   table.doc-table th { background: #f2f2f2; }
-  table.doc-table td.name-cell, table.doc-table th.name-cell { text-align: left; white-space: nowrap; }
+  table.doc-table td.name-cell, table.doc-table th.name-cell { text-align: center; white-space: nowrap; }
   .legend { margin-top: 10px; font-size: 12px; color: var(--text-secondary); }
   .sign-line { margin-top: 40px; text-align: right; font-size: 13px; }
 
@@ -96,10 +121,6 @@
   .receipt-copy h3 { text-align:center; }
   .receipt-copy p { font-size:12px; line-height:1.8; }
   .receipt-copy .doc-table { margin:20px 0; }
-  .attendance-details { margin-top:16px; border:1px solid var(--border); border-radius:8px; padding:12px; background:var(--surface); }
-  .attendance-details > summary { cursor:pointer; font-size:14px; font-weight:600; }
-  .attendance-details > summary:focus-visible { outline:2px solid var(--blue); outline-offset:4px; }
-  .attendance-details-body { margin-top:12px; }
   .table-scroll-hint { margin:6px 0; font-size:12px; color:var(--text-secondary); }
   @media screen {
     #print-panel, #print-area { min-width:0; max-width:100%; }
@@ -137,7 +158,7 @@
     .toolbar { flex-wrap:wrap; }
   }
   @media print {
-    .attendance-details { display:none !important; }
+    .column-action, .column-menu, .view-summary { display:none !important; }
     .table-scroll { overflow:visible !important; width:auto; max-width:none; }
     .table-scroll-hint { display:none !important; }
     .receipt-pair {grid-template-columns:1fr 1fr;}
@@ -182,15 +203,15 @@
         <div class="field fixed-select-field"><label>클래스</label><select id="f-class"><option value="">전체 클래스</option></select></div>
         <div class="field fixed-select-field"><label>학생</label><select id="f-student" disabled><option value="">클래스를 먼저 선택하세요</option></select></div>
         <div class="field"><label>검색(이름)</label><input type="text" id="f-search" placeholder="학생 이름"></div>
-        <button id="btn-query">조회</button>
+        <div class="query-actions"><button id="btn-query" aria-busy="false">조회</button><span id="doc-status" role="status" aria-live="polite" aria-atomic="true"></span></div>
       </div>
       <div style="margin-top:6px;font-size:12px;color:var(--text-secondary)"><span id="meta-status" role="status" aria-live="polite"></span> <button id="btn-meta-retry" type="button" hidden>재시도</button></div>
-      <div id="doc-status" style="margin-top:8px"></div>
     </div>
 
     <div class="toolbar">
+      <span class="export-note">PDF·엑셀: 원래 조회 결과 전체 출력 (화면 정렬·필터 미반영)</span>
       <label id="receipt-layout-field" hidden>영수증 출력 방식 <select id="receipt-layout"><option value="list">관리용 목록</option><option value="form">원부·영수증 서식</option></select></label>
-      <button id="btn-print">🖨️ 인쇄(PDF)</button>
+      <button id="btn-print" disabled>🖨️ 인쇄(PDF)</button>
       <button id="btn-excel" disabled>⬇️ Excel 다운로드</button>
     </div>
 
@@ -202,6 +223,7 @@
   </main>
 </div>
 
+<div id="column-menu" class="column-menu" role="dialog" aria-label="열 정렬 및 필터" hidden></div>
 <script>
   const SUPABASE_URL = "https://twczhsxybkcvjkdfdxvs.supabase.co";
   const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR3Y3poc3h5YmtjdmprZGZkeHZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyOTcwMDQsImV4cCI6MjEwMzg3MzAwNH0.t7Ltb_iSYqE4gHSoGSm-OlpiLjGqIcgrhzGJ-t56EDc";
@@ -212,6 +234,19 @@
     metaRequestId++;
     docRequestId++;
     loadedDocument = null;
+    authGeneration++;tabStates.clear();closeColumnMenu();menu.replaceChildren();
+    currentDocType="attendance";
+    document.querySelectorAll("#doc-type-tabs button").forEach(b=>b.classList.toggle("active",b.dataset.type===currentDocType));
+    document.getElementById("f-search").value="";
+    document.getElementById("receipt-layout").value="list";
+    document.getElementById("receipt-layout-field").hidden=true;
+    classSel.replaceChildren(new Option("전체 클래스",""));classSel.disabled=true;
+    resetStudents("클래스를 먼저 선택하세요");setDefaultDates();
+    document.getElementById("print-area").replaceChildren();
+    document.getElementById("doc-status").textContent="";
+    metaLoading=false;metaUnavailable=false;
+    queryBtn.textContent="조회";queryBtn.setAttribute("aria-busy","false");
+    document.getElementById("btn-print").disabled=true;
     document.getElementById("btn-excel").disabled = true;
     document.getElementById("login-screen").style.display = "flex";
     document.getElementById("app-screen").style.display = "none";
@@ -278,13 +313,18 @@
   let currentDocType = "attendance";
   let loadedDocument = null;
   let docRequestId = 0;
-  document.getElementById("doc-type-tabs").addEventListener("click", (e) => {
-    const btn = e.target.closest("button[data-type]");
-    if (!btn) return;
-    document.querySelectorAll("#doc-type-tabs button").forEach((b) => b.classList.remove("active"));
-    btn.classList.add("active");
-    currentDocType = btn.dataset.type;
-    document.getElementById("receipt-layout-field").hidden = currentDocType !== "receipt-ledger";
+  const tabStates = new Map();
+  let authGeneration = 0;
+  let metaLoading = false;
+  let metaUnavailable = false;
+  document.getElementById("doc-type-tabs").addEventListener("click", e=>{
+    const btn=e.target.closest("button[data-type]");
+    if(!btn || btn.dataset.type===currentDocType || classSel.disabled)return;
+    saveCurrentTab();closeColumnMenu();metaRequestId++;
+    currentDocType=btn.dataset.type;
+    document.querySelectorAll("#doc-type-tabs button").forEach(b=>b.classList.toggle("active",b===btn));
+    const state=getTabState();restoreTabControls(state);showCurrentTab();
+    if(metaLoading)loadClassStudents();
   });
 
   function setDefaultDates() {
@@ -321,7 +361,7 @@
     classSel.disabled = true;
     classSel.replaceChildren(new Option("클래스 불러오는 중…", ""));
     resetStudents("클래스를 먼저 선택하세요");
-    queryBtn.disabled = true;
+    metaLoading=true;metaUnavailable=false;refreshQueryUI();
     setMetaStatus("클래스 불러오는 중…");
     try {
       const classes = initialClasses || (await callFn({ action: "classes" })).classes;
@@ -330,10 +370,11 @@
       classSel.replaceChildren(new Option("전체 클래스", ""));
       appendOptions(classSel, classes);
       classSel.disabled = false;
-      queryBtn.disabled = false;
+      metaLoading=false;metaUnavailable=false;refreshQueryUI();
       setMetaStatus(`클래스 ${classes.length}개 · 반을 선택하면 해당 반 학생을 불러옵니다.`);
     } catch (err) {
       if (requestId !== metaRequestId) return;
+      metaLoading=false;metaUnavailable=true;refreshQueryUI();
       classSel.replaceChildren(new Option("클래스 로딩 실패", ""));
       setMetaStatus("클래스 로딩 실패: " + err.message, () => loadClasses());
     }
@@ -341,13 +382,14 @@
   async function loadClassStudents() {
     const requestId = ++metaRequestId;
     const classId = classSel.value;
+    metaLoading=!!classId;metaUnavailable=false;refreshQueryUI();
     resetStudents(classId ? "학생 불러오는 중…" : "클래스를 먼저 선택하세요");
     if (!classId) {
-      queryBtn.disabled = false;
+      metaLoading=false;refreshQueryUI();
       setMetaStatus("전체 클래스 조회가 가능합니다. 반을 선택하면 해당 반 학생을 불러옵니다.");
       return;
     }
-    queryBtn.disabled = true;
+    refreshQueryUI();
     setMetaStatus("해당 반 학생 불러오는 중…");
     try {
       const data = await callFn({ action: "students", classId });
@@ -356,10 +398,11 @@
       studentSel.replaceChildren(new Option("전체 학생", ""));
       appendOptions(studentSel, data.students);
       studentSel.disabled = data.students.length === 0;
-      queryBtn.disabled = false;
+      metaLoading=false;metaUnavailable=false;refreshQueryUI();
       setMetaStatus(data.students.length ? `해당 반 학생 ${data.students.length}명` : "해당 반에 등록된 학생이 없습니다.");
     } catch (err) {
       if (requestId !== metaRequestId || classSel.value !== classId) return;
+      metaLoading=false;metaUnavailable=true;refreshQueryUI();
       resetStudents("학생 로딩 실패");
       setMetaStatus("학생 로딩 실패: " + err.message, loadClassStudents);
     }
@@ -383,8 +426,6 @@
     html += `</tr></thead><tbody>`;
     data.students.forEach(r=>{html+=`<tr><td>${field(r.subject)}</td><td>${field(r.className)}</td><td class="name-cell">${field(r.studentName)}</td>`;data.dateList.forEach(d=>html+=`<td>${esc(r.days[d] || "")}</td>`);html+=`</tr>`;});
     html += `</tbody></table><div class="legend">○ 출석 · × 결석 · △ 보강 · · 예정/미체크 · 공란: 수업 기록 없음<br>등록별 별도 행이며, 같은 등록에 하루 여러 수업이 있으면 시간순으로 / 구분합니다. 등하원 체크를 수업 출석으로 대체하지 않습니다.</div>`;
-    const sessions = data.students.flatMap(r=>(r.sessions || []).map(v=>({...v,...{className:r.className,studentName:r.studentName,registrationNo:r.registrationNo}})));
-    if(sessions.length) html += `<details class="attendance-details"><summary>수업별 상세 내역 보기 (${sessions.length}건)</summary><div class="attendance-details-body"><table class="doc-table"><thead><tr><th>신고 반명</th><th>성명</th><th>등록번호</th><th>수업일</th><th>시각</th><th>출석 상태</th></tr></thead><tbody>${sessions.map(v=>`<tr><td>${field(v.className)}</td><td>${field(v.studentName)}</td><td>${field(v.registrationNo)}</td><td>${esc(v.date)}</td><td>${esc(v.time)}</td><td>${esc(v.symbol)} ${esc(v.status)}</td></tr>`).join("")}</tbody></table></div></details>`;
     return html;
   }
   const REGISTER_COLUMN_RATIOS = [8, 12, 38, 16, 13, 13];
@@ -410,23 +451,22 @@
     let html=`<h2>교습비등 영수증 원부</h2><div class="doc-sub">별지 제24호서식 항목 기반 초안 · 원부 5년 보관</div>`+warningsHtml(data);
     if(layout==="form") return html+data.rows.map(r=>`<section class="receipt-page"><div class="receipt-pair">${receiptCopy(r,"교습비등 영수증 원부")}${receiptCopy(r,"교습비등 영수증")}</div></section>`).join("");
     html+=`<table class="doc-table"><thead><tr><th>일련번호</th><th>납부일자</th><th>납부자(성명)</th><th>등록번호</th><th>생년월일</th><th>교습과목</th><th>신고 교습과정</th><th>교습기간</th><th>교습비</th><th>기타경비</th><th>결제금액</th><th>비고</th></tr></thead><tbody>`;
-    data.rows.forEach(r=>html+=`<tr><td>${field(r.serialNo)}</td><td>${esc(r.paymentDate)}</td><td class="name-cell">${field(r.payerName)}</td><td>${field(r.registrationNo)}</td><td>${esc(r.birthDate)}</td><td>${field(r.subject)}</td><td>${field(r.className)}</td><td>${esc(billingText(r))}</td><td>${money(r.amount)}</td><td>${money(r.etcExpense)}</td><td>${money(r.paidAmount)}</td><td>${esc(r.note)}</td></tr>`);
-    return html+`</tbody></table><div class="legend">실제 결제금액 합계: ${won(data.rows.reduce((sum,r)=>sum+(r.paidAmount ?? 0),0))}<br>교습비/기타경비 미확인은 0원과 다릅니다. 목록은 관리용이며 원부·영수증 서식으로 전환해 개별 인쇄할 수 있습니다.</div>`;
+    data.rows.forEach(r=>html+=`<tr><td>${field(r.serialNo)}</td><td>${esc(r.paymentDate)}</td><td class="name-cell">${field(r.payerName)}</td><td>${field(r.registrationNo)}</td><td>${esc(r.birthDate)}</td><td>${field(r.subject)}</td><td>${field(r.className)}</td><td>${esc(billingText(r))}</td><td>${money(r.amount)}</td><td>${money(r.etcExpense)}</td><td>${money(r.paidAmount)}</td><td class="note-cell">${esc(r.note)}</td></tr>`);
+    return html+`</tbody></table><div class="legend">조회 전체 결제금액 합계: ${won(data.rows.reduce((sum,r)=>sum+(r.paidAmount ?? 0),0))}<br>교습비/기타경비 미확인은 0원과 다릅니다. 목록은 관리용이며 원부·영수증 서식으로 전환해 개별 인쇄할 수 있습니다.</div>`;
   }
 
   function renderCashJournal(data) {
     let html = `<h2>현금출납부</h2><div class="doc-sub">현금 입·출금 기록 (5년간 보관)</div>`;
     html += `<table class="doc-table"><thead><tr><th>날짜</th><th>구분</th><th>내용</th><th>비고</th><th>금액</th><th>잔액</th></tr></thead><tbody>`;
     data.rows.forEach((r) => {
-      html += `<tr><td>${esc(r.date)}</td><td>${esc(r.type)}</td><td class="name-cell">${esc(r.title)}</td><td>${esc(r.note)}</td><td>${won(r.amount)}</td><td>${won(r.balance)}</td></tr>`;
+      html += `<tr><td>${esc(r.date)}</td><td>${esc(r.type)}</td><td class="name-cell">${esc(r.title)}</td><td class="note-cell">${esc(r.note)}</td><td>${won(r.amount)}</td><td>${won(r.balance)}</td></tr>`;
     });
     html += `</tbody></table>`;
     return html;
   }
 
   // Screen-only scroll surfaces. Formal receipt copies and all export data remain unchanged.
-  function prepareTableScrolling() {
-    const area=document.getElementById("print-area");
+  function prepareTableScrolling(area=document.getElementById("print-area")) {
     area.querySelectorAll("table.doc-table").forEach(table=>{
       if(table.closest(".receipt-copy") || table.parentElement.classList.contains("table-scroll"))return;
       const wrapper=document.createElement("div");
@@ -440,54 +480,143 @@
     });
   }
 
-  document.getElementById("btn-query").addEventListener("click", async () => {
-    const statusEl = document.getElementById("doc-status");
-    const printArea = document.getElementById("print-area");
-    const requestId = ++docRequestId;
-    document.getElementById("btn-excel").disabled = true;
-    loadedDocument = null;
-    statusEl.textContent = "조회 중...";
-    const body = {
-      docType: currentDocType,
-      receiptLayout: document.getElementById("receipt-layout").value,
-      periodStart: document.getElementById("f-start").value,
-      periodEnd: document.getElementById("f-end").value,
-      classId: document.getElementById("f-class").value || undefined,
-      studentId: document.getElementById("f-student").value || undefined,
-      search: document.getElementById("f-search").value.trim() || undefined,
-    };
-    const targetLabel = body.studentId
-      ? studentSel.selectedOptions[0]?.textContent || "학생"
-      : body.classId ? classSel.selectedOptions[0]?.textContent || "클래스" : "전체";
-    const filterLabel = `클래스: ${classSel.selectedOptions[0]?.textContent || "전체"} · 학생: ${studentSel.value ? studentSel.selectedOptions[0]?.textContent : "전체 학생"}${body.search ? " · 검색: " + body.search : ""}`;
-    try {
-      const data = await callFn(body);
-      if (requestId !== docRequestId) return;
-      let html = "";
-      if (body.docType === "attendance") html = renderAttendance(data);
-      else if (body.docType === "student-register") html = renderStudentRegister(data);
-      else if (body.docType === "receipt-ledger") html = renderReceiptLedger(data, body.receiptLayout);
-      else if (body.docType === "cash-journal") html = renderCashJournal(data);
-      printArea.innerHTML = html;
-      prepareTableScrolling();
-      const legalNames = [...new Set((data.students || data.rows || []).map(r=>r.className).filter(Boolean))];
-      const legalFilterLabel = `신고 교습과정: ${legalNames.join(", ") || "미입력"} · ${body.studentId ? targetLabel : "전체 학생"}${body.search ? " · 검색: "+body.search : ""}`;
-      loadedDocument = { data, query: { ...body }, filterLabel: body.docType === "cash-journal" ? filterLabel : legalFilterLabel, targetLabel };
-      document.getElementById("btn-excel").disabled = false;
-      statusEl.textContent = data.warnings?.length ? "조회 완료 · 누락/확인 사항을 살펴주세요." : "조회 완료";
-    } catch (err) {
-      if (requestId !== docRequestId) return;
-      statusEl.textContent = "조회 실패: " + err.message;
+  function captureControls() {
+    return {periodStart:document.getElementById("f-start").value,periodEnd:document.getElementById("f-end").value,classId:classSel.value,studentId:studentSel.value,search:document.getElementById("f-search").value,receiptLayout:document.getElementById("receipt-layout").value,
+      studentOptions:[...studentSel.options].map(o=>({id:o.value,name:o.textContent})),studentDisabled:studentSel.disabled,metaStatus:document.getElementById("meta-status").textContent,metaLoading,metaUnavailable,retryMeta};
+  }
+  function getTabState(type=currentDocType) {
+    if(!tabStates.has(type)){
+      const area=document.getElementById("print-area");if(!area.querySelector(".doc-pane"))area.replaceChildren();
+      const pane=document.createElement("div");pane.className="doc-pane";pane.dataset.docType=type;pane.hidden=type!==currentDocType;
+      pane.innerHTML='<p style="text-align:center;color:#999">기간과 조건을 선택한 뒤 [조회]를 눌러주세요.</p>';area.appendChild(pane);
+      tabStates.set(type,{type,pane,filters:captureControls(),document:null,status:"",loading:false,requestId:0,controllers:[]});
+    }
+    return tabStates.get(type);
+  }
+  function saveCurrentTab(){getTabState().filters=captureControls();}
+  function restoreTabControls(state){
+    const f=state.filters;
+    document.getElementById("f-start").value=f.periodStart;document.getElementById("f-end").value=f.periodEnd;
+    classSel.value=f.classId;studentSel.replaceChildren();appendOptions(studentSel,f.studentOptions);studentSel.value=f.studentId;studentSel.disabled=f.studentDisabled;
+    document.getElementById("f-search").value=f.search;document.getElementById("receipt-layout").value=f.receiptLayout;
+    metaLoading=f.metaLoading;metaUnavailable=f.metaUnavailable;setMetaStatus(f.metaStatus,f.retryMeta);
+  }
+  function refreshQueryUI(){
+    const state=tabStates.get(currentDocType),busy=!!state?.loading;
+    queryBtn.disabled=busy || metaLoading || metaUnavailable || classSel.disabled;
+    queryBtn.setAttribute("aria-busy",String(busy));
+    if(busy){queryBtn.innerHTML='<span class="query-spinner" aria-hidden="true">🔄</span><span>조회 중…</span>';}else queryBtn.textContent="조회";
+    document.getElementById("doc-status").textContent=busy ? "" : state?.status || "";
+    document.getElementById("btn-excel").disabled=busy || !!state?.exporting || !state?.document;
+    document.getElementById("btn-excel").textContent=state?.exporting ? "엑셀 생성 중…" : "⬇️ Excel 다운로드";
+    state?.pane.setAttribute("aria-busy",String(busy));
+    document.getElementById("btn-print").disabled=busy || !state?.document;
+  }
+  function showCurrentTab(){
+    const state=getTabState();tabStates.forEach(s=>s.pane.hidden=s!==state);loadedDocument=state.document;
+    document.getElementById("receipt-layout-field").hidden=currentDocType!=="receipt-ledger";
+    refreshQueryUI();
+  }
+  function documentHtml(snapshot){
+    const {data,query}=snapshot;
+    if(query.docType==="attendance")return renderAttendance(data);
+    if(query.docType==="student-register")return renderStudentRegister(data);
+    if(query.docType==="receipt-ledger")return renderReceiptLedger(data,query.receiptLayout);
+    return renderCashJournal(data);
+  }
+  function renderTabDocument(state,snapshot=state.document){
+    const draft=document.createElement("div");draft.innerHTML=documentHtml(snapshot);
+    prepareTableScrolling(draft);const controllers=setupColumnTools(draft);
+    if(state.type===currentDocType)closeColumnMenu();
+    state.pane.replaceChildren(...draft.childNodes);state.controllers=controllers;
+  }
+  document.getElementById("btn-query").addEventListener("click",async()=>{
+    const state=getTabState();if(state.loading || metaLoading || metaUnavailable || classSel.disabled)return;
+    state.filters=captureControls();state.loading=true;const requestId=++docRequestId;state.requestId=requestId;const generation=authGeneration;refreshQueryUI();
+    const f=state.filters;
+    const body={docType:state.type,receiptLayout:f.receiptLayout,periodStart:f.periodStart,periodEnd:f.periodEnd,classId:f.classId || undefined,studentId:f.studentId || undefined,search:f.search.trim() || undefined};
+    const targetLabel=body.studentId ? studentSel.selectedOptions[0]?.textContent || "학생" : body.classId ? classSel.selectedOptions[0]?.textContent || "클래스" : "전체";
+    const filterLabel=`클래스: ${classSel.selectedOptions[0]?.textContent || "전체"} · 학생: ${body.studentId ? targetLabel : "전체 학생"}${body.search ? " · 검색: "+body.search : ""}`;
+    try{
+      const data=await callFn(body);
+      if(generation!==authGeneration || state.requestId!==requestId || tabStates.get(state.type)!==state)return;
+      const legalNames=[...new Set((data.students || data.rows || []).map(r=>r.className).filter(Boolean))];
+      const legalFilterLabel=`신고 교습과정: ${legalNames.join(", ") || "미입력"} · ${body.studentId ? targetLabel : "전체 학생"}${body.search ? " · 검색: "+body.search : ""}`;
+      const snapshot={data,query:{...body},filterLabel:body.docType==="cash-journal" ? filterLabel : legalFilterLabel,targetLabel};
+      renderTabDocument(state,snapshot);state.document=snapshot;
+      const count=(data.students || data.rows || []).length;
+      state.status=`✓ 조회 완료 · ${count}건${data.warnings?.length ? " · 확인 사항 "+data.warnings.length+"개" : ""}`;
+    }catch(err){
+      if(generation!==authGeneration || state.requestId!==requestId || tabStates.get(state.type)!==state)return;
+      state.status="⚠ 조회 실패: "+err.message+(state.document ? " · 이전 조회 결과 유지" : "");
+    }finally{
+      if(generation===authGeneration && state.requestId===requestId && tabStates.get(state.type)===state){state.loading=false;if(currentDocType===state.type)showCurrentTab();}
     }
   });
-
   document.getElementById("receipt-layout").addEventListener("change",()=>{
-    if(loadedDocument?.query.docType !== "receipt-ledger")return;
-    loadedDocument.query.receiptLayout=document.getElementById("receipt-layout").value;
-    document.getElementById("print-area").innerHTML=renderReceiptLedger(loadedDocument.data,loadedDocument.query.receiptLayout);
-    prepareTableScrolling();
+    const state=getTabState();state.filters.receiptLayout=document.getElementById("receipt-layout").value;
+    if(state.document?.query.docType!=="receipt-ledger")return;
+    state.document.query.receiptLayout=state.filters.receiptLayout;renderTabDocument(state);showCurrentTab();
   });
-  document.getElementById("btn-print").addEventListener("click", () => window.print());
+
+  // Header controls change DOM rows only. The queried snapshot used by exports stays immutable.
+  const collator=new Intl.Collator("ko",{numeric:true,sensitivity:"base"});
+  let openMenuButton=null;
+  const menu=document.getElementById("column-menu");
+  function closeColumnMenu(){menu.hidden=true;openMenuButton?.setAttribute("aria-expanded","false");openMenuButton=null;}
+  function compareValues(a,b){
+    const blank=v=>v==="" || v==="미입력" || v==="미확인";
+    if(blank(a)||blank(b))return blank(a)===blank(b)?0:blank(a)?1:-1;
+    const parse=v=>/^-?[\d,]+(?:\.\d+)?(?:원)?$/.test(v) ? Number(v.replace(/[,원]/g,"")) : NaN;
+    const x=parse(a),y=parse(b);return Number.isFinite(x)&&Number.isFinite(y)?x-y:collator.compare(a,b);
+  }
+  function applyColumnView(c){
+    let rows=[...c.rows];
+    if(c.sort)rows.sort((a,b)=>{const x=a.values[c.sort.col],y=b.values[c.sort.col],empty=v=>v===""||v==="미입력"||v==="미확인";const cmp=compareValues(x,y);return (empty(x)||empty(y)?cmp:cmp*(c.sort.direction==="ascending"?1:-1)) || a.index-b.index;});
+    let visible=0;
+    for(const entry of rows){
+      const show=[...c.filters.entries()].every(([col,f])=>entry.values[col].toLocaleLowerCase().includes(f.search.toLocaleLowerCase()) && (f.exact===null || entry.values[col]===f.exact));
+      entry.row.hidden=!show;if(show)visible++;c.table.tBodies[0].appendChild(entry.row);
+    }
+    c.headers.forEach((th,col)=>{const sort=c.sort?.col===col ? c.sort.direction : "none";th.setAttribute("aria-sort",sort);const active=c.filters.has(col);th.querySelector(".column-action").textContent=(sort==="ascending"?"↑":sort==="descending"?"↓":"⇅")+(active?" •":"");});
+    c.count.textContent=`화면 ${visible}/${c.rows.length}행 · 정렬·필터는 화면 확인용`;
+  }
+  function setupColumnTools(pane){
+    return [...pane.querySelectorAll("table.doc-table")].filter(t=>t.tHead && t.tBodies.length).map(table=>{
+      const headers=[...table.tHead.rows[0].cells];const c={table,headers,rows:[...table.tBodies[0].rows].map((row,index)=>({row,index,values:[...row.cells].map(cell=>cell.textContent.trim())})),sort:null,filters:new Map()};
+      const summary=document.createElement("div");summary.className="view-summary";c.count=document.createElement("span");summary.appendChild(c.count);
+      const reset=document.createElement("button");reset.type="button";reset.textContent="정렬·필터 초기화";reset.addEventListener("click",()=>{c.sort=null;c.filters.clear();closeColumnMenu();applyColumnView(c);});summary.appendChild(reset);table.parentElement.after(summary);
+      headers.forEach((th,col)=>{
+        const label=th.textContent.trim();th.classList.add("has-column-tools");th.setAttribute("scope","col");th.replaceChildren();const title=document.createElement("span");title.className="head-label";title.textContent=label;th.appendChild(title);
+        const button=document.createElement("button");button.type="button";button.className="column-action";button.textContent="⇅";button.setAttribute("aria-label",`${label} 정렬 및 필터`);button.setAttribute("aria-haspopup","dialog");button.setAttribute("aria-expanded","false");button.title=`${label} 정렬 및 필터`;button.addEventListener("click",()=>openColumnMenu(c,col,label,button));th.appendChild(button);
+      });applyColumnView(c);return c;
+    });
+  }
+  function openColumnMenu(c,col,label,button){
+    if(openMenuButton===button && !menu.hidden){closeColumnMenu();return;}
+    closeColumnMenu();openMenuButton=button;button.setAttribute("aria-expanded","true");menu.replaceChildren();menu.hidden=false;
+    const close=document.createElement("button");close.type="button";close.className="menu-close";close.textContent="닫기";close.addEventListener("click",()=>{closeColumnMenu();button.focus();});menu.appendChild(close);
+    const title=document.createElement("h3");title.textContent=label;menu.appendChild(title);
+    const actions=document.createElement("div");actions.className="sort-actions";
+    for(const [text,direction] of [["오름차순 ↑","ascending"],["내림차순 ↓","descending"],["원래 순서",null]]){const b=document.createElement("button");b.type="button";b.textContent=text;b.addEventListener("click",()=>{c.sort=direction?{col,direction}:null;applyColumnView(c);});actions.appendChild(b);}menu.appendChild(actions);
+    const previous=c.filters.get(col) || {search:"",exact:null};
+    const searchLabel=document.createElement("label");searchLabel.textContent="열 안에서 검색";const search=document.createElement("input");search.type="search";search.value=previous.search;search.placeholder="검색어 입력";searchLabel.appendChild(search);menu.appendChild(searchLabel);
+    const valueLabel=document.createElement("label");valueLabel.textContent="값 선택";const select=document.createElement("select");select.add(new Option("전체 값","all"));const values=[...new Set(c.rows.map(r=>r.values[col]))].sort(collator.compare);values.forEach((v,i)=>select.add(new Option(v || "(빈칸)",String(i))));select.value=previous.exact===null ? "all" : String(values.indexOf(previous.exact));valueLabel.appendChild(select);menu.appendChild(valueLabel);
+    function change(){const f={search:search.value,exact:select.value==="all"?null:values[Number(select.value)]};if(!f.search && f.exact===null)c.filters.delete(col);else c.filters.set(col,f);applyColumnView(c);}
+    search.addEventListener("input",change);select.addEventListener("change",change);
+    const reset=document.createElement("button");reset.type="button";reset.className="menu-reset";reset.textContent="이 열 필터 해제";reset.addEventListener("click",()=>{search.value="";select.value="all";change();});menu.appendChild(reset);
+    const rect=button.getBoundingClientRect();const width=menu.getBoundingClientRect().width,height=menu.getBoundingClientRect().height;
+    menu.style.left=Math.max(8,Math.min(rect.left,innerWidth-width-8))+"px";menu.style.top=Math.max(8,Math.min(rect.bottom+6,innerHeight-height-8))+"px";search.focus();
+  }
+  document.addEventListener("pointerdown",e=>{if(!menu.hidden && !menu.contains(e.target) && !e.target.closest(".column-action"))closeColumnMenu();});
+  document.addEventListener("keydown",e=>{if(e.key==="Escape" && !menu.hidden){const b=openMenuButton;closeColumnMenu();b?.focus();}});
+  window.addEventListener("resize",closeColumnMenu);window.addEventListener("scroll",e=>{if(!menu.contains(e.target))closeColumnMenu();},true);
+  window.addEventListener("beforeprint",()=>{
+    closeColumnMenu();
+    for(const c of tabStates.get(currentDocType)?.controllers || [])for(const entry of c.rows){entry.row.hidden=false;c.table.tBodies[0].appendChild(entry.row);}
+  });
+  window.addEventListener("afterprint",()=>{for(const c of tabStates.get(currentDocType)?.controllers || [])applyColumnView(c);});
+  document.getElementById("btn-print").addEventListener("click",()=>{if(loadedDocument && !getTabState().loading)window.print();});
 
   // 라이브러리를 같은 저장소에서 필요할 때만 읽는다. 조회 데이터는 외부로 전송하지 않는다.
   let excelLibraryPromise;
@@ -536,7 +665,7 @@
       for(const r of [2,3]){ws.getCell(r,1).font={name:"Malgun Gothic",size:10,color:{argb:"FF666666"}};ws.getCell(r,1).alignment={wrapText:true,vertical:"middle"};}
       ws.getRow(5).values=headers;ws.getRow(5).height=34;
       ws.getRow(5).eachCell(c=>{c.font={name:"Malgun Gothic",size:10,bold:true};c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFE5F2FC"}};c.alignment={horizontal:"center",vertical:"middle",wrapText:true};c.border={bottom:{style:"thin",color:{argb:"FF999999"}}};});
-      rows.forEach((values,i)=>{const r=ws.getRow(i+6);r.values=values;r.height=32;r.eachCell({includeEmpty:true},(c,j)=>{c.font={name:"Malgun Gothic",size:10};c.alignment={vertical:"middle",wrapText:true,horizontal:alignments?.[j-1] || (money.includes(j)?"right":"left")};c.border={bottom:{style:"hair",color:{argb:"FFDDDDDD"}}};if(typeof c.value==="number")c.numFmt="0";if(dates.includes(j))c.numFmt="yyyy-mm-dd";if(money.includes(j))c.numFmt='#,##0"원"';if(typeof c.value==="string")c.numFmt="@";if(query.docType==="attendance"&&freeze===3&&j>3)c.alignment.horizontal="center";});
+      rows.forEach((values,i)=>{const r=ws.getRow(i+6);r.values=values;r.height=32;r.eachCell({includeEmpty:true},(c,j)=>{c.font={name:"Malgun Gothic",size:10};c.alignment={vertical:"middle",wrapText:true,horizontal:alignments?.[j-1] || "center"};c.border={bottom:{style:"hair",color:{argb:"FFDDDDDD"}}};if(typeof c.value==="number")c.numFmt="0";if(dates.includes(j))c.numFmt="yyyy-mm-dd";if(money.includes(j))c.numFmt='#,##0"원"';if(typeof c.value==="string")c.numFmt="@";if(query.docType==="attendance"&&freeze===3&&j>3)c.alignment.horizontal="center";});
         if(autoHeight){
           const lineCount=Math.max(1,...values.map((value,j)=>{
             if(typeof value!=="string")return 1;
@@ -556,18 +685,16 @@
     if(query.docType==="attendance"){
       const ws=tableSheet(title,title,["교습과목","신고 반명(교습과정)","성명",...data.dateList],[14,24,14,...data.dateList.map(()=>8)],data.students.map(r=>[excelText(r.subject),excelText(r.className),excelText(r.studentName),...data.dateList.map(d=>excelText(r.days[d] || ""))]),{freeze:3,note:"○ 출석 · × 결석 · △ 보강 · · 예정/미체크 · 공란: 수업 기록 없음. 등록별 별도 행, 복수 수업은 시간순 / 구분."});
       data.dateList.forEach((d,i)=>{ws.getCell(5,i+4).value=excelDate(d);ws.getCell(5,i+4).numFmt="mm-dd";});
-      const details=data.students.flatMap(r=>(r.sessions || []).map(v=>[excelText(r.subject),excelText(r.className),optionalNumber(r.registrationNo),excelText(r.studentName),excelDate(v.date),excelText(v.time),excelText(v.symbol),excelText(v.status)]));
-      tableSheet("수업별 상세", "수업별 출석 내역",["교습과목","신고 반명","등록번호","성명","수업일","시각","표기","출석 상태"],[14,24,12,14,14,10,8,18],details,{dates:[5],note:"같은 학생의 서로 다른 등록과 하루 복수 수업을 합치지 않은 원본 내역입니다."});
     }else if(query.docType==="student-register"){
       const groups=registerGroups(data);
       (groups.length?groups:[{className:"조회 결과 없음",subject:"",rows:[]}]).forEach(g=>tableSheet(g.className || "신고명 미입력",title,["등록번호","성명","주소","전화번호","입원 연월일","퇴원 연월일"],REGISTER_COLUMN_RATIOS.map(width=>Number((width*1.2).toFixed(1))),g.rows.map(r=>[optionalNumber(r.registrationNo),excelText(r.studentName),excelText(r.address),excelText(r.phone),excelDate(r.enrollDate),excelDate(r.endDate)]),{dates:[5,6],alignments:["center","center","left","center","center","center"],autoHeight:true,subtitle:`반명: ${g.className || "미입력"} · 교습과목: ${g.subject || "미입력"}`,note:"별지 제25호서식 항목 기준 · 3년 보관. 전화번호: 학생 연락처 우선, 없으면 지정된 우선 보호자 연락처."}));
     }else if(query.docType==="receipt-ledger"){
-      const ws=tableSheet("관리용 목록",title,["일련번호","납부일자","납부자(성명)","등록번호","생년월일","교습과목","신고 교습과정","교습기간","교습비","기타경비","결제금액","비고"],[12,14,16,12,14,14,24,30,16,16,16,26],data.rows.map(r=>[optionalNumber(r.serialNo),excelDate(r.paymentDate),excelText(r.payerName),optionalNumber(r.registrationNo),excelDate(r.birthDate),excelText(r.subject),excelText(r.className),excelText(billingText(r)),optionalNumber(r.amount),optionalNumber(r.etcExpense),optionalNumber(r.paidAmount),excelText(r.note)]),{dates:[2,5],money:[9,10,11],note:"목록은 관리용. 원부·영수증 시트는 별지 제24호서식 항목 기반 초안. 미확인 금액은 빈칸이며 0원과 다릅니다. 환불·취소 대조 및 발행자 서명 확인 필요."});
+      const ws=tableSheet("관리용 목록",title,["일련번호","납부일자","납부자(성명)","등록번호","생년월일","교습과목","신고 교습과정","교습기간","교습비","기타경비","결제금액","비고"],[12,14,16,12,14,14,24,30,16,16,16,26],data.rows.map(r=>[optionalNumber(r.serialNo),excelDate(r.paymentDate),excelText(r.payerName),optionalNumber(r.registrationNo),excelDate(r.birthDate),excelText(r.subject),excelText(r.className),excelText(billingText(r)),optionalNumber(r.amount),optionalNumber(r.etcExpense),optionalNumber(r.paidAmount),excelText(r.note)]),{dates:[2,5],money:[9,10,11],alignments:["center","center","center","center","center","center","center","center","center","center","center","left"],note:"목록은 관리용. 원부·영수증 시트는 별지 제24호서식 항목 기반 초안. 미확인 금액은 빈칸이며 0원과 다릅니다. 환불·취소 대조 및 발행자 서명 확인 필요."});
       const sumRow=data.rows.length+6;
-      ws.getCell(sumRow,10).value="결제 합계";ws.getCell(sumRow,11).value=data.rows.length?{formula:`SUM(K6:K${data.rows.length+5})`,result:data.rows.reduce((sum,r)=>sum+(r.paidAmount ?? 0),0)}:0;ws.getCell(sumRow,11).numFmt='#,##0"원"';
+      ws.getCell(sumRow,10).value="결제 합계";ws.getCell(sumRow,11).value=data.rows.length?{formula:`SUM(K6:K${data.rows.length+5})`,result:data.rows.reduce((sum,r)=>sum+(r.paidAmount ?? 0),0)}:0;ws.getCell(sumRow,11).numFmt='#,##0"원"';ws.getCell(sumRow,10).alignment={horizontal:"center"};ws.getCell(sumRow,11).alignment={horizontal:"center"};
       const forms=wb.addWorksheet(uniqueName("원부·영수증"),{views:[{showGridLines:false}],pageSetup:{paperSize:9,orientation:"portrait",fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:0.3,right:0.3,top:0.4,bottom:0.4,header:0.2,footer:0.2}}});
       forms.columns=Array.from({length:9},(_,i)=>({width:i===4?3:11}));
-      function formCell(row,col,endCol,value,bold=false){forms.mergeCells(row,col,row,endCol);const c=forms.getCell(row,col);c.value=value;c.font={name:"Malgun Gothic",size:10,bold};c.alignment={wrapText:true,vertical:"middle"};c.border={bottom:{style:"hair",color:{argb:"FFBBBBBB"}}};return c;}
+      function formCell(row,col,endCol,value,bold=false){forms.mergeCells(row,col,row,endCol);const c=forms.getCell(row,col);c.value=value;c.font={name:"Malgun Gothic",size:10,bold};c.alignment={horizontal:"center",wrapText:true,vertical:"middle"};c.border={bottom:{style:"hair",color:{argb:"FFBBBBBB"}}};return c;}
       data.rows.forEach((r,index)=>{
         const base=index*26+1;
         for(let j=0;j<26;j++)forms.getRow(base+j).height=25;
@@ -590,8 +717,8 @@
       if(!data.rows.length)forms.getCell("A1").value="조회 결과 없음";
       forms.pageSetup.printArea=`A1:I${Math.max(1,data.rows.length*26)}`;
     }else{
-      const ws=tableSheet(title,title,["날짜","구분","내용","비고","금액","잔액"],[14,10,30,30,18,18],data.rows.map(r=>[excelDate(r.date),excelText(r.type),excelText(r.title),excelText(r.note),excelNumber(r.amount),null]),{dates:[1],money:[5,6],note:"잔액은 조회기간 내 입·출금 기준이며 기간 이전 이월 잔액은 포함하지 않습니다."});
-      data.rows.forEach((r,i)=>{const n=i+6;ws.getCell(n,6).value={formula:`${i?"F"+(n-1):"0"}+IF(B${n}="지출",-E${n},E${n})`,result:excelNumber(r.balance)};ws.getCell(n,6).numFmt='#,##0"원"';});
+      const ws=tableSheet(title,title,["날짜","구분","내용","비고","금액","잔액"],[14,10,30,30,18,18],data.rows.map(r=>[excelDate(r.date),excelText(r.type),excelText(r.title),excelText(r.note),excelNumber(r.amount),null]),{dates:[1],money:[5,6],alignments:["center","center","center","left","center","center"],note:"잔액은 조회기간 내 입·출금 기준이며 기간 이전 이월 잔액은 포함하지 않습니다."});
+      data.rows.forEach((r,i)=>{const n=i+6;ws.getCell(n,6).value={formula:`${i?"F"+(n-1):"0"}+IF(B${n}="지출",-E${n},E${n})`,result:excelNumber(r.balance)};ws.getCell(n,6).numFmt='#,##0"원"';ws.getCell(n,6).alignment={horizontal:"center",vertical:"middle"};});
     }
     return {workbook:wb,title};
   }
@@ -600,11 +727,14 @@
     const snapshot = loadedDocument;
     if (!snapshot) return;
     const btn = document.getElementById("btn-excel");
-    btn.disabled = true;
-    btn.textContent = "엑셀 생성 중…";
+    const exportState=tabStates.get(snapshot.query.docType),generation=authGeneration;
+    if(!exportState || exportState.exporting)return;
+    exportState.exporting=true;refreshQueryUI();
     try {
       const { workbook, title } = await buildExcelWorkbook(snapshot);
+      if(generation!==authGeneration)return;
       const buffer = await workbook.xlsx.writeBuffer();
+      if(generation!==authGeneration)return;
       const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -615,10 +745,9 @@
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) {
-      document.getElementById("doc-status").textContent = "엑셀 다운로드 실패: " + err.message;
+      const state=tabStates.get(snapshot.query.docType);if(state){state.status="엑셀 다운로드 실패: "+err.message;if(state.type===currentDocType)refreshQueryUI();}
     } finally {
-      btn.textContent = "⬇️ Excel 다운로드";
-      btn.disabled = !loadedDocument;
+      exportState.exporting=false;refreshQueryUI();
     }
   });
 
