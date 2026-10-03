@@ -120,12 +120,24 @@
   table.register-table th, table.register-table td { text-align:center; vertical-align:middle; }
   table.register-table td:nth-child(3) { text-align:left; white-space:normal; word-break:normal; overflow-wrap:anywhere; line-height:1.5; }
   table.register-table td:nth-child(4), table.register-table td:nth-child(5), table.register-table td:nth-child(6) { white-space:nowrap; }
-  .receipt-page { break-after:page; margin-top:24px; }
-  .receipt-pair { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
-  .receipt-copy { border:1px solid #777; padding:20px; }
-  .receipt-copy h3 { text-align:center; }
-  .receipt-copy p { font-size:12px; line-height:1.8; }
-  .receipt-copy .doc-table { margin:20px 0; }
+  .receipt-sets { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,760px),1fr)); gap:24px; align-items:start; }
+  .receipt-page { width:100%; max-width:920px; margin:0 auto; min-width:0; }
+  .receipt-pair { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .receipt-copy { min-width:0; padding:14px 0; }
+  .receipt-copy h3 { text-align:center; min-height:44px; margin:0 0 10px; font-size:16px; display:flex; align-items:center; justify-content:center; }
+  .receipt-context { font-size:11px; line-height:1.5; min-height:45px; overflow-wrap:anywhere; }
+  table.receipt-official { table-layout:fixed; margin-top:10px; font-size:12px; }
+  table.receipt-official th, table.receipt-official td { background:#fff; border:1px solid #777; vertical-align:middle; overflow-wrap:anywhere; font-weight:normal; padding:8px 5px; }
+  .receipt-official .receipt-top td { height:42px; }
+  .receipt-official .payer-row td, .receipt-official .payer-row th { height:56px; }
+  .receipt-official .payment-row td { height:72px; }
+  .receipt-official .receipt-footer td { padding:12px 10px; line-height:1.7; }
+  .receipt-value { display:block; margin-top:5px; }
+  .receipt-date { text-align:right; margin:18px 0; }
+  .receipt-issuer { text-align:left; }
+  .receipt-signature { text-align:right; margin-top:8px; }
+  .receipt-footer-note { font-size:10px; }
+  .screen-only { display:block; }
   .table-scroll-hint { margin:6px 0; font-size:12px; color:var(--text-secondary); }
   @media screen {
     #print-panel, #print-area { min-width:0; max-width:100%; }
@@ -164,8 +176,19 @@
     .column-action, .column-menu, .view-summary { display:none !important; }
     .table-scroll { overflow:visible !important; width:auto; max-width:none; }
     .table-scroll-hint { display:none !important; }
-    .receipt-pair {grid-template-columns:1fr 1fr;}
-    .receipt-page:last-child {break-after:auto;}
+    #document-warnings, .warnings, .screen-only { display:none !important; }
+    .receipt-sets { display:block; }
+    .receipt-page { width:100%; max-width:180mm; margin:0 auto; break-inside:avoid; break-after:page; page-break-after:always; }
+    .receipt-page:last-child { break-after:auto; page-break-after:auto; }
+    .receipt-pair { grid-template-columns:1fr 1fr; gap:5mm; }
+    .receipt-copy { padding:0; }
+    .receipt-copy h3 { font-size:14px; min-height:12mm; margin:0 0 2mm; }
+    .receipt-context { min-height:10mm; }
+    .receipt-official .receipt-top td { height:12mm; }
+    .receipt-official .payer-row td, .receipt-official .payer-row th { height:15mm; }
+    .receipt-official .payment-row td { height:18mm; }
+    table.receipt-official { font-size:10px; }
+
     .class-register + .class-register, .class-receipt-list + .class-receipt-list { break-before:page; page-break-before:always; }
     .class-register, .class-receipt-list { break-inside:auto; }
     .class-register h2, .class-register h3, .class-receipt-list h2, .class-receipt-list h3 { break-after:avoid; }
@@ -230,6 +253,7 @@
       <button id="btn-excel" disabled>⬇️ Excel 다운로드</button>
     </div>
 
+    <div id="document-warnings" hidden aria-live="polite"></div>
     <div class="panel" id="print-panel">
       <div id="print-area">
         <p style="text-align:center;color:#999">위에서 서류 종류와 기간을 선택한 뒤 [조회]를 눌러주세요.</p>
@@ -258,6 +282,7 @@
     classSel.replaceChildren(new Option("전체 클래스",""));classSel.disabled=true;
     resetStudents("클래스를 먼저 선택하세요");setDefaultDates();
     document.getElementById("print-area").replaceChildren();
+    document.getElementById("document-warnings").replaceChildren();document.getElementById("document-warnings").hidden=true;
     document.getElementById("doc-status").textContent="";
     metaLoading=false;metaUnavailable=false;
     queryBtn.textContent="조회";queryBtn.setAttribute("aria-busy","false");
@@ -486,11 +511,21 @@
     return html;
   }
   function receiptCopy(r, title) {
-    return `<div class="receipt-copy"><h3>${esc(title)}</h3><p>일련번호: ${field(r.serialNo)} &nbsp; 연월(분기): ${field(r.billingMonth)}<br>교습기간: ${esc(billingText(r))}<br>신고 교습과정: ${field(r.className)}</p><table class="doc-table"><tr><th>등록(신고)번호</th><td>${field(r.registrationNo)}</td></tr><tr><th>성명</th><td>${field(r.payerName)}</td></tr><tr><th>생년월일</th><td>${field(r.birthDate)}</td></tr><tr><th>교습과목</th><td>${field(r.subject)}</td></tr><tr><th>교습비</th><td>${money(r.amount)}</td></tr><tr><th>기타경비</th><td>${money(r.etcExpense)}</td></tr></table><p>위와 같이 영수하였음을 증명합니다.<br>${field(r.paymentDate)}</p><p>학원설립·운영자, 교습자<br>또는 개인과외교습자 __________________ (서명 또는 인)</p><p><b>대조·보완용 초안 — 누락 항목/환불·취소와 발행자 서명 확인 필요</b></p></div>`;
+    const value=v=>`<span class="receipt-value">${field(v)}</span>`;
+    return `<div class="receipt-copy"><h3>${esc(title)}</h3><div class="receipt-context">교습기간: ${esc(billingText(r))}<br>신고 교습과정: ${field(r.className)}</div>
+      <table class="doc-table receipt-official"><colgroup><col style="width:16%"><col style="width:24%"><col style="width:10%"><col style="width:16%"><col style="width:14%"><col style="width:20%"></colgroup><tbody>
+      <tr class="receipt-top"><td colspan="3">일련번호: ${field(r.serialNo)}</td><td colspan="3">연월(분기): ${field(r.billingMonth)}</td></tr>
+      <tr class="payer-row"><th rowspan="2">납부자</th><td colspan="2">등록(신고)번호:${value(r.registrationNo)}</td><td colspan="3">성명:${value(r.payerName)}</td></tr>
+      <tr class="payer-row"><td colspan="2">생년월일:${value(r.birthDate)}</td><td colspan="3">교습과목:${value(r.subject)}</td></tr>
+      <tr><th rowspan="2">납부<br>명세</th><td>교습비</td><td colspan="4">기타경비</td></tr>
+      <tr class="payment-row"><td>${money(r.amount)}</td><td colspan="4">${money(r.etcExpense)}</td></tr>
+      <tr class="receipt-footer"><td colspan="6">위와 같이 영수하였음을 증명합니다.<div class="receipt-footer-note">※ 본 서식 외 교육감이 지정한 영수증을 사용할 수 있습니다.</div><div class="receipt-date">${field(r.paymentDate)}</div><div class="receipt-issuer">학원설립·운영자, 교습자<br>또는 개인과외교습자</div><div class="receipt-signature">__________________ (서명 또는 인)</div></td></tr>
+      </tbody></table></div>`;
   }
   function renderReceiptLedger(data, layout="list", snapshot) {
     let html=`<h2>${esc(documentTitle(snapshot))}</h2><div class="doc-sub">별지 제24호서식 항목 기반 초안 · 원부 5년 보관</div>`+warningsHtml(data);
-    if(layout==="form") return html+data.rows.map(r=>`<section class="receipt-page"><div class="receipt-pair">${receiptCopy(r,documentTitle(snapshot))}${receiptCopy(r,documentTitle(snapshot,"교습비등 영수증"))}</div></section>`).join("");
+    if(layout==="form" && !data.rows.length)return `<h2>${esc(documentTitle(snapshot))}</h2><div class="doc-sub">조회 결과가 없습니다.</div>`;
+    if(layout==="form") return `<div class="receipt-form-heading screen-only"><h2>${esc(documentTitle(snapshot))}</h2><div class="doc-sub">원부·영수증 서식 미리보기 — 확정 발급 전 금액·환불·취소·서명을 확인하세요.</div></div><div class="receipt-sets">`+data.rows.map(r=>`<section class="receipt-page"><div class="receipt-pair">${receiptCopy(r,documentTitle(snapshot))}${receiptCopy(r,documentTitle(snapshot,"교습비등 영수증"))}</div></section>`).join("")+`</div>`;
     const groups=new Map();
     data.rows.forEach(r=>{const key=r.classId || JSON.stringify([r.className || "",r.subject || ""]);
       if(!groups.has(key))groups.set(key,{className:r.className,subject:r.subject,rows:[]});groups.get(key).rows.push(r);
@@ -502,7 +537,7 @@
       html+=`<section class="class-receipt-list"><h2>${esc(documentTitle(snapshot))}</h2><div class="doc-sub">별지 제24호서식 항목 기반 초안 · 원부 5년 보관</div><h3>반명: ${field(g.className)} &nbsp; 교습과목: ${field(g.subject)}</h3>`;
     html+=`<table class="doc-table"><thead><tr><th>일련번호</th><th>납부일자</th><th>납부자(성명)</th><th>등록번호</th><th>생년월일</th><th>교습과목</th><th>신고 교습과정</th><th>교습기간</th><th>교습비</th><th>기타경비</th><th>결제금액</th><th>비고</th></tr></thead><tbody>`;
     g.rows.forEach(r=>html+=`<tr><td>${field(r.serialNo)}</td><td>${esc(r.paymentDate)}</td><td class="name-cell">${field(r.payerName)}</td><td>${field(r.registrationNo)}</td><td>${esc(r.birthDate)}</td><td>${field(r.subject)}</td><td>${field(r.className)}</td><td>${esc(billingText(r))}</td><td>${money(r.amount)}</td><td>${money(r.etcExpense)}</td><td>${money(r.paidAmount)}</td><td class="note-cell">${esc(r.note)}</td></tr>`);
-      html+=`</tbody></table><div class="legend">반별 결제금액 합계: ${won(g.rows.reduce((sum,r)=>sum+(r.paidAmount ?? 0),0))}<br>교습비는 청구금액, 기타경비는 출력용 기본값 0원입니다. 필요 시 엑셀에서 직접 수정하고 실제 수납액과 대조하세요.</div></section>`;
+      html+=`</tbody></table><div class="legend">반별 결제금액 합계: ${won(g.rows.reduce((sum,r)=>sum+(r.paidAmount ?? 0),0))}<span class="screen-only">교습비는 청구금액, 기타경비는 출력용 기본값 0원입니다. 필요 시 엑셀에서 직접 수정하고 실제 수납액과 대조하세요.</span></div></section>`;
     });
     return html+`<div class="legend">조회 전체 결제금액 합계: ${won(data.rows.reduce((sum,r)=>sum+(r.paidAmount ?? 0),0))}</div>`;
   }
@@ -567,6 +602,8 @@
   function showCurrentTab(){
     const state=getTabState();tabStates.forEach(s=>s.pane.hidden=s!==state);loadedDocument=state.document;
     document.getElementById("receipt-layout-field").hidden=currentDocType!=="receipt-ledger";
+    const warningArea=document.getElementById("document-warnings");
+    warningArea.innerHTML=state.document ? warningsHtml(state.document.data) : "";warningArea.hidden=!warningArea.children.length;
     refreshQueryUI();
   }
   function documentHtml(snapshot){
@@ -578,6 +615,7 @@
   }
   function renderTabDocument(state,snapshot=state.document){
     const draft=document.createElement("div");draft.innerHTML=documentHtml(snapshot);
+    draft.querySelectorAll(".warnings").forEach(e=>e.remove());
     prepareTableScrolling(draft);const controllers=setupColumnTools(draft);
     if(state.type===currentDocType)closeColumnMenu();
     state.pane.replaceChildren(...draft.childNodes);state.controllers=controllers;
