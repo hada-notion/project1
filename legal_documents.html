@@ -120,8 +120,8 @@
   table.register-table th, table.register-table td { text-align:center; vertical-align:middle; }
   table.register-table td:nth-child(3) { text-align:left; white-space:normal; word-break:normal; overflow-wrap:anywhere; line-height:1.5; }
   table.register-table td:nth-child(4), table.register-table td:nth-child(5), table.register-table td:nth-child(6) { white-space:nowrap; }
-  .receipt-sets { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,760px),1fr)); gap:24px; align-items:start; }
-  .receipt-page { width:100%; max-width:920px; margin:0 auto; min-width:0; }
+  .receipt-sets { display:grid; grid-template-columns:minmax(0,1fr); gap:32px; align-items:start; }
+  .receipt-page { width:100%; max-width:180mm; margin:0 auto; min-width:0; }
   .receipt-pair { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
   .receipt-copy { min-width:0; padding:14px 0; }
   .receipt-copy h3 { text-align:center; min-height:44px; margin:0 0 10px; font-size:16px; display:flex; align-items:center; justify-content:center; }
@@ -543,7 +543,7 @@
   function renderReceiptLedger(data, layout="list", snapshot) {
     let html=`<h2>${esc(documentTitle(snapshot))}</h2><div class="doc-sub">별지 제24호서식 항목 기반 초안 · 원부 5년 보관</div>`+warningsHtml(data);
     if(layout==="form" && !data.rows.length)return `<h2>${esc(documentTitle(snapshot))}</h2><div class="doc-sub">조회 결과가 없습니다.</div>`;
-    if(layout==="form") return `<div class="receipt-form-heading screen-only"><h2>${esc(documentTitle(snapshot))}</h2><div class="doc-sub">원부·영수증 서식 미리보기 — 확정 발급 전 금액·환불·취소·서명을 확인하세요.</div></div><div class="receipt-sets">`+data.rows.map(r=>`<section class="receipt-page"><div class="receipt-pair">${receiptCopy(r,documentTitle(snapshot))}${receiptCopy(r,documentTitle(snapshot,"교습비등 영수증"))}</div></section>`).join("")+`</div>`;
+    if(layout==="form") return `<div class="receipt-form-heading screen-only"><h2>${esc(documentTitle(snapshot))}</h2><div class="doc-sub">원부·영수증 서식 미리보기 — 확정 발급 전 금액·환불·취소·서명을 확인하세요.</div></div><div class="receipt-sets">`+data.rows.map(r=>`<section class="receipt-page"><div class="receipt-pair">${receiptCopy(r,"교습비등 영수증 원부")}${receiptCopy(r,"교습비등 영수증")}</div></section>`).join("")+`</div>`;
     const groups=new Map();
     data.rows.forEach(r=>{const key=r.classId || JSON.stringify([r.className || "",r.subject || ""]);
       if(!groups.has(key))groups.set(key,{className:r.className,subject:r.subject,rows:[]});groups.get(key).rows.push(r);
@@ -833,12 +833,11 @@
         const base=index*20+1;
         for(let j=0;j<20;j++)forms.getRow(base+j).height=24;
         forms.getRow(base+3).height=8;forms.getRow(base+14).height=10;forms.getRow(base+16).height=10;forms.getRow(base+19).height=12;
-        const titleUnits=Array.from(documentTitle(snapshot)).reduce((n,c)=>n+(/[^\x00-\x7f]/.test(c)?2:1),0);
-        forms.getRow(base).height=Math.max(32,Math.ceil(titleUnits/48)*20+8);
+        forms.getRow(base).height=32;
         forms.getRow(base+1).height=32;forms.getRow(base+2).height=32;forms.getRow(base+13).height=36;
         [1,7].forEach((col,half)=>{
           const box=(offset,left,endOffset,right,value,opts)=>formBox(base+offset,col+left,base+endOffset,col+right,value,opts);
-          box(0,0,0,4,documentTitle(snapshot,half?"교습비등 영수증":"교습비등 영수증 원부"),{bold:true,border:false,size:12});
+          box(0,0,0,4,half?"교습비등 영수증":"교습비등 영수증 원부",{bold:true,border:false,size:12});
           box(1,0,1,4,`교습기간: ${billingText(r)}`,{border:false});
           box(2,0,2,4,`신고 교습과정: ${r.className || "미입력"}`,{border:false});
           box(4,0,4,2,optionalNumber(r.serialNo),{numFmt:'"일련번호: "0'});
