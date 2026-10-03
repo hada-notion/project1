@@ -132,7 +132,16 @@
   .receipt-official .payer-row td, .receipt-official .payer-row th { height:56px; }
   .receipt-official .payment-row td { height:72px; }
   .receipt-official .receipt-footer td { padding:12px 10px; line-height:1.7; }
-  .receipt-value { display:block; margin-top:5px; }
+  .receipt-value { display:block; margin-top:8px; text-align:center; }
+  table.receipt-official .receipt-data { text-align:left; }
+  table.receipt-official td.receipt-footer-cell { padding:12px 10px; }
+  .receipt-footer-inner { min-height:180px; display:flex; flex-direction:column; gap:8px; }
+  .receipt-confirm { text-align:center; }
+  .receipt-footer-inner .receipt-footer-note { text-align:left; line-height:1.6; }
+  .receipt-footer-inner .receipt-date { display:flex; justify-content:flex-end; gap:14px; margin:18px 0; }
+  .receipt-footer-bottom { margin-top:auto; display:flex; justify-content:space-between; gap:10px; align-items:flex-end; }
+  .receipt-footer-bottom .receipt-issuer { text-align:left; line-height:1.7; }
+  .receipt-footer-bottom .receipt-signature { text-align:right; margin:0; font-size:10px; }
   .receipt-date { text-align:right; margin:18px 0; }
   .receipt-issuer { text-align:left; }
   .receipt-signature { text-align:right; margin-top:8px; }
@@ -189,7 +198,8 @@
     .receipt-copy h3 { font-size:14px; min-height:12mm; margin:0 0 2mm; }
     .receipt-context { min-height:10mm; }
     .receipt-official .receipt-top td { height:12mm; }
-    table.receipt-official .payer-label td, table.receipt-official .payer-value td { height:7mm; padding:2px 4px; }
+    .receipt-official .payer-row td, .receipt-official .payer-row th { height:15mm; }
+    .receipt-footer-inner { min-height:48mm; }
     .receipt-official .payment-row td { height:18mm; }
     table.receipt-official { font-size:10px; }
 
@@ -522,17 +532,12 @@
     return `<div class="receipt-copy"><h3>${esc(title)}</h3><div class="receipt-context">교습기간: ${esc(billingText(r))}<br>신고 교습과정: ${field(r.className)}</div>
       <table class="doc-table receipt-official"><colgroup>${Array.from({length:5},()=>'<col style="width:20%">').join("")}</colgroup><tbody>
       <tr class="receipt-top"><td colspan="3">일련번호: ${field(r.serialNo)}</td><td colspan="2">연월(분기): ${field(r.billingMonth)}</td></tr>
-      <tr class="payer-label"><th rowspan="4">납부자</th><td colspan="2">등록(신고)번호:</td><td colspan="2">성명:</td></tr>
-      <tr class="payer-value"><td colspan="2">${field(r.registrationNo)}</td><td colspan="2">${field(r.payerName)}</td></tr>
-      <tr class="payer-label"><td colspan="2">생년월일:</td><td colspan="2">교습과목:</td></tr>
-      <tr class="payer-value"><td colspan="2">${field(r.birthDate)}</td><td colspan="2">${field(r.subject)}</td></tr>
+      <tr class="payer-row"><th rowspan="2">납부자</th><td colspan="2" class="receipt-data">등록(신고)번호:<span class="receipt-value">${field(r.registrationNo)}</span></td><td colspan="2" class="receipt-data">성명:<span class="receipt-value">${field(r.payerName)}</span></td></tr>
+      <tr class="payer-row"><td colspan="2" class="receipt-data">생년월일:<span class="receipt-value">${field(r.birthDate)}</span></td><td colspan="2" class="receipt-data">교습과목:<span class="receipt-value">${field(r.subject)}</span></td></tr>
       <tr><th rowspan="3">납부<br>명세</th><td rowspan="2">교습비</td><td colspan="3">기타경비</td></tr>
       <tr class="expense-labels"><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
       <tr class="payment-row"><td>${money(r.amount)}</td><td>${money(r.etcExpense)}</td><td></td><td></td></tr>
-      <tr><td colspan="5">위와 같이 영수하였음을 증명합니다.</td></tr>
-      <tr><td colspan="5" class="receipt-footer-note">※ 본 서식 외 교육감이 지정한 영수증을 사용할 수 있습니다.</td></tr>
-      <tr class="receipt-date-row"><td colspan="2"></td>${receiptDateParts(r.paymentDate).map((v,i)=>`<td>${esc(v)}${["년","월","일"][i]}</td>`).join("")}</tr>
-      <tr class="receipt-bottom"><td colspan="3" class="receipt-issuer">학원설립·운영자, 교습자<br>또는 개인과외교습자</td><td colspan="2" class="receipt-signature">__________________<br>(서명 또는 인)</td></tr>
+      <tr><td colspan="5" class="receipt-footer-cell"><div class="receipt-footer-inner"><div class="receipt-confirm">위와 같이 영수하였음을 증명합니다.</div><div class="receipt-footer-note">※ 본 서식 외 교육감이 지정한 영수증을 사용할 수 있습니다.</div><div class="receipt-date">${receiptDateParts(r.paymentDate).map((v,i)=>`<span>${esc(v)}${["년","월","일"][i]}</span>`).join("")}</div><div class="receipt-footer-bottom"><div class="receipt-issuer">학원설립·운영자, 교습자<br>또는 개인과외교습자</div><div class="receipt-signature">__________________<br>(서명 또는 인)</div></div></div></td></tr>
       </tbody></table></div>`;
   }
   function renderReceiptLedger(data, layout="list", snapshot) {
@@ -816,10 +821,11 @@
       ws.getCell(sumRow,10).value="결제 합계";ws.getCell(sumRow,11).value=data.rows.length?{formula:`SUM(K6:K${data.rows.length+5})`,result:data.rows.reduce((sum,r)=>sum+(r.paidAmount ?? 0),0)}:0;ws.getCell(sumRow,11).numFmt='#,##0"원"';ws.getCell(sumRow,10).alignment={horizontal:"center"};ws.getCell(sumRow,11).alignment={horizontal:"center"};
       const forms=wb.addWorksheet(uniqueName("원부·영수증"),{views:[{showGridLines:false}],pageSetup:{paperSize:9,orientation:"portrait",fitToPage:true,fitToWidth:1,fitToHeight:0,horizontalCentered:true,margins:{left:0.3,right:0.3,top:0.4,bottom:0.4,header:0.2,footer:0.2}}});
       forms.columns=Array.from({length:11},(_,i)=>({width:i===5?3:10}));
-      function formBox(row,col,endRow,endCol,value,{bold=false,border=true,numFmt=null,size=10}={}) {
+      function formBox(row,col,endRow,endCol,value,{bold=false,border=true,numFmt=null,size=10,edges=null,align="center"}={}) {
         if(row!==endRow || col!==endCol)forms.mergeCells(row,col,endRow,endCol);
-        const c=forms.getCell(row,col);c.value=value;c.font={name:"Malgun Gothic",size,bold};c.alignment={horizontal:"center",wrapText:true,vertical:"middle"};
-        if(border)c.border=Object.fromEntries(["top","bottom","left","right"].map(side=>[side,{style:"thin",color:{argb:"FF777777"}}]));
+        const c=forms.getCell(row,col);c.value=value;c.font={name:"Malgun Gothic",size,bold};c.alignment={horizontal:align,wrapText:true,vertical:"middle"};
+        if(edges)c.border=Object.fromEntries(edges.map(side=>[side,{style:"thin",color:{argb:"FF777777"}}]));
+        else if(border)c.border=Object.fromEntries(["top","bottom","left","right"].map(side=>[side,{style:"thin",color:{argb:"FF777777"}}]));
         if(numFmt)c.numFmt=numFmt;else if(typeof value==="string")c.numFmt="@";else if(typeof value==="number")c.numFmt="0";
         return c;
       }
@@ -838,22 +844,22 @@
           box(4,0,4,2,optionalNumber(r.serialNo),{numFmt:'"일련번호: "0'});
           box(4,3,4,4,`연월(분기): ${r.billingMonth || "미입력"}`);
           box(5,0,8,0,"납부자");
-          box(5,1,5,2,"등록(신고)번호:");box(6,1,6,2,optionalNumber(r.registrationNo));
-          box(5,3,5,4,"성명:");box(6,3,6,4,excelText(r.payerName));
-          box(7,1,7,2,"생년월일:");box(8,1,8,2,excelDate(r.birthDate),{numFmt:"yyyy-mm-dd"});
-          box(7,3,7,4,"교습과목:");box(8,3,8,4,excelText(r.subject));
+          box(5,1,5,2,"등록(신고)번호:",{edges:["top","left","right"],align:"left"});box(6,1,6,2,optionalNumber(r.registrationNo),{edges:["bottom","left","right"]});
+          box(5,3,5,4,"성명:",{edges:["top","left","right"],align:"left"});box(6,3,6,4,excelText(r.payerName),{edges:["bottom","left","right"]});
+          box(7,1,7,2,"생년월일:",{edges:["top","left","right"],align:"left"});box(8,1,8,2,excelDate(r.birthDate),{numFmt:"yyyy-mm-dd",edges:["bottom","left","right"]});
+          box(7,3,7,4,"교습과목:",{edges:["top","left","right"],align:"left"});box(8,3,8,4,excelText(r.subject),{edges:["bottom","left","right"]});
           box(9,0,11,0,"납부\n명세");box(9,1,10,1,"교습비");box(9,2,9,4,"기타경비");
           for(let k=2;k<=4;k++)box(10,k,10,k,"");
           box(11,1,11,1,optionalNumber(r.amount),{numFmt:'#,##0"원"'});
           box(11,2,11,2,optionalNumber(r.etcExpense),{numFmt:'#,##0"원"'});
           box(11,3,11,3,"");box(11,4,11,4,"");
-          box(12,0,12,4,"위와 같이 영수하였음을 증명합니다.");
-          box(13,0,13,4,"※ 본 서식 외 교육감이 지정한 영수증을 사용할 수 있습니다.",{size:9});
-          box(14,0,14,4,"",{border:false});box(15,0,15,1,"",{border:false});
-          receiptDateParts(r.paymentDate).forEach((v,i)=>box(15,i+2,15,i+2,v,{border:false,numFmt:['0"년"','0"월"','0"일"'][i]}));
-          box(16,0,16,4,"",{border:false});
-          box(17,0,18,2,"학원설립·운영자, 교습자\n또는 개인과외교습자");
-          box(17,3,18,4,"__________________\n(서명 또는 인)",{size:9});
+          box(12,0,12,4,"위와 같이 영수하였음을 증명합니다.",{edges:["top","left","right"]});
+          box(13,0,13,4,"※ 본 서식 외 교육감이 지정한 영수증을 사용할 수 있습니다.",{size:9,edges:["left","right"],align:"left"});
+          box(14,0,14,4,"",{edges:["left","right"]});box(15,0,15,1,"",{edges:["left"]});
+          receiptDateParts(r.paymentDate).forEach((v,i)=>box(15,i+2,15,i+2,v,{edges:i===2?["right"]:[],numFmt:['0"년"','0"월"','0"일"'][i]}));
+          box(16,0,16,4,"",{edges:["left","right"]});
+          box(17,0,18,2,"학원설립·운영자, 교습자\n또는 개인과외교습자",{edges:["left","bottom"],align:"left"});
+          box(17,3,18,4,"__________________\n(서명 또는 인)",{size:9,edges:["right","bottom"],align:"right"});
         });
         if(index<data.rows.length-1)forms.getRow(base+19).addPageBreak();
       });
