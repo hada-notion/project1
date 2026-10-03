@@ -127,7 +127,7 @@
 
     <div class="toolbar">
       <button id="btn-print">🖨️ 인쇄(PDF)</button>
-      <button id="btn-word">⬇️ Word로 다운로드</button>
+      <button id="btn-excel" disabled>⬇️ Excel 다운로드</button>
     </div>
 
     <div class="panel" id="print-panel">
@@ -146,6 +146,9 @@
 
   function showLoginScreen(errorMsg) {
     metaRequestId++;
+    docRequestId++;
+    loadedDocument = null;
+    document.getElementById("btn-excel").disabled = true;
     document.getElementById("login-screen").style.display = "flex";
     document.getElementById("app-screen").style.display = "none";
     document.getElementById("login-error").textContent = errorMsg || "";
@@ -209,6 +212,8 @@
   document.getElementById("login-input").addEventListener("keydown", (e) => { if (e.key === "Enter") submitLogin(); });
 
   let currentDocType = "attendance";
+  let loadedDocument = null;
+  let docRequestId = 0;
   document.getElementById("doc-type-tabs").addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-type]");
     if (!btn) return;
@@ -350,6 +355,9 @@
   document.getElementById("btn-query").addEventListener("click", async () => {
     const statusEl = document.getElementById("doc-status");
     const printArea = document.getElementById("print-area");
+    const requestId = ++docRequestId;
+    document.getElementById("btn-excel").disabled = true;
+    loadedDocument = null;
     statusEl.textContent = "조회 중...";
     const body = {
       docType: currentDocType,
@@ -359,36 +367,174 @@
       studentId: document.getElementById("f-student").value || undefined,
       search: document.getElementById("f-search").value.trim() || undefined,
     };
+    const filterLabel = `클래스: ${classSel.selectedOptions[0]?.textContent || "전체"} · 학생: ${studentSel.value ? studentSel.selectedOptions[0]?.textContent : "전체 학생"}${body.search ? " · 검색: " + body.search : ""}`;
     try {
       const data = await callFn(body);
+      if (requestId !== docRequestId) return;
       let html = "";
-      if (currentDocType === "attendance") html = renderAttendance(data);
-      else if (currentDocType === "student-register") html = renderStudentRegister(data);
-      else if (currentDocType === "receipt-ledger") html = renderReceiptLedger(data);
-      else if (currentDocType === "cash-journal") html = renderCashJournal(data);
+      if (body.docType === "attendance") html = renderAttendance(data);
+      else if (body.docType === "student-register") html = renderStudentRegister(data);
+      else if (body.docType === "receipt-ledger") html = renderReceiptLedger(data);
+      else if (body.docType === "cash-journal") html = renderCashJournal(data);
       printArea.innerHTML = html;
+      loadedDocument = { data, query: { ...body }, filterLabel };
+      document.getElementById("btn-excel").disabled = false;
       statusEl.textContent = "조회 완료";
     } catch (err) {
+      if (requestId !== docRequestId) return;
       statusEl.textContent = "조회 실패: " + err.message;
     }
   });
 
   document.getElementById("btn-print").addEventListener("click", () => window.print());
 
-  document.getElementById("btn-word").addEventListener("click", () => {
-    const content = document.getElementById("print-area").innerHTML;
-    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
-      <head><meta charset="utf-8"><style>
-        table{border-collapse:collapse;width:100%;font-size:12px} td,th{border:1px solid #999;padding:4px 6px;text-align:center}
-        h2{text-align:center} .doc-sub{text-align:center;color:#666;font-size:12px}
-      </style></head><body>${content}</body></html>`;
-    const blob = new Blob(['\ufeff', html], { type: "application/msword" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `법정서류_${currentDocType}_${document.getElementById("f-start").value}.doc`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  // 라이브러리를 같은 저장소에서 필요할 때만 읽는다. 조회 데이터는 외부로 전송하지 않는다.
+  let excelLibraryPromise;
+  function loadExcelLibrary() {
+    if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
+    if (!excelLibraryPromise) {
+      excelLibraryPromise = new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = "vendor/exceljs-4.4.0.min.js";
+        script.onload = () => window.ExcelJS ? resolve(window.ExcelJS) : reject(new Error("엑셀 라이브러리를 읽지 못했습니다."));
+        script.onerror = () => { script.remove(); reject(new Error("엑셀 라이브러리 로딩 실패. 다시 눌러주세요.")); };
+        document.head.appendChild(script);
+      }).catch((err) => { excelLibraryPromise = null; throw err; });
+    }
+    return excelLibraryPromise;
+  }
+  function excelDate(value) {
+    if (!value) return "";
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value));
+    if (!match) return String(value);
+    const date = new Date(Date.UTC(+match[1], +match[2] - 1, +match[3]));
+    return date.toISOString().slice(0, 10) === value ? date : String(value);
+  }
+  function excelNumber(value) {
+    const number = Number(value ?? 0);
+    return Number.isFinite(number) ? number : 0;
+  }
+  function excelText(value) { return String(value ?? ""); }
+
+  async function buildExcelWorkbook(snapshot) {
+    const ExcelJS = await loadExcelLibrary();
+    const { data, query, filterLabel } = snapshot;
+    const definitions = {
+      attendance: { title: "수강생 출석부", headers: ["클래스", "성명", ...data.dateList || []], widths: [18, 16, ...(data.dateList || []).map(() => 6)], dates: [], money: [] },
+      "student-register": { title: "수강생 대장", headers: ["클래스", "성명", "생년월일", "성별", "학생 연락처", "보호자 연락처", "등록일", "종료일"], widths: [18, 16, 14, 8, 20, 20, 14, 14], dates: [3, 7, 8], money: [] },
+      "receipt-ledger": { title: "교습비등 영수증 원부", headers: ["일련번호", "납부일자", "납부자(성명)", "등록번호", "생년월일", "교습과목", "교습비", "기타경비", "비고"], widths: [12, 14, 18, 16, 14, 18, 16, 16, 28], dates: [2, 5], money: [7, 8] },
+      "cash-journal": { title: "현금출납부", headers: ["날짜", "구분", "내용", "비고", "금액", "잔액"], widths: [14, 10, 30, 30, 18, 18], dates: [1], money: [5, 6] },
+    };
+    const def = definitions[query.docType];
+    if (!def) throw new Error("지원하지 않는 서류입니다.");
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "하다 학원관리";
+    wb.created = new Date();
+    wb.calcProperties.fullCalcOnLoad = true;
+    const ws = wb.addWorksheet(def.title, {
+      views: [{ state: "frozen", ySplit: 5, xSplit: query.docType === "attendance" ? 2 : 0, showGridLines: false }],
+      pageSetup: { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: "1:5", horizontalCentered: true,
+        margins: { left: 0.25, right: 0.25, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } },
+    });
+    ws.columns = def.widths.map((width) => ({ width }));
+    const columnCount = def.headers.length;
+    const lastCol = ws.getColumn(columnCount).letter;
+    ws.mergeCells(1, 1, 1, columnCount);
+    ws.getCell("A1").value = def.title;
+    ws.getCell("A1").font = { name: "Malgun Gothic", size: 18, bold: true };
+    ws.getCell("A1").alignment = { horizontal: "center", vertical: "middle" };
+    ws.getRow(1).height = 32;
+    ws.mergeCells(2, 1, 2, columnCount);
+    ws.getCell("A2").value = `조회 기간: ${query.periodStart || "미지정"} ~ ${query.periodEnd || "미지정"}`;
+    ws.mergeCells(3, 1, 3, columnCount);
+    ws.getCell("A3").value = filterLabel;
+    ws.getRow(3).height = 30;
+    [2, 3].forEach((r) => { ws.getCell(r, 1).font = { name: "Malgun Gothic", size: 10, color: { argb: "FF666666" } }; ws.getCell(r, 1).alignment = { wrapText: true, vertical: "middle" }; });
+    ws.getRow(5).values = def.headers;
+    ws.getRow(5).height = 30;
+    ws.getRow(5).eachCell((cell, col) => {
+      if (query.docType === "attendance" && col > 2) { cell.value = excelDate(cell.value); cell.numFmt = "mm-dd"; }
+      cell.font = { name: "Malgun Gothic", size: 10, bold: true };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE5F2FC" } };
+      cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+      cell.border = { bottom: { style: "thin", color: { argb: "FF999999" } } };
+    });
+    let rows;
+    if (query.docType === "attendance") rows = data.students.map((s) => [excelText(s.className), excelText(s.studentName), ...data.dateList.map((d) => excelText(s.days[d] || ""))]);
+    else if (query.docType === "student-register") rows = data.rows.map((r) => [excelText(r.className), excelText(r.studentName), excelDate(r.birthDate), excelText(r.gender), excelText(r.studentPhone), excelText(r.parentPhone), excelDate(r.enrollDate), excelDate(r.endDate)]);
+    else if (query.docType === "receipt-ledger") rows = data.rows.map((r) => [excelNumber(r.serialNo), excelDate(r.paymentDate), excelText(r.payerName), excelText(r.registrationNo), excelDate(r.birthDate), excelText(r.subject), excelNumber(r.amount), excelNumber(r.etcExpense), excelText(r.note)]);
+    else rows = data.rows.map((r) => [excelDate(r.date), excelText(r.type), excelText(r.title), excelText(r.note), excelNumber(r.amount), null]);
+    rows.forEach((values, index) => {
+      const rowNumber = index + 6;
+      const row = ws.getRow(rowNumber);
+      row.values = values;
+      row.height = 28;
+      row.eachCell({ includeEmpty: true }, (cell, col) => {
+        cell.font = { name: "Malgun Gothic", size: 10 };
+        cell.alignment = { vertical: "middle", horizontal: def.money.includes(col) ? "right" : "left", wrapText: true };
+        if (def.dates.includes(col)) cell.numFmt = "yyyy-mm-dd";
+        if (query.docType === "receipt-ledger" && col === 1) cell.numFmt = "0";
+        if (def.money.includes(col)) cell.numFmt = '#,##0"원"';
+        if (typeof cell.value === "string") cell.numFmt = "@";
+        if (query.docType === "attendance" && col > 2) { cell.alignment.horizontal = "center"; cell.border = { bottom: { style: "hair", color: { argb: "FFDDDDDD" } } }; }
+      });
+      if (query.docType === "cash-journal") {
+        // 조회기간 내 잔액은 기존 화면과 동일하게 0에서 시작하며 편집 시 재계산된다.
+        row.getCell(6).value = { formula: `${index ? "F" + (rowNumber - 1) : "0"}+IF(B${rowNumber}="지출",-E${rowNumber},E${rowNumber})`, result: excelNumber(data.rows[index].balance) };
+        row.getCell(6).numFmt = '#,##0"원"';
+      }
+    });
+    const lastDataRow = 5 + rows.length;
+    if (rows.length) ws.autoFilter = `A5:${lastCol}${lastDataRow}`;
+    let lastRow = lastDataRow;
+    if (query.docType === "receipt-ledger") {
+      lastRow += 2;
+      ws.getCell(lastRow, 6).value = "합계";
+      [7, 8].forEach((col) => {
+        const letter = ws.getColumn(col).letter;
+        ws.getCell(lastRow, col).value = rows.length ? { formula: `SUM(${letter}6:${letter}${lastDataRow})`, result: rows.reduce((sum, r) => sum + r[col - 1], 0) } : 0;
+        ws.getCell(lastRow, col).numFmt = '#,##0"원"';
+        ws.getCell(lastRow, col).font = { name: "Malgun Gothic", size: 11, bold: true };
+      });
+    }
+    const notes = {
+      attendance: "○ 출석 · × 결석 · △ 보강",
+      "student-register": "현재 조회된 수강생 정보를 기준으로 작성한 대장입니다.",
+      "receipt-ledger": "위와 같이 교습비등을 받았음을 확인함.    원장 (서명 또는 인)",
+      "cash-journal": "잔액은 조회기간 내 입·출금 기준이며, 기간 이전 이월 잔액은 포함하지 않습니다.",
+    };
+    lastRow += 2;
+    ws.mergeCells(lastRow, 1, lastRow, columnCount);
+    ws.getCell(lastRow, 1).value = notes[query.docType];
+    ws.getCell(lastRow, 1).font = { name: "Malgun Gothic", size: 10, color: { argb: "FF666666" } };
+    ws.getCell(lastRow, 1).alignment = { wrapText: true, vertical: "middle" };
+    ws.getRow(lastRow).height = 32;
+    ws.pageSetup.printArea = `A1:${lastCol}${lastRow}`;
+    return { workbook: wb, title: def.title };
+  }
+
+  document.getElementById("btn-excel").addEventListener("click", async () => {
+    const snapshot = loadedDocument;
+    if (!snapshot) return;
+    const btn = document.getElementById("btn-excel");
+    btn.disabled = true;
+    btn.textContent = "엑셀 생성 중…";
+    try {
+      const { workbook, title } = await buildExcelWorkbook(snapshot);
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${title}_${snapshot.query.periodStart || "전체"}_${snapshot.query.periodEnd || "전체"}.xlsx`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      document.getElementById("doc-status").textContent = "엑셀 다운로드 실패: " + err.message;
+    } finally {
+      btn.textContent = "⬇️ Excel 다운로드";
+      btn.disabled = !loadedDocument;
+    }
   });
 
   if (getAdminKey()) { showAppScreen(); } else { showLoginScreen(); }
