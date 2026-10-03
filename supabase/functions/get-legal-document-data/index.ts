@@ -105,7 +105,7 @@ async function legalRows(body: any, getCachedPage: (id:string)=>Promise<any>) {
   return {registrationId:reg.id,studentId:sid,studentName:titleOf(student,"학생이름"),
     ...legalClass(cp),
     registrationNo: sid && reg.properties?.[PROP_REG_ENROLL_DATE]?.date?.start ? await ensureStudentRegistrationNumber(sid,student) : null,
-    address:plainText(sp["주소"]),phone:sp["학생 연락처"]?.phone_number || sp[guardianKey]?.phone_number || "",
+    address:plainText(sp["주소"]),phone:["학생 연락처",guardianKey,"어머니 연락처","아버지 연락처","기타 보호자 연락처"].map(key=>String(sp[key]?.phone_number ?? "").trim()).find(Boolean) || "",
     enrollDate:seoulDate(reg.properties?.[PROP_REG_ENROLL_DATE]?.date?.start ?? ""),
     endDate:seoulDate(reg.properties?.[PROP_REG_END_DATE]?.date?.start ?? "")}
  })
@@ -298,7 +298,7 @@ async function buildCashJournal(body: any) {
 async function buildClasses() {
   const classes = await queryAllPages(DS_CLASS)
   return {
-    classes: classes.map((c: any) => ({ id: c.id, name: titleOf(c, PROP_CLASS_TITLE) }))
+    classes: classes.map((c: any) => ({ id: c.id, name: titleOf(c, PROP_CLASS_TITLE), legalName: legalClass(c).className }))
       .sort((a, b) => a.name.localeCompare(b.name, "ko")),
   }
 }
