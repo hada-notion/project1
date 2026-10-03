@@ -367,6 +367,9 @@
       studentId: document.getElementById("f-student").value || undefined,
       search: document.getElementById("f-search").value.trim() || undefined,
     };
+    const targetLabel = body.studentId
+      ? studentSel.selectedOptions[0]?.textContent || "학생"
+      : body.classId ? classSel.selectedOptions[0]?.textContent || "클래스" : "전체";
     const filterLabel = `클래스: ${classSel.selectedOptions[0]?.textContent || "전체"} · 학생: ${studentSel.value ? studentSel.selectedOptions[0]?.textContent : "전체 학생"}${body.search ? " · 검색: " + body.search : ""}`;
     try {
       const data = await callFn(body);
@@ -377,7 +380,7 @@
       else if (body.docType === "receipt-ledger") html = renderReceiptLedger(data);
       else if (body.docType === "cash-journal") html = renderCashJournal(data);
       printArea.innerHTML = html;
-      loadedDocument = { data, query: { ...body }, filterLabel };
+      loadedDocument = { data, query: { ...body }, filterLabel, targetLabel };
       document.getElementById("btn-excel").disabled = false;
       statusEl.textContent = "조회 완료";
     } catch (err) {
@@ -526,7 +529,9 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${title}_${snapshot.query.periodStart || "전체"}_${snapshot.query.periodEnd || "전체"}.xlsx`;
+      const target = String(snapshot.targetLabel || "전체")
+        .replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").trim().replace(/[. ]+$/g, "").slice(0, 80) || "전체";
+      a.download = `${target}_${title}_${snapshot.query.periodStart || "전체"}_${snapshot.query.periodEnd || "전체"}.xlsx`;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) {
