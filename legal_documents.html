@@ -648,6 +648,12 @@
   }
   function excelText(value) { return String(value ?? ""); }
 
+  function excelFilenameStem(snapshot,title) {
+    const target = String(snapshot.targetLabel || "전체")
+      .replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").trim().replace(/[. ]+$/g, "").slice(0, 80) || "전체";
+    return `${target}_${title}_${snapshot.query.periodStart || "전체"}_${snapshot.query.periodEnd || "전체"}`;
+  }
+
   function optionalNumber(value) { return value === null || value === undefined || value === "" ? "" : excelNumber(value); }
   async function buildExcelWorkbook(snapshot) {
     const ExcelJS=await loadExcelLibrary();
@@ -686,6 +692,12 @@
     }
     if(query.docType==="attendance"){
       const ws=tableSheet(title,title,["교습과목","신고 반명(교습과정)","성명",...data.dateList],[14,24,14,...data.dateList.map(()=>8)],data.students.map(r=>[excelText(r.subject),excelText(r.className),excelText(r.studentName),...data.dateList.map(d=>excelText(r.days[d] || ""))]),{freeze:3,note:"○ 출석 · × 결석 · △ 보강 · · 예정/미체크 · 공란: 수업 기록 없음. 등록별 별도 행, 복수 수업은 시간순 / 구분."});
+      const filenameTitle=excelFilenameStem(snapshot,title);
+      ws.getCell("A1").value=filenameTitle;ws.getCell("A1").numFmt="@";
+      ws.getCell("A1").alignment={horizontal:"center",vertical:"middle",wrapText:true};
+      const titleUnits=Array.from(filenameTitle).reduce((n,c)=>n+(/[^\x00-\x7f]/.test(c)?2:1),0);
+      const titleLines=Math.max(1,Math.ceil(titleUnits*(18/11)/Math.max(1,ws.columns.reduce((n,c)=>n+c.width,0)-4)));
+      ws.getRow(1).height=titleLines===1 ? 32 : Math.min(409,titleLines*28+8);
       data.dateList.forEach((d,i)=>{ws.getCell(5,i+4).value=excelDate(d);ws.getCell(5,i+4).numFmt="mm-dd";});
     }else if(query.docType==="student-register"){
       const groups=registerGroups(data);
@@ -741,9 +753,7 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      const target = String(snapshot.targetLabel || "전체")
-        .replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").trim().replace(/[. ]+$/g, "").slice(0, 80) || "전체";
-      a.download = `${target}_${title}_${snapshot.query.periodStart || "전체"}_${snapshot.query.periodEnd || "전체"}.xlsx`;
+      a.download = excelFilenameStem(snapshot,title)+".xlsx";
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) {
