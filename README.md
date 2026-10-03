@@ -15,6 +15,7 @@ Notion 워크스페이스의 "📘 하다 학원관리 구조·실행 설명서"
 | DB 마이그레이션 | `supabase/migrations/*.sql` (pg_cron, sync_queue 등 포함) |
 | 학부모 리포트 웹앱 | `student_report.html`, `student_report_part1.js`, `student_report_part2.js` (GitHub Pages) |
 | 출결 키오스크 웹앱 | `attendance_kiosk.html` (GitHub Pages) |
+| 관리자 서류 출력 | `legal_documents.html` → `get-legal-document-data` (관리자 전용) |
 | 배포 워크플로 | `.github/workflows/deploy-supabase-functions.yml` |
 | 회귀 가드 스크립트 | `scripts/` |
 
@@ -32,6 +33,10 @@ Secrets 전체 목록, 하드코딩 값 자동 치환 스크립트 사용법은
 
 학습기록·학습활동 본문 공유, PDF·첨부파일 열기 API와 보안·테스트 기준은
 [`docs/학생-보고서-본문-첨부파일.md`](docs/학생-보고서-본문-첨부파일.md)를 참고하세요.
+
+관리자 서류 출력의 최신 데이터 기준·웹/PDF/XLSX 규칙·번호 부작용·미구현 기능은
+[`LEGAL_DOCUMENTS.md`](LEGAL_DOCUMENTS.md)를 참고하세요. 운영 사용법은 Notion 메뉴얼의
+**관리자 서류 출력**, 데이터 흐름·접근 경계는 **구조도**에 있습니다.
 
 ## 히스토리 / 과거 작업 로그
 
