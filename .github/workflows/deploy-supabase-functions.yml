@@ -29,6 +29,9 @@ jobs:
             deno check "$f"
           done
 
+      - name: Test kiosk identity and directory guards
+        run: deno test supabase/functions/_shared/kioskIdentity_test.ts
+
       - name: Run regression guard checks
         run: bash scripts/check-known-regressions.sh
 

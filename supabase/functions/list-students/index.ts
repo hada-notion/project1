@@ -9,6 +9,8 @@ import {
   parseTokenValue,
 } from "../_shared/adminShared.ts"
 
+import { buildKioskDirectory, queryAllKioskPages, ACTIVE_KIOSK_STATUS } from "../_shared/kioskIdentity.ts"
+
 function todayKst(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date())
 }
@@ -35,6 +37,17 @@ Deno.serve(async (req: Request) => {
 
   try {
     const registrationDbId = getRegistrationDbId()
+    // 키오스크 전용 최소 목록: 출석 이력·보고서 토큰·보호자 이름은 포함하지 않는다.
+    if (new URL(req.url).searchParams.get("kiosk") === "1") {
+      const studentDbId = await resolveRelatedDatabaseId(registrationDbId, "학생정보")
+      const students = await queryAllKioskPages(body => notionQueryDatabase(studentDbId, body))
+      const registrations = await queryAllKioskPages(body => notionQueryDatabase(registrationDbId, body), {
+        filter: { property: "수강상태", formula: { string: { equals: ACTIVE_KIOSK_STATUS } } },
+      })
+      return new Response(JSON.stringify({ candidates: buildKioskDirectory(registrations, students), generatedAt: new Date().toISOString() }), {
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json", "Cache-Control": "no-store" },
+      })
+    }
     const registrations = await notionQueryDatabaseAll(registrationDbId, {
       page_size: 100,
     })

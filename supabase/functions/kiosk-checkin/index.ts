@@ -6,6 +6,8 @@
 // 학생 매칭·출석 기록·알림톡 발송을 위임했는데, 그 경로를 없애고 다른 관리 함수들과 동일하게
 // Notion을 직접 조회/갱신하도록 통합한다 (로드맵: 키오스크 Make 의존 제거, 2026-09-19).
 //
+// [2026-10-05 v2.5.2] 화면의 최소 목록으로 등록 ID를 먼저 받으며 서버에서 현재 소속·수강 상태·학생 연락처를 검증한다.
+// 등록 ID가 없는 구버전/목록 누락 요청만 전체 학생 조회로 보완한다.
 // 매칭: 학생(학원) DB의 학생/어머니/아버지/기타 보호자 연락처 중 하나가 일치하고, 수강 중(🟢)인 등록을 찾는다.
 // 알림 수신 대상이 "우선 연락 대상"이면 등록의 학부모 연락처 롤업(학생의 우선 연락처 원본)을 사용한다.
 // - 매칭이 하나도 없으면 { matched: false }.
@@ -42,7 +44,6 @@ import {
   getRegistrationDbId,
   resolveRelatedDatabaseId,
   notionQueryDatabase,
-  notionQueryDatabaseAll,
   notionGetPage,
   notionPatchPageProperties,
   notionCreatePage,
@@ -56,6 +57,8 @@ import { normalizePhone, resolveParentPhone, resolveAlimtalkRecipients } from ".
 // 기능을 최대한 줄이는 방향으로 가기로 했다 -- 나중에 pull 모델로 별도 작업에서 다시 만들 예정.
 // (예전 import는 `import { enqueueDashboardLink } from "../_shared/dashboardLinkTarget.ts"`,
 // 호출부는 stateChanged 블록 안 한 곳이었다.)
+
+import { resolveKioskHint, queryAllKioskPages } from "../_shared/kioskIdentity.ts"
 
 function plainText(prop: any): string {
   if (!prop) return ""
@@ -118,16 +121,14 @@ function formatKstTimeKorean(iso: string | null | undefined): string {
 type Candidate = { registrationId: string; studentName: string; className: string }
 
 async function findActiveRegistrationsForStudent(registrationDbId: string, studentId: string): Promise<any[]> {
-  const json = await notionQueryDatabase(registrationDbId, {
+  return await queryAllKioskPages(body => notionQueryDatabase(registrationDbId, body), {
     filter: {
       and: [
         { property: "학생정보", relation: { contains: studentId } },
         { property: "수강상태", formula: { string: { equals: "🟢 수강 중" } } },
       ],
     },
-    page_size: 20,
   })
-  return json.results ?? []
 }
 
 function toCandidate(reg: any): Candidate {
@@ -176,11 +177,19 @@ Deno.serve(async (req: Request) => {
     let registrationId: string | null =
       typeof body?.registrationId === "string" && body.registrationId ? body.registrationId : null
     let studentName = ""
+    let registrationPage: any = null
+    if (registrationId) {
+      // 등록 ID는 클라이언트 힌트. 타 DB/종료 등록/다른 연락처를 출결 처리하지 않는다.
+      registrationPage = await resolveKioskHint({ registrationId, phone, registrationDbId, studentDbId, getPage: notionGetPage })
+      if (!registrationPage) return new Response(JSON.stringify({ refreshCandidates: true, error: "학생 목록이 변경되었습니다. 다시 선택해주세요." }), {
+        status: 409, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      })
+    }
 
     if (!registrationId) {
       // 학생 연락처/어머니 연락처/아버지 연락처 저장 형식이 사람마다 달라서(하이픈 유무 등) Notion
-      // 필터의 정확 일치에 기대지 않고, 전체를 가져와 숫자만 비교한다 (학생 수 규모상 충분히 빠름).
-      const students = await notionQueryDatabaseAll(studentDbId, {})
+      // 필터의 정확 일치에 기대지 않는다. 구버전 화면/목록 누락 때만 전체 조회로 보완한다.
+      const students = await queryAllKioskPages(body => notionQueryDatabase(studentDbId, body))
       const matchedStudents = students.filter((s: any) => {
         const p = s.properties ?? {}
         return (
@@ -211,7 +220,12 @@ Deno.serve(async (req: Request) => {
       studentName = candidates[0].studentName
     }
 
-    const registrationPage = await notionGetPage(registrationId)
+    if (!registrationPage) {
+      registrationPage = await resolveKioskHint({ registrationId, phone, registrationDbId, studentDbId, getPage: notionGetPage })
+      if (!registrationPage) return new Response(JSON.stringify({ refreshCandidates: true, error: "학생 목록이 변경되었습니다. 다시 선택해주세요." }), {
+        status: 409, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      })
+    }
     if (!studentName) {
       studentName = rollupFirstText(registrationPage.properties?.["학생이름(등록)"]) || "이름 미상"
     }

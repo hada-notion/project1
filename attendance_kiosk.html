@@ -342,6 +342,40 @@
 
   let digits = "";
   let pendingType = null;
+  // 학생/연락처 최소 목록은 메모리에만 보관한다. 새로고침/로그아웃 시 폐기한다.
+  let kioskCandidates = [];
+  let kioskCandidatesAt = 0;
+  let kioskDirectoryPending = null;
+  let kioskDirectoryVersion = 0;
+  const KIOSK_DIRECTORY_TTL_MS = 5 * 60 * 1000;
+  async function fetchKioskDirectory(key) {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/list-students?kiosk=1`, {
+      cache: "no-store",
+      headers: { "x-admin-key": key, "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "apikey": SUPABASE_ANON_KEY },
+    });
+    if (!res.ok) { const error = new Error(res.status === 401 ? "로그인이 만료되었습니다." : "학생 목록을 불러오지 못했습니다."); error.status = res.status; throw error; }
+    const data = await res.json();
+    if (!Array.isArray(data.candidates)) throw new Error("학생 목록 응답 형식 오류");
+    return data.candidates;
+  }
+  async function refreshKioskDirectory(force = false) {
+    if (!force && kioskCandidatesAt && Date.now() - kioskCandidatesAt < KIOSK_DIRECTORY_TTL_MS) return;
+    if (kioskDirectoryPending) return kioskDirectoryPending;
+    const key = getAdminKey();
+    const version = kioskDirectoryVersion;
+    const pending = (async () => {
+      const candidates = await fetchKioskDirectory(key);
+      if (version !== kioskDirectoryVersion || getAdminKey() !== key) throw new Error("로그인 상태가 변경되었습니다.");
+      kioskCandidates = candidates; kioskCandidatesAt = Date.now();
+    })();
+    kioskDirectoryPending = pending;
+    try { await pending; } finally { if (kioskDirectoryPending === pending) kioskDirectoryPending = null; }
+  }
+  function matchingKioskCandidates(phone) {
+    const normalized = String(phone).replace(/[^0-9]/g, "");
+    return kioskCandidates.filter(c => Array.isArray(c.phones) && c.phones.includes(normalized));
+  }
+  function clearKioskDirectory() { kioskDirectoryVersion++; kioskCandidates = []; kioskCandidatesAt = 0; kioskDirectoryPending = null; }
   const display = document.getElementById("display");
   const resultEl = document.getElementById("result");
   const checkinBtn = document.getElementById("checkinBtn");
@@ -363,7 +397,8 @@
     (candidates || []).forEach((c) => {
       const btn = document.createElement("button");
       btn.className = "candidate-btn";
-      btn.innerHTML = (c.studentName || "이름 미상") + (c.className ? '<span class="sub">' + c.className + "</span>" : "");
+      btn.textContent = c.studentName || "이름 미상";
+      if (c.className) { const sub = document.createElement("span"); sub.className = "sub"; sub.textContent = c.className; btn.appendChild(sub); }
       btn.addEventListener("click", () => {
         showMain();
         runCheckin(pendingType, c.registrationId);
@@ -424,6 +459,7 @@
   });
 
   async function runCheckin(type, registrationId) {
+    const requestPhone = digits;
     const label = type === "checkin" ? "등원" : "하원";
     const activeBtn = type === "checkin" ? checkinBtn : checkoutBtn;
     const originalText = activeBtn.textContent;
@@ -431,7 +467,23 @@
     checkoutBtn.disabled = true;
     activeBtn.textContent = "확인 중...";
     try {
-      const body = { phone: digits, type };
+      // 최소 목록 우선. 목록 장애는 구버전 전화번호 조회로 보완하되 인증 실패는 재로그인한다.
+      try { await refreshKioskDirectory(); } catch (e) {
+        if (e.status === 401) { localStorage.removeItem(ADMIN_KEY_STORAGE); showLoginScreen(e.message); return; }
+        clearKioskDirectory();
+      }
+      if (!registrationId && kioskCandidatesAt) {
+        let candidates = matchingKioskCandidates(requestPhone);
+        if (!candidates.length) {
+          try { await refreshKioskDirectory(true); candidates = matchingKioskCandidates(requestPhone); } catch (e) {
+            if (e.status === 401) { localStorage.removeItem(ADMIN_KEY_STORAGE); showLoginScreen(e.message); return; }
+            clearKioskDirectory();
+          }
+        }
+        if (candidates.length > 1) { digits = requestPhone; updateDisplay(); showCandidates(candidates, type); return; }
+        if (candidates.length === 1) registrationId = candidates[0].registrationId;
+      }
+      const body = { phone: requestPhone, type };
       if (registrationId) body.registrationId = registrationId;
       const res = await fetch(`${SUPABASE_URL}/functions/v1/kiosk-checkin`, {
         method: "POST",
@@ -453,11 +505,17 @@
           localStorage.removeItem(ADMIN_KEY_STORAGE);
           showLoginScreen();
         }, 1200);
+      } else if (res.status === 409 && data.refreshCandidates) {
+        kioskCandidatesAt = 0;
+        await refreshKioskDirectory(true);
+        const candidates = matchingKioskCandidates(requestPhone);
+        if (candidates.length) { digits = requestPhone; updateDisplay(); showCandidates(candidates, type); return; }
+        showResult("error", "학생 목록이 변경되었습니다. 등록된 연락처와 수강 상태를 확인해주세요.");
       } else if (res.ok && data.needsSelection) {
         checkinBtn.disabled = false;
         checkoutBtn.disabled = false;
         activeBtn.textContent = originalText;
-        showCandidates(data.candidates, type);
+        digits = requestPhone; updateDisplay(); showCandidates(data.candidates, type);
         return;
       } else if (res.ok && data.matched && data.alreadyDone) {
         showResult("info", `이미 ${data.alreadyAt ? data.alreadyAt + "에 " : ""}${label} 처리되었습니다.`);
@@ -472,13 +530,14 @@
         showResult("error", data.error || "처리 중 오류가 발생했습니다.");
       }
     } catch (err) {
-      showResult("error", "연결에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      if (err.status === 401) { localStorage.removeItem(ADMIN_KEY_STORAGE); showLoginScreen(err.message); }
+      else showResult("error", "연결에 실패했습니다. 잠시 후 다시 시도해주세요.");
+    } finally {
+      checkinBtn.disabled = false;
+      checkoutBtn.disabled = false;
+      activeBtn.textContent = originalText;
+      if (candidatesView.hidden) { digits = ""; updateDisplay(); }
     }
-    checkinBtn.disabled = false;
-    checkoutBtn.disabled = false;
-    activeBtn.textContent = originalText;
-    digits = "";
-    updateDisplay();
   }
 
   function submitAttendance(type) {
@@ -500,6 +559,7 @@
   const ADMIN_KEY_STORAGE = "admin_key";
   function getAdminKey() { return localStorage.getItem(ADMIN_KEY_STORAGE) || ""; }
   function showLoginScreen(errorMsg) {
+    clearKioskDirectory();
     document.getElementById("login-screen").style.display = "flex";
     document.getElementById("app-screen").style.display = "none";
     document.getElementById("login-error").textContent = errorMsg || "";
@@ -510,6 +570,9 @@
     document.getElementById("login-screen").style.display = "none";
     document.getElementById("app-screen").style.display = "flex";
     showMain();
+    refreshKioskDirectory().catch(err => {
+      if (err.status === 401) { localStorage.removeItem(ADMIN_KEY_STORAGE); showLoginScreen(err.message); }
+    });
   }
   logoutBtn.addEventListener("click", () => {
     if (!confirm("로그아웃 하시겠습니까?")) return;
@@ -528,21 +591,10 @@
     btn.textContent = "확인 중...";
     errEl.textContent = "";
     try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/list-students`, {
-        headers: {
-          "x-admin-key": key,
-          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-          "apikey": SUPABASE_ANON_KEY,
-        },
-      });
-      if (res.status === 401) {
-        errEl.textContent = "비밀번호가 올바르지 않습니다.";
-        btn.disabled = false;
-        btn.textContent = "로그인";
-        return;
-      }
-      if (!res.ok) throw new Error(`서버 오류: ${res.status}`);
+      const candidates = await fetchKioskDirectory(key);
       localStorage.setItem(ADMIN_KEY_STORAGE, key);
+      kioskCandidates = candidates;
+      kioskCandidatesAt = Date.now();
       showAppScreen();
     } catch (err) {
       errEl.textContent = "로그인에 실패했습니다: " + err.message;
