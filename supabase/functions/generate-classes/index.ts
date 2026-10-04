@@ -16,22 +16,10 @@
 // 하나도 없어 죽어있던 코드였다. 초기 배포 단계라 예약실행/자동 트리거를 최대한 줄이는 방향에
 // 맞춰 이 죽은 경로를 제거했다 -- 이제 timetableId도 mode=bulk도 없는 호출은 400 에러로 응답한다.
 //
-// v2에서 추가됨: 출석을 새로 만든 직후, 그 등록(학생)에 대해 "과제 마감"이 아직 비어있는 과제
-// 학습활동이 있으면 이번에 새로 생긴 출석(수업)에 자동으로 연결해야 한다. 출제 당시엔 다음 수업이
-// 없어서 마감을 못 잡았던 경우, 이 함수가 나중에 다음 수업을 만들 때 자동으로 채워지도록 하는
-// 안전망이다.
-//
-// v3에서 재설계됨 (2026-09-24): 기존엔 학습활동(학원) DB를 "구분=과제 AND 과제 마감=empty" 필터로
-// 직접 검색했는데, 학습활동의 "구분"이 학습기록(학원) DB의 구분을 미러링하는 rollup으로 바뀐 뒤로
-// select 필터가 타입 불일치(400)로 매 호출 실패하고 있었다 (조용히 catch되어 안 보였음). 이제는
-// 검색을 아예 하지 않는다: 직전 수업(getLatestClassSession)이 이미 갖고 있는 "학습기록" 관계 ID들을
-// 그대로 물려받아, 학습기록(구분은 여기서 네이티브 select) -> 학습활동 관계를 getPage로만 순수하게
-// 따라가서(computePendingDeadlineTargets) 대상 학습활동 ID를 찾는다. 이 함수는 실제로 "과제 마감"을
-// 쓰지 않고, 새로 만든 출석 페이지에 "과제마감 백필 대상"/"과제마감 백필 상태(대기열)"만 세팅해서
-// 독립된 큐에 넘긴다 — 실제 연결 작업은 별도 함수 backfill-assignment-deadlines가 그 큐를 드레인하며
-// 수행한다 (분리큐 원칙: 단위 작업마다 독립된 큐/체인). sync-registration-class-session의 등록
-// "수업 생성" 버튼 경로에도 동일한 백필 로직이 있다 — 이 함수는 시간표 기준 자동/수동 생성 경로를
-// 담당한다.
+// Deadline backfill uses each activity's registration, not the first record registration.
+// Candidates include unset/automatic unsubmitted deadlines across weekday timetables.
+// The independent worker rechecks the nearest later attendance and protects manual overrides.
+// Bulk self-calls carry a date/start-time ordered plan; each step still creates one session.
 
 import {
 	queryDataSource,
@@ -90,6 +78,8 @@ const SESSION_GEN_STATUS_SPEC: StatusSpec = {
 // `import { enqueueDashboardLink } from "../_shared/dashboardLinkTarget.ts"`, 호출부는
 // createPage(DS.classSession) 직후와 등록별 출석 생성 루프 안쪽 두 곳이었다.)
 import { wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
+import { pendingDeadlineActivities, type DeadlineIO } from "../_shared/assignmentDeadline.ts"
+import { orderBulkClasses, finishBulkStep, timetableStartAt, type BulkClassItem } from "../_shared/bulkClassOrder.ts"
 // (2026-09-21, 인증 정책 추가) 이 함수는 지금까지 아무 인증도 없이 POST만 확인하면 누구나 호출할 수 있었다.
 // 다른 어드민 함수들과 동일하게 x-admin-key 헤더를 요구해서, URL만 알면 전체 시간표를 강제로
 // 재생성시킬 수 있었던 구멍을 막는다.
@@ -102,7 +92,6 @@ import {
 	DS_REGISTRATION,
 	DS_SCHEDULE_EVENT,
 	DS_STUDY_ACTIVITY,
-	DS_LEARNING_RECORD,
 } from "../_shared/constants.ts"
 
 // Data source IDs: 이제 하드코딩하지 않고 _shared/constants.ts(환경변수 기반 단일 소스)에서
@@ -115,24 +104,13 @@ const DS = {
   registration: DS_REGISTRATION,
   scheduleEvent: DS_SCHEDULE_EVENT,
   studyActivity: DS_STUDY_ACTIVITY,
-  learningRecord: DS_LEARNING_RECORD,
 }
 
-// ---- 대기 중인 과제 마감 백필용 (2026-09-24, PART N-12 후속 재설계) ----
-// 예전엔 "학습활동 DB를 등록ID+구분+마감비어있음으로 검색"하는 방식이었는데, 학습활동의 "구분"이
-// 어느 시점에 select에서 rollup(학습기록.구분을 그대로 미러링)으로 바뀌면서 그 필터가 매번
-// 400(rollup does not match filter select)으로 깨져 있었다(2026-09-24 실측 로그로 확인). 게다가
-// 검색 자체가 사용자의 설계 원칙("호출부가 이미 정확한 범위를 넘겨줘야 한다")에도 안 맞았다.
-// 새 설계: 수업(학원) DB -> 학습기록(학원) DB -> 학습활동(학원) DB가 전부 진짜 relation이므로,
-// 이미 하고 있던 "이전 수업 조회" 한 번에 학습기록 relation을 얹어서 챙기고, 그걸 getPage로
-// 직접 따라 내려간다(별도 DB 검색 전혀 없음). 학습기록(학원) DB의 "구분"은 (학습활동과 달리)
-// 진짜 select라서 그대로 비교할 수 있다.
-const PROP_SESSION_LEARNING_RECORDS = "학습기록" // 수업(학원) DB relation -> 학습기록(학원) DB
-const PROP_RECORD_CATEGORY = "구분" // 학습기록(학원) DB (select: 학습/과제/평가)
-const PROP_RECORD_REGISTRATION = "등록" // 학습기록(학원) DB relation -> 등록(학원) DB
-const PROP_RECORD_ACTIVITIES = "학습활동" // 학습기록(학원) DB relation -> 학습활동(학원) DB
-const CATEGORY_ASSIGNMENT = "과제"
-const PROP_ACTIVITY_DEADLINE = "과제 마감" // 학습활동(학원) DB relation -> 출석(학원) DB
+// Deadline candidates are grouped by each activity's own registration, across all weekdays.
+const deadlineIO: DeadlineIO = {
+  getPage, query: queryDataSource, update: updatePageProperties,
+  attendanceDb: DS.attendance, activityDb: DS.studyActivity,
+}
 // 출석(학원) DB: 여기서는 실제로 마감을 연결하지 않고, "이 학생 것으로 이미 계산해둔 대상"만
 // 채워서 별도 큐(backfill-assignment-deadlines)에 넘긴다 (분리 큐 설계, 사용자 요청).
 const PROP_ATTENDANCE_BACKFILL_TARGET = "과제마감 백필 대상" // relation -> 학습활동(학원) DB
@@ -182,52 +160,6 @@ const REG_CONCURRENCY = 4
 
 // notionHeaders / queryDataSource / getPage / createPage / updatePageProperties / dateStart / relIds
 // 는 이제 _shared/notionClient.ts에서 가져온다 (429/5xx 재시도가 자동으로 추가됨, 로드맵 5-9).
-
-// 이전 수업(같은 시간표의 latestDate에 해당하는 수업 페이지, getLatestClassSession이 이미 한 번
-// 조회하면서 함께 챙겨온 것)의 "학습기록" relation ID들을 받아서, 학생(등록)별로 "이번에 새로
-// 만드는 출석에 마감을 연결해줘야 할 학습활동 ID 목록"을 계산한다. DB 검색이 전혀 없다 — 전부
-// 이미 알고 있는 ID를 getPage로 직접 따라 내려가는 것뿐이다(수업.학습기록 -> 학습기록.학습활동).
-// 실제 마감 연결(쓰기)은 여기서 하지 않는다 — 계산 결과만 반환하고, 호출부가 출석 생성 시점에
-// "과제마감 백필 대상"/"과제마감 백필 상태"에 채워서 별도 큐(backfill-assignment-deadlines)로
-// 넘긴다(2026-09-24, 분리 큐 재설계, 사용자 요청).
-async function computePendingDeadlineTargets(learningRecordIds: string[]): Promise<Map<string, string[]>> {
-  const targets = new Map<string, string[]>()
-  if (learningRecordIds.length === 0) return targets
-
-  // (2026-09-24, PART N-14) 무제한 Promise.all -> REG_CONCURRENCY로 상한 (위 상수 주석 참고).
-  const records = await mapWithConcurrency(learningRecordIds, REG_CONCURRENCY, (id) => getPage(id))
-  const assignmentRecords = records.filter(
-    (r: any) => r.properties[PROP_RECORD_CATEGORY]?.select?.name === CATEGORY_ASSIGNMENT,
-  )
-  if (assignmentRecords.length === 0) return targets
-
-  // 학습활동 ID -> 그게 속한 등록(학생) ID. 여러 학습기록이 같은 학습활동을 가리킬 일은 없지만,
-  // 안전하게 Map으로 관리한다.
-  const activityOwner = new Map<string, string>()
-  for (const record of assignmentRecords) {
-    const regId = relIds(record.properties[PROP_RECORD_REGISTRATION])[0]
-    if (!regId) continue
-    for (const activityId of relIds(record.properties[PROP_RECORD_ACTIVITIES])) {
-      activityOwner.set(activityId, regId)
-    }
-  }
-  if (activityOwner.size === 0) return targets
-
-  // 이미 마감이 채워져 있는 항목은 제외해야 하므로, 각 학습활동을 직접 조회해서 확인한다
-  // (검색이 아니라 위에서 이미 확보한 ID들을 그대로 getPage로 읽는 것뿐).
-  const activityIds = [...activityOwner.keys()]
-  // (2026-09-24, PART N-14) 무제한 Promise.all -> REG_CONCURRENCY로 상한 (위 상수 주석 참고).
-  const activities = await mapWithConcurrency(activityIds, REG_CONCURRENCY, (id) => getPage(id))
-  for (const activity of activities) {
-    if (relIds(activity.properties[PROP_ACTIVITY_DEADLINE]).length > 0) continue // 이미 마감 있음
-    const regId = activityOwner.get(activity.id)
-    if (!regId) continue
-    const list = targets.get(regId) ?? []
-    list.push(activity.id)
-    targets.set(regId, list)
-  }
-  return targets
-}
 
 // Today's date (YYYY-MM-DD) in KST.
 function todayKstDateStr(): string {
@@ -310,26 +242,6 @@ async function getLatestClassDate(timetableId: string): Promise<string | null> {
   if (data.results.length === 0) return null
   const date = data.results[0].properties["수업일시"].date
   return date ? date.start.slice(0, 10) : null
-}
-
-// processTimetable이 쓰는 버전: 위 getLatestClassDate와 똑같은 조회(같은 필터/정렬/page_size)
-// 이지만, 날짜만 뽑고 버리지 않고 그 수업 페이지의 "학습기록" relation도 함께 챙긴다 — 이걸로
-// computePendingDeadlineTargets를 검색 없이 바로 호출할 수 있다(2026-09-24, 분리 큐 재설계).
-async function getLatestClassSession(
-  timetableId: string,
-): Promise<{ date: string | null; learningRecordIds: string[] } | null> {
-  const data = await queryDataSource(DS.classSession, {
-    filter: { property: "시간표", relation: { contains: timetableId } },
-    sorts: [{ property: "수업일시", direction: "descending" }],
-    page_size: 1,
-  })
-  if (data.results.length === 0) return null
-  const page = data.results[0] as any
-  const date = page.properties["수업일시"].date
-  return {
-    date: date ? date.start.slice(0, 10) : null,
-    learningRecordIds: relIds(page.properties[PROP_SESSION_LEARNING_RECORDS]),
-  }
 }
 
 // Monday (YYYY-MM-DD) of the calendar week containing dateStr. Used by the bulk button's
@@ -542,14 +454,11 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
   // withTimeout이 중간에 포기해도 이미 push된 항목은 그 시점의 오류 로그에 그대로 남으므로,
   // "어느 항목까지는 찍혔고 그 다음이 없는지"로 막힌 구간을 알 수 있다.
   const setupStartedAt = Date.now()
-  const latestSession = await getLatestClassSession(timetableId)
-  let latestDate = latestSession?.date ?? null
+  let latestDate = await getLatestClassDate(timetableId)
   let createdCount = 0
   let backfillQueuedCount = 0
-  // (2026-09-24, 분리 큐 재설계) 위 조회에 이미 얹혀서 나온 이전 수업의 "학습기록" relation을
-  // 그대로 따라 내려가서, 학생별로 "이번에 만드는 출석에 마감을 백필해줘야 할 학습활동 ID"를
-  // 미리 계산해둔다 — 검색 없음, 전부 이미 알고 있는 ID로 getPage만 호출(위 함수 주석 참고).
-  const pendingDeadlineTargets = await computePendingDeadlineTargets(latestSession?.learningRecordIds ?? [])
+  // Fetch student-owned candidates only for dates that will actually be created.
+  const pendingDeadlineTargets = new Map<string, string[]>()
 
   // Perf (2026-09-11): closures, class name, and the registration list don't change across
   // iterations of the while-loop below for a given timetable, but were previously re-fetched
@@ -614,6 +523,9 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
     // from the single timetableRegs fetch above instead of a fresh Notion query per session
     // date (2026-09-11 perf fix).
     const registrationIds = filterRegistrationsForDate(timetableRegs, nextDate)
+    await mapWithConcurrency(registrationIds, REG_CONCURRENCY, async regId => {
+      pendingDeadlineTargets.set(regId, await pendingDeadlineActivities(deadlineIO, regId))
+    })
 
     const createSessionStartedAt = Date.now()
     const classPage = await createPage(DS.classSession, {
@@ -866,8 +778,10 @@ async function runBulkChainStep(opts: {
   chainStartedAt: number
   adminKey: string
   log: string[]
+  bulkPlan?: BulkClassItem[]
 }): Promise<void> {
   const { menuPageId, horizonDate, chainStartedAt, adminKey, log } = opts
+  let bulkPlan = opts.bulkPlan
 
   if (Date.now() - chainStartedAt > BULK_CHAIN_TOTAL_BUDGET_MS) {
     log.push(`[warn] bulk chain: 전체 시간 한도(30분)를 초과해 중단함 -- 남은 시간표는 버튼을 다시 눌러 이어서 처리해주세요`)
@@ -882,26 +796,30 @@ async function runBulkChainStep(opts: {
     return
   }
 
-  let queued: any
+  let next: any
   try {
-    queued = await queryDataSource(DS.timetable, {
-      page_size: 1,
-      filter: { property: "상태", select: { equals: STATUS_QUEUED } },
-    })
-  } catch (err) {
-    log.push(`[error] bulk chain: 대기열 조회 실패: ${(err as Error).message}`)
-    console.error("generate-classes (bulk chain) 대기열 조회 실패:\n", log.join("\n"))
-    if (menuPageId) {
-      await safeMarkStatus(
-        `${menuPageId} markError(대기열 조회 실패)`,
-        () => markError(menuPageId, TIMETABLE_STATUS_SPEC, (err as Error).message),
-        log,
-      )
+    // Legacy continuations without a plan are rebuilt from the complete queued set.
+    if (!bulkPlan) {
+      const queued = await queryAllPages(DS.timetable, { property: "상태", select: { equals: STATUS_QUEUED } })
+      const peeked = await mapWithConcurrency(queued, TIMETABLE_CONCURRENCY, async t => {
+        const date = await peekNextNeededDate(t)
+        if (!date || date > horizonDate) { await markDone(t.id, TIMETABLE_STATUS_SPEC); return null }
+        return { id: t.id, nextAt: timetableStartAt(t, date) }
+      })
+      bulkPlan = orderBulkClasses(peeked.filter((p): p is BulkClassItem => p !== null))
+    } else bulkPlan = orderBulkClasses(bulkPlan)
+    // State remains the source of truth: a completed/cancelled item from an old plan is skipped.
+    while (bulkPlan.length) {
+      const candidate = await getPage(bulkPlan[0].id)
+      if (candidate.properties["상태"]?.select?.name === STATUS_QUEUED && !candidate.archived && !candidate.in_trash) { next = candidate; break }
+      bulkPlan = finishBulkStep(bulkPlan, bulkPlan[0].id)
     }
+  } catch (err) {
+    log.push(`[error] bulk chain: ordered queue lookup failed: ${(err as Error).message}`)
+    if (menuPageId) await markError(menuPageId, TIMETABLE_STATUS_SPEC, (err as Error).message)
     return
   }
 
-  const next = (queued.results as any[])[0]
   if (!next) {
     // 더 이상 대기중인 시간표가 없음 -> 체인 종료.
     console.log("generate-classes (bulk button) finished:\n", log.join("\n"))
@@ -912,6 +830,8 @@ async function runBulkChainStep(opts: {
   }
 
   const tId = next.id
+  let followingAt: string | undefined
+  log.push(`[order] ${tId}: ${bulkPlan![0].nextAt}`)
   // (2026-09-24, PART N-15) markRunning 실패해도 처리 자체는 계속한다 -- next는 이미 확보했으므로
   // "작업중" 표시 실패가 실제 처리를 막을 이유가 없다(아래 safeMarkStatus 주석 참고).
   await safeMarkStatus(`${tId} markRunning`, () => markRunning(tId, TIMETABLE_STATUS_SPEC), log)
@@ -927,6 +847,9 @@ async function runBulkChainStep(opts: {
       // "대기열"로 표시해서 다음 체인 스텝이 이어서 처리하게 한다 (무한루프 걱정 없음: 매 스텝마다
       // 최소 1건은 만들고 멈추므로 항상 앞으로 나아간다).
       log.push(`[requeue] ${tId}: 시간 예산 초과로 이번 스텝은 일부만 처리, 다시 대기열에 넣음`)
+      const fresh = await getPage(tId)
+      const date = await peekNextNeededDate(fresh)
+      if (date && date <= horizonDate) followingAt = timetableStartAt(fresh, date)
       await safeMarkStatus(`${tId} markQueued(부분 처리)`, () => markQueued(tId, TIMETABLE_STATUS_SPEC), log)
     } else {
       await safeMarkStatus(`${tId} markDone`, () => markDone(tId, TIMETABLE_STATUS_SPEC), log)
@@ -941,6 +864,7 @@ async function runBulkChainStep(opts: {
       console.error(`generate-classes (bulk chain) ${tId} 처리 시간 예산 초과, 대기열 재투입:\n`, log.join("\n"))
       // (2026-09-24, PART N-15) 바로 이 markQueued가 실패해서 체인이 죽는 사고가 실제로 재현됨
       // (위 safeMarkStatus 주석 참고) -- 실패해도 반드시 아래 callSelf까지 도달해야 한다.
+      followingAt = bulkPlan![0].nextAt
       await safeMarkStatus(`${tId} markQueued(타임아웃)`, () => markQueued(tId, TIMETABLE_STATUS_SPEC), log)
     } else {
       log.push(`[error] ${tId}: ${(err as Error).message}`)
@@ -956,7 +880,7 @@ async function runBulkChainStep(opts: {
   // 진행된다 -- 호출이 계속 쌓이지 않는다 (send-selected-notifications와 동일 패턴). 위에서 무슨
   // 일이 있었든(상태 표시 실패 포함) 이 줄에는 항상 도달한다 -- PART N-15의 핵심.
   try {
-    await callSelf({ isContinuation: true, menuPageId, horizonDate, chainStartedAt }, adminKey)
+    await callSelf({ isContinuation: true, menuPageId, horizonDate, chainStartedAt, bulkPlan: finishBulkStep(bulkPlan!, tId, followingAt) }, adminKey)
   } catch (err) {
     log.push(`[error] bulk chain: 다음 단계 이어달리기 호출 실패: ${(err as Error).message}`)
     console.error("generate-classes (bulk chain) 이어달리기 실패:\n", log.join("\n"))
@@ -1011,6 +935,7 @@ Deno.serve(async (req: Request) => {
   let contMenuPageId: string | undefined
   let contHorizonDate: string | undefined
   let contChainStartedAt: number | undefined
+  let contBulkPlan: BulkClassItem[] | undefined
   try {
     const body = await req.json()
     rawBodyForLog = body
@@ -1019,6 +944,7 @@ Deno.serve(async (req: Request) => {
       contMenuPageId = typeof body?.menuPageId === "string" ? body.menuPageId : undefined
       contHorizonDate = typeof body?.horizonDate === "string" ? body.horizonDate : undefined
       contChainStartedAt = typeof body?.chainStartedAt === "number" ? body.chainStartedAt : undefined
+      contBulkPlan = Array.isArray(body?.bulkPlan) ? body.bulkPlan : undefined
     }
     const candidates: unknown[] = [
       body?.timetableId,
@@ -1067,6 +993,7 @@ Deno.serve(async (req: Request) => {
           chainStartedAt: contChainStartedAt!,
           adminKey,
           log,
+          bulkPlan: contBulkPlan,
         }),
       )
       return respondAccepted({ mode: "bulk" })
@@ -1102,7 +1029,7 @@ Deno.serve(async (req: Request) => {
 
     runInBackground(async () => {
       try {
-        const timetables = await queryDataSource(DS.timetable, { page_size: 100 })
+        const timetables = await queryAllPages(DS.timetable)
 
         // Week-completeness pre-pass (2026-09-11): find the earliest calendar week (Mon-Sun)
         // that at least one timetable is still missing a session for. This becomes the SHARED
@@ -1110,10 +1037,8 @@ Deno.serve(async (req: Request) => {
         // (for whatever reason) are left untouched this round -- while timetables still missing
         // that week get filled up to it. This makes every timetable's length converge together
         // instead of already-ahead ones running further ahead while behind ones never catch up.
-        const peeked = await Promise.all(
-          (timetables.results as any[]).map(async (t) => ({ id: t.id, nextNeeded: await peekNextNeededDate(t) })),
-        )
-        const needed = peeked.filter((p) => p.nextNeeded !== null) as Array<{ id: string; nextNeeded: string }>
+        const peeked = await mapWithConcurrency(timetables, TIMETABLE_CONCURRENCY, async (t) => ({ id: t.id, page: t, nextNeeded: await peekNextNeededDate(t) }))
+        const needed = peeked.filter((p) => p.nextNeeded !== null) as Array<{ id: string; page: any; nextNeeded: string }>
 
         if (needed.length === 0) {
           log.push(`[ok] bulk: every timetable is already fully caught up, nothing to do`)
@@ -1131,7 +1056,8 @@ Deno.serve(async (req: Request) => {
         // (2026-09-24, PART N-12) 처리가 필요한 시간표를 전부 "⏳ 대기열"로 표시만 해둔다 (빠른
         // Notion 쓰기 몇 건 -- 세션/출석 생성이나 대시보드 연결 트리거는 전혀 안 일어나므로 여러
         // 건을 동시에 표시해도 안전하다). 실제 처리는 아래 runBulkChainStep이 한 번에 딱 1개씩만 진행한다.
-        const needIds = needed.map((p) => p.id)
+        const bulkPlan = orderBulkClasses(needed.filter(p => p.nextNeeded <= horizonDate).map(p => ({ id: p.id, nextAt: timetableStartAt(p.page, p.nextNeeded) })))
+        const needIds = bulkPlan.map((p) => p.id)
         await mapWithConcurrency(needIds, TIMETABLE_CONCURRENCY, async (tId) => {
           try {
             await markQueued(tId, TIMETABLE_STATUS_SPEC)
@@ -1141,7 +1067,7 @@ Deno.serve(async (req: Request) => {
         })
 
         const adminKey = await getCurrentAdminKey()
-        await runBulkChainStep({ menuPageId, horizonDate, chainStartedAt: Date.now(), adminKey, log })
+        await runBulkChainStep({ menuPageId, horizonDate, chainStartedAt: Date.now(), adminKey, log, bulkPlan })
       } catch (err) {
         console.error(
           "generate-classes (bulk button) failed:",

@@ -1,44 +1,12 @@
 // Supabase Edge Function: backfill-assignment-deadlines
-//
-// (2026-09-24, 분리 큐 재설계) generate-classes가 새 수업/출석을 만들 때, 그 학생의 직전 수업에
-// "구분=과제"인 학습기록이 있었고 그 학습기록에 연결된 학습활동 중 아직 "과제 마감"이 비어있는
-// 게 있으면, 그 학습활동 ID들을 이번에 새로 만든 출석의 "과제마감 백필 대상"(relation)에 채우고
-// "과제마감 백필 상태"를 "⏳ 대기열"로 표시해서 이 함수에 넘긴다 (generate-classes/index.ts의
-// computePendingDeadlineTargets 주석 참고 -- 예전엔 generate-classes 자신이 학습활동(학원) DB를
-// "구분=과제 AND 과제 마감=empty"로 직접 검색했는데, 학습활동의 "구분"이 학습기록(학원) DB의
-// 구분을 미러링하는 rollup으로 바뀐 뒤로 select 필터가 타입 불일치(400)로 매번 조용히 실패하고
-// 있었다. 그 버그를 고치는 김에, 사용자가 명시적으로 요청한 원칙("모든 단위 작업은 분리큐로")에
-// 따라 이 링크 작업 자체도 generate-classes의 세션/출석 생성 흐름과 완전히 독립된 자기 큐/체인으로
-// 뽑아냈다.)
-//
-// 이 함수가 하는 일은 아주 좁다: "과제마감 백필 상태 == ⏳대기열"인 출석 페이지를 딱 1개 찾아서,
-// 그 페이지가 이미 들고 있는 "과제마감 백필 대상" relation(학습활동 ID들 -- 이미 generate-classes가
-// 계산해서 넘겨준 값이라 여기서는 검색이 전혀 필요 없음)을 그대로 읽어, 각 학습활동의 "과제 마감"
-// relation을 이 출석으로 채운다. 끝나면 상태를 완료로 표시하고, 자기 자신을 다시 호출해 다음
-// 대기열 항목으로 이어달리기한다 (generate-classes의 runBulkChainStep/callSelf와 완전히 동일한
-// 패턴 -- 청크가 아니라 매번 1건씩 처리하는 이유도 같다: 대상 하나가 유난히 느려도 다음 항목이
-// 그것 때문에 굶지 않게 하기 위함).
-//
-// 트리거 경로 2가지 (다른 큐/함수와 동일한 이중 안전망 구조):
-//   1) generate-classes가 새 백필 대상을 만든 직후 wakeAssignmentDeadlineWorker()로 즉시 트리거
-//      (지연시간 줄이기용, 실패해도 조용히 무시됨).
-//   2) pg_cron이 주기적으로 호출하는 안전망 (즉시 트리거가 실패/유실되거나, 처리 중 이 함수 자체가
-//      시간 예산을 다 쓰고 멈춰도 다음 주기에 이어서 처리하도록). 마이그레이션:
-//      supabase/migrations/<타임스탬프>_backfill_assignment_deadlines_cron.sql
-//
-// 동시성 안전성: 이 큐는 Postgres 테이블이 아니라 Notion의 "과제마감 백필 상태" select 속성
-// 자체가 큐다(사용자의 설계 원칙: "Notion의 상태 속성이 큐다"). generate-classes의 크론 경로는
-// 여러 시간표를 동시에(TIMETABLE_CONCURRENCY=4) 처리할 수 있어서, 이 워커가 거의 같은 순간에
-// 여러 번 깨어날 수 있다. 명시적인 잠금 테이블은 두지 않았다 -- 최악의 경우 두 호출이 우연히
-// 같은 대기열 항목을 동시에 집어도, 이 함수가 하는 쓰기(학습활동의 "과제 마감"을 이 출석으로
-// 설정)는 완전히 멱등이라 중복 실행되어도 결과가 달라지지 않는다 (runBulkChainStep도 같은 수준의
-// 동시성 허용치를 이미 쓰고 있다).
-//
-// (참고) sync-registration-class-session(등록 "수업 생성" 버튼 경로)에도 같은 백필 필요성이
-// 있는데, 그 함수는 아직 구 방식(직접 검색)을 쓰는지 별도로 확인 필요 -- 이 함수 자체는 어느
-// 쪽이 채워주든 "과제마감 백필 대상"/"과제마감 백필 상태"만 보고 동작하므로 무관하다.
+// Independent Notion status queue. generate-classes supplies student-owned candidate IDs.
+// Each trigger attendance is only a signal: re-read the activity, protect manual overrides,
+// validate registration/source/category, and find the closest later attendance across weekdays.
+// Automatic provenance is stored with the deadline; legacy populated values are never inferred.
+// Persist remaining targets after every item so timeout retries resume with bounded progress.
+// Immediate wake + existing pg_cron fallback and status tracking are preserved.
 
-import { queryDataSource, updatePageProperties, relIds, withTimeout } from "../_shared/notionClient.ts"
+import { queryDataSource, updatePageProperties, getPage, relIds, withTimeout } from "../_shared/notionClient.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 import { requireAdminKey, getCurrentAdminKey } from "../_shared/adminShared.ts"
 import {
@@ -49,10 +17,10 @@ import {
 	markQueued,
 	type StatusSpec,
 } from "../_shared/statusTracking.ts"
-import { DS_ATTENDANCE } from "../_shared/constants.ts"
+import { DS_ATTENDANCE, DS_STUDY_ACTIVITY } from "../_shared/constants.ts"
+import { reconcileDeadline } from "../_shared/assignmentDeadline.ts"
 
 const PROP_BACKFILL_TARGET = "과제마감 백필 대상" // 출석(학원) DB, relation -> 학습활동(학원) DB
-const PROP_ACTIVITY_DEADLINE = "과제 마감" // 학습활동(학원) DB, relation -> 출석(학원) DB
 
 const ATTENDANCE_BACKFILL_STATUS_SPEC: StatusSpec = {
 	statusProp: "과제마감 백필 상태",
@@ -109,16 +77,18 @@ async function findNextQueued(): Promise<any | null> {
 	return (data.results as any[])[0] ?? null
 }
 
-// 이 출석 페이지가 이미 들고 있는 "과제마감 백필 대상" 학습활동 ID들의 "과제 마감"을 이 출석으로
-// 채운다. 검색 없음 -- 전부 이미 알고 있는 ID에 대한 쓰기뿐이다.
+// 출석이 들고 있는 학생별 후보를 검토하고, 각 학생의 가장 가까운 다음 출석을 선택한다.
 async function linkTargets(attendanceId: string, activityIds: string[]): Promise<void> {
-	await Promise.all(
-		activityIds.map((activityId) =>
-			updatePageProperties(activityId, {
-				[PROP_ACTIVITY_DEADLINE]: { relation: [{ id: attendanceId }] },
-			}),
-		),
-	)
+  // Trigger is a wake signal, never a blindly assigned deadline. Recheck owner/manual override
+  // and find the closest attendance across all timetables at execution time.
+  const io = { getPage, query: queryDataSource, update: updatePageProperties, attendanceDb: DS_ATTENDANCE, activityDb: DS_STUDY_ACTIVITY }
+  for (let i = 0; i < activityIds.length; i++) {
+    await reconcileDeadline(io, activityIds[i], attendanceId)
+    // Persist progress so a slow batch resumes at remaining targets instead of re-reading all.
+    await updatePageProperties(attendanceId, {
+      [PROP_BACKFILL_TARGET]: { relation: activityIds.slice(i + 1).map(id => ({ id })) },
+    })
+  }
 }
 
 // 체인의 한 단계: "⏳ 대기열"인 출석을 딱 1개 찾아 처리하고, 끝나면 다음 단계로 이어달리기(또는
@@ -160,7 +130,7 @@ async function runChainStep(opts: { chainStartedAt: number; adminKey: string; lo
 		const timeoutLabel = `backfill(${attendanceId})`
 		try {
 			await withTimeout(linkTargets(attendanceId, activityIds), LINK_TIMEOUT_MS, timeoutLabel)
-			log.push(`[done] ${attendanceId}: 학습활동 ${activityIds.length}건의 "과제 마감"을 연결함`)
+			log.push(`[done] ${attendanceId}: 학습활동 ${activityIds.length}건의 마감 검토 완료(수동값 보존 포함)`)
 			await markDone(attendanceId, ATTENDANCE_BACKFILL_STATUS_SPEC)
 		} catch (err) {
 			const isTimeout = ((err as Error)?.message ?? "").includes(`${timeoutLabel}: 시간 제한(`)

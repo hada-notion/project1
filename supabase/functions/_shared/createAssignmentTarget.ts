@@ -36,6 +36,7 @@ import {
 } from "./constants.ts"
 // (2026-09-21, 이식성 리팩토링) 위 4개도 constants.ts로 이동함 — 그 파일 상단 주석 참고.
 import { markRunning, markDone, markError, type StatusSpec } from "./statusTracking.ts"
+import { AUTO_DEADLINE_PROP, findNextDeadline } from "./assignmentDeadline.ts"
 // (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) "출제 처리중"(checkbox)을 활동 생성 상태(select)+활동 생성
 // 처리 시작 시각(date)으로 전환. 마스터플랜 표에는 이 항목이 "학습활동 DB 출제 처리중"으로 적혀
 // 있었지만, 실제로 "학습활동 생성" 버튼과 이 상태 속성은 학습기록(학원) DB에 있다(학습활동 DB는 출제 결과로
@@ -132,18 +133,7 @@ function formatKoreanDateLabel(isoDate: string): string {
 }
 
 async function findNextAttendance(registrationId: string, afterIso: string): Promise<string | null> {
-	const result = await queryDataSource(DS_ATTENDANCE, {
-		filter: {
-			and: [
-				{ property: PROP_ATTENDANCE_REGISTRATION, relation: { contains: registrationId } },
-				{ property: PROP_ATTENDANCE_DATETIME, date: { after: afterIso } },
-			],
-		},
-		sorts: [{ property: PROP_ATTENDANCE_DATETIME, direction: "ascending" }],
-		page_size: 1,
-	})
-	const results = (result.results as JsonRecord[]) ?? []
-	return (results[0]?.id as string) ?? null
+  return await findNextDeadline({ getPage, query: queryDataSource, update: async () => {}, attendanceDb: DS_ATTENDANCE, activityDb: DS_STUDY_ACTIVITY }, registrationId, afterIso)
 }
 
 // 이 학습기록(recordId)+등록(registrationId) 조합으로 이미 만들어진 학습활동이 있는지 확인한다.
@@ -234,6 +224,7 @@ export async function finishCreateAssignment(
 				createProps[PROP_ACTIVITY_ASSIGNMENT_STATUS] = { select: { name: ASSIGNMENT_STATUS_NOT_SUBMITTED } }
 				if (deadlineAttendanceId) {
 					createProps[PROP_ACTIVITY_DEADLINE] = { relation: [{ id: deadlineAttendanceId }] }
+					createProps[AUTO_DEADLINE_PROP] = { relation: [{ id: deadlineAttendanceId }] }
 				}
 			}
 
