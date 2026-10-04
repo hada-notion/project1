@@ -49,6 +49,16 @@
 // 한다 -- 별도 Notion 스키마 변경 없이 기존 속성을 재사용한다. 아래 createBooksForClass(동시 처리)는
 // 제거하고, index.ts의 이어달리기 루프가 매 홉마다 쓰는 getPendingClassTextbookRegistrations /
 // createBooksForOneRegistrationWithStatus로 대체했다.
+//
+// (2026-10-04, PART N-11 실사용 검증) "고1 A" 클래스에서 실제 버튼으로 재현 테스트해 경쟁(race)
+// 없이 등록 전원이 순차 정상 연결됨을 확인했다. 테스트 과정에서 getPendingClassTextbookRegistrations의
+// 판정 기준에 대한 혼동이 한 번 있었다 -- 이 함수는 "진도교재"/템플릿의 "등록" relation이 실제로
+// 연결돼 있는지가 아니라 "교재 상태" select 값만 보고 완료 여부를 판정한다. 그래서 테스트용으로
+// relation만 수동으로 연결 해제하고 "교재 상태"는 "완료"로 남겨둔 학생은 여전히 "완료"로 간주돼
+// 다음 배치에서 건너뛰어졌다(아래 getPendingClassTextbookRegistrations 함수 설명 참고). 정상
+// 운영 중에는 "개별교재 생성"/"교재 생성" 두 버튼이 항상 relation과 "교재 상태"를 함께 갱신하므로
+// 이 간극이 생기지 않는다 -- 수동으로 relation만 건드리는 경우(주로 테스트/데이터 보정)에만
+// "교재 상태"도 함께 초기화해야 한다는 점을 기억해둔다.
 
 import {
 	PROP_CLASS,
@@ -238,6 +248,13 @@ function registrationLabel(reg: any): string {
 // 눌러도 이미 끝난 학생은 건너뛰고, 그때까지 처리되지 않았거나(예: 신규 등록) 오류로 끝난 학생만
 // 자연스럽게 다시 시도된다. 이름(가나다) 순으로 정렬해서 처리 순서/진행 표시("3/24 처리 중")가
 // 매번 같은 순서로 예측 가능하게 보이게 한다.
+//
+// ⚠️ 판정 기준은 relation(실제 "진도교재"/템플릿의 "등록" 연결 여부)이 아니라 이 select 값 그
+// 자체다. 두 버튼("개별교재 생성"/"교재 생성")은 항상 relation과 "교재 상태"를 함께 갱신하므로
+// 정상 사용 중에는 둘이 어긋나지 않지만, 누군가 relation만 수동으로 끊거나 이어붙이면(예: 데이터
+// 보정, 테스트) "교재 상태"가 "완료"로 남아있는 한 이 함수는 여전히 그 등록을 완료로 보고 건너뛴다
+// (2026-10-04 PART N-11 실사용 검증에서 실제로 이 방식으로 재현됨). 그런 경우 relation을 고친
+// 등록의 "교재 상태"도 함께 초기화해야 다음 "교재 생성" 실행에서 다시 대상으로 잡힌다.
 export async function getPendingClassTextbookRegistrations(classId: string): Promise<any[]> {
 	const registrations = await getActiveRegistrationsForClassNow(classId)
 	const pending = registrations.filter((reg: any) => selectName(reg, TEXTBOOK_STATUS_SPEC.statusProp) !== STATUS_DONE)
