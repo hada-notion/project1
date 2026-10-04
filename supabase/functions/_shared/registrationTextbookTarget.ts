@@ -59,6 +59,21 @@
 // 운영 중에는 "개별교재 생성"/"교재 생성" 두 버튼이 항상 relation과 "교재 상태"를 함께 갱신하므로
 // 이 간극이 생기지 않는다 -- 수동으로 relation만 건드리는 경우(주로 테스트/데이터 보정)에만
 // "교재 상태"도 함께 초기화해야 한다는 점을 기억해둔다.
+//
+// (2026-10-04, PART N-12: 대상 판정을 "교재 상태"에서 실제 relation 비교로 전환) 위 검증 과정에서
+// 드러난 더 근본적인 사례: 클래스에 반별교재(템플릿)가 "나중에 새로 추가"되면, 이미 "교재 상태 완료"인
+// 기존 학생들은 getPendingClassTextbookRegistrations가 애초에 대상에서 제외해서 클래스 "교재 생성"
+// 버튼을 다시 눌러도 새 템플릿을 받지 못한다 (사용자 지적 - 교재 상태만 보는 한 피할 수 없는 구조적
+// 한계). "교재 상태" select 값 대신, 클래스의 템플릿 목록과 각 등록의 실제 연결 상태를 직접 비교하는
+// 방식으로 바꾼다 -- 클래스의 템플릿을 한 번만 조회해서(getClassTextbookPages) 그룹 진도는 템플릿의
+// "등록" relation과 등록의 "진도교재" relation 양쪽에 서로 포함되는지, 개별 진도는 (등록+템플릿)에
+// 해당하는 인스턴스가 존재하고 그 인스턴스가 등록의 "진도교재"에 포함되는지를 확인한다
+// (isTemplateSatisfiedForRegistration). 모든 템플릿이 충족된 등록은 "이미 동일함" -> 빠르게 건너뛰고,
+// 하나라도 빠진 등록만 처리 대상(pending)으로 잡는다. 템플릿이 아예 없으면(클래스 세팅 전) 할 일이
+// 없는 것이므로 건너뛴다. 덤으로 예전 경쟁(race) 버그로 남아있을 수 있는 "한쪽 방향만 연결된" 상태도
+// 양쪽을 다 확인하므로 자동으로 다시 pending 처리되어 스스로 복구된다. "교재 상태"(TEXTBOOK_STATUS_SPEC)
+// 자체는 여전히 createBooksForOneRegistrationWithStatus가 갱신해서 사용자가 보는 실시간 진행 표시
+// 용도로는 그대로 남겨둔다 - 다만 더 이상 "처리할 대상인지"를 가르는 기준으로는 쓰지 않는다.
 
 import {
 	PROP_CLASS,
@@ -80,7 +95,7 @@ import {
 	formulaString,
 	mapWithConcurrency,
 } from "./notionClient.ts"
-import { type StatusSpec, markRunning, markDone, markError, STATUS_DONE } from "./statusTracking.ts"
+import { type StatusSpec, markRunning, markDone, markError } from "./statusTracking.ts"
 
 // (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) "교재 처리중" 체크박스(등록 DB, create-individual
 // 라우트 전용) → "교재 상태"(select) + "교재 처리 시작 시각"(date). 마스터플랜:
@@ -242,22 +257,68 @@ function registrationLabel(reg: any): string {
 	return titleText(reg, "이름") ?? `(이름 없음: ${String(reg?.id ?? "").slice(0, 8)})`
 }
 
-// (PART N-11) 클래스 "교재 생성" 버튼 순차 이어달리기(index.ts)가 매 홉마다 "아직 처리할 등록이
-// 남았는지"를 확인하는 데 쓴다. 활성 등록 중 "교재 상태"(TEXTBOOK_STATUS_SPEC, 개별 "개별교재 생성"
-// 버튼과 동일한 속성)가 아직 "완료"가 아닌 것만 대상으로 한다 -- 이렇게 하면 버튼을 나중에 다시
-// 눌러도 이미 끝난 학생은 건너뛰고, 그때까지 처리되지 않았거나(예: 신규 등록) 오류로 끝난 학생만
-// 자연스럽게 다시 시도된다. 이름(가나다) 순으로 정렬해서 처리 순서/진행 표시("3/24 처리 중")가
-// 매번 같은 순서로 예측 가능하게 보이게 한다.
-//
-// ⚠️ 판정 기준은 relation(실제 "진도교재"/템플릿의 "등록" 연결 여부)이 아니라 이 select 값 그
-// 자체다. 두 버튼("개별교재 생성"/"교재 생성")은 항상 relation과 "교재 상태"를 함께 갱신하므로
-// 정상 사용 중에는 둘이 어긋나지 않지만, 누군가 relation만 수동으로 끊거나 이어붙이면(예: 데이터
-// 보정, 테스트) "교재 상태"가 "완료"로 남아있는 한 이 함수는 여전히 그 등록을 완료로 보고 건너뛴다
-// (2026-10-04 PART N-11 실사용 검증에서 실제로 이 방식으로 재현됨). 그런 경우 relation을 고친
-// 등록의 "교재 상태"도 함께 초기화해야 다음 "교재 생성" 실행에서 다시 대상으로 잡힌다.
+// (PART N-12) 클래스에 연결된 반별교재(템플릿)와 이미 생성된 개별교재 인스턴스를 한 번에 조회한다.
+// createIndividualBooksForRegistration이 등록 1건 기준으로 하던 쿼리와 같은 모양이지만, 여기서는
+// classId를 이미 알고 있으므로(등록을 거칠 필요 없음) 클래스 전체 등록에 대해 한 번만 호출해서
+// 재사용한다.
+async function getClassTextbookPages(classId: string): Promise<any[]> {
+	return await queryAllPages(DATA_SOURCE_PROGRESS_BOOK, {
+		property: PROP_CLASS_ON_BOOK,
+		relation: { contains: classId },
+	})
+}
+
+// (PART N-12) 템플릿 하나가 특정 등록에 대해 이미 "완전히 연결됐는지" 판정한다.
+// - 그룹 진도: 템플릿 자신의 "등록" relation에 이 등록이 들어있고, 동시에 이 등록의 "진도교재"에도
+//   템플릿 자신이 들어있어야 한다. 양쪽을 다 확인하므로, 예전 경쟁(race) 버그로 한쪽 방향만 연결된
+//   잔존 상태도 "아직 미완료"로 잡혀서 재실행 시 스스로 복구된다.
+// - 개별 진도: (이 등록 + 이 템플릿) 조합의 인스턴스가 instancePages 안에 존재하고, 그 인스턴스가
+//   이 등록의 "진도교재"에 들어있어야 한다.
+function isTemplateSatisfiedForRegistration(
+	templatePage: any,
+	instancePages: any[],
+	registrationId: string,
+	existingBookIds: string[],
+): boolean {
+	const mode = selectName(templatePage, PROP_PROGRESS_MODE) ?? "그룹 진도"
+	if (mode === "그룹 진도") {
+		const regLinkedOnTemplate = relationIds(templatePage, PROP_REGISTRATION_ON_BOOK).includes(registrationId)
+		const templateLinkedOnReg = existingBookIds.includes(templatePage.id)
+		return regLinkedOnTemplate && templateLinkedOnReg
+	}
+	const instance = instancePages.find(
+		(p) =>
+			relationIds(p, PROP_TEMPLATE_RELATION).includes(templatePage.id) &&
+			relationIds(p, PROP_REGISTRATION_ON_BOOK).includes(registrationId),
+	)
+	if (!instance) return false
+	return existingBookIds.includes(instance.id)
+}
+
+// (PART N-12) 클래스 "교재 생성" 버튼 순차 이어달리기(index.ts)가 매 홉마다 "아직 처리할 등록이
+// 남았는지"를 확인하는 데 쓴다. 이전에는 "교재 상태"(select) 값만 보고 판정했는데, 그러면 클래스에
+// 템플릿이 "나중에 추가"됐을 때 이미 "완료"로 표시된 기존 학생들을 영원히 다시 못 잡는 구조적 한계가
+// 있었다(2026-10-04 PART N-11 실사용 검증에서 드러남). 그래서 이제는 클래스의 템플릿 목록과 각
+// 등록의 실제 연결 상태를 직접 비교한다 -- 모든 템플릿이 이미 충족된(isTemplateSatisfiedForRegistration)
+// 등록은 "클래스와 학생의 진도교재가 같음" -> 빠르게 건너뛰고, 하나라도 빠진 등록만 pending으로
+// 잡는다. 템플릿이 아예 없는 클래스(세팅 전)는 할 일이 없으므로 전원 건너뛴다. 이름(가나다) 순으로
+// 정렬해서 처리 순서/진행 표시("3/24 처리 중")가 매번 같은 순서로 예측 가능하게 보이게 한다.
 export async function getPendingClassTextbookRegistrations(classId: string): Promise<any[]> {
 	const registrations = await getActiveRegistrationsForClassNow(classId)
-	const pending = registrations.filter((reg: any) => selectName(reg, TEXTBOOK_STATUS_SPEC.statusProp) !== STATUS_DONE)
+	if (registrations.length === 0) return []
+
+	const classBooks = await getClassTextbookPages(classId)
+	// (PART N-7과 동일한 이유로) 진짜 템플릿은 PROP_TEMPLATE_RELATION("반별교재")이 비어있고,
+	// 이미 생성된 개별교재 인스턴스는 그게 채워져 있다.
+	const templatePages = classBooks.filter((p: any) => relationIds(p, PROP_TEMPLATE_RELATION).length === 0)
+	const instancePages = classBooks.filter((p: any) => relationIds(p, PROP_TEMPLATE_RELATION).length > 0)
+
+	const pending = templatePages.length === 0
+		? []
+		: registrations.filter((reg: any) => {
+			const existingBookIds = relationIds(reg, PROP_REGISTRATION_BOOKS)
+			return !templatePages.every((t: any) => isTemplateSatisfiedForRegistration(t, instancePages, reg.id, existingBookIds))
+		})
 	pending.sort((a: any, b: any) => registrationLabel(a).localeCompare(registrationLabel(b), "ko"))
 	return pending
 }

@@ -85,6 +85,12 @@
 // 주석 참고), 수동으로 relation을 지운 뒤 같은 학생을 다시 테스트하려면 "교재 상태"도 함께 비워야
 // 한다. 정상 운영에서는 두 버튼("개별교재 생성"/"교재 생성")이 relation과 "교재 상태"를 항상 같이
 // 갱신하므로 이 간극이 생기지 않는다.
+//
+// (2026-10-04, PART N-12) 위에서 드러난 더 근본적인 사례(클래스에 템플릿이 나중에 추가되면 이미
+// "완료"인 기존 학생들을 영원히 다시 못 잡음)를 고치기 위해, getPendingClassTextbookRegistrations의
+// 판정 기준을 "교재 상태" select 값에서 "클래스 템플릿 목록 vs 등록의 실제 연결 상태" 직접 비교로
+// 바꿨다 -- 이 라우트(index.ts)의 호출 방식 자체는 바뀌지 않는다. 자세한 내용은
+// _shared/registrationTextbookTarget.ts의 PART N-12 주석 참고.
 
 import { extractPageId, getPage } from "../_shared/notionClient.ts"
 import {
