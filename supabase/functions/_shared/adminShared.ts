@@ -254,6 +254,7 @@ export async function createSendLogEntry(args: {
   // "전송 내역"이 계속 비어 보이는 버그가 있었다.
   textbookCartId?: string
   senderUserId?: string
+  attendanceType?: "등원" | "하원"
   title: string
   category: SendLogCategory
   status: SendLogStatus
@@ -271,6 +272,9 @@ export async function createSendLogEntry(args: {
       "발송일시": { date: { start: new Date().toISOString() } },
       "발송 채널": { select: { name: "알림톡" } },
       "등록": { relation: [{ id: args.registrationId }] },
+    }
+    if (args.category === "키오스크 알림톡" && args.attendanceType) {
+      properties["출결 구분"] = { select: { name: args.attendanceType } }
     }
     if (args.attendanceId) {
       properties["출석"] = { relation: [{ id: args.attendanceId }] }

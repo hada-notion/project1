@@ -328,6 +328,7 @@ Deno.serve(async (req: Request) => {
           await createSendLogEntry({
             registrationId,
             attendanceId: attendance.id,
+            attendanceType: type === "checkin" ? "등원" : "하원",
             title: studentName,
             category,
             status: "성공",
@@ -336,6 +337,7 @@ Deno.serve(async (req: Request) => {
           await createSendLogEntry({
             registrationId,
             attendanceId: attendance.id,
+            attendanceType: type === "checkin" ? "등원" : "하원",
             title: studentName,
             category,
             status: "실패",

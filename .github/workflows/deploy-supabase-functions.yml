@@ -30,7 +30,7 @@ jobs:
           done
 
       - name: Test kiosk identity and directory guards
-        run: deno test supabase/functions/_shared/kioskIdentity_test.ts
+        run: deno test --allow-env supabase/functions/_shared/kioskIdentity_test.ts supabase/functions/_shared/kioskSendLog_test.ts
 
       - name: Run regression guard checks
         run: bash scripts/check-known-regressions.sh
