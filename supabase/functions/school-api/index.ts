@@ -39,10 +39,9 @@ Deno.serve(async req => {
       await updatePageProperties(id, {
         "교육청 코드": richText(office), "학교 코드": richText(code), "주소": richText(s.ORG_RDNMA),
         "홈페이지": { url: safeWebsite(s.HMPG_ADRES) }, "학교 구분": { select: { name: s.SCHUL_KND_SC_NM } },
-        "학사일정 동기화": { checkbox: false },
       })
-      // 사용자 제목/학생 연결 유지. 자동 실행은 사용자가 체크한 뒤 활성화한다.
-      return json({ ok: true, name: s.SCHUL_NM, pageId: id, message: "학교가 연결됐습니다. 자동 실행 활성화 후 Notion에서 ‘학사일정 동기화’를 체크하세요." })
+      // 사용자 제목/학생 연결 유지. 학사일정은 Notion 버튼으로 수동 실행한다.
+      return json({ ok: true, name: s.SCHUL_NM, pageId: id, message: "학교가 연결됐습니다. Notion에서 ‘학사일정 가져오기’ 버튼을 누르세요." })
     }
     return json({ error: "지원하지 않는 action" }, 400)
   } catch (e) { console.error("[school-api]", e instanceof Error ? e.message : "error"); return json({ error: e instanceof Error ? e.message : "처리 실패" }, 500) }
