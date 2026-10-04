@@ -27,6 +27,28 @@
 // 추가했다. 현재는 create-individual과 동일한 runSyncWebhookForPage를 재사용해 즉시 응답 후
 // EdgeRuntime.waitUntil 백그라운드에서 처리한다. pageId 자리에 classId를 넘기고, 잠금/상태 속성은
 // 클래스 DB의 "교재 생성 상태"와 "마지막 오류"를 사용한다.
+//
+// (2026-10-04, PART N-11: 클래스 "교재 생성" 순차 이어달리기 재설계) PART N-8의 createBooksForClass는
+// mapWithConcurrency(registrations, 4, ...)로 등록 여러 건을 "동시에" 처리했다. 그런데 그룹 진도
+// 모드에서는 반별교재(템플릿) 페이지 "하나"를 반 전체 등록이 공유하고, resolveInstanceForTemplate이
+// 그 템플릿의 "등록" relation을 읽고(read) -> 수정하고(modify) -> 통째로 다시 쓰는(write) 방식으로
+// 등록을 추가한다. 이 read-modify-write가 원자적이지 않아서, 같은 템플릿을 동시에 겨냥하는 등록
+// 여러 건의 쓰기가 서로 경쟁(race)하면 "마지막에 쓴 쪽이 이긴다" -- 즉 먼저 끝낸 등록들이 추가한
+// 내용이 조용히 덮어써져 사라진다. 실제로 "고1 A" 클래스(6명 x 템플릿 4개 = 24쌍)에서 일부 쌍만
+// 연결되거나 한쪽 방향으로만 연결되는 현상으로 나타났고, 학생 수가 많아질수록(동시 처리 4건) 더
+// 자주 재현된다. 근본 해결은 "등록을 절대 동시에 처리하지 않는 것"이다 -- 클래스 배치 레벨에서는
+// 완전히 순차 처리하도록 바꾼다(등록 1건 안에서 서로 다른 템플릿들을 mapWithConcurrency(4)로 처리하는
+// 것은 그대로 안전하다 -- 템플릿이 다르면 공유 상태가 없다).
+//
+// 동시에 사용자가 요청한 두 번째 문제("처리 중 실시간 상태를 보고 싶다")도 함께 해결한다:
+// 완전 순차 처리 자체가 다건 배치에서 Supabase Edge Function의 플랫폼 실행시간 한도(~150초)에
+// 걸릴 수 있으므로, send-selected-notifications(알림톡 발송함 "일괄 전송")와 동일한 "고정 청크
+// (여기서는 1건) + 자기 호출 이어달리기" 패턴을 쓴다(index.ts). 그 패턴이 등록을 한 건씩 처리하는
+// 동안, 등록(학원) DB의 "교재 상태"(개별 "개별교재 생성" 버튼이 이미 쓰는 것과 동일한 속성)도 함께
+// 갱신해서, 클래스 버튼으로 처리되는 중에도 각 학생 등록 페이지에서 실시간 진행 상황이 보이게
+// 한다 -- 별도 Notion 스키마 변경 없이 기존 속성을 재사용한다. 아래 createBooksForClass(동시 처리)는
+// 제거하고, index.ts의 이어달리기 루프가 매 홉마다 쓰는 getPendingClassTextbookRegistrations /
+// createBooksForOneRegistrationWithStatus로 대체했다.
 
 import {
 	PROP_CLASS,
@@ -48,7 +70,7 @@ import {
 	formulaString,
 	mapWithConcurrency,
 } from "./notionClient.ts"
-import { type StatusSpec } from "./statusTracking.ts"
+import { type StatusSpec, markRunning, markDone, markError, STATUS_DONE } from "./statusTracking.ts"
 
 // (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) "교재 처리중" 체크박스(등록 DB, create-individual
 // 라우트 전용) → "교재 상태"(select) + "교재 처리 시작 시각"(date). 마스터플랜:
@@ -96,6 +118,12 @@ const STATUS_ACTIVE = "🟢 수강 중"
 // 처리할 때 각자 등록 페이지를 read-modify-write 하면 서로 덮어써서 일부가 유실되는
 // 문제가 있었기 때문에, 호출부(createIndividualBooksForRegistration)에서 결과를 모아
 // 마지막에 한 번만 반영한다.
+//
+// (PART N-11) 이 함수 자체는 "그룹 진도 템플릿의 등록 relation"에 대해 여전히 read-modify-write를
+// 한다 -- 그런데 그 템플릿 하나를 "같은 클래스의 여러 등록"이 공유하므로, 등록 여러 건을 동시에
+// 처리하면 이 read-modify-write끼리 경쟁해서 유실이 생긴다(실제로 재현된 버그). 그래서 이제
+// index.ts의 클래스 "교재 생성" 이어달리기는 등록을 절대 동시에 처리하지 않는다(완전 순차) --
+// 이 함수 내부 로직은 그대로 두되, 호출부가 등록을 하나씩만 넘기도록 보장해서 안전하게 만든다.
 async function resolveInstanceForTemplate(registrationId: string, templatePage: any) {
 	const templateId = templatePage.id
 	const mode = selectName(templatePage, PROP_PROGRESS_MODE) ?? "그룹 진도"
@@ -198,14 +226,43 @@ async function getActiveRegistrationsForClassNow(classId: string): Promise<any[]
 	return registrations.filter((reg: any) => formulaString(reg, PROP_STATUS) === STATUS_ACTIVE)
 }
 
-// index.ts의 create-class 라우트가 직접 호출하는 진입점 (2026-09-22, PART N-8). 클래스(학원) DB
-// "교재 생성" 버튼 -- 클래스에서 수강 중인 등록 전체에 대해 createIndividualBooksForRegistration을
-// 실행한다. createIndividualBooksForRegistration은 이미 (등록+템플릿) 조합 단위로 멱등이므로,
-// 이 버튼을 여러 번 눌러도 나중에 클래스에 템플릿이 추가된 뒤 다시 눌러도 중복 생성되지 않는다.
-export async function createBooksForClass(classId: string): Promise<{ processed: number }> {
+// 등록 페이지의 표시용 이름. "이름"(title) 속성이 비어있는 드문 경우에도 실패 목록/로그에 뭔가는
+// 보이도록 id 일부로 대체한다.
+function registrationLabel(reg: any): string {
+	return titleText(reg, "이름") ?? `(이름 없음: ${String(reg?.id ?? "").slice(0, 8)})`
+}
+
+// (PART N-11) 클래스 "교재 생성" 버튼 순차 이어달리기(index.ts)가 매 홉마다 "아직 처리할 등록이
+// 남았는지"를 확인하는 데 쓴다. 활성 등록 중 "교재 상태"(TEXTBOOK_STATUS_SPEC, 개별 "개별교재 생성"
+// 버튼과 동일한 속성)가 아직 "완료"가 아닌 것만 대상으로 한다 -- 이렇게 하면 버튼을 나중에 다시
+// 눌러도 이미 끝난 학생은 건너뛰고, 그때까지 처리되지 않았거나(예: 신규 등록) 오류로 끝난 학생만
+// 자연스럽게 다시 시도된다. 이름(가나다) 순으로 정렬해서 처리 순서/진행 표시("3/24 처리 중")가
+// 매번 같은 순서로 예측 가능하게 보이게 한다.
+export async function getPendingClassTextbookRegistrations(classId: string): Promise<any[]> {
 	const registrations = await getActiveRegistrationsForClassNow(classId)
-	await mapWithConcurrency(registrations, 4, (reg: any) => createIndividualBooksForRegistration(reg.id))
-	return { processed: registrations.length }
+	const pending = registrations.filter((reg: any) => selectName(reg, TEXTBOOK_STATUS_SPEC.statusProp) !== STATUS_DONE)
+	pending.sort((a: any, b: any) => registrationLabel(a).localeCompare(registrationLabel(b), "ko"))
+	return pending
+}
+
+// 등록 1건을 처리하면서 등록(학원) DB의 "교재 상태"(개별 "개별교재 생성" 버튼과 동일한 속성)도 함께
+// 갱신한다. 별도 Notion 스키마 변경 없이, 클래스 "교재 생성" 버튼으로 처리되는 중에도 각 학생의
+// 등록 페이지에서 실시간 진행 상황("🔄 작업중" -> "✅ 완료"/"⚠️ 오류")을 볼 수 있게 해준다.
+export async function createBooksForOneRegistrationWithStatus(
+	reg: any,
+): Promise<{ id: string; label: string; ok: boolean; note: string }> {
+	const label = registrationLabel(reg)
+	try {
+		await markRunning(reg.id, TEXTBOOK_STATUS_SPEC)
+		const result: any = await createIndividualBooksForRegistration(reg.id)
+		await markDone(reg.id, TEXTBOOK_STATUS_SPEC)
+		const note = result && typeof result.skipped === "string" ? result.skipped : `처리 ${result?.results?.length ?? 0}건`
+		return { id: reg.id, label, ok: true, note }
+	} catch (err) {
+		const message = (err as Error)?.message ?? String(err)
+		await markError(reg.id, TEXTBOOK_STATUS_SPEC, message).catch(() => {})
+		return { id: reg.id, label, ok: false, note: message }
+	}
 }
 
 // 종료 처리 시 교재 정리: "다음 교재" 상태 + 학습기록 없음 인 인스턴스만 정리 대상.
