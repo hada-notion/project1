@@ -32,6 +32,9 @@ jobs:
       - name: Test kiosk identity and directory guards
         run: deno test --allow-env supabase/functions/_shared/kioskIdentity_test.ts supabase/functions/_shared/kioskSendLog_test.ts
 
+      - name: Test assignment deadlines and chronological bulk order
+        run: deno test --allow-env supabase/functions/_shared/assignmentDeadline_test.ts supabase/functions/_shared/bulkClassOrder_test.ts supabase/functions/generate-classes/index_test.ts
+
       - name: Run regression guard checks
         run: bash scripts/check-known-regressions.sh
 
