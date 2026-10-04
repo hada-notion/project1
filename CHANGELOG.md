@@ -3,6 +3,10 @@
 버전별 변경 기록입니다. 최신 버전이 맨 위에 옵니다. 상세 실행 지침은 `docs/updates/vX.Y.md`에 있습니다.
 패치를 올릴 때마다 한 줄 이상 추가하고, 해당 버전의 지침 파일을 함께 만듭니다. (템플릿: `docs/updates/_TEMPLATE.md`)
 
+## v2.3.3 — 2026-10-04
+
+- school-api Edge Function 배포 + school_search.html 운영별 자체 호스팅/주소 치환 + v2.3.1 formula의 원본 전용 주소 보정 (환경별 값 하드코딩 수정). 지침: `docs/updates/v2.3.3.md`
+
 ## v2.3.2 — 2026-10-04
 
 - 학교(학원) DB "주소"·"홈페이지" 속성 누락 보정 (학교 검색 기능 번들 중 빠졌던 나머지). 지침: `docs/updates/v2.3.2.md`
