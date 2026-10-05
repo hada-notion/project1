@@ -35,6 +35,9 @@ jobs:
       - name: Test assignment deadlines and chronological bulk order
         run: deno test --allow-env supabase/functions/_shared/assignmentDeadline_test.ts supabase/functions/_shared/bulkClassOrder_test.ts supabase/functions/generate-classes/index_test.ts
 
+      - name: Test individual textbook ownership and class lookup
+        run: deno test --allow-env supabase/functions/_shared/registrationTextbookTarget_test.ts
+
       - name: Run regression guard checks
         run: bash scripts/check-known-regressions.sh
 

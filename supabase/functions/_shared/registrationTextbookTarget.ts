@@ -134,6 +134,11 @@ const STATUS_NEXT = "다음 교재"
 // 클래스 단위 일괄 버튼과 동일하게 "현재 🟢 수강 중"인 등록만 대상으로 한다.
 const STATUS_ACTIVE = "🟢 수강 중"
 
+// 제목의 서식이 나뉘어 있어도 첫 조각만 복사하지 않고 전체 문자열을 사용한다.
+function fullBookTitle(page: any, name: string): string {
+	return (page?.properties?.[name]?.title ?? []).map((part: any) => part.plain_text ?? part.text?.content ?? "").join("")
+}
+
 // 반별교재(템플릿) 하나를 보고, 이 등록에 연결할 개별교재 인스턴스를 확보한다.
 // - 그룹 진도: 반 전체가 인스턴스 "하나"를 공유한다. 이미 이 템플릿의 인스턴스가 있으면
 //   새로 만들지 않고 그 인스턴스에 이 등록을 추가로 연결(등록 relation에 추가)만 한다.
@@ -149,7 +154,8 @@ const STATUS_ACTIVE = "🟢 수강 중"
 // 처리하면 이 read-modify-write끼리 경쟁해서 유실이 생긴다(실제로 재현된 버그). 그래서 이제
 // index.ts의 클래스 "교재 생성" 이어달리기는 등록을 절대 동시에 처리하지 않는다(완전 순차) --
 // 이 함수 내부 로직은 그대로 두되, 호출부가 등록을 하나씩만 넘기도록 보장해서 안전하게 만든다.
-async function resolveInstanceForTemplate(registrationId: string, templatePage: any) {
+async function resolveInstanceForTemplate(registration: any, templatePage: any) {
+	const registrationId = registration.id as string
 	const templateId = templatePage.id
 	const mode = selectName(templatePage, PROP_PROGRESS_MODE) ?? "그룹 진도"
 
@@ -177,11 +183,15 @@ async function resolveInstanceForTemplate(registrationId: string, templatePage: 
 	}
 
 	const regularBookIds = relationIds(templatePage, PROP_REGULAR_BOOK)
-	const classIds = relationIds(templatePage, PROP_CLASS_ON_BOOK)
-	const templateTitle = titleText(templatePage, PROP_BOOK_TITLE) ?? "진도교재"
+	// 개별교재의 주인은 등록이며, 반별교재는 복사 출처다. 기준 교재의 클래스/제목을
+	// 복사하지 않는다. 자동화 설정 전에도 새 교재는 같은 네이밍으로 생성한다.
+	const regularBookPage = regularBookIds[0] ? await getPage(regularBookIds[0]) : null
+	const bookName = regularBookPage ? (fullBookTitle(regularBookPage, "교재명") || "정규교재 연결 필요") : "정규교재 연결 필요"
+	const registrationName = fullBookTitle(registration, "이름")
+	const individualTitle = `${bookName}(${registrationName})`
 
 	const properties: Record<string, unknown> = {
-		[PROP_BOOK_TITLE]: { title: [{ text: { content: templateTitle } }] },
+		[PROP_BOOK_TITLE]: { title: [{ text: { content: individualTitle } }] },
 		[PROP_TEMPLATE_RELATION]: { relation: [{ id: templateId }] },
 		[PROP_PROGRESS_MODE]: { select: { name: mode } },
 		// 새 인스턴스는 아직 진도를 시작하지 않았으니 "다음 교재"로 생성한다.
@@ -190,7 +200,7 @@ async function resolveInstanceForTemplate(registrationId: string, templatePage: 
 		[PROP_REGISTRATION_ON_BOOK]: { relation: [{ id: registrationId }] },
 	}
 	if (regularBookIds.length > 0) properties[PROP_REGULAR_BOOK] = { relation: [{ id: regularBookIds[0] }] }
-	if (classIds.length > 0) properties[PROP_CLASS_ON_BOOK] = { relation: [{ id: classIds[0] }] }
+	// PROP_CLASS_ON_BOOK 는 새 개별교재에 설정하지 않는다. 기존 행의 클래스는 변경하지 않는다.
 
 	const page = await createPage(DATA_SOURCE_PROGRESS_BOOK, properties)
 	return { instanceId: page.id, created: true }
@@ -216,15 +226,13 @@ export async function createIndividualBooksForRegistration(registrationId: strin
 	})
 	if (candidates.length === 0) return { skipped: "클래스에 반별교재(템플릿)가 아직 없음 - 먼저 진도교재 DB에서 템플릿을 만들어 클래스에 연결하세요" }
 
-	// 이 쿼리 결과에도 진짜 반별교재(템플릿) 외에 이미 생성된 개별교재 인스턴스가 섞여 있다 (둘 다
-	// "클래스"를 갖기 때문). 진짜 템플릿은 절대 PROP_TEMPLATE_RELATION("반별교재")이 채워지지 않으므로,
-	// 그것으로만 필터링해서 인스턴스가 실수로 "템플릿"으로 취급되어 또 다른 인스턴스를 낳는(무한 증식) 일을 막는다.
-	const templatePages = candidates.filter((p: any) => relationIds(p, PROP_TEMPLATE_RELATION).length === 0)
+	// 구형 개별 인스턴스나 학생에게 직접 만든 교재를 반의 배포 기준으로 오인하지 않는다.
+	const templatePages = candidates.filter(isClassTextbookTemplate)
 	if (templatePages.length === 0) {
 		return { skipped: "클래스에 연결된 진도교재 중 진짜 템플릿이 없음 (전부 이미 생성된 개별교재 인스턴스로 보임)" }
 	}
 
-	const results = await mapWithConcurrency(templatePages, 4, (templatePage) => resolveInstanceForTemplate(registrationId, templatePage))
+	const results = await mapWithConcurrency(templatePages, 4, (templatePage) => resolveInstanceForTemplate(registration, templatePage))
 
 	// 등록의 "진도교재" relation은 여기서 한 번만 최신 상태를 읽어서 반영한다 (동시 처리로 인한
 	// read-modify-write 유실 방지).
@@ -257,10 +265,15 @@ function registrationLabel(reg: any): string {
 	return titleText(reg, "이름") ?? `(이름 없음: ${String(reg?.id ?? "").slice(0, 8)})`
 }
 
-// (PART N-12) 클래스에 연결된 반별교재(템플릿)와 이미 생성된 개별교재 인스턴스를 한 번에 조회한다.
-// createIndividualBooksForRegistration이 등록 1건 기준으로 하던 쿼리와 같은 모양이지만, 여기서는
-// classId를 이미 알고 있으므로(등록을 거칠 필요 없음) 클래스 전체 등록에 대해 한 번만 호출해서
-// 재사용한다.
+// 반별교재가 있으면 복사된 인스턴스다. 출처 없이 등록에 직접 연결된 개별교재도
+// 배포 기준이 아니다. 그룹 교재는 여러 등록이 연결된 뒤에도 계속 배포 기준으로 유지한다.
+function isClassTextbookTemplate(page: any): boolean {
+	if (relationIds(page, PROP_TEMPLATE_RELATION).length > 0) return false
+	const mode = selectName(page, PROP_PROGRESS_MODE) ?? "그룹 진도"
+	return mode === "그룹 진도" || relationIds(page, PROP_REGISTRATION_ON_BOOK).length === 0
+}
+
+// 클래스 직접 연결은 반의 기준 교재 조회에만 사용한다. 구형 개별교재가 섞이면 위에서 제외한다.
 async function getClassTextbookPages(classId: string): Promise<any[]> {
 	return await queryAllPages(DATA_SOURCE_PROGRESS_BOOK, {
 		property: PROP_CLASS_ON_BOOK,
@@ -308,10 +321,19 @@ export async function getPendingClassTextbookRegistrations(classId: string): Pro
 	if (registrations.length === 0) return []
 
 	const classBooks = await getClassTextbookPages(classId)
-	// (PART N-7과 동일한 이유로) 진짜 템플릿은 PROP_TEMPLATE_RELATION("반별교재")이 비어있고,
-	// 이미 생성된 개별교재 인스턴스는 그게 채워져 있다.
-	const templatePages = classBooks.filter((p: any) => relationIds(p, PROP_TEMPLATE_RELATION).length === 0)
-	const instancePages = classBooks.filter((p: any) => relationIds(p, PROP_TEMPLATE_RELATION).length > 0)
+	const templatePages = classBooks.filter(isClassTextbookTemplate)
+	// 새 개별교재는 클래스가 비어 있으므로 classBooks 안에서 찾으면 항상 누락으로 판정된다.
+	// 복사 출처로 조회하고, 아래에서 등록까지 대조한다. 구형 클래스 연결 인스턴스도 함께 찾는다.
+	const individualTemplateIds = templatePages
+		.filter((p: any) => selectName(p, PROP_PROGRESS_MODE) === "개별 진도")
+		.map((p: any) => p.id as string)
+	const batches: string[][] = []
+	for (let i = 0; i < individualTemplateIds.length; i += 50) {
+		batches.push(individualTemplateIds.slice(i, i + 50))
+	}
+	const instancePages = (await mapWithConcurrency(batches, 4, (ids) => queryAllPages(DATA_SOURCE_PROGRESS_BOOK, {
+		or: ids.map((id) => ({ property: PROP_TEMPLATE_RELATION, relation: { contains: id } })),
+	}))).flat()
 
 	const pending = templatePages.length === 0
 		? []
