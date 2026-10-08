@@ -41,6 +41,9 @@ jobs:
       - name: Test attendance scheduled-only modes
         run: deno test --allow-env supabase/functions/sync-attendance/index_test.ts
 
+      - name: Test schedule visibility and NEIS defaults
+        run: deno test --allow-env supabase/functions/_shared/neisSchool_test.ts supabase/functions/_shared/neisManual_test.ts supabase/functions/_shared/scheduleVisibility_test.ts
+
       - name: Run regression guard checks
         run: bash scripts/check-known-regressions.sh
 

@@ -2,7 +2,7 @@
 import { CORS_HEADERS, requireAdminKey, getCurrentAdminKey } from "../_shared/adminShared.ts"
 import { queryAllPages, getPage, updatePageProperties } from "../_shared/notionClient.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
-import { neisRows, textOf, eventGrades, eventKey, ownedProperties, richText, type NeisRow } from "../_shared/neisSchool.ts"
+import { neisRows, textOf, eventGrades, eventKey, ownedProperties, newEventProperties, richText, type NeisRow } from "../_shared/neisSchool.ts"
 import { academicRange, sameOwnedEvent, buttonSchoolId } from "../_shared/neisManual.ts"
 import { schoolNotion, schoolSources, compactId } from "../_shared/schoolNotion.ts"
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { ...CORS_HEADERS, "Content-Type": "application/json", "Cache-Control": "no-store" } })
@@ -83,7 +83,7 @@ async function processRun(runId: string) {
       })
       const properties=ownedProperties(row,page.id,key,gradeIds), previous=byKey.get(key)
       if(previous){if(!sameOwnedEvent(previous,row,page.id,key,gradeIds))await updatePageProperties(previous.id,properties)}
-      else{const p=await schoolNotion("/pages","POST",{parent:{data_source_id:sources.events},properties});byKey.set(key,p)}
+      else{const p=await schoolNotion("/pages","POST",{parent:{data_source_id:sources.events},properties:newEventProperties(row,page.id,key,gradeIds)});byKey.set(key,p)}
       await db(path,"PATCH",{row_cursor:cursor+1,updated_at:new Date().toISOString()})
       await new Promise(resolve=>setTimeout(resolve,400))
     }

@@ -1,0 +1,221 @@
+diff --git a/.github/workflows/deploy-supabase-functions.yml b/.github/workflows/deploy-supabase-functions.yml
+index 72362e5..36b6423 100644
+--- a/.github/workflows/deploy-supabase-functions.yml
++++ b/.github/workflows/deploy-supabase-functions.yml
+@@ -41,6 +41,9 @@ jobs:
+       - name: Test attendance scheduled-only modes
+         run: deno test --allow-env supabase/functions/sync-attendance/index_test.ts
+ 
++      - name: Test schedule visibility and NEIS defaults
++        run: deno test --allow-env supabase/functions/_shared/neisSchool_test.ts supabase/functions/_shared/neisManual_test.ts supabase/functions/_shared/scheduleVisibility_test.ts
++
+       - name: Run regression guard checks
+         run: bash scripts/check-known-regressions.sh
+ 
+diff --git a/supabase/functions/_shared/neisManual_test.ts b/supabase/functions/_shared/neisManual_test.ts
+index 4a16226..8b59df3 100644
+--- a/supabase/functions/_shared/neisManual_test.ts
++++ b/supabase/functions/_shared/neisManual_test.ts
+@@ -21,7 +21,7 @@ Deno.test("Notion 버튼 본문 data.id와 직접 pageId 지원",()=>{
+ Deno.test("숨김/메모를 바꿔도 원본 동기화 내용은 동일",()=>{
+  const row:NeisRow={AA_YMD:"20261002",EVENT_NM:"중간고사",EVENT_CNTNT:"",SBTR_DD_SC_NM:"해당없음",TW_GRADE_EVENT_YN:"Y"}
+  const properties:any=ownedProperties(row,"school","key",["g2"])
+- const page={properties:{...properties,"숨김":{checkbox:true},"메모":{rich_text:[{plain_text:"수동 메모"}]}}}
++ const page={properties:{...properties,"숨김":{checkbox:false},"학부모 공개":{checkbox:true},"메모":{rich_text:[{plain_text:"수동 메모"}]}}}
+  assert(sameOwnedEvent(page,row,"school","key",["g2"]))
+  assert(!sameOwnedEvent(page,{...row,EVENT_CNTNT:"새 내용"},"school","key",["g2"]))
+  assert(!sameOwnedEvent(page,row,"school","key",["g3"]))
+diff --git a/supabase/functions/_shared/neisSchool.ts b/supabase/functions/_shared/neisSchool.ts
+index 4098ac5..b2d54b0 100644
+--- a/supabase/functions/_shared/neisSchool.ts
++++ b/supabase/functions/_shared/neisSchool.ts
+@@ -66,6 +66,15 @@ export function ownedProperties(row: NeisRow, pageId: string, key: string, grade
+     "대상 학년": richText(eventGrades(row).map(n => `${n}학년`).join(", ") || "미지정"),
+     "수업공제일명": richText(row.SBTR_DD_SC_NM), "원본 행사내용": richText(row.EVENT_CNTNT),
+     "NEIS 동기화키": richText(key),
+-    // 숨김/메모/태그/담당자/진행상태/본문은 동기화 소유가 아니므로 절대 덮어쓰지 않는다.
++    // 숨김/학부모 공개/메모/태그/담당자/진행상태/본문은 동기화 소유가 아니므로 절대 덮어쓰지 않는다.
++  }
++}
++
++// 최초 생성 전용. 기존 일정 업데이트에는 ownedProperties만 사용한다.
++export function newEventProperties(row: NeisRow, pageId: string, key: string, gradeIds: string[]) {
++  return {
++    ...ownedProperties(row, pageId, key, gradeIds),
++    "숨김": { checkbox: true },
++    "학부모 공개": { checkbox: false },
+   }
+ }
+diff --git a/supabase/functions/_shared/neisSchool_test.ts b/supabase/functions/_shared/neisSchool_test.ts
+index 140a1e5..556301b 100644
+--- a/supabase/functions/_shared/neisSchool_test.ts
++++ b/supabase/functions/_shared/neisSchool_test.ts
+@@ -1,4 +1,4 @@
+-import { eventKey, eventGrades, ownedProperties, safeWebsite, type NeisRow } from "./neisSchool.ts"
++import { eventKey, eventGrades, ownedProperties, newEventProperties, safeWebsite, type NeisRow } from "./neisSchool.ts"
+ function assert(v: unknown, message = "assertion failed") { if (!v) throw new Error(message) }
+ const row: NeisRow = { ATPT_OFCDC_SC_CODE: "B10", SD_SCHUL_CODE: "7041238", AY: "2026", AA_YMD: "20261002", EVENT_NM: "중간고사", EVENT_CNTNT: "", SCHUL_CRSE_SC_NM: "중학교", ONE_GRADE_EVENT_YN: "N", TW_GRADE_EVENT_YN: "Y", THREE_GRADE_EVENT_YN: "N", SBTR_DD_SC_NM: "해당없음" }
+ Deno.test("대상 학년 Y만 연결", () => assert(JSON.stringify(eventGrades(row)) === "[2]"))
+@@ -8,7 +8,7 @@ Deno.test("키는 내용 변경에 안정적, 학교/날짜/행사/학년 변경
+  for (const r of [{ ...row, EVENT_NM: "기말고사" }, { ...row, AA_YMD: "20261003" }, { ...row, TW_GRADE_EVENT_YN: "N", THREE_GRADE_EVENT_YN: "Y" }]) assert(k !== await eventKey(r, "abc"))
+  assert(k !== await eventKey(row, "def"))
+ })
+-Deno.test("숨김/메모/본문/진행상태 보존", () => { const props = ownedProperties(row, "abc", "key", ["grade2"]); for (const key of ["숨김", "메모", "진행상태", "태그", "담당자"]) assert(!(key in props)); assert(props["날짜"].date.start === "2026-10-02") })
++Deno.test("숨김/메모/본문/진행상태 보존", () => { const props = ownedProperties(row, "abc", "key", ["grade2"]); for (const key of ["숨김", "학부모 공개", "메모", "진행상태", "태그", "담당자"]) assert(!(key in props)); assert(props["날짜"].date.start === "2026-10-02") })
+ Deno.test("공휴일/토요일/애매한 행사도 수집", () => { for (const name of ["한글날", "토요휴업일", "창체의날"]) assert(ownedProperties({ ...row, EVENT_NM: name }, "abc", "key", [])["이름"].title[0].text.content === name) })
+ Deno.test("웹사이트 안전 프로토콜", () => { assert(safeWebsite("javascript:alert(1)") === null); assert(safeWebsite("https://cheonwang.sen.ms.kr") === "https://cheonwang.sen.ms.kr/"); assert(safeWebsite(null) === null) })
+ 
+@@ -35,3 +35,11 @@ Deno.test("인증키 없이는 샘플로 동기화하지 않음", async () => {
+  const { neisRows } = await import("./neisSchool.ts")
+  let failed = false; try { await neisRows("SchoolSchedule", {}) } catch { failed = true }; assert(failed)
+ })
++
++Deno.test("신규 학사일정만 숨김 체크/학부모 비공개", () => {
++ const props = newEventProperties(row, "school", "key", ["grade2"])
++ assert(props["숨김"].checkbox === true)
++ assert(props["학부모 공개"].checkbox === false)
++ assert(!("숨김" in ownedProperties(row, "school", "key", ["grade2"])))
++ assert(!("학부모 공개" in ownedProperties(row, "school", "key", ["grade2"])))
++})
+diff --git a/supabase/functions/_shared/reportCacheBuilder.ts b/supabase/functions/_shared/reportCacheBuilder.ts
+index 083bb46..0c95ee7 100644
+--- a/supabase/functions/_shared/reportCacheBuilder.ts
++++ b/supabase/functions/_shared/reportCacheBuilder.ts
+@@ -16,6 +16,7 @@ import {
+   upsertReportCacheRows,
+   type ReportCacheRow,
+ } from "./reportCacheShared.ts"
++import { isParentPublicEvent, NOTICE_VISIBILITY_POLICY } from "./scheduleVisibility.ts"
+ import { selectAttendanceByRegistrationId } from "./attendanceSyncShared.ts"
+ import { DS_STUDY_ACTIVITY, DS_REPORT } from "./constants.ts"
+ // (2026-09-21, 이식성 리팩토링) 위 2개도 constants.ts로 이동함 — 그 파일 상단 주석 참고.
+@@ -173,7 +174,7 @@ async function shareQueriedPages(pages: any[], cachedGetPage: (id: string) => Pr
+   return seed ? await Promise.all(pages.map((page) => seed(page))) : pages
+ }
+ 
+-async function buildStudentNotices(
++export async function buildStudentNotices(
+   studentId: string,
+   studentProps: any,
+   cachedGetPage: (id: string) => Promise<any>,
+@@ -211,8 +212,7 @@ async function buildStudentNotices(
+ 
+   return noticePages
+     .filter((n: any) => {
+-      const category = text(n.properties["구분"])
+-      if (category.includes("할일")) return false
++      if (!isParentPublicEvent(n)) return false
+       const startIso = dateStartOf(n.properties["날짜"])
+       if (!startIso || startIso < sinceIso) return false
+       if (directIds.has(n.id)) return true
+@@ -285,6 +285,7 @@ async function buildStudentFields(studentId: string, cachedGetPage: (id: string)
+     primary_contact: primaryContact,
+     siblings,
+     notices,
++    notice_visibility_policy: NOTICE_VISIBILITY_POLICY,
+     issued_at: new Date().toISOString(),
+   }
+ }
+diff --git a/supabase/functions/_shared/scheduleVisibility.ts b/supabase/functions/_shared/scheduleVisibility.ts
+new file mode 100644
+index 0000000..f5280ac
+--- /dev/null
++++ b/supabase/functions/_shared/scheduleVisibility.ts
+@@ -0,0 +1,15 @@
++// 내부 운영 표시 여부와 학부모 공개 여부를 분리한다. 누락/잘못된 공개 값은 비공개.
++export const NOTICE_VISIBILITY_POLICY = 1
++const PUBLIC_CATEGORIES = new Set(["📆 학원 일정", "🏫 학사 일정", "💤 휴원"])
++export function isParentPublicEvent(page: any): boolean {
++  const p = page?.properties
++  return !page?.archived && !page?.in_trash &&
++    p?.["숨김"]?.checkbox === false &&
++    p?.["학부모 공개"]?.checkbox === true &&
++    PUBLIC_CATEGORIES.has(p?.["구분"]?.select?.name)
++}
++// 기존 캐시에는 공개 결정의 근거가 없다. 재동기화 전까지 일정만 비공개로 반환한다.
++export function publicNoticeFields(fields: Record<string, unknown>): Record<string, unknown> {
++  const { notice_visibility_policy, notices, ...rest } = fields
++  return { ...rest, notices: notice_visibility_policy === NOTICE_VISIBILITY_POLICY && Array.isArray(notices) ? notices : [] }
++}
+diff --git a/supabase/functions/_shared/scheduleVisibility_test.ts b/supabase/functions/_shared/scheduleVisibility_test.ts
+new file mode 100644
+index 0000000..47ccb14
+--- /dev/null
++++ b/supabase/functions/_shared/scheduleVisibility_test.ts
+@@ -0,0 +1,32 @@
++import { isParentPublicEvent, publicNoticeFields, NOTICE_VISIBILITY_POLICY } from "./scheduleVisibility.ts"
++import { buildStudentNotices } from "./reportCacheBuilder.ts"
++function assert(v: unknown, msg = "assertion failed") { if (!v) throw new Error(msg) }
++function event(hidden: unknown = false, published: unknown = true, category = "📆 학원 일정"): any {
++ return {id:"event", properties:{"숨김":{type:"checkbox",checkbox:hidden},"학부모 공개":{type:"checkbox",checkbox:published},"구분":{type:"select",select:{name:category}},"날짜":{type:"date",date:{start:new Date().toISOString().slice(0,10)}},"이름":{type:"title",title:[{plain_text:"공개 행사"}]}}}
++}
++for (const hidden of [false,true]) for (const published of [false,true]) Deno.test(`숨김=${hidden}/공개=${published}`,()=>assert(isParentPublicEvent(event(hidden,published)) === (!hidden&&published)))
++Deno.test("공개/숨김 누락과 잘못된 값은 비공개",()=>{
++ for(const v of [undefined,null,"true",1]) {const e=event();e.properties["학부모 공개"].checkbox=v;assert(!isParentPublicEvent(e))}
++ for(const v of [undefined,null,"false",0]) {const e=event();e.properties["숨김"].checkbox=v;assert(!isParentPublicEvent(e))}
++ assert(!isParentPublicEvent({properties:{}}))
++})
++Deno.test("할일/미지정 구분은 공개하지 않음",()=>{for(const c of ["✅ 할일","","내부 일정"]) assert(!isParentPublicEvent(event(false,true,c)))})
++Deno.test("학원/학사/휴원은 공개 조건 적용",()=>{for(const c of ["📆 학원 일정","🏫 학사 일정","💤 휴원"]) assert(isParentPublicEvent(event(false,true,c)))})
++Deno.test("삭제/아카이브 일정은 비공개",()=>{for(const k of ["archived","in_trash"]) assert(!isParentPublicEvent({...event(),[k]:true}))})
++Deno.test("기존 캐시 일정 제거/다른 학생 필드 유지",()=>{const f=publicNoticeFields({student_name:"가상학생",notices:[{title:"직원회의"}]});assert(JSON.stringify(f.notices)==="[]");assert(f.student_name==="가상학생")})
++Deno.test("정책 확인된 캐시는 일정 보존/내부 정책값 비노출",()=>{const notices=[{title:"설명회"}];const f=publicNoticeFields({notice_visibility_policy:NOTICE_VISIBILITY_POLICY,notices});assert(f.notices===notices);assert(!("notice_visibility_policy" in f));assert(JSON.stringify(publicNoticeFields({notice_visibility_policy:NOTICE_VISIBILITY_POLICY,notices:null}).notices)==="[]")})
++function rel(ids:string[]) {return {type:"relation",relation:ids.map(id=>({id}))}}
++async function noticesFor(pages:Record<string,any>, props:any) {return await buildStudentNotices("student",props,async id=>{assert(!!pages[id],id);return pages[id]})}
++Deno.test("학생 직접 연결도 숨김/공개 조건을 우회하지 않음",async()=>{
++ const good=event();good.id="good";const staff=event(false,false);staff.id="staff";const hidden=event(true,true);hidden.id="hidden"
++ const n=await noticesFor({good,staff,hidden},{"학원일정":rel(["good","staff","hidden"])});assert(n.length===1)
++})
++Deno.test("학교/학년 관련성 조건 유지",async()=>{
++ const good=event();good.id="good";good.properties["학교"]=rel(["school"]);good.properties["학년"]=rel(["grade"])
++ const other=event();other.id="other";other.properties["학교"]=rel(["school"]);other.properties["학년"]=rel(["other-grade"])
++ const n=await noticesFor({good,other,school:{properties:{"일정":rel(["good","other"])}},grade:{properties:{"일정":rel([])}}},{"학교":rel(["school"]),"학년":rel(["grade"])});assert(n.length===1)
++})
++Deno.test("클래스 직접 연결 비공개도 제외",async()=>{
++ const staff=event(false,false);staff.id="staff";const n=await noticesFor({staff,reg:{properties:{"수강상태":{type:"status",status:{name:"수강 중"}},"클래스":rel(["class"])}},class:{properties:{"일정":rel(["staff"])}}},{"등록":rel(["reg"])});assert(n.length===0)
++})
++Deno.test("날짜 누락 일정 제외",async()=>{const e=event();delete e.properties["날짜"];assert((await noticesFor({event:e},{"학원일정":rel(["event"])})).length===0)})
+diff --git a/supabase/functions/get-report-fast/index.ts b/supabase/functions/get-report-fast/index.ts
+index 4bf92bd..9d7a958 100644
+--- a/supabase/functions/get-report-fast/index.ts
++++ b/supabase/functions/get-report-fast/index.ts
+@@ -9,6 +9,8 @@ import {
+   selectReportCacheOverviewsByStudentKey,
+ } from "../_shared/reportCacheShared.ts"
+ 
++import { publicNoticeFields } from "../_shared/scheduleVisibility.ts"
++
+ Deno.serve(async (req: Request) => {
+   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS })
+ 
+@@ -36,7 +38,7 @@ Deno.serve(async (req: Request) => {
+     // 기존 캐시에 grades가 남아 있어도 공개 응답 경계에서 제거한다.
+     const { grades: _privateGrades, ...publicStudentFields } = row.student_fields ?? {}
+     const payload = {
+-      ...publicStudentFields,
++      ...publicNoticeFields(publicStudentFields),
+       token: row.access_token,
+       registration_id: row.registration_id,
+       registrations: overviews,
+diff --git a/supabase/functions/sync-school-calendar/index.ts b/supabase/functions/sync-school-calendar/index.ts
+index 4f87a7a..d2d79e8 100644
+--- a/supabase/functions/sync-school-calendar/index.ts
++++ b/supabase/functions/sync-school-calendar/index.ts
+@@ -2,7 +2,7 @@
+ import { CORS_HEADERS, requireAdminKey, getCurrentAdminKey } from "../_shared/adminShared.ts"
+ import { queryAllPages, getPage, updatePageProperties } from "../_shared/notionClient.ts"
+ import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
+-import { neisRows, textOf, eventGrades, eventKey, ownedProperties, richText, type NeisRow } from "../_shared/neisSchool.ts"
++import { neisRows, textOf, eventGrades, eventKey, ownedProperties, newEventProperties, richText, type NeisRow } from "../_shared/neisSchool.ts"
+ import { academicRange, sameOwnedEvent, buttonSchoolId } from "../_shared/neisManual.ts"
+ import { schoolNotion, schoolSources, compactId } from "../_shared/schoolNotion.ts"
+ const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { ...CORS_HEADERS, "Content-Type": "application/json", "Cache-Control": "no-store" } })
+@@ -83,7 +83,7 @@ async function processRun(runId: string) {
+       })
+       const properties=ownedProperties(row,page.id,key,gradeIds), previous=byKey.get(key)
+       if(previous){if(!sameOwnedEvent(previous,row,page.id,key,gradeIds))await updatePageProperties(previous.id,properties)}
+-      else{const p=await schoolNotion("/pages","POST",{parent:{data_source_id:sources.events},properties});byKey.set(key,p)}
++      else{const p=await schoolNotion("/pages","POST",{parent:{data_source_id:sources.events},properties:newEventProperties(row,page.id,key,gradeIds)});byKey.set(key,p)}
+       await db(path,"PATCH",{row_cursor:cursor+1,updated_at:new Date().toISOString()})
+       await new Promise(resolve=>setTimeout(resolve,400))
+     }

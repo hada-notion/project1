@@ -66,6 +66,15 @@ export function ownedProperties(row: NeisRow, pageId: string, key: string, grade
     "대상 학년": richText(eventGrades(row).map(n => `${n}학년`).join(", ") || "미지정"),
     "수업공제일명": richText(row.SBTR_DD_SC_NM), "원본 행사내용": richText(row.EVENT_CNTNT),
     "NEIS 동기화키": richText(key),
-    // 숨김/메모/태그/담당자/진행상태/본문은 동기화 소유가 아니므로 절대 덮어쓰지 않는다.
+    // 숨김/학부모 공개/메모/태그/담당자/진행상태/본문은 동기화 소유가 아니므로 절대 덮어쓰지 않는다.
+  }
+}
+
+// 최초 생성 전용. 기존 일정 업데이트에는 ownedProperties만 사용한다.
+export function newEventProperties(row: NeisRow, pageId: string, key: string, gradeIds: string[]) {
+  return {
+    ...ownedProperties(row, pageId, key, gradeIds),
+    "숨김": { checkbox: true },
+    "학부모 공개": { checkbox: false },
   }
 }

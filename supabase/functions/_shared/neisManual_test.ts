@@ -21,7 +21,7 @@ Deno.test("Notion 버튼 본문 data.id와 직접 pageId 지원",()=>{
 Deno.test("숨김/메모를 바꿔도 원본 동기화 내용은 동일",()=>{
  const row:NeisRow={AA_YMD:"20261002",EVENT_NM:"중간고사",EVENT_CNTNT:"",SBTR_DD_SC_NM:"해당없음",TW_GRADE_EVENT_YN:"Y"}
  const properties:any=ownedProperties(row,"school","key",["g2"])
- const page={properties:{...properties,"숨김":{checkbox:true},"메모":{rich_text:[{plain_text:"수동 메모"}]}}}
+ const page={properties:{...properties,"숨김":{checkbox:false},"학부모 공개":{checkbox:true},"메모":{rich_text:[{plain_text:"수동 메모"}]}}}
  assert(sameOwnedEvent(page,row,"school","key",["g2"]))
  assert(!sameOwnedEvent(page,{...row,EVENT_CNTNT:"새 내용"},"school","key",["g2"]))
  assert(!sameOwnedEvent(page,row,"school","key",["g3"]))

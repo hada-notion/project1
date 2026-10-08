@@ -16,6 +16,7 @@ import {
   upsertReportCacheRows,
   type ReportCacheRow,
 } from "./reportCacheShared.ts"
+import { isParentPublicEvent, NOTICE_VISIBILITY_POLICY } from "./scheduleVisibility.ts"
 import { selectAttendanceByRegistrationId } from "./attendanceSyncShared.ts"
 import { DS_STUDY_ACTIVITY, DS_REPORT } from "./constants.ts"
 // (2026-09-21, 이식성 리팩토링) 위 2개도 constants.ts로 이동함 — 그 파일 상단 주석 참고.
@@ -173,7 +174,7 @@ async function shareQueriedPages(pages: any[], cachedGetPage: (id: string) => Pr
   return seed ? await Promise.all(pages.map((page) => seed(page))) : pages
 }
 
-async function buildStudentNotices(
+export async function buildStudentNotices(
   studentId: string,
   studentProps: any,
   cachedGetPage: (id: string) => Promise<any>,
@@ -211,8 +212,7 @@ async function buildStudentNotices(
 
   return noticePages
     .filter((n: any) => {
-      const category = text(n.properties["구분"])
-      if (category.includes("할일")) return false
+      if (!isParentPublicEvent(n)) return false
       const startIso = dateStartOf(n.properties["날짜"])
       if (!startIso || startIso < sinceIso) return false
       if (directIds.has(n.id)) return true
@@ -285,6 +285,7 @@ async function buildStudentFields(studentId: string, cachedGetPage: (id: string)
     primary_contact: primaryContact,
     siblings,
     notices,
+    notice_visibility_policy: NOTICE_VISIBILITY_POLICY,
     issued_at: new Date().toISOString(),
   }
 }

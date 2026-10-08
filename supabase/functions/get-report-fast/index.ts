@@ -9,6 +9,8 @@ import {
   selectReportCacheOverviewsByStudentKey,
 } from "../_shared/reportCacheShared.ts"
 
+import { publicNoticeFields } from "../_shared/scheduleVisibility.ts"
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS })
 
@@ -36,7 +38,7 @@ Deno.serve(async (req: Request) => {
     // 기존 캐시에 grades가 남아 있어도 공개 응답 경계에서 제거한다.
     const { grades: _privateGrades, ...publicStudentFields } = row.student_fields ?? {}
     const payload = {
-      ...publicStudentFields,
+      ...publicNoticeFields(publicStudentFields),
       token: row.access_token,
       registration_id: row.registration_id,
       registrations: overviews,
