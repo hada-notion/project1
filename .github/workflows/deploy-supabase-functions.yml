@@ -38,6 +38,9 @@ jobs:
       - name: Test individual textbook ownership and class lookup
         run: deno test --allow-env supabase/functions/_shared/registrationTextbookTarget_test.ts
 
+      - name: Test attendance scheduled-only modes
+        run: deno test --allow-env supabase/functions/sync-attendance/index_test.ts
+
       - name: Run regression guard checks
         run: bash scripts/check-known-regressions.sh
 
