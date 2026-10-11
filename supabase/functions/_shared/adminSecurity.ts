@@ -64,7 +64,14 @@ export async function verifyPassword(password:unknown,encoded:string):Promise<bo
   if(!/^pbkdf2-sha256\$600000\$[0-9a-f]{32}\$[0-9a-f]{64}$/.test(encoded))return false;
   return equalSecret(await hashPassword(password,encoded.split('$')[2]),encoded);
 }
-export function routeName(req:Request):string { return new URL(req.url).pathname.split('/').filter(Boolean).pop() ?? ''; }
+// The function name, not the last path segment: several functions use sub-routes
+// (sync-registration-textbook/create-class, sync-textbook-distribution/from-cart), and an appended
+// segment must not let a key borrow another function's scope (e.g. /process-sync-queue/kiosk-checkin).
+export function routeName(req:Request):string {
+  const parts=new URL(req.url).pathname.split('/').filter(Boolean);
+  const v1=parts.indexOf('v1');
+  return (v1>0&&parts[v1-1]==='functions'?parts[v1+1]:parts[0])??'';
+}
 export async function authorizeKey(req:Request,provided:unknown,legacy:string):Promise<boolean> {
   if(typeof provided!=='string'||!provided||provided.length>1024)return false;
   if(!securityEnabled())return !!legacy && equalSecret(provided,legacy);
