@@ -8,7 +8,13 @@ await db.exec(`create role anon; create role authenticated; create role service_
 create table vault.secrets(id uuid primary key default gen_random_uuid(),name text,secret text);
 create function vault.create_secret(value text,label text) returns uuid language plpgsql as $$ declare x uuid; begin insert into vault.secrets(name,secret) values(label,value) returning id into x;return x;end $$;
 create function vault.update_secret(x uuid,value text) returns void language plpgsql as $$ begin update vault.secrets set secret=value where id=x;end $$;`);
-for(const f of ['20261011010000_admin_security.sql','20261012010000_admin_password_simplify.sql'])await db.exec(fs.readFileSync('supabase/migrations/'+f,'utf8'));
+const migrations=['20261011010000_admin_security.sql','20261012010000_admin_password_simplify.sql','20261012020000_admin_security_safeupdate.sql'];
+for(const f of migrations)await db.exec(fs.readFileSync('supabase/migrations/'+f,'utf8'));
+// Supabase rejects DELETE/UPDATE without WHERE on API connections (pg-safeupdate); PGlite does not,
+// so check the current function definition statically.
+const current=fs.readFileSync('supabase/migrations/'+migrations.at(-1),'utf8').replace(/--[^\n]*/g,'');
+const unsafe=[...current.matchAll(/\b(delete\s+from|update)\s[^;]*;/gi)].map(m=>m[0]).filter(s=>!/\bwhere\b/i.test(s));
+if(unsafe.length)throw new Error('DELETE/UPDATE without WHERE (blocked by Supabase safeupdate): '+unsafe.join(' | '));
 const h=x=>x.repeat(64),web=h('c'),key1=h('d'),key2=h('e'),token=h('b'),kiosk=h('9'),other=h('7');
 const pw=d=>'pbkdf2-sha256$600000$'+'1'.repeat(32)+'$'+d.repeat(64);
 const initial=pw('2'),changed=pw('3');

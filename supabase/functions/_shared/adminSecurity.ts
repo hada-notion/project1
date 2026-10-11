@@ -26,7 +26,12 @@ export async function securityRpc(action: string, data: Record<string, unknown> 
     method: 'POST', headers: { 'Content-Type':'application/json', apikey:key, Authorization:`Bearer ${key}` },
     body: JSON.stringify({p_action:action,p_data:data}), signal:AbortSignal.timeout(15000),
   });
-  if (!res.ok) throw new SecurityError(503, '관리자 인증 저장소에 연결하지 못했습니다.');
+  if (!res.ok) {
+    // Database error text (e.g. "DELETE requires a WHERE clause") goes to the function log only; it holds
+    // no request values. The browser keeps the generic message.
+    console.error('hada_security_command failed', action, res.status, (await res.text().catch(() => '')).slice(0, 300));
+    throw new SecurityError(503, '관리자 인증 저장소에 연결하지 못했습니다.');
+  }
   const result = await res.json();
   if (!result || typeof result !== 'object' || Array.isArray(result)) throw new SecurityError(503, '관리자 인증 응답 형식이 올바르지 않습니다.');
   if (result.error) throw new SecurityError(result.status ?? 400, result.error);
