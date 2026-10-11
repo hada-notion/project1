@@ -41,6 +41,15 @@ await db.exec("update public.hada_security_state set locked_until=now()-interval
 ok((await rpc('login',{verified:true,version:1,token_hash:token})).ok,true);
 ok((await rpc('authorize',{candidate:token})).kind,'session');
 ok((await rpc('profile',{session_hash:token})).email,'owner@example.test');
+// Kiosk sessions: 30 days, own kind, never usable for profile or credential changes.
+const kiosk=h('9');
+ok((await rpc('login',{verified:true,version:1,token_hash:kiosk,kind:'root'})).status,400);
+ok((await rpc('login',{verified:true,version:1,token_hash:kiosk,kind:'kiosk'})).ok,true);
+ok((await rpc('authorize',{candidate:kiosk})).kind,'kiosk');
+ok((await raw(`select (expires_at>now()+interval '29 days') as long from public.hada_security_sessions where token_hash='${kiosk}'`))[0].long,true);
+ok((await raw(`select (expires_at<now()+interval '13 hours') as short from public.hada_security_sessions where token_hash='${token}'`))[0].short,true);
+ok((await rpc('profile',{session_hash:kiosk})).status,401);
+ok((await rpc('begin-otp',{id:'77777777-7777-4777-8777-777777777777',purpose:'change',email:'owner@example.test',context_hash:kiosk,version:1,code_hash:code})).status,401);
 ok((await rpc('begin-otp',{id:'33333333-3333-4333-8333-333333333333',purpose:'change',email:'attacker@example.test',context_hash:token,version:1,code_hash:code})).status,401);
 const id2='44444444-4444-4444-8444-444444444444';
 await rpc('begin-otp',{id:id2,purpose:'change',email:'owner@example.test',context_hash:token,version:1,code_hash:code});
@@ -55,6 +64,7 @@ await db.exec('create or replace function vault.update_secret(x uuid,value text)
 ok((await rpc('complete',rotate)).ok,true);
 ok((await rpc('authorize',{candidate:web})).kind,'webhook');
 ok((await rpc('authorize',{candidate:token})).kind,'none');
+ok((await rpc('authorize',{candidate:kiosk})).kind,'none');
 ok((await rpc('authorize',{candidate:key2})).kind,'internal');
 ok((await rpc('authorize',{candidate:key1})).kind,'internal');
 await db.exec("update public.hada_security_state set previous_until=now()-interval '1 second'");

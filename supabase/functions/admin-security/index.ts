@@ -26,7 +26,7 @@ export async function handleAdminSecurity(req:Request):Promise<Response> {
       const info=await securityRpc('owner');
       const ok=await verifyPassword(b.password,info.password_hash??'');
       const token=randomToken();
-      await securityRpc('login',{verified:ok,version:info.version,token_hash:await sha256(token)});
+      await securityRpc('login',{verified:ok,version:info.version,token_hash:await sha256(token),kind:b.scope==='kiosk'?'kiosk':'admin'});
       return result({session:token});
     }
     if(b.action==='logout'){if(session)await securityRpc('logout',{session_hash:await sha256(session)});return result({ok:true});}

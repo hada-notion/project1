@@ -8,8 +8,11 @@ create table public.hada_security_state (
  setup_hash text, setup_expires timestamptz,
  login_failures integer not null default 0, locked_until timestamptz
 );
+-- kind=kiosk: long-lived session for the front-desk kiosk, limited to check-in routes and
+-- never allowed to read the owner profile or change credentials.
 create table public.hada_security_sessions (
  token_hash text primary key, version integer not null,
+ kind text not null default 'admin' check(kind in ('admin','kiosk')),
  expires_at timestamptz not null default now()+interval '12 hours'
 );
 create table public.hada_security_otp (
@@ -42,6 +45,7 @@ declare
  c public.hada_security_otp%rowtype;
  lim public.hada_security_limits%rowtype;
  valid_session boolean;
+ sess_kind text;
  secret_id uuid;
  secret_count integer;
  new_version integer;
@@ -89,9 +93,9 @@ begin
    return jsonb_build_object('kind','internal');
   end if;
   if p_data->>'candidate'=s.webhook_hash then return jsonb_build_object('kind','webhook'); end if;
-  if exists(select 1 from public.hada_security_sessions where token_hash=p_data->>'candidate' and version=s.version and expires_at>v_now) then
-   return jsonb_build_object('kind','session');
-  end if;
+  select kind into sess_kind from public.hada_security_sessions where token_hash=p_data->>'candidate' and version=s.version and expires_at>v_now;
+  if sess_kind='admin' then return jsonb_build_object('kind','session'); end if;
+  if sess_kind='kiosk' then return jsonb_build_object('kind','kiosk'); end if;
   return jsonb_build_object('kind','none');
  end if;
  if p_action='owner' then
@@ -108,12 +112,15 @@ begin
    return jsonb_build_object('error','비밀번호가 올바르지 않습니다.','status',401);
   end if;
   if coalesce(p_data->>'token_hash','') !~ '^[0-9a-f]{64}$' then return jsonb_build_object('error','세션 형식 오류','status',400); end if;
+  sess_kind:=coalesce(p_data->>'kind','admin');
+  if sess_kind not in ('admin','kiosk') then return jsonb_build_object('error','세션 종류 오류','status',400); end if;
   delete from public.hada_security_sessions where expires_at<=v_now or version<>s.version;
-  insert into public.hada_security_sessions(token_hash,version) values(p_data->>'token_hash',s.version);
+  insert into public.hada_security_sessions(token_hash,version,kind,expires_at)
+   values(p_data->>'token_hash',s.version,sess_kind,v_now+case when sess_kind='kiosk' then interval '30 days' else interval '12 hours' end);
   update public.hada_security_state set login_failures=0,locked_until=null where id=1;
   return jsonb_build_object('ok',true);
  end if;
- valid_session:=exists(select 1 from public.hada_security_sessions where token_hash=p_data->>'session_hash' and version=s.version and expires_at>v_now);
+ valid_session:=exists(select 1 from public.hada_security_sessions where token_hash=p_data->>'session_hash' and version=s.version and kind='admin' and expires_at>v_now);
  if p_action='logout' then
   delete from public.hada_security_sessions where token_hash=p_data->>'session_hash';return jsonb_build_object('ok',true);
  end if;
@@ -128,7 +135,7 @@ begin
     return jsonb_build_object('error','최초 설정 링크가 유효하지 않습니다.','status',401);
    end if;
   elsif p_data->>'purpose'='change' then
-   if not exists(select 1 from public.hada_security_sessions where token_hash=p_data->>'context_hash' and version=s.version and expires_at>v_now) or s.email<>p_data->>'email' then
+   if not exists(select 1 from public.hada_security_sessions where token_hash=p_data->>'context_hash' and version=s.version and kind='admin' and expires_at>v_now) or s.email<>p_data->>'email' then
     return jsonb_build_object('error','다시 로그인해 주세요.','status',401);
    end if;
   else return jsonb_build_object('error','인증 목적 오류','status',400); end if;
@@ -151,7 +158,7 @@ begin
    if s.version>0 or s.setup_hash is null or s.setup_expires<=v_now or s.setup_hash<>c.context_hash then
     return jsonb_build_object('error','최초 설정 링크가 만료되었습니다.','status',401);
    end if;
-  elsif not exists(select 1 from public.hada_security_sessions where token_hash=c.context_hash and version=s.version and expires_at>v_now) then
+  elsif not exists(select 1 from public.hada_security_sessions where token_hash=c.context_hash and version=s.version and kind='admin' and expires_at>v_now) then
    return jsonb_build_object('error','다시 로그인해 주세요.','status',401);
   end if;
   if c.code_hash<>p_data->>'code_hash' then

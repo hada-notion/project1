@@ -1,9 +1,10 @@
 /* Shared by the existing administrator pages. Public configuration comes from each page. */
 window.HadaAdminAuth = Object.freeze({
-  async login(base, password) {
+  // scope 'kiosk' asks for a 30-day session limited to check-in routes.
+  async login(base, password, scope) {
     const res = await fetch(base.replace(/\/$/, '') + '/functions/v1/admin-security', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'login', password }), cache: 'no-store',
+      body: JSON.stringify({ action: 'login', password, ...(scope ? { scope } : {}) }), cache: 'no-store',
     });
     const data = await res.json().catch(() => ({}));
     // Legacy fallback is allowed only when the server explicitly says security is not enabled.

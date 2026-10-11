@@ -592,7 +592,7 @@
     btn.textContent = "확인 중...";
     errEl.textContent = "";
     try {
-      const session = await HadaAdminAuth.login(SUPABASE_URL, key);
+      const session = await HadaAdminAuth.login(SUPABASE_URL, key, "kiosk");
       const candidates = await fetchKioskDirectory(session);
       localStorage.setItem(ADMIN_KEY_STORAGE, session);
       input.value = "";

@@ -67,10 +67,11 @@ export async function verifyPassword(password:unknown,encoded:string):Promise<bo
 // The function name, not the last path segment: several functions use sub-routes
 // (sync-registration-textbook/create-class, sync-textbook-distribution/from-cart), and an appended
 // segment must not let a key borrow another function's scope (e.g. /process-sync-queue/kiosk-checkin).
+// Only a LEADING /functions/v1 is stripped; searching for it later in the path would let a caller
+// append /functions/v1/<allowed-route> after the real function name and borrow that route's scope.
 export function routeName(req:Request):string {
   const parts=new URL(req.url).pathname.split('/').filter(Boolean);
-  const v1=parts.indexOf('v1');
-  return (v1>0&&parts[v1-1]==='functions'?parts[v1+1]:parts[0])??'';
+  return (parts[0]==='functions'&&parts[1]==='v1'?parts[2]:parts[0])??'';
 }
 export async function authorizeKey(req:Request,provided:unknown,legacy:string):Promise<boolean> {
   if(typeof provided!=='string'||!provided||provided.length>1024)return false;
@@ -80,6 +81,8 @@ export async function authorizeKey(req:Request,provided:unknown,legacy:string):P
   if(result.kind==='internal')return true;
   if(result.kind==='session')return SECURITY_BROWSER_ROUTES.has(route);
   if(result.kind==='webhook')return SECURITY_WEBHOOK_ROUTES.has(route);
+  // Long-lived kiosk sessions: check-in and the minimal directory only (the full list exposes report tokens).
+  if(result.kind==='kiosk')return route==='kiosk-checkin'||(route==='list-students'&&new URL(req.url).searchParams.get('kiosk')==='1');
   return false;
 }
 export async function currentInternalKey():Promise<string> {
