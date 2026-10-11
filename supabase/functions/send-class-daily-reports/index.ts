@@ -1,3 +1,4 @@
+import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 // 수업(학원) 페이지의 출석 학생에게 일일 보고서를 순차 전송한다.
 //
 // 2026-09-25 안정화:
@@ -331,8 +332,8 @@ Deno.serve(async (req) => {
   }
 
   const adminKey = resolveAdminKeyFromRequest(req, body)
-  const effectiveAdminKey = await getEffectiveAdminKey()
-  if (!adminKey || adminKey !== effectiveAdminKey) {
+  const effectiveAdminKey = securityEnabled() ? "" : await getEffectiveAdminKey()
+  if (!adminKey || !await authorizeKey(req, adminKey, effectiveAdminKey)) {
     return new Response(JSON.stringify({ error: "unauthorized" }), {
       status: 401,
       headers: { "Content-Type": "application/json", ...corsHeaders },

@@ -1,3 +1,4 @@
+import { authorizeKey, securityEnabled } from "./adminSecurity.ts"
 // _shared/webhookIngest.ts
 //
 // (2026-09-20, 웹훅 코드 정리 3단계) 등록(학원)/시험범위(학원)/클래스(학원) 등 여러 DB의 버튼 웹훅이
@@ -166,8 +167,8 @@ export async function handleLockedQueueWebhook(
 
   if (opts.requireAdminKey) {
     const adminKey = resolveAdminKeyFromRequest(req, body)
-    const currentAdminKey = await getCurrentAdminKey()
-    if (!adminKey || adminKey !== currentAdminKey) {
+    const currentAdminKey = securityEnabled() ? "" : await getCurrentAdminKey()
+    if (!adminKey || !await authorizeKey(req, adminKey, currentAdminKey)) {
       return jsonResponse({ error: "unauthorized" }, 401)
     }
   }
@@ -255,8 +256,8 @@ export async function handleSyncWebhook(
 
   if (opts.requireAdminKey) {
     const adminKey = resolveAdminKeyFromRequest(req, body)
-    const currentAdminKey = await getCurrentAdminKey()
-    if (!adminKey || adminKey !== currentAdminKey) {
+    const currentAdminKey = securityEnabled() ? "" : await getCurrentAdminKey()
+    if (!adminKey || !await authorizeKey(req, adminKey, currentAdminKey)) {
       return jsonResponse({ error: "unauthorized" }, 401)
     }
   }
@@ -337,8 +338,8 @@ export async function handleQueuedBackgroundWebhook(
 
   if (opts.requireAdminKey) {
     const adminKey = resolveAdminKeyFromRequest(req, (body as Record<string, unknown>) ?? {})
-    const currentAdminKey = await getCurrentAdminKey()
-    if (!adminKey || adminKey !== currentAdminKey) {
+    const currentAdminKey = securityEnabled() ? "" : await getCurrentAdminKey()
+    if (!adminKey || !await authorizeKey(req, adminKey, currentAdminKey)) {
       return jsonResponse({ error: "unauthorized" }, 401)
     }
   }
@@ -417,8 +418,8 @@ export async function handleLockedBackgroundWebhook(
 
   if (opts.requireAdminKey) {
     const adminKey = resolveAdminKeyFromRequest(req, (body as Record<string, unknown>) ?? {})
-    const currentAdminKey = await getCurrentAdminKey()
-    if (!adminKey || adminKey !== currentAdminKey) {
+    const currentAdminKey = securityEnabled() ? "" : await getCurrentAdminKey()
+    if (!adminKey || !await authorizeKey(req, adminKey, currentAdminKey)) {
       return jsonResponse({ error: "unauthorized" }, 401)
     }
   }

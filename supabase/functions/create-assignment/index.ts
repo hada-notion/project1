@@ -1,3 +1,4 @@
+import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 // create-assignment v7
 // Trigger: 학습기록(학원) DB의 "학습활동 생성" 버튼 웹훅
 //
@@ -87,8 +88,8 @@ async function handleRequest(req: Request): Promise<Response> {
 	}
 
 	const adminKey = resolveAdminKeyFromRequest(req, body)
-	const currentAdminKey = await getCurrentAdminKey()
-	if (!adminKey || adminKey !== currentAdminKey) {
+	const currentAdminKey = securityEnabled() ? "" : await getCurrentAdminKey()
+	if (!adminKey || !await authorizeKey(req, adminKey, currentAdminKey)) {
 		return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { "Content-Type": "application/json" } })
 	}
 

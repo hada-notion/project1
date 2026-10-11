@@ -275,6 +275,7 @@
 </div>
 
 <div id="column-menu" class="column-menu" role="dialog" aria-label="열 정렬 및 필터" hidden></div>
+<script src="admin_auth.js"></script>
 <script>
   const SUPABASE_URL = "https://twczhsxybkcvjkdfdxvs.supabase.co";
   const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR3Y3poc3h5YmtjdmprZGZkeHZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyOTcwMDQsImV4cCI6MjEwMzg3MzAwNH0.t7Ltb_iSYqE4gHSoGSm-OlpiLjGqIcgrhzGJ-t56EDc";
@@ -343,16 +344,18 @@
     if (!key) { errEl.textContent = "비밀번호를 입력하세요."; return; }
     btn.disabled = true; btn.textContent = "확인 중..."; errEl.textContent = "";
     try {
+      const session = await HadaAdminAuth.login(SUPABASE_URL, key);
       const res = await fetch(`${SUPABASE_URL}/functions/v1/get-legal-document-data`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-key": key, "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "apikey": SUPABASE_ANON_KEY },
+        headers: { "Content-Type": "application/json", "x-admin-key": session, "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "apikey": SUPABASE_ANON_KEY },
         body: JSON.stringify({ action: "classes" }),
       });
       if (res.status === 401) { errEl.textContent = "비밀번호가 올바르지 않습니다."; return; }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `서버 오류: ${res.status}`);
       if (!Array.isArray(data.classes)) throw new Error("클래스 목록을 확인할 수 없습니다.");
-      localStorage.setItem(ADMIN_KEY_STORAGE, key);
+      localStorage.setItem(ADMIN_KEY_STORAGE, session);
+      input.value = "";
       await showAppScreen(data.classes);
     } catch (err) {
       errEl.textContent = "로그인에 실패했습니다: " + err.message;

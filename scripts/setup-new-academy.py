@@ -44,6 +44,7 @@ TARGET_FILES_URL_KEY = [
     "legal_documents.html",
     "student_report_part1.js",
     "school_search.html",
+    "admin_config.json",
 ]
 
 TARGET_FILES_PAGES_PATH = [

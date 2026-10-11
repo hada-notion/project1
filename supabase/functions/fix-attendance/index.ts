@@ -1,3 +1,4 @@
+import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 // Supabase Edge Function: fix-attendance
 //
 // Triggered by the "출석 조정" button on a 수업(학원) DB page (via Notion's built-in
@@ -70,8 +71,8 @@ Deno.serve(async (req: Request) => {
   }
 
   const adminKey = resolveAdminKeyFromRequest(req, body)
-  const currentAdminKey = await getCurrentAdminKey()
-  if (!adminKey || adminKey !== currentAdminKey) {
+  const currentAdminKey = securityEnabled() ? "" : await getCurrentAdminKey()
+  if (!adminKey || !await authorizeKey(req, adminKey, currentAdminKey)) {
     return new Response(JSON.stringify({ error: "unauthorized" }), {
       status: 401,
       headers: { "Content-Type": "application/json" },

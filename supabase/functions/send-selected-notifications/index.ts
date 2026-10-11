@@ -1,3 +1,4 @@
+import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 // Supabase Edge Function: send-selected-notifications
 //
 // (2026-09-16) "알림톡 설정(학원) DB"의 '선택 일괄전송' 버튼 대신, "알림톡 발송함(학원) DB"
@@ -357,8 +358,8 @@ Deno.serve(async (req: Request) => {
 	}
 
 	const adminKey = resolveAdminKeyFromRequest(req, body)
-	const currentAdminKey = await getCurrentAdminKey()
-	if (!adminKey || adminKey !== currentAdminKey) {
+	const currentAdminKey = securityEnabled() ? "" : await getCurrentAdminKey()
+	if (!adminKey || !await authorizeKey(req, adminKey, currentAdminKey)) {
 		await finishBatch(batchId, `${nowKstLabel()} - 인증 실패: x-admin-key가 올바르지 않습니다. Notion 자동화의 웹훅 헤더와 현재 관리자 키가 일치하는지 확인하세요.`)
 		return new Response(JSON.stringify({ error: "unauthorized" }), {
 			status: 401,

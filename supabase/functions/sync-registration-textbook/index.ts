@@ -1,3 +1,4 @@
+import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 // sync-registration-textbook
 //
 // 등록 DB "개별교재 생성" 버튼 하나로 그룹/개별 진도 모두 처리한다 (등록일/종료일 편집
@@ -304,8 +305,8 @@ Deno.serve(async (req: Request) => {
 	console.log("sync-registration-textbook payload:", route, JSON.stringify(body))
 
 	const adminKey = resolveAdminKeyFromRequest(req, body)
-	const currentAdminKey = await getCurrentAdminKey()
-	if (!adminKey || adminKey !== currentAdminKey) {
+	const currentAdminKey = securityEnabled() ? "" : await getCurrentAdminKey()
+	if (!adminKey || !await authorizeKey(req, adminKey, currentAdminKey)) {
 		return new Response(JSON.stringify({ error: "unauthorized" }), {
 			status: 401,
 			headers: { "Content-Type": "application/json" },

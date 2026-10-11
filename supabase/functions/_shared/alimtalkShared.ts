@@ -1,3 +1,4 @@
+import { securityEnabled, currentInternalKey } from "./adminSecurity.ts"
 // _shared/alimtalkShared.ts
 //
 // send-daily-report / send-tuition-notice / send-report / send-class-daily-reports 네 함수가
@@ -65,6 +66,7 @@ const SERVICE_ROLE_KEY = Deno.env.get("SB_SERVICE_ROLE_KEY")!
 const ADMIN_SECRET = Deno.env.get("ADMIN_SECRET")!
 
 export async function getEffectiveAdminKey(): Promise<string> {
+  if (securityEnabled()) return await currentInternalKey()
   try {
     const res = await fetch(SUPABASE_URL + "/rest/v1/admin_settings?select=admin_key&id=eq.1", {
       headers: {

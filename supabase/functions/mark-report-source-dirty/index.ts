@@ -1,3 +1,4 @@
+import { securityEnabled, authorizeKey } from "../_shared/adminSecurity.ts"
 // Notion DB 자동화 공용 웹훅.
 // 보고서에 영향을 주는 속성의 편집 트리거에서 이 주소를 호출하면, 해당 페이지의
 // `학습정보 수정일`만 현재 시각으로 기록한다. 이 속성 자체는 자동화 트리거에서 제외해야 한다.
@@ -10,6 +11,9 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS })
   try {
     const body = await req.json().catch(() => ({}))
+    if (securityEnabled() && !await authorizeKey(req, req.headers.get("x-admin-key") ?? body?.adminKey, "")) {
+      return new Response(JSON.stringify({ error: "인증 실패" }), { status: 401, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } })
+    }
     const pageId = extractPageId(body)
     if (!pageId) {
       return new Response(JSON.stringify({ error: "pageId를 찾을 수 없습니다." }), {
