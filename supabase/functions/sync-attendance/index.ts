@@ -1,4 +1,5 @@
-// POST /functions/v1/sync-attendance — 출석 원자료 예약 동기화 전용.
+// POST /functions/v1/sync-attendance — 출석 원자료 일괄 동기화. v2.5.13부터 정기 예약은 해제했고
+// GitHub Actions에서 필요할 때만 수동 실행한다.
 // body: { mode: "incremental" } — 마지막 동기화 이후 수정분과 영향받은 report_cache 갱신.
 // body: { mode: "reconcile" } — 전체 출석을 대조하고 삭제된 원자료까지 반영.
 // 두 모드 모두 x-admin-key 필요. Notion 출석 생성·편집 웹훅은 연결하지 않는다.
