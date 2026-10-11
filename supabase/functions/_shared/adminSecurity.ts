@@ -43,15 +43,27 @@ export function equalSecret(a:string,b:string):boolean {
   for(let i=0;i<Math.max(aa.length,bb.length);i++)diff|=(aa[i]??0)^(bb[i]??0);
   return diff===0;
 }
-export function normalizeEmail(raw:unknown):string {
-  if(typeof raw!=='string')throw new SecurityError(400,'이메일을 입력해 주세요.');
-  const value=raw.trim().toLowerCase();
-  if(value.length>254||! /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(value))throw new SecurityError(400,'올바른 이메일 주소를 입력해 주세요.');
-  return value;
-}
+// Published initial password. It only opens the password-change screen (must_change) and is never
+// accepted by business pages; the deploy manager can reset an academy back to it.
+export const INITIAL_PASSWORD='0000';
 export function validatePassword(raw:unknown):string {
-  if(typeof raw!=='string'||raw.length<12||raw.length>128||raw.trim()!==raw)throw new SecurityError(400,'비밀번호는 앞뒤 공백 없이 12~128자로 입력해 주세요.');
+  if(typeof raw!=='string'||raw.length<8||raw.length>128||raw.trim()!==raw)throw new SecurityError(400,'비밀번호는 앞뒤 공백 없이 8~128자로 입력해 주세요.');
+  if(raw===INITIAL_PASSWORD)throw new SecurityError(400,'초기 비밀번호와 다른 비밀번호를 입력해 주세요.');
   return raw;
+}
+// Fixed webhook key kept in Edge Function Secrets (Notion button/automation headers).
+export function fixedWebhookKey():string {
+  const key=Deno.env.get('WEBHOOK_SECRET')||Deno.env.get('ADMIN_SECRET')||'';
+  if(!key)throw new SecurityError(503,'웹훅 키(ADMIN_SECRET) 설정이 필요합니다.');
+  return key;
+}
+// Creates the owner state on first use (initial password, internal key, Vault, webhook hash) and
+// re-applies the initial password after a deploy-manager reset. Idempotent and serialized in SQL.
+export async function ensureInitialized():Promise<void> {
+  const state=await securityRpc('status');
+  if(state.initialized&&state.password_set)return;
+  const internalKey=randomToken();
+  await securityRpc('init',{password_hash:await hashPassword(INITIAL_PASSWORD),internal_key:internalKey,internal_hash:await sha256(internalKey),webhook_hash:await sha256(fixedWebhookKey())});
 }
 export async function hashPassword(password:string,salt=randomToken(16)):Promise<string> {
   const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveBits']);
@@ -76,7 +88,10 @@ export function routeName(req:Request):string {
 export async function authorizeKey(req:Request,provided:unknown,legacy:string):Promise<boolean> {
   if(typeof provided!=='string'||!provided||provided.length>1024)return false;
   if(!securityEnabled())return !!legacy && equalSecret(provided,legacy);
-  const result=await securityRpc('authorize',{candidate:await sha256(provided)});
+  const candidate=await sha256(provided);
+  let result=await securityRpc('authorize',{candidate});
+  // First request after activation (often a Notion webhook) creates the owner state.
+  if(result.kind==='uninitialized'){await ensureInitialized();result=await securityRpc('authorize',{candidate});}
   const route=routeName(req);
   if(result.kind==='internal')return true;
   if(result.kind==='session')return SECURITY_BROWSER_ROUTES.has(route);
@@ -86,30 +101,11 @@ export async function authorizeKey(req:Request,provided:unknown,legacy:string):P
   return false;
 }
 export async function currentInternalKey():Promise<string> {
-  const state=await securityRpc('internal');
-  if(!state.internal_key)throw new SecurityError(503,'소유자 최초 설정을 완료해 주세요.');
+  let state=await securityRpc('internal');
+  if(!state.internal_key){await ensureInitialized();state=await securityRpc('internal');}
+  if(!state.internal_key)throw new SecurityError(503,'관리자 보안 초기 설정을 완료하지 못했습니다.');
   return state.internal_key;
 }
-export function mailReady():boolean { return !!Deno.env.get('ADMIN_MAIL_API_KEY') && !!Deno.env.get('ADMIN_MAIL_FROM'); }
-export async function sendCode(email:string,code:string,id:string):Promise<void> {
-  if(!mailReady())throw new SecurityError(503,'인증메일 발송 서비스 연결이 필요합니다.');
-  const res=await fetch('https://api.resend.com/emails',{
-    method:'POST',headers:{Authorization:`Bearer ${Deno.env.get('ADMIN_MAIL_API_KEY')}`,'Content-Type':'application/json','Idempotency-Key':id},
-    body:JSON.stringify({from:Deno.env.get('ADMIN_MAIL_FROM'),to:[email],subject:'하다 학원관리 관리자 인증번호',text:`관리자 인증번호: ${code}\n\n10분 안에 입력해 주세요. 본인이 요청하지 않았다면 무시하세요. 인증번호를 타인에게 전달하지 마세요.`}),signal:AbortSignal.timeout(15000),
-  });
-  if(!res.ok)throw new SecurityError(503,'인증메일 발송에 실패했습니다. 잠시 후 다시 요청해 주세요.');
-}
-export function randomCode():string {
-  // Rejection sampling avoids modulo bias.
-  let n:number;do{n=crypto.getRandomValues(new Uint32Array(1))[0];}while(n>=4294000000);
-  return String(n%1000000).padStart(6,'0');
-}
-export async function otpHash(id:string,code:string):Promise<string> {
-  const key=Deno.env.get('SB_SERVICE_ROLE_KEY');if(!key)throw new SecurityError(503,'서버 설정이 필요합니다.');
-  const hmac=await crypto.subtle.importKey('raw',new TextEncoder().encode(key),{name:'HMAC',hash:'SHA-256'},false,['sign']);
-  return Array.from(new Uint8Array(await crypto.subtle.sign('HMAC',hmac,new TextEncoder().encode(`${id}:${code}`))),x=>x.toString(16).padStart(2,'0')).join('');
-}
-export function maskedEmail(email:string):string { const [local,host]=email.split('@');return `${local.slice(0,2)}***@${host}`; }
 export function nextRecommended(iso:string):string {
   const value=new Date(iso);const day=value.getUTCDate();value.setUTCDate(1);value.setUTCMonth(value.getUTCMonth()+3);
   const last=new Date(Date.UTC(value.getUTCFullYear(),value.getUTCMonth()+1,0)).getUTCDate();value.setUTCDate(Math.min(day,last));return value.toISOString();

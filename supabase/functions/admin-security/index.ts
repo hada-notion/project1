@@ -1,4 +1,4 @@
-import { SecurityError,securityEnabled,securityRpc,sha256,randomToken,randomCode,otpHash,sendCode,mailReady,normalizeEmail,validatePassword,hashPassword,verifyPassword,maskedEmail,nextRecommended } from '../_shared/adminSecurity.ts';
+import { SecurityError,securityEnabled,securityRpc,sha256,randomToken,validatePassword,hashPassword,verifyPassword,nextRecommended,ensureInitialized,fixedWebhookKey } from '../_shared/adminSecurity.ts';
 // While security is disabled the function only answers with a fixed 503 message and no secrets, so the
 // browser must be able to read it for the legacy-login fallback even before ADMIN_ALLOWED_ORIGINS is set.
 function cors(req:Request,enforceOrigin:boolean):Record<string,string> {
@@ -17,46 +17,37 @@ export async function handleAdminSecurity(req:Request):Promise<Response> {
     let b:any;try{b=JSON.parse(raw);}catch{throw new SecurityError(400,'요청 형식이 올바르지 않습니다.');}
     if(!b||typeof b!=='object'||Array.isArray(b))throw new SecurityError(400,'요청 형식이 올바르지 않습니다.');
     const result=(value:unknown)=>new Response(JSON.stringify(value),{headers});
-    if(b.action==='status'){const state=await securityRpc('status');return result({configured:state.configured,mail_ready:mailReady()});}
-    // Persistent global + address buckets; independent of spoofable browser IP headers.
-    if(['login','setup-send','change-send','setup-complete','change-complete'].includes(b.action))
-      await securityRpc('limit',{bucket:'security-'+b.action,max:b.action.endsWith('send')?10:60,seconds:3600});
+    // Public status: never says whether the initial password is still active.
+    if(b.action==='status'){await ensureInitialized();return result({ready:true,webhook_key_weak:fixedWebhookKey().length<32});}
+    // Persistent global buckets; independent of spoofable browser IP headers.
+    if(b.action==='login'||b.action==='change')await securityRpc('limit',{bucket:'security-'+b.action,max:60,seconds:3600});
     const session=req.headers.get('x-admin-key')??'';
     if(b.action==='login'){
+      await ensureInitialized();
       const info=await securityRpc('owner');
       const ok=await verifyPassword(b.password,info.password_hash??'');
+      // The initial password may only open the settings page to change it.
+      if(ok&&info.must_change&&b.scope!=='settings')throw new SecurityError(409,'초기 비밀번호 상태입니다. 관리자 설정 페이지에서 비밀번호를 먼저 변경해 주세요.');
       const token=randomToken();
       await securityRpc('login',{verified:ok,version:info.version,token_hash:await sha256(token),kind:b.scope==='kiosk'?'kiosk':'admin'});
-      return result({session:token});
+      return result({session:token,must_change:!!info.must_change});
     }
     if(b.action==='logout'){if(session)await securityRpc('logout',{session_hash:await sha256(session)});return result({ok:true});}
     if(b.action==='profile'){
       const state=await securityRpc('profile',{session_hash:await sha256(session)});
       const next=nextRecommended(state.changed_at);
-      return result({email:maskedEmail(state.email),changed_at:state.changed_at,recommended_at:next,change_due:Date.now()>=Date.parse(next)});
+      return result({changed_at:state.changed_at,recommended_at:next,change_due:Date.now()>=Date.parse(next),must_change:!!state.must_change});
     }
-    const setup=b.action==='setup-send'||b.action==='setup-complete';
-    const change=b.action==='change-send'||b.action==='change-complete';
-    if(!setup&&!change)throw new SecurityError(400,'지원하지 않는 작업입니다.');
-    const token=typeof b.setup_token==='string'?b.setup_token:'';
-    if(setup&&(!/^[0-9a-f]{64}$/.test(token)))throw new SecurityError(401,'유효한 일회용 설정 링크가 필요합니다.');
-    const context=setup?await securityRpc('setup-context',{setup_hash:await sha256(token)}):await securityRpc('profile',{session_hash:await sha256(session)});
-    if(b.action.endsWith('send')){
-      if(!mailReady())throw new SecurityError(503,'인증메일 발송 서비스 연결이 필요합니다.');
-      if(change){if(!await verifyPassword(b.password,context.password_hash))throw new SecurityError(401,'현재 비밀번호가 올바르지 않습니다.');}
-      const email=setup?normalizeEmail(b.email):context.email;
-      const id=crypto.randomUUID(),code=randomCode();
-      await securityRpc('begin-otp',{id,purpose:setup?'setup':'change',email,context_hash:await sha256(setup?token:session),version:context.version,code_hash:await otpHash(id,code)});
-      try{await sendCode(email,code,id);}catch(e){await securityRpc('cancel-otp',{id});throw e;}
-      return result({challenge_id:id,email:maskedEmail(email),expires_in:600});
+    if(b.action==='change'){
+      const ctx=await securityRpc('profile',{session_hash:await sha256(session)});
+      if(!await verifyPassword(b.current_password,ctx.password_hash))throw new SecurityError(401,'현재 비밀번호가 올바르지 않습니다.');
+      const password=validatePassword(b.new_password);
+      if(password===b.current_password)throw new SecurityError(400,'현재 비밀번호와 다른 비밀번호를 입력해 주세요.');
+      const internalKey=randomToken();
+      const response=await securityRpc('change',{session_hash:await sha256(session),expected_version:ctx.version,password_hash:await hashPassword(password),internal_key:internalKey,internal_hash:await sha256(internalKey)});
+      return result({ok:true,changed_at:response.changed_at,message:'변경 완료. 모든 기존 로그인 세션이 해제되었습니다.'});
     }
-    if(typeof b.challenge_id!=='string'||!/^[0-9a-f-]{36}$/.test(b.challenge_id)||typeof b.code!=='string'||!/^\d{6}$/.test(b.code))throw new SecurityError(400,'6자리 인증번호를 입력해 주세요.');
-    const password=validatePassword(b.new_password),passwordHash=await hashPassword(password);
-    const fixed=Deno.env.get('WEBHOOK_SECRET')||Deno.env.get('ADMIN_SECRET')||'';
-    if(setup&&fixed.length<32)throw new SecurityError(503,'32자 이상의 학원 전용 웹훅 키를 먼저 설정해 주세요.');
-    const internalKey=randomToken();
-    const response=await securityRpc('complete',{id:b.challenge_id,code_hash:await otpHash(b.challenge_id,b.code),purpose:setup?'setup':'change',context_hash:await sha256(setup?token:session),password_hash:passwordHash,internal_key:internalKey,internal_hash:await sha256(internalKey),webhook_hash:setup?await sha256(fixed):null,expected_version:context.version});
-    return result({ok:true,changed_at:response.changed_at,message:'설정 완료. 모든 기존 로그인 세션이 해제되었습니다.'});
+    throw new SecurityError(400,'지원하지 않는 작업입니다.');
   }catch(e){const status=e instanceof SecurityError?e.status:503;return new Response(JSON.stringify({error:e instanceof SecurityError?e.message:'처리하지 못했습니다. 서버 연결 상태를 확인해 주세요.'}),{status,headers});}
 }
 Deno.serve(handleAdminSecurity);
