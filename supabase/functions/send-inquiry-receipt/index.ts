@@ -1,3 +1,4 @@
+import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 // 상담 신청 접수 안내 알림톡
 // - 상담 폼: 학생 DB의 "페이지 추가" 자동화 + "개인정보 동의=체크됨" 조건으로 호출
 // - 관리자 직접 입력: 학생 DB의 "접수안내 발송" 버튼으로 호출
@@ -364,8 +365,8 @@ Deno.serve(async (req: Request) => {
   }
 
   const providedKey = resolveAdminKeyFromRequest(req, body)
-  const currentKey = await getCurrentAdminKey()
-  if (!providedKey || providedKey !== currentKey) {
+  const currentKey = securityEnabled() ? "" : await getCurrentAdminKey()
+  if (!providedKey || !await authorizeKey(req, providedKey, currentKey)) {
     return new Response(JSON.stringify({ error: "unauthorized" }), {
       status: 401,
       headers: { ...CORS_HEADERS, "Content-Type": "application/json" },

@@ -1,3 +1,4 @@
+import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 // Supabase Edge Function: sync-dashboard-link
 //
 // 같은 날짜의 수업·출석·일정과 대시보드 페이지를 연결하는 엔드포인트다.
@@ -26,8 +27,8 @@ Deno.serve(async (req: Request) => {
   console.log("[sync-dashboard-link] received body:", JSON.stringify(body))
 
   const adminKey = resolveAdminKeyFromRequest(req, body)
-  const currentAdminKey = await getCurrentAdminKey()
-  if (!adminKey || adminKey !== currentAdminKey) {
+  const currentAdminKey = securityEnabled() ? "" : await getCurrentAdminKey()
+  if (!adminKey || !await authorizeKey(req, adminKey, currentAdminKey)) {
     return new Response(JSON.stringify({ error: "unauthorized" }), {
       status: 401,
       headers: { "Content-Type": "application/json" },

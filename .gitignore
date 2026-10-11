@@ -1,0 +1,4 @@
+# Secrets and private owner setup links
+*.private.txt
+.env
+.env.*

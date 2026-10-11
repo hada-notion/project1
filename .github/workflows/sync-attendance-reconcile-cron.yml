@@ -1,10 +1,9 @@
 name: Sync Attendance (daily reconcile)
 
 on:
-  schedule:
-    # 매일 16:00 UTC = 한국시간(KST, UTC+9) 새벽 1시. 증분 동기화가 놓칠 수 있는 변경분(특히 Notion에서
-    # 삭제된 출석 레코드)까지 전체를 다시 훑어서 정합성을 맞춥니다.
-    - cron: '0 16 * * *'
+  # v2.5.13: 정기 실행(매일 16:00 UTC)은 해제했다. 학부모 리포트는 보고서 발송 직전과
+  # "학생 페이지 동기화" 버튼에서 등록 단위로(삭제분 포함) 최신화한다.
+  # 전체 출석 원자료를 한 번에 대조해야 할 때만 Actions 탭에서 수동 실행한다.
   workflow_dispatch: {}
 
 jobs:
@@ -14,7 +13,8 @@ jobs:
       - name: Call sync-attendance (mode=reconcile)
         run: |
           set -e
-          curl -sS -X POST "https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1/sync-attendance" \
+          # --fail-with-body: 401 등 HTTP 오류를 job 실패로 표시한다(응답 본문은 로그에 남김).
+          curl -sS --fail-with-body -X POST "https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1/sync-attendance" \
             -H "apikey: ${SUPABASE_ANON_KEY}" \
             -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
             -H "x-admin-key: ${{ secrets.ADMIN_SECRET }}" \

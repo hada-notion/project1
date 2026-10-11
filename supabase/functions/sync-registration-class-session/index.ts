@@ -1,3 +1,4 @@
+import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 // Supabase Edge Function: sync-registration-class-session
 //
 // 등록(학원) DB "수업 생성" 버튼 전용.
@@ -69,8 +70,8 @@ Deno.serve(async (req: Request) => {
 		console.log("[sync-registration-class-session] received body:", JSON.stringify(body))
 
 		const adminKey = resolveAdminKeyFromRequest(req, body)
-		const currentAdminKey = await getCurrentAdminKey()
-		if (!adminKey || adminKey !== currentAdminKey) {
+		const currentAdminKey = securityEnabled() ? "" : await getCurrentAdminKey()
+		if (!adminKey || !await authorizeKey(req, adminKey, currentAdminKey)) {
 			return new Response(JSON.stringify({ error: "unauthorized" }), {
 				status: 401,
 				headers: { "Content-Type": "application/json" },

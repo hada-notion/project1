@@ -1,3 +1,4 @@
+import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 // Supabase Edge Function: sync-registration-timetable
 //
 // 시간표 연결: 클래스 기준 자동 연결은 이 함수에서 더 이상 하지 않는다 (2026-09-10 변경).
@@ -93,8 +94,8 @@ Deno.serve(async (req: Request) => {
     console.log("[sync-registration-timetable] received body:", JSON.stringify(body))
 
     const adminKey = resolveAdminKeyFromRequest(req, body)
-    const currentAdminKey = await getCurrentAdminKey()
-    if (!adminKey || adminKey !== currentAdminKey) {
+    const currentAdminKey = securityEnabled() ? "" : await getCurrentAdminKey()
+    if (!adminKey || !await authorizeKey(req, adminKey, currentAdminKey)) {
       return new Response(JSON.stringify({ error: "unauthorized" }), {
         status: 401,
         headers: { "Content-Type": "application/json" },

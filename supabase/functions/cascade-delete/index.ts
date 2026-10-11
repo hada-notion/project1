@@ -1,3 +1,4 @@
+import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 // Supabase Edge Function: cascade-delete (v13)
 //
 // v13 변경 사항 (2026-09-22, Phase 6: 동시성 제어 -- 큐 재도입):
@@ -77,8 +78,8 @@ Deno.serve(async (req: Request) => {
   }
 
   const adminKey = resolveAdminKeyFromRequest(req, body)
-  const currentAdminKey = await getCurrentAdminKey()
-  if (!adminKey || adminKey !== currentAdminKey) {
+  const currentAdminKey = securityEnabled() ? "" : await getCurrentAdminKey()
+  if (!adminKey || !await authorizeKey(req, adminKey, currentAdminKey)) {
     return new Response(JSON.stringify({ error: "unauthorized" }), {
       status: 401,
       headers: { "Content-Type": "application/json" },

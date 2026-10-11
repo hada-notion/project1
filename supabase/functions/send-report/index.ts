@@ -1,3 +1,4 @@
+import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 // supabase/functions/send-report/index.ts (v2)
 // 주간/월간 보고서 카카오 알림톡 발송을 하나로 통합한 함수입니다.
 // send-weekly-report / send-monthly-report를 대체합니다 (이 둘은 이제 사용하지 않아도 됩니다).
@@ -138,8 +139,8 @@ Deno.serve(async (req) => {
   }
 
   const adminKey = resolveAdminKeyFromRequest(req, body)
-  const currentAdminKey = await getCurrentAdminKey()
-  if (!adminKey || adminKey !== currentAdminKey) {
+  const currentAdminKey = securityEnabled() ? "" : await getCurrentAdminKey()
+  if (!adminKey || !await authorizeKey(req, adminKey, currentAdminKey)) {
     return new Response(JSON.stringify({ error: "unauthorized" }), {
       status: 401,
       headers: { "Content-Type": "application/json", ...corsHeaders },

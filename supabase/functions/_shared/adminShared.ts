@@ -19,6 +19,8 @@
 // 또 실패했음 -- 아래에 다시 추가한다.
 
 import { fetchWithRetry } from "./notionClient.ts"
+import { securityEnabled, currentInternalKey, authorizeKey } from "./adminSecurity.ts"
+export { authorizeKey } from "./adminSecurity.ts"
 
 const NOTION_TOKEN = Deno.env.get("NOTION_TOKEN")!
 const REGISTRATION_DB_ID = Deno.env.get("NOTION_REGISTRATION_DB_ID")!
@@ -74,6 +76,7 @@ async function getKv(): Promise<Deno.Kv | null> {
 }
 
 export async function getCurrentAdminKey(): Promise<string> {
+  if (securityEnabled()) return await currentInternalKey()
   const store = await getKv()
   if (store) {
     const entry = await store.get(["admin_key"])
@@ -83,6 +86,7 @@ export async function getCurrentAdminKey(): Promise<string> {
 }
 
 export async function setCurrentAdminKey(newKey: string): Promise<boolean> {
+  if (securityEnabled()) return false // Security mode changes only through verified owner RPC.
   const store = await getKv()
   if (!store) return false
   await store.set(["admin_key"], newKey)
@@ -91,8 +95,8 @@ export async function setCurrentAdminKey(newKey: string): Promise<boolean> {
 
 export async function requireAdminKey(req: Request): Promise<Response | null> {
   const provided = req.headers.get("x-admin-key") ?? ""
-  const current = await getCurrentAdminKey()
-  if (!current || provided !== current) {
+  const current = securityEnabled() ? "" : await getCurrentAdminKey()
+  if (!await authorizeKey(req, provided, current)) {
     return new Response(JSON.stringify({ error: "인증 실패" }), { status: 401, headers: CORS_HEADERS })
   }
   return null

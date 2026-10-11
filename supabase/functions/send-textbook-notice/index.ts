@@ -1,3 +1,4 @@
+import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 // supabase/functions/send-textbook-notice/index.ts (v3)
 // 교재비 안내 카카오 알림톡 발송. 교재비(학원) DB의 "안내문 전송" 버튼이 호출합니다.
 // send-tuition-notice와 동일한 패턴을 따른다:
@@ -105,8 +106,8 @@ Deno.serve(async (req) => {
   }
 
   const adminKey = resolveAdminKeyFromRequest(req, body)
-  const currentAdminKey = await getCurrentAdminKey()
-  if (!adminKey || adminKey !== currentAdminKey) {
+  const currentAdminKey = securityEnabled() ? "" : await getCurrentAdminKey()
+  if (!adminKey || !await authorizeKey(req, adminKey, currentAdminKey)) {
     return new Response(JSON.stringify({ error: "unauthorized" }), {
       status: 401,
       headers: { "Content-Type": "application/json", ...corsHeaders },

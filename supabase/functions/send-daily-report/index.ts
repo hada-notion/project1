@@ -1,3 +1,4 @@
+import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 // supabase/functions/send-daily-report/index.ts (v5)
 // Sends the daily study-report Kakao AlimTalk for one class day, based on a single
 // row in the attendance (출석) database.
@@ -51,8 +52,8 @@ Deno.serve(async (req) => {
   }
 
   const adminKey = resolveAdminKeyFromRequest(req, body)
-  const effectiveAdminKey = await getEffectiveAdminKey()
-  if (!adminKey || adminKey !== effectiveAdminKey) {
+  const effectiveAdminKey = securityEnabled() ? "" : await getEffectiveAdminKey()
+  if (!adminKey || !await authorizeKey(req, adminKey, effectiveAdminKey)) {
     return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } })
   }
 

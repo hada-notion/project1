@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://*.supabase.co; base-uri 'none'; form-action 'none'">
 <title>관리자 설정 | 하다 학원관리</title>
 <style>
 :root{color-scheme:light;--bg:#FBF8F3;--surface:#fff;--ink:#191F28;--muted:#4E5968;--brand:#6B5D4D;--border:#DED1C0;--soft:#F5EFE7;--warning:#765019;--warning-bg:#FFF5DF;--danger:#AF2424}
@@ -15,53 +15,38 @@
 </head>
 <body>
 <div class="shell">
-<nav class="top" aria-label="서비스 정보"><div class="wordmark">하다<span>학원관리</span></div><span class="badge">관리자 전용 · 화면 준비 단계</span></nav>
-<header><h1>관리자 설정</h1><p class="muted">이메일 인증과 관리용 비밀번호를 한곳에서 설정합니다.</p></header>
-<div class="notice" role="note"><strong>아직 인증 서버가 연결되지 않았어요.</strong>현재는 이메일 입력 초안만 보관할 수 있습니다. 소유자 등록, 인증메일 발송, 비밀번호 설정, 시크릿 변경은 실행되지 않습니다.</div>
+<nav class="top" aria-label="서비스 정보"><div class="wordmark">하다<span>학원관리</span></div><span class="badge">관리자 전용</span></nav>
+<header><h1>관리자 설정</h1><p class="muted">키오스크와 관리자 서류 화면에서 쓰는 관리자 비밀번호를 변경합니다.</p></header>
+<div class="notice" role="status" id="connection-status"><strong>인증 서버 연결을 확인하고 있어요.</strong>Notion 버튼·자동화의 웹훅 키는 이 화면에서 바꾸지 않습니다.</div>
 <main class="layout">
-<section class="card" aria-labelledby="setup-title">
-<ol class="steps" aria-label="최초 설정 순서"><li class="current"><span class="stepnum">1</span>이메일 인증</li><li><span class="stepnum">2</span>비밀번호 설정</li></ol>
-<div id="email-screen">
-<h2 id="setup-title">소유자 이메일</h2><p class="muted">앞으로 비밀번호를 변경할 때 인증번호를 받을 이메일을 입력해 주세요.</p>
-<form id="email-form" novalidate>
-<label for="owner-email">이메일 주소</label>
-<input id="owner-email" name="email" type="email" autocomplete="email" inputmode="email" placeholder="이메일 주소를 입력하세요" maxlength="254" required aria-describedby="email-help email-error">
-<p class="help" id="email-help">소유자 본인이 확인할 수 있는 이메일을 사용해 주세요.</p>
-<p class="error" id="email-error" role="alert" hidden></p>
-<button class="primary" type="submit">이메일 초안 보관</button>
+<section class="card" aria-labelledby="panel-title">
+<h2 id="panel-title">서버 연결 확인 중</h2>
+<p id="panel-description" class="muted">인증 서버의 설정 상태를 확인하고 있어요.</p>
+<form id="login-form" hidden>
+<label for="login-password">관리자 비밀번호</label><input type="password" id="login-password" autocomplete="current-password" maxlength="128" required>
+<p class="help">처음 설치한 학원은 초기 비밀번호 0000으로 로그인한 뒤 바로 변경합니다. 비밀번호는 브라우저에 저장하지 않으며, 로그인은 12시간 후 만료됩니다.</p>
+<button class="primary" type="submit">로그인</button>
 </form>
-<p class="privacy">입력값은 이 탭의 임시 저장소에만 보관됩니다. 서버로 전송하지 않으며, 탭을 닫으면 삭제됩니다. 공용 기기에서는 사용 후 초안을 지워 주세요.</p>
-</div>
-<div id="pending-screen" hidden>
-<h2 id="pending-title" tabindex="-1">이메일 인증 준비</h2><p class="muted">이메일 초안을 이 탭에 보관했어요. 아직 소유자 등록이나 이메일 인증이 완료된 것은 아닙니다.</p>
-<div class="status"><strong>입력한 이메일</strong><span class="email-value" id="saved-email"></span></div>
-<button class="primary" disabled type="button" aria-describedby="connection-help">인증번호 받기 · 서버 연결 후 사용</button>
-<p class="help" id="connection-help">학원별 일회용 설정 링크와 이메일 발송 기능이 연결되면 인증을 진행할 수 있어요. 일반 공개 주소만으로는 소유자를 등록할 수 없습니다.</p>
-<div class="actions"><button class="secondary" type="button" id="edit-email">이메일 수정</button><button class="secondary" type="button" id="clear-draft">초안 지우기</button></div>
-<p class="privacy" id="storage-message"></p>
-</div>
+<form id="change-form" hidden>
+<label for="current-password">현재 비밀번호</label><input type="password" id="current-password" autocomplete="current-password" maxlength="128" required>
+<label for="new-password">새 관리자 비밀번호</label><input type="password" id="new-password" autocomplete="new-password" minlength="8" maxlength="128" required>
+<p class="help">앞뒤 공백 없이 8~128자. 초기 비밀번호 0000은 사용할 수 없습니다.</p>
+<label for="confirm-password">새 비밀번호 확인</label><input type="password" id="confirm-password" autocomplete="new-password" minlength="8" maxlength="128" required>
+<div class="status">변경하면 키오스크·관리자 서류 화면의 로그인이 모두 해제되고 새 비밀번호로 다시 로그인합니다. Notion 웹훅 키는 그대로 유지됩니다.</div>
+<button class="primary" type="submit">비밀번호 변경</button>
+<button class="secondary" id="cancel-change" type="button" style="margin-top:12px">취소</button>
+</form>
+<div id="dashboard" hidden><div class="status" id="due-status"></div><button class="primary" id="start-change" type="button">비밀번호 변경</button><button class="secondary" id="logout" type="button" style="margin-top:12px">로그아웃</button></div>
+<p id="form-error" class="error" role="alert" hidden></p>
+<button class="secondary" id="retry" type="button" hidden>연결 다시 확인</button>
 </section>
-<aside class="card" aria-labelledby="security-title">
-<h2 class="aside-title" id="security-title">보안 설정 현황</h2>
-<dl class="facts"><div><dt>소유자 인증</dt><dd>서버 연결 전 · 미등록</dd></div><div><dt>마지막 비밀번호 변경일</dt><dd>설정 후 표시</dd></div><div><dt>다음 권장 변경일</dt><dd>변경 완료 후 3개월 기준</dd></div><div><dt>웹훅 인증키</dt><dd>이 화면에서 변경하지 않음</dd></div></dl>
-<hr class="divider"><p class="muted" style="font-size:14px;margin-bottom:0">서버 연결 후 적용할 기준</p>
-<ul class="rules"><li>비밀번호 변경 전 이메일 인증</li><li>내부 관리자 시크릿도 함께 교체</li><li>기존 웹훅 헤더는 그대로 유지</li><li>연동 확인이 끝나야 변경 완료</li></ul>
-</aside>
+<aside class="card" aria-labelledby="security-title"><h2 class="aside-title" id="security-title">보안 설정 현황</h2>
+<dl class="facts"><div><dt>비밀번호 상태</dt><dd id="owner-status">확인 중</dd></div><div><dt>마지막 비밀번호 변경일</dt><dd id="last-change">로그인 후 표시</dd></div><div><dt>다음 권장 변경일</dt><dd id="next-change">변경 완료 후 3개월 기준</dd></div><div><dt>웹훅 인증키</dt><dd>평소 유지 · 사고 시 별도 교체</dd></div></dl>
+<hr class="divider"><ul class="rules"><li>처음에는 초기 비밀번호 0000으로 로그인해 바로 변경</li><li>변경 전에는 키오스크·서류 화면을 사용할 수 없음</li><li>비밀번호를 바꾸면 내부 인증키도 함께 갱신</li><li>Notion 웹훅 키는 그대로 유지</li><li>비밀번호를 잊으면 배포 담당자에게 초기화 요청</li></ul></aside>
 </main>
-<p class="foot"><strong>기존 운영에는 영향을 주지 않습니다.</strong> 이 페이지는 키를 조회하거나 변경하지 않으며, 비밀번호를 입력받지 않습니다.</p>
-<noscript><p class="notice">이메일 초안 입력 화면을 사용하려면 JavaScript가 필요합니다.</p></noscript>
+<p class="foot"><strong>비밀번호는 타인에게 전달하지 마세요.</strong> 공용 기기에서는 사용 후 로그아웃하세요.</p>
+<noscript><p class="notice">관리자 설정을 사용하려면 JavaScript가 필요합니다.</p></noscript>
 </div>
-<script>
-'use strict';
-const storageKey='hada_admin_owner_email_draft_v1';
-const $=id=>document.getElementById(id);
-let draft='';
-function showDraft(email,persisted){draft=email;$('saved-email').textContent=email;$('email-screen').hidden=true;$('pending-screen').hidden=false;$('storage-message').textContent=persisted?'초안은 이 탭을 닫을 때 삭제됩니다. 인증메일은 아직 발송되지 않았어요.':'브라우저가 임시 저장을 허용하지 않아 현재 화면에서만 유지됩니다. 인증메일은 발송되지 않았어요.';}
-function clearDraft(){draft='';try{sessionStorage.removeItem(storageKey);}catch{}$('owner-email').value='';$('pending-screen').hidden=true;$('email-screen').hidden=false;$('email-error').hidden=true;$('owner-email').removeAttribute('aria-invalid');$('owner-email').focus();}
-$('email-form').addEventListener('submit',event=>{event.preventDefault();const input=$('owner-email');input.value=input.value.trim();if(!input.checkValidity()){input.setAttribute('aria-invalid','true');$('email-error').textContent='올바른 이메일 주소를 입력해 주세요.';$('email-error').hidden=false;input.focus();return;}input.removeAttribute('aria-invalid');$('email-error').hidden=true;let persisted=false;try{sessionStorage.setItem(storageKey,input.value);persisted=true;}catch{}showDraft(input.value,persisted);$('pending-title').focus();});
-$('edit-email').addEventListener('click',()=>{$('pending-screen').hidden=true;$('email-screen').hidden=false;$('owner-email').value=draft;$('owner-email').focus();});
-$('clear-draft').addEventListener('click',clearDraft);
-try{const saved=sessionStorage.getItem(storageKey);if(saved&&saved.length<=254){$('owner-email').value=saved;if($('owner-email').checkValidity())showDraft(saved,true);else sessionStorage.removeItem(storageKey);}}catch{}
-</script>
+<script src="admin_settings.js"></script>
 </body>
 </html>

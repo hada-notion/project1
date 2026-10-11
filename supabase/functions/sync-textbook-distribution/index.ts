@@ -1,3 +1,4 @@
+import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 // sync-textbook-distribution
 //
 // 교재비 기능(로드맵 5-37): 진도교재 담기(교재배부 생성) + 필요 시 교재비(카트) 자동 생성.
@@ -64,8 +65,8 @@ Deno.serve(async (req: Request) => {
 	console.log("sync-textbook-distribution payload:", route, JSON.stringify(body))
 
 	const adminKey = resolveAdminKeyFromRequest(req, body)
-	const currentAdminKey = await getCurrentAdminKey()
-	if (!adminKey || adminKey !== currentAdminKey) {
+	const currentAdminKey = securityEnabled() ? "" : await getCurrentAdminKey()
+	if (!adminKey || !await authorizeKey(req, adminKey, currentAdminKey)) {
 		return new Response(JSON.stringify({ error: "unauthorized" }), {
 			status: 401,
 			headers: { "Content-Type": "application/json" },
