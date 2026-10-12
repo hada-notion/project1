@@ -17,16 +17,19 @@
  /* 글자 */
  --font-sans:Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR","Segoe UI",sans-serif;
  --font-mono:ui-monospace,Consolas,"D2Coding",monospace;
- --text-caption:12px;--text-label:13px;--text-small:14px;--text-body:16px;--text-lead:18px;
- --text-title:22px;--text-display:32px;
- /* 간격 (4의 배수) */
- --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;--space-8:32px;--space-12:48px;
+ --text-caption:.75rem;--text-label:.8125rem;--text-small:.875rem;--text-body:1rem;--text-lead:1.125rem;
+ --text-title:1.375rem;--text-display:2rem;
+ /* 간격 (4px 단위). 글자·간격·모서리·높이는 rem이라 기기 화면 모드(html.device)에서 함께 커진다 */
+ --space-1:.25rem;--space-2:.5rem;--space-3:.75rem;--space-4:1rem;--space-5:1.25rem;--space-6:1.5rem;--space-8:2rem;--space-12:3rem;
  /* 모서리 */
- --radius-sm:4px;--radius-md:8px;--radius-lg:12px;--radius-pill:999px;
+ --radius-sm:.25rem;--radius-md:.5rem;--radius-lg:.75rem;--radius-pill:999px;
  /* 크기 */
- --page-max:1180px;--form-max:560px;--dialog-sm:440px;--dialog-md:600px;--control-h:48px;--logo-h:36px;--icon-sm:14px;--icon-md:20px;
+ --page-max:1180px;--form-max:560px;--dialog-sm:440px;--dialog-md:600px;
+ --control-h:3rem;--control-lg:3.5rem;--logo-h:2.25rem;--icon-sm:.875rem;--icon-md:1.25rem;--icon-lg:1.75rem;
+ /* 기기 화면 모드(출결 키오스크): 세로 카드 폭과, 그 폭에 맞춘 기준 글자 크기(360px 폭일 때 16px) */
+ --device-w:min(90vw,calc(90vh * .68),640px);--device-font:calc(16px * var(--device-w) / 360px);
 }
-@media(max-width:700px){:root{--text-display:28px;--logo-h:28px}}
+@media(max-width:700px){:root{--text-display:1.75rem;--logo-h:1.75rem}}
 
 /* 기본 */
 *{box-sizing:border-box}
@@ -81,7 +84,7 @@ input[aria-invalid=true]{border-color:var(--danger-ink)}
 .secondary:hover,.primary:not(:disabled):hover{filter:brightness(.95)}
 .ghost{background:none;border:1px solid var(--brand-border);border-radius:var(--radius-md);padding:var(--space-1) var(--space-3);color:var(--brand-deep);font-size:var(--text-small);font-weight:600}
 .ghost:hover{border-color:var(--brand-deep)}
-.help-btn{width:24px;height:24px;border-radius:var(--radius-pill);border:1px solid var(--brand-border);background:var(--surface);color:var(--brand-deep);font-weight:700;font-size:var(--text-label);line-height:1;padding:0}
+.help-btn{width:var(--space-6);height:var(--space-6);border-radius:var(--radius-pill);border:1px solid var(--brand-border);background:var(--surface);color:var(--brand-deep);font-weight:700;font-size:var(--text-label);line-height:1;padding:0}
 .help-btn:hover{border-color:var(--brand-deep)}
 .wide{width:100%;margin-top:var(--space-3)}
 .actions{display:flex;gap:var(--space-3);flex-wrap:wrap;margin:var(--space-4) 0}
@@ -96,6 +99,12 @@ input[aria-invalid=true]{border-color:var(--danger-ink)}
 .kind svg{width:13px;height:13px}
 .kind.button{background:var(--info-soft);color:var(--info-ink)}
 .kind.auto{background:var(--warning-soft);color:var(--warning-ink)}
+
+/* 기기 화면 모드: <html class="device">. rem 토큰 전체가 카드 폭에 맞춰 커진다 */
+html.device{font-size:var(--device-font)}
+html.device body{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:var(--space-6)}
+/* 선 아이콘(stroke) */
+svg.line{width:100%;height:100%;display:block;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 
 /* 대화상자 */
 dialog.card{width:calc(100% - var(--space-8));padding:var(--space-6)}
