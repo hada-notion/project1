@@ -1,13 +1,14 @@
 /* 하다 학원관리 공용 UI 스타일 (docs/DESIGN.md)
  * 값(토큰)은 assets/hada-tokens.css에만 있다. 각 화면 CSS는 var(--토큰)만 쓴다.
  * 이 파일을 쓰는 화면은 docs/DESIGN.md "적용 현황" 표를 본다. */
-@import url("hada-tokens.css?v=141dbaf8");
+@import url("hada-tokens.css?v=273e823a");
 
 /* 기본 */
 *{box-sizing:border-box}
 /* 1부 14장: 스크롤바 유무로 가운데 정렬이 밀리지 않게 */
 html{overflow-y:scroll;scrollbar-gutter:stable}
-body{margin:0;background:var(--canvas);color:var(--text-ink);font:var(--text-body)/1.6 var(--font-sans);word-break:keep-all}
+/* 줄바꿈: 한국어는 단어(띄어쓰기) 단위로, 칸보다 긴 낱말(주소·영문)은 칸 안에서 끊는다(docs/DESIGN.md 2-3 "줄바꿈") */
+body{margin:0;background:var(--canvas);color:var(--text-ink);font:var(--text-body)/1.6 var(--font-sans);word-break:keep-all;overflow-wrap:break-word}
 button,input,select{font:inherit}button{cursor:pointer}button:disabled{cursor:not-allowed}
 a{color:var(--brand-deep)}
 [hidden]{display:none!important}
@@ -53,8 +54,24 @@ label{display:block;font-weight:600;margin:var(--space-6) 0 var(--space-2)}
 input,select{width:100%;height:var(--control-h);border:1px solid var(--control-border);border-radius:var(--radius-md);background:var(--surface);color:var(--text-ink);padding:var(--space-3) var(--space-4);min-width:0}
 input[aria-invalid=true]{border-color:var(--danger-ink)}
 /* 선택 상자: 브라우저 기본 화살표(상자 끝에 붙음) 대신 입력 칸 여백 안에 Feather chevron-down(20×20).
-   위치는 날짜 칸 달력 아이콘과 세로 한 줄이 되도록 맞췄다(중심이 오른쪽 끝에서 약 27px). */
-select{appearance:none;-webkit-appearance:none;padding-right:var(--space-12);text-overflow:ellipsis;background-image:var(--icon-chevron-down);background-position:right calc(var(--space-4) + .5px) center;background-size:var(--icon-md) var(--icon-md);background-repeat:no-repeat}
+   날짜 칸도 같은 자리·크기의 Feather calendar를 쓰므로 두 아이콘이 세로 한 줄이 된다(오른쪽 16px, 20×20). */
+select{appearance:none;-webkit-appearance:none;padding-right:var(--space-12);text-overflow:ellipsis;background-image:var(--icon-chevron-down);background-position:right var(--space-4) center;background-size:var(--icon-md) var(--icon-md);background-repeat:no-repeat}
+/* 날짜 칸: 브라우저·기기마다 다른 기본 모양(데스크탑 달력 아이콘, 휴대폰 아래 화살표·가운데 정렬) 대신 선택 상자와 같은
+   여백·글자 위치와 Feather calendar. 기본 달력 버튼은 투명하게 아이콘 자리에 겹쳐 눌러도 달력이 열린다 */
+input[type=date]{appearance:none;-webkit-appearance:none;position:relative;text-align:left;padding-right:var(--space-12);background-image:var(--icon-calendar);background-repeat:no-repeat;background-position:right var(--space-4) center;background-size:var(--icon-md) var(--icon-md)}
+input[type=date]::-webkit-date-and-time-value{text-align:left;margin:0}
+input[type=date]::-webkit-calendar-picker-indicator{position:absolute;top:0;right:0;width:var(--space-12);height:100%;margin:0;padding:0;opacity:0;cursor:pointer}
+/* 검색 칸의 브라우저 기본 지우기(×) 아이콘은 쓰지 않는다(아이콘은 Feather만) */
+input[type=search]::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none;display:none}
+/* 접고 펴는 제목(details): 브라우저 기본 ▶ 대신 Feather chevron-right, 펼치면 아래로 */
+summary{display:flex;align-items:center;gap:var(--space-2);list-style:none;cursor:pointer}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"";flex-shrink:0;width:var(--icon-sm);height:var(--icon-sm);background:currentColor;-webkit-mask:var(--icon-chevron-right) center/contain no-repeat;mask:var(--icon-chevron-right) center/contain no-repeat;transition:transform .15s}
+details[open]>summary::before{transform:rotate(90deg)}
+/* 새 탭으로 여는 링크·버튼 뒤의 Feather arrow-up-right(글자색을 따른다). "↗" 글자 대신 쓴다 */
+.icon-ext::after{content:"";display:inline-block;flex-shrink:0;width:var(--icon-sm);height:var(--icon-sm);margin-left:var(--space-1);vertical-align:-2px;background:currentColor;-webkit-mask:var(--icon-arrow-up-right) center/contain no-repeat;mask:var(--icon-arrow-up-right) center/contain no-repeat}
+/* 문장 안에 넣는 작은 Feather 아이콘 */
+svg.line.inline-icon{display:inline-block;width:var(--icon-sm);height:var(--icon-sm);vertical-align:-2px}
 select:disabled{color:var(--text-subtle);background-color:var(--brand-tint)}
 /* 좁은 폼: 넓은 카드 안에서 가운데 */
 .narrow{max-width:var(--form-max);margin-left:auto;margin-right:auto}
@@ -95,7 +112,7 @@ html:not(.device) .primary.loading:not(:disabled)::before{border-color:var(--sur
 
 /* 종류 배지 (버튼 / 자동화) */
 .kind{border-radius:var(--radius-sm);padding:0 var(--space-1);font-weight:700;display:inline-flex;align-items:center;gap:2px}
-.kind svg{width:13px;height:13px}
+.kind svg{width:13px;height:13px;flex-shrink:0}
 .kind.button{background:var(--info-soft);color:var(--info-ink)}
 .kind.auto{background:var(--warning-soft);color:var(--warning-ink)}
 
@@ -156,9 +173,9 @@ dd{margin:0;font-weight:600}
  .nav-ext svg.nav-icon{width:var(--icon-md);height:var(--icon-md)}
  .wordmark span{display:block;margin:0}
  header{margin-top:var(--space-6)}
- .card{padding:var(--space-6)}
+ .card{padding:var(--space-5)}
  .notice{padding:var(--space-4)}
- .actions button{flex:1}
+ .actions{flex-direction:column}.actions button,.actions .primary{width:100%;flex:none}
  .foot{margin-top:var(--space-5)}
 }
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}.loading::before{animation:none}::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none!important}}

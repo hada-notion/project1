@@ -6,7 +6,7 @@
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.supabase.co; base-uri 'none'; form-action 'none'">
 <title>관리자 설정 | 하다 학원관리</title>
-<link rel="stylesheet" href="assets/hada-ui.css?v=5a0a9128">
+<link rel="stylesheet" href="assets/hada-ui.css?v=3d786192">
 <style>
 /* 관리자 설정 화면 전용. 값은 assets/hada-ui.css 토큰만 쓴다(docs/DESIGN.md). */
 .centered #panel-title,.centered #panel-description,.centered #form-error{max-width:var(--form-max);margin-left:auto;margin-right:auto}
@@ -71,21 +71,22 @@
 .trigger-label{font-weight:700;color:var(--text-subtle);margin-right:var(--space-1)}
 .trigger-label:not(:first-child){margin-left:var(--space-1)}
 .trig{display:inline-flex;align-items:center;gap:var(--space-1);padding:0 var(--space-2);border:1px solid var(--divider);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-ink);font-weight:600}
-.box-icon svg{display:block;width:var(--icon-sm);height:var(--icon-sm)}
+.box-icon svg.line{display:block;width:var(--icon-sm);height:var(--icon-sm)}
 .trig.box.on .box-icon{color:var(--info)}
 .trig.box .box-icon{color:var(--text-subtle)}
-.box-icon .tick{stroke:var(--surface)}
 .trigger-state{font-weight:700;color:var(--info-ink);margin-left:var(--space-1)}
-.trig-glyph{color:var(--text-subtle);font-weight:700}
+.trig-glyph{display:inline-flex;color:var(--text-subtle)}
+.trig-glyph svg.line{width:var(--icon-sm);height:var(--icon-sm)}
 .meta{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-2);align-items:center;margin:var(--space-1) 0 0 var(--space-8);font-size:var(--text-caption)}
 .hint.bad{color:var(--danger-ink);font-weight:600}
 .hint.good{color:var(--success-ink)}
 .hint.none{color:var(--text-subtle)}
 /* 새 웹훅 키 막대: 체크리스트를 내려가도 위에 붙어 있어 URL과 키를 번갈아 복사할 수 있다 */
 .key-bar{position:sticky;top:var(--space-2);z-index:5;display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;padding:var(--space-3) var(--space-4);margin:0 0 var(--space-4);background:var(--surface);border:1px solid var(--brand-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-md)}
-.key-bar-label{font-weight:700;font-size:var(--text-small)}
+.key-bar-label{font-weight:700;font-size:var(--text-small);white-space:nowrap}
 .key-bar-value{flex:1;min-width:0;overflow-wrap:anywhere;font-size:var(--text-small)}
 .key-bar .primary{min-height:var(--hit-area)}
+#key-bar-copy{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-2)}
 .copies{display:flex;flex-wrap:nowrap;gap:var(--space-2);margin:var(--space-2) 0 0 var(--space-8)}
 .copy-btn{display:inline-flex;align-items:center;gap:var(--space-1);font-size:var(--text-caption);padding:2px var(--space-2)}
 .copy-icon{display:inline-flex;width:var(--icon-sm);height:var(--icon-sm)}
@@ -94,7 +95,8 @@
 .links-row{display:flex;justify-content:flex-end;align-items:center;gap:var(--space-3);margin:var(--space-3) 0;font-size:var(--text-label)}
 @media(max-width:1100px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:860px){.guide-grid,.dash-grid{grid-template-columns:minmax(0,1fr)}}
-@media(max-width:700px){.topright .badge{display:none}.progress-head{flex-wrap:wrap}.cards{grid-template-columns:minmax(0,1fr)}}
+/* 휴대폰: 키 막대는 붙어 다니지 않고(화면을 가리지 않게) 이름·버튼 한 줄, 키 값은 아래 한 줄 전체. 아래쪽 버튼은 가로 꽉 */
+@media(max-width:700px){.topright .badge{display:none}.progress-head{flex-wrap:wrap}.cards{grid-template-columns:minmax(0,1fr)}.key-bar{position:static}.key-bar-label{flex-basis:100%}.key-bar-value{order:2;flex-basis:100%}#key-bar-show,#key-bar-copy{order:3;flex:1}.dash-foot .secondary{width:100%}}
 </style>
 </head>
 <body>
@@ -149,7 +151,7 @@
 <ol class="flow"><li>카드의 <strong>DB 열기</strong>로 DB를 열고 오른쪽 위 <strong>번개 모양(자동화)</strong> 아이콘을 누릅니다.</li><li>목록에서 해당 자동화(예: 링크 비활성화)를 엽니다. 체크됨/체크 해제됨처럼 조건이 다른 자동화는 각각 따로 바꿉니다.</li><li>버튼과 같은 방법으로 <strong>웹훅 보내기 → 값</strong> 칸을 새 키로 바꾸고 저장합니다.</li><li>이 화면에서 체크합니다.</li></ol>
 </div>
 <figure class="mock" aria-label="웹훅 보내기 편집 화면 예시">
-<div class="mock-head">링크 재발급 <span>← 버튼·자동화 이름</span></div>
+<div class="mock-head">링크 재발급 <span><svg class="line inline-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg> 버튼·자동화 이름</span></div>
 <div class="mock-label">작업</div><div class="mock-box">{ } 웹훅 보내기</div>
 <div class="mock-label">URL <span>(그대로 둡니다)</span></div><div class="mock-field">https://…supabase.co/functions/v1/…</div>
 <div class="mock-row"><div><div class="mock-label">키 <span>(그대로)</span></div><div class="mock-field">x-admin-key</div></div><div><div class="mock-label">값</div><div class="mock-field hl">새 웹훅 키 붙여넣기</div></div></div>
@@ -180,6 +182,6 @@
 <noscript><p class="notice">관리자 설정을 사용하려면 JavaScript가 필요합니다.</p></noscript>
 </div>
 <script src="assets/hada-shortcuts.js?v=956b3656"></script>
-<script src="admin_auth.js?v=2529a461"></script><script src="admin_settings.js?v=2ed63be1"></script>
+<script src="admin_auth.js?v=2529a461"></script><script src="admin_settings.js?v=b57dc1b8"></script>
 </body>
 </html>
