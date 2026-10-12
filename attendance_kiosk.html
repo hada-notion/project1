@@ -28,6 +28,8 @@
 .confirm-row .primary,.confirm-row .secondary{width:100%;height:var(--control-lg);font-size:var(--text-body);font-weight:700}
 /* 키보드로 고른 버튼: 바깥 테두리(키보드를 쓴 뒤에만) */
 .confirm-row .chosen,.pick .chosen{outline:3px solid var(--brand-deep);outline-offset:3px}
+/* 학생 목록은 길면 스크롤되는 칸이라 바깥 테두리가 잘린다. 학생 버튼은 테두리를 안쪽(버튼 테두리 위)에 그린다 */
+.pick .candidate-btn.chosen{outline-offset:-3px}
 /* 처리 결과: 카드 레이아웃을 흔들지 않도록 모달로 띄운다. 성공·이미 처리는 잠시 뒤 자동으로 닫힌다 */
 dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - var(--space-8));padding:var(--space-6) var(--space-5);text-align:center}
 .result-icon{width:calc(var(--icon-lg) * 1.5);height:calc(var(--icon-lg) * 1.5);margin:0 auto var(--space-3);padding:var(--space-2);border-radius:var(--radius-pill)}
