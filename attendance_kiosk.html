@@ -22,10 +22,12 @@
 .display.placeholder{color:var(--text-subtle);font-weight:400;font-size:var(--text-body);letter-spacing:0}
 .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-3);margin-bottom:var(--space-4)}
 .key{height:var(--control-lg);border-radius:var(--radius-md);border:1px solid var(--brand-border);background:var(--surface);font-size:var(--text-lead);font-weight:600;color:var(--text-ink);display:flex;align-items:center;justify-content:center;transition:background .1s ease}
-.key:active{background:var(--brand-soft)}
+.key:active,.key.pressed{background:var(--brand-soft)}
 .key.func{color:var(--text-muted);font-size:var(--text-small);font-weight:500}
 .confirm-row{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)}
 .confirm-row .primary,.confirm-row .secondary{width:100%;height:var(--control-lg);font-size:var(--text-body);font-weight:700}
+/* 키보드로 고른 버튼: 바깥 테두리(키보드를 쓴 뒤에만) */
+.confirm-row .chosen{outline:3px solid var(--brand-deep);outline-offset:3px}
 /* 처리 결과: 카드 레이아웃을 흔들지 않도록 모달로 띄운다. 성공·이미 처리는 잠시 뒤 자동으로 닫힌다 */
 dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - var(--space-8));padding:var(--space-6) var(--space-5);text-align:center}
 .result-icon{width:calc(var(--icon-lg) * 1.5);height:calc(var(--icon-lg) * 1.5);margin:0 auto var(--space-3);padding:var(--space-2);border-radius:var(--radius-pill)}
@@ -220,6 +222,7 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
   }
 
   function updateDisplay() {
+    if (digits.length < 9 && choice) setChoice(null);
     if (digits.length === 0) {
       display.textContent = "전화번호 입력";
       display.classList.add("placeholder");
@@ -252,10 +255,19 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
   }
   document.getElementById("resultClose").addEventListener("click", clearResult);
 
-  document.getElementById("keypad").addEventListener("click", (e) => {
-    const btn = e.target.closest(".key");
-    if (!btn) return;
-    const val = btn.dataset.val;
+  // 키보드로 등원·하원 고르기: 키보드를 한 번이라도 쓰면(kbUsed) 고른 버튼에 테두리를 그린다.
+  // 휴대폰 번호 11자리가 채워지면 등원이 자동으로 골라지고, ←/→로 바꾸고 Enter로 처리한다.
+  // 9~10자리 번호는 Enter를 처음 누르면 등원이 골라지고 한 번 더 누르면 처리한다.
+  let kbUsed = false;
+  let choice = null;
+  function renderChoice() {
+    checkinBtn.classList.toggle("chosen", kbUsed && choice === "checkin");
+    checkoutBtn.classList.toggle("chosen", kbUsed && choice === "checkout");
+  }
+  function setChoice(next) { choice = next; renderChoice(); }
+
+  function pressKey(val) {
+    const before = digits;
     if (val === "back") {
       digits = digits.slice(0, -1);
     } else if (val === "clear") {
@@ -263,15 +275,58 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
     } else if (digits.length < 11) {
       digits += val;
     }
+    // 번호가 바뀌면 고른 것을 다시 정한다: 11자리면 등원(이미 고른 게 있으면 유지), 아니면 해제.
+    if (digits !== before) setChoice(digits.length === 11 && kbUsed ? (choice || "checkin") : null);
     updateDisplay();
     clearResult();
+  }
+
+  document.getElementById("keypad").addEventListener("click", (e) => {
+    const btn = e.target.closest(".key");
+    if (btn) pressKey(btn.dataset.val);
+  });
+
+  // 키보드 입력(PC·노트북 키오스크): 숫자(숫자패드 포함), Backspace = 한 글자 지우기, Delete = 전체 지우기,
+  // ←/→ = 등원·하원 고르기, Enter = 고른 쪽으로 처리(위 renderChoice 주석 참고).
+  document.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (document.getElementById("app-screen").hidden || mainView.hidden) return;
+    if (e.target instanceof HTMLInputElement) return;
+    // 결과 모달이 떠 있으면 Enter·Esc는 모달 닫기만 한다(처리가 두 번 되지 않게).
+    if (resultEl.open && (e.key === "Enter" || e.key === "Escape")) { e.preventDefault(); clearResult(); return; }
+    // 마우스·터치로 눌렀던 화면 버튼에 남은 포커스 테두리가 키보드 선택 표시와 헷갈리지 않게 푼다.
+    if (document.activeElement && document.activeElement.closest && document.activeElement.closest("#mainView")) document.activeElement.blur();
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault();
+      kbUsed = true;
+      if (digits.length >= 9) setChoice(e.key === "ArrowLeft" ? "checkin" : "checkout");
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      kbUsed = true;
+      if (digits.length < 9) { showResult("error", "전화번호를 정확히 입력해주세요."); return; }
+      if (!choice) { setChoice("checkin"); return; }
+      submitAttendance(choice);
+      return;
+    }
+    // 숫자패드는 NumLock이 꺼져 있으면 e.key가 숫자가 아니므로 키 위치(e.code)로도 받는다.
+    const pad = /^Numpad([0-9])$/.exec(e.code);
+    const val = /^[0-9]$/.test(e.key) ? e.key : pad ? pad[1] : e.key === "Backspace" ? "back" : e.key === "Delete" ? "clear" : null;
+    if (!val) return;
+    e.preventDefault();
+    kbUsed = true;
+    pressKey(val);
+    // 누른 키를 화면 숫자판에도 잠깐 표시한다.
+    const btn = document.querySelector('.key[data-val="' + val + '"]');
+    if (btn) { btn.classList.add("pressed"); setTimeout(() => btn.classList.remove("pressed"), 120); }
   });
 
   async function runCheckin(type, registrationId) {
     const requestPhone = digits;
     const label = type === "checkin" ? "등원" : "하원";
     const activeBtn = type === "checkin" ? checkinBtn : checkoutBtn;
-    const originalText = activeBtn.textContent;
+    const originalText = activeBtn.innerHTML;
     checkinBtn.disabled = true;
     checkoutBtn.disabled = true;
     activeBtn.textContent = "확인 중…";
@@ -324,7 +379,7 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
       } else if (res.ok && data.needsSelection) {
         checkinBtn.disabled = false;
         checkoutBtn.disabled = false;
-        activeBtn.textContent = originalText;
+        activeBtn.innerHTML = originalText;
         activeBtn.classList.remove("loading");
         digits = requestPhone; updateDisplay(); showCandidates(data.candidates, type);
         return;
@@ -346,7 +401,7 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
     } finally {
       checkinBtn.disabled = false;
       checkoutBtn.disabled = false;
-      activeBtn.textContent = originalText;
+      activeBtn.innerHTML = originalText;
       activeBtn.classList.remove("loading");
       if (candidatesView.hidden) { digits = ""; updateDisplay(); }
     }
