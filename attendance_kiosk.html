@@ -8,11 +8,12 @@
 <style>
 /* 출결 키오스크 전용. 값은 assets/hada-ui.css 토큰만 쓴다(docs/DESIGN.md).
    html.device 모드라 카드 폭에 맞춰 모든 크기가 함께 커진다. */
-.kiosk{width:var(--device-w);aspect-ratio:.6;display:flex;flex-direction:column;justify-content:center;overflow:hidden;background:var(--surface);border:1px solid var(--brand-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);padding:var(--space-6) var(--space-5)}
-.kiosk-head{position:relative;text-align:center;margin-bottom:var(--space-4);padding:0 var(--control-h)}
-.kiosk-head h1{font-size:var(--text-title);line-height:1.3;letter-spacing:0;margin:0 0 var(--space-1)}
-.kiosk-head p{font-size:var(--text-small);color:var(--text-muted);margin:0}
-.icon-btn{position:absolute;top:0;right:0;width:var(--control-h);height:var(--control-h);padding:var(--space-3);border:0;background:none;color:var(--text-muted);border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center}
+.kiosk{position:relative;width:var(--device-w);aspect-ratio:.6;display:flex;flex-direction:column;justify-content:center;overflow:hidden;background:var(--surface);border:1px solid var(--brand-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);padding:var(--space-8) var(--space-5)}
+.kiosk-head{text-align:center;margin-bottom:var(--space-5)}
+.kiosk-icon{width:var(--icon-lg);height:var(--icon-lg);margin:0 auto var(--space-1);color:var(--brand-deep)}
+.kiosk-head h1{font-size:var(--text-title);line-height:1.3;letter-spacing:0;margin:var(--space-1) 0 var(--space-1)}
+.kiosk-head p{font-size:var(--text-label);color:var(--text-muted);margin:0}
+.icon-btn{position:absolute;top:var(--space-3);right:var(--space-3);width:var(--control-h);height:var(--control-h);padding:var(--space-3);border:0;background:none;color:var(--text-muted);border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center}
 .icon-btn:active{background:var(--brand-soft)}
 .display{background:var(--brand-tint);border:1px solid var(--brand-border);border-radius:var(--radius-md);height:var(--control-lg);display:flex;align-items:center;justify-content:center;font-size:var(--text-title);font-weight:600;letter-spacing:1px;margin-bottom:var(--space-4)}
 .display.placeholder{color:var(--text-subtle);font-weight:400;font-size:var(--text-body);letter-spacing:0}
@@ -22,10 +23,16 @@
 .key.func{color:var(--text-muted);font-size:var(--text-small);font-weight:500}
 .confirm-row{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)}
 .confirm-row .primary,.confirm-row .secondary{width:100%;height:var(--control-lg);font-size:var(--text-body);font-weight:700}
-.result{margin-top:var(--space-3);min-height:var(--control-lg);padding:var(--space-2) var(--space-3);font-size:var(--text-small);text-align:center;border-radius:var(--radius-md);line-height:1.5;display:flex;align-items:center;justify-content:center}
-.result.success{background:var(--success-soft);color:var(--success-ink);font-weight:600}
-.result.error{background:var(--danger-soft);color:var(--danger-ink);font-weight:600}
-.result.info{background:var(--info-soft);color:var(--info-ink);font-weight:600}
+/* 처리 결과: 카드 레이아웃을 흔들지 않도록 모달로 띄운다. 성공·이미 처리는 잠시 뒤 자동으로 닫힌다 */
+dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - var(--space-8));padding:var(--space-6) var(--space-5);text-align:center}
+.result-icon{width:calc(var(--icon-lg) * 1.5);height:calc(var(--icon-lg) * 1.5);margin:0 auto var(--space-3);padding:var(--space-2);border-radius:var(--radius-pill)}
+.result-text{font-size:var(--text-body);font-weight:600;line-height:1.6;margin:0 0 var(--space-5)}
+.result-dialog.success .result-icon{background:var(--success-soft);color:var(--success-ink)}
+.result-dialog.info .result-icon{background:var(--info-soft);color:var(--info-ink)}
+.result-dialog.error .result-icon{background:var(--danger-soft);color:var(--danger-ink)}
+.result-dialog.success .result-text{color:var(--success-ink)}
+.result-dialog.info .result-text{color:var(--info-ink)}
+.result-dialog.error .result-text{color:var(--danger-ink)}
 .pick{text-align:center}
 .pick-icon{width:var(--icon-lg);height:var(--icon-lg);margin:0 auto var(--space-2);color:var(--brand-deep)}
 .pick h2{font-size:var(--text-body);margin:var(--space-1) 0 var(--space-2)}
@@ -35,7 +42,7 @@
 .candidate-btn:active{background:var(--brand-soft)}
 .candidate-btn .sub{display:block;font-size:var(--text-caption);font-weight:400;color:var(--text-muted);margin-top:2px}
 /* 학원 이름: 카드 아래에 작게. 값은 서버가 Notion 최상위 페이지 제목에서 가져온다 */
-.academy-name{margin:var(--space-4) 0 0;text-align:center;font-size:var(--text-caption);color:var(--text-subtle);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.academy-name{position:absolute;left:var(--space-5);right:var(--space-5);bottom:var(--space-2);margin:0;text-align:center;font-size:var(--text-caption);color:var(--text-subtle);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .text-btn{width:100%;height:var(--control-h);margin-top:var(--space-1);border:0;background:none;color:var(--text-muted);font-size:var(--text-small)}
 /* 로그인 */
 .login-card{width:var(--device-w);text-align:center}
@@ -55,8 +62,9 @@
     <div class="login-error" id="login-error"></div>
   </div>
   <div class="kiosk" id="app-screen" hidden>
+    <button class="icon-btn" id="logoutBtn" aria-label="로그아웃" title="로그아웃"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></button>
     <div class="kiosk-head">
-      <button class="icon-btn" id="logoutBtn" aria-label="로그아웃" title="로그아웃"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></button>
+      <div class="kiosk-icon"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg></div>
       <h1>출결 체크</h1>
       <p>보호자 또는 학생 전화번호를 입력해주세요</p>
     </div>
@@ -81,7 +89,6 @@
         <button class="primary" id="checkinBtn">등원</button>
         <button class="secondary" id="checkoutBtn">하원</button>
       </div>
-      <div class="result" id="result"></div>
     </div>
 
     <div id="candidatesView" class="pick" hidden>
@@ -93,6 +100,11 @@
     </div>
     <p class="academy-name" id="academyName" hidden></p>
   </div>
+  <dialog class="card result-dialog" id="result" aria-live="assertive">
+    <div class="result-icon" id="resultIcon"></div>
+    <p class="result-text" id="resultText"></p>
+    <button class="primary" id="resultClose" type="button">확인</button>
+  </dialog>
 <script src="admin_auth.js"></script>
 <script>
   // 등원/하원 데이터는 더 이상 외부 웹훅(Make.com)으로 보내지 않습니다.
@@ -204,15 +216,27 @@
     }
   }
 
+  // 처리 결과는 모달로 보여 준다. 성공·이미 처리는 3초 뒤 자동으로 닫고, 오류는 확인을 눌러 닫는다.
+  const RESULT_ICONS = {
+    success: '<polyline points="20 6 9 17 4 12"></polyline>',
+    info: '<circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="8"></line><line x1="12" y1="11" x2="12" y2="16"></line>',
+    error: '<circle cx="12" cy="12" r="9"></circle><line x1="12" y1="7" x2="12" y2="13"></line><line x1="12" y1="16.5" x2="12" y2="16.5"></line>',
+  };
+  let resultTimer = null;
   function clearResult() {
-    resultEl.className = "result";
-    resultEl.textContent = "";
+    clearTimeout(resultTimer);
+    if (resultEl.open) resultEl.close();
   }
 
   function showResult(type, msg) {
-    resultEl.className = "result " + type;
-    resultEl.textContent = msg;
+    clearTimeout(resultTimer);
+    resultEl.className = "card result-dialog " + type;
+    document.getElementById("resultIcon").innerHTML = '<svg class="line" viewBox="0 0 24 24" aria-hidden="true">' + RESULT_ICONS[type] + '</svg>';
+    document.getElementById("resultText").textContent = msg;
+    if (!resultEl.open) resultEl.showModal();
+    if (type !== "error") resultTimer = setTimeout(clearResult, 3000);
   }
+  document.getElementById("resultClose").addEventListener("click", clearResult);
 
   document.getElementById("keypad").addEventListener("click", (e) => {
     const btn = e.target.closest(".key");
@@ -334,6 +358,7 @@
   function getAdminKey() { return localStorage.getItem(ADMIN_KEY_STORAGE) || ""; }
   function showLoginScreen(errorMsg) {
     clearKioskDirectory();
+    clearResult();
     document.getElementById("login-screen").hidden = false;
     document.getElementById("app-screen").hidden = true;
     document.getElementById("login-error").textContent = errorMsg || "";

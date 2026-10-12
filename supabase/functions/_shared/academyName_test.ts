@@ -12,14 +12,25 @@ const tree: Record<string, any> = {
 }
 const get = (kind: string, id: string) => Promise.resolve(tree[`${kind}/${id}`] ?? null)
 Deno.test("academy name is the title of the top-level page above the registration DB", async () => {
-  assert(await findAcademyName("reg", get) === "하다 학원관리 v2.0")
+  assert((await findAcademyName("reg", get)).name === "하다 학원관리 v2.0")
 })
-Deno.test("academy name is empty when a parent is not shared, instead of a wrong middle page", async () => {
+Deno.test("academy name is the connected root when its parent page is not shared (teamspace page above it)", async () => {
+  const above = (kind: string, id: string) => Promise.resolve(
+    id === "root" ? { ...tree["pages/root"], parent: { type: "page_id", page_id: "teamspace-home" } } : tree[`${kind}/${id}`] ?? null)
+  const r = await findAcademyName("reg", above)
+  assert(r.name === "하다 학원관리 v2.0" && !r.stoppedAt, JSON.stringify(r))
+})
+Deno.test("academy name also starts from a data source ID", async () => {
+  const withDs = (kind: string, id: string) => Promise.resolve(kind === "data_sources" && id === "regds" ? { parent: { type: "database_id", database_id: "reg" } } : tree[`${kind}/${id}`] ?? null)
+  assert((await findAcademyName("regds", withDs)).name === "하다 학원관리 v2.0")
+})
+Deno.test("academy name is empty when a parent is not shared, and reports where it stopped", async () => {
   const partial = (kind: string, id: string) => Promise.resolve(id === "root" ? null : tree[`${kind}/${id}`] ?? null)
-  assert(await findAcademyName("reg", partial) === "")
+  const r = await findAcademyName("reg", partial)
+  assert(r.name === "" && r.stoppedAt === "pages:root:not-accessible", JSON.stringify(r))
 })
 Deno.test("academy name lookup stops on unexpected parents and loops", async () => {
-  const loop = (kind: string, id: string) => Promise.resolve(kind === "databases" ? { parent: { type: "page_id", page_id: "p" } } : { ...title("x"), parent: { type: "database_id", database_id: "d" } })
-  assert(await findAcademyName("reg", loop) === "")
-  assert(await findAcademyName("reg", () => Promise.resolve({ parent: { type: "unknown" } })) === "")
+  const loop = (kind: string) => Promise.resolve(kind === "databases" ? { parent: { type: "page_id", page_id: "p" } } : { ...title("x"), parent: { type: "database_id", database_id: "d" } })
+  assert((await findAcademyName("reg", loop)).name === "")
+  assert((await findAcademyName("reg", () => Promise.resolve({ parent: { type: "unknown" } }))).stoppedAt === "databases:reg:parent-unknown")
 })
