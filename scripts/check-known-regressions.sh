@@ -248,6 +248,21 @@ if grep -rq '선생님 한마때' supabase/functions; then
   fail=1
 fi
 
+# 학원별 연결 값(Supabase 주소·공개 키)은 hada_config.js 한 파일에만 둔다. 화면 파일에 다시 넣으면 업데이트 때
+# 화면 파일을 통째로 바꿀 수 없고 원본 값이 운영에 섞인다(v2.5.63).
+web_files=$(git ls-files '*.html' '*.js' '*.json' | grep -v '^supabase/' | grep -v '^tests/' | grep -v '^hada_config.js$')
+if grep -lE 'https://[a-z0-9]+.supabase.co|eyJhbGciOi' $web_files 2>/dev/null | grep -q .; then
+  echo "❌ 화면 파일에 Supabase 주소나 공개 키가 직접 들어 있습니다. hada_config.js에서 읽게 하세요:"
+  grep -lE 'https://[a-z0-9]+.supabase.co|eyJhbGciOi' $web_files
+  fail=1
+fi
+for page in student_report.html attendance_kiosk.html legal_documents.html school_search.html admin_settings.html; do
+  if ! grep -q '<script src="hada_config.js"></script>' "$page"; then
+    echo "❌ $page 가 hada_config.js를 불러오지 않습니다."
+    fail=1
+  fi
+done
+
 if [ "$fail" != 0 ]; then
   echo ""
   echo "회귀 가드 실패 -- 위 문제를 고친 뒤 다시 배포하세요."

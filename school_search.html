@@ -46,21 +46,22 @@
 </main>
 <p class="foot"><strong>비밀번호는 타인에게 전달하지 마세요.</strong> 공용 기기에서는 사용 후 창을 닫으세요.</p>
 </div>
-<script src="assets/hada-shortcuts.js?v=956b3656"></script><script src="admin_auth.js?v=2529a461"></script>
+<script src="assets/hada-shortcuts.js?v=956b3656"></script><script src="hada_config.js"></script><script src="admin_auth.js?v=ec2cac35"></script>
 <script>
 'use strict';
-const ENDPOINT='https://twczhsxybkcvjkdfdxvs.supabase.co/functions/v1/school-api';
+// 학원 연결 설정은 hada_config.js에서 읽는다(HadaAdminAuth.config). 잘못되면 호출 시 오류 문구로 알린다.
+const endpoint=()=>HadaAdminAuth.config().url+'/functions/v1/school-api';
 const $=id=>document.getElementById(id);let adminKey='',pages=[];
 // kind: info(평소 안내·진행 중) / success(연결 완료) / error(실패) — docs/DESIGN.md 알림 줄
 function status(text,kind='info'){const el=$('status');el.textContent=text;['info','success','error'].forEach(k=>el.classList.toggle(k,k===kind))}
-async function api(body){const r=await fetch(ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','x-admin-key':adminKey},body:JSON.stringify(body)});let data;try{data=await r.json()}catch{throw new Error('서버 응답을 읽지 못했습니다. 배포 상태를 확인하세요.')}if(!r.ok)throw new Error(data.error||'인증 또는 연결 실패');return data}
+async function api(body){const r=await fetch(endpoint(),{method:'POST',headers:{'Content-Type':'application/json','x-admin-key':adminKey},body:JSON.stringify(body)});let data;try{data=await r.json()}catch{throw new Error('서버 응답을 읽지 못했습니다. 배포 상태를 확인하세요.')}if(!r.ok)throw new Error(data.error||'인증 또는 연결 실패');return data}
 function busy(form,on){form.querySelectorAll('button').forEach(b=>{b.disabled=on;b.classList.toggle('loading',on)})}
 function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e}
 // 이름이 이미 종류로 끝나면(예시고등학교 · 고등학교) 종류를 다시 붙이지 않는다.
 function schoolTitle(s){return s.kind&&!String(s.name).endsWith(s.kind)?s.name+' · '+s.kind:s.name}
 // 로그인 후 화면: 학교 페이지 목록을 받아 Notion 링크로 넘어온 페이지를 고른다.
 async function openWorkspace(){const data=await api({action:'meta'});pages=data.schools;$('target').replaceChildren();pages.forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.name+(p.address?' · '+p.address:'');$('target').append(o)});if(!pages.length)throw new Error('먼저 Notion 학교 DB에 학교 페이지를 추가하세요.');const requested=new URLSearchParams(location.search).get('pageId');if(requested){const p=pages.find(p=>p.id.replaceAll('-','')===requested.replaceAll('-',''));if(!p)throw new Error('요청한 페이지가 학교 DB에 없습니다.');$('target').value=p.id}chooseTarget();$('login').hidden=true;$('workspace').hidden=false;$('logout').hidden=false;$('key').value='';status('학교명과 주소를 확인해 연결하세요.');$('region').focus()}
-$('loginForm').addEventListener('submit',async e=>{e.preventDefault();busy(e.target,true);status('관리자 확인 중…');adminKey=$('key').value;try{adminKey=await HadaAdminAuth.login(new URL(ENDPOINT).origin,adminKey);await openWorkspace();HadaAdminAuth.saveSession(adminKey)}catch(e){adminKey='';status(e.message,'error')}finally{busy(e.target,false)}});
+$('loginForm').addEventListener('submit',async e=>{e.preventDefault();busy(e.target,true);status('관리자 확인 중…');adminKey=$('key').value;try{adminKey=await HadaAdminAuth.login(HadaAdminAuth.config().url,adminKey);await openWorkspace();HadaAdminAuth.saveSession(adminKey)}catch(e){adminKey='';status(e.message,'error')}finally{busy(e.target,false)}});
 // 같은 탭에서 관리자 설정·법정 서류에 로그인해 두었으면 비밀번호를 다시 묻지 않는다(admin_auth.js). 만료됐으면 로그인 화면으로.
 (async()=>{const saved=HadaAdminAuth.savedSession();if(!saved)return;adminKey=saved;$('login').hidden=true;status('로그인 정보를 확인하는 중…');try{await openWorkspace()}catch(e){adminKey='';HadaAdminAuth.saveSession('');$('login').hidden=false;$('key').focus();status('다시 로그인해 주세요. ('+e.message+')','error')}})();
 function chooseTarget(){const p=pages.find(p=>p.id===$('target').value);$('query').value=p?.name||'';$('results').replaceChildren()}

@@ -153,7 +153,8 @@ dialog.settings-dialog{width:calc(var(--device-w) * .9);max-width:calc(100vw - v
     <p class="result-text" id="resultText"></p>
     <button class="primary" id="resultClose" type="button">확인</button>
   </dialog>
-<script src="admin_auth.js?v=2529a461"></script>
+<script src="hada_config.js"></script>
+<script src="admin_auth.js?v=ec2cac35"></script>
 <script>
   // 등원/하원 데이터는 더 이상 외부 웹훅(Make.com)으로 보내지 않습니다.
   // 로그인 때 저장해둔 관리자 키(x-admin-key)로 Supabase Edge Function "kiosk-checkin"을
@@ -514,8 +515,9 @@ dialog.settings-dialog{width:calc(var(--device-w) * .9);max-width:calc(100vw - v
   updateDisplay();
 
   // ============ 공용 로그인 (admin.html과 같은 localStorage 키를 사용해 한 번만 로그인하면 됩니다) ============
-  const SUPABASE_URL = "https://twczhsxybkcvjkdfdxvs.supabase.co";
-  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR3Y3poc3h5YmtjdmprZGZkeHZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyOTcwMDQsImV4cCI6MjEwMzg3MzAwNH0.t7Ltb_iSYqE4gHSoGSm-OlpiLjGqIcgrhzGJ-t56EDc";
+  // 학원 연결 설정은 hada_config.js에서 읽는다(HadaAdminAuth.config). 없거나 잘못되면 로그인 화면에 알린다.
+  let SUPABASE_URL = "", SUPABASE_ANON_KEY = "", CONFIG_ERROR = "";
+  try { ({ url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY } = HadaAdminAuth.config()); } catch (e) { CONFIG_ERROR = e.message; }
   const ADMIN_KEY_STORAGE = "admin_key";
   function getAdminKey() { return localStorage.getItem(ADMIN_KEY_STORAGE) || ""; }
   function showLoginScreen(errorMsg) {
@@ -659,6 +661,7 @@ dialog.settings-dialog{width:calc(var(--device-w) * .9);max-width:calc(100vw - v
     const btn = document.getElementById("login-btn");
     const errEl = document.getElementById("login-error");
     if (!key) { errEl.textContent = "비밀번호를 입력하세요."; return; }
+    if (CONFIG_ERROR) { errEl.textContent = CONFIG_ERROR; return; }
     btn.disabled = true;
     btn.textContent = "확인 중…";
     btn.classList.add("loading");
@@ -683,7 +686,9 @@ dialog.settings-dialog{width:calc(var(--device-w) * .9);max-width:calc(100vw - v
     if (e.key === "Enter") submitLogin();
   });
 
-  if (getAdminKey()) {
+  if (CONFIG_ERROR) {
+    showLoginScreen(CONFIG_ERROR);
+  } else if (getAdminKey()) {
     showAppScreen();
   } else {
     showLoginScreen();

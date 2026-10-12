@@ -4,8 +4,10 @@ let STUDENT = null
 let DATA_ERROR = null
 let REPORT_ACCESS_TOKEN = ""
 
-const SUPABASE_URL = "https://twczhsxybkcvjkdfdxvs.supabase.co"
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR3Y3poc3h5YmtjdmprZGZkeHZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyOTcwMDQsImV4cCI6MjEwMzg3MzAwNH0.t7Ltb_iSYqE4gHSoGSm-OlpiLjGqIcgrhzGJ-t56EDc"
+// 학원 연결 설정은 hada_config.js에서 읽는다(학원마다 다른 파일). 없거나 잘못되면 안내 문구를 보여준다.
+const REPORT_CONFIG = window.HADA_CONFIG || {}
+const SUPABASE_URL = /^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(REPORT_CONFIG.supabaseUrl || "") ? REPORT_CONFIG.supabaseUrl : ""
+const SUPABASE_ANON_KEY = typeof REPORT_CONFIG.supabaseAnonKey === "string" ? REPORT_CONFIG.supabaseAnonKey : ""
 
 // 반마다 서로 다른 색상 이모지를 안정적으로 배정한다 (같은 반 이름이면 항상 같은 색).
 // 실제 반 색상 데이터가 서버에서 내려오면 이 함수를 그 값으로 교체하면 된다.
@@ -487,6 +489,10 @@ async function loadReportFromServer() {
   REPORT_ACCESS_TOKEN = token || ""
   if (!token) {
     DATA_ERROR = "링크가 올바르지 않아요. 받으신 링크를 다시 확인해주세요"
+    return
+  }
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    DATA_ERROR = "학원 연결 설정이 필요해요. 학원에 문의해주세요"
     return
   }
   try {

@@ -5,11 +5,9 @@ Supabase 프로젝트 정보를 이번 학원의 값으로 한 번에 치환하�
 
 무엇을 바꾸는지 (자동 치환 대상):
   1) supabase/migrations/*.sql  — pg_cron이 호출하는 Edge Function URL
-  2) attendance_kiosk.html, legal_documents.html, student_report_part1.js,
-     school_search.html, admin_config.json
-     — 정적 호스팅이라 서버 환경변수를 못 쓰는 프런트엔드 상수 SUPABASE_URL/SUPABASE_ANON_KEY
-       (school_search.html은 school-api 엔드포인트 상수 ENDPOINT, admin_config.json은
-       관리자 설정 화면의 supabaseUrl)
+  2) hada_config.js — 학원별 연결 설정 파일 하나. 정적 호스팅이라 서버 환경변수를 못 쓰는
+     화면들(학부모 리포트·키오스크·법정 서류·학교 검색·관리자 설정)이 모두 이 파일의
+     supabaseUrl/supabaseAnonKey를 읽는다. 화면 파일에는 주소·키를 직접 넣지 않는다(v2.5.63).
   3) README.md — 운영 웹앱 주소 안내문
 
 무엇을 바꾸지 "않는지" (이 스크립트 범위 밖, 별도로 처리 필요):
@@ -42,11 +40,7 @@ TARGET_FILES_URL_KEY = [
     "supabase/migrations/20260924010000_backfill_assignment_deadlines_cron.sql",
     "supabase/migrations/20260926020000_status_watchdog_cron_15min.sql",
     "supabase/migrations/20261013030000_kiosk_today.sql",
-    "attendance_kiosk.html",
-    "legal_documents.html",
-    "student_report_part1.js",
-    "school_search.html",
-    "admin_config.json",
+    "hada_config.js",
 ]
 
 TARGET_FILES_PAGES_PATH = [
