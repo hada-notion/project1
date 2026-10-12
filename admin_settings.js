@@ -275,11 +275,13 @@ async function showProgress(){
  renderChecklist(); // after the panel is visible so the column count uses the real width
 }
 async function openWebhook(){await loadWebhook();if(webhook.rotating){await showProgress();return;}clearPasswords();panel('webhook-form','웹훅 키 교체','유출이 의심될 때 Notion 버튼·자동화를 멈추지 않고 새 키로 옮깁니다.');$('webhook-password').focus();}
-// Runs one server action at a time. The clicked button shows a spinner and a waiting label meanwhile.
+// Runs one server action at a time. The clicked button keeps its size and shows a spinner in place of its label
+// (hada-ui.css); the waiting text goes to the notice line and the previous notice comes back unless the task set a new one.
 async function task(fn,button,label='불러오는 중…'){
  if(busy)return;busy=true;error('');const buttons=[...document.querySelectorAll('button,input[type=checkbox]')];buttons.forEach(x=>x.disabled=true);
- const original=button&&button.textContent;if(button){button.classList.add('loading');button.textContent=label;button.setAttribute('aria-busy','true');}
- try{await fn();}catch(e){error(friendly(e));}finally{busy=false;buttons.forEach(x=>x.disabled=false);if(button){button.classList.remove('loading');button.removeAttribute('aria-busy');if(button.textContent===label)button.textContent=original;}}
+ const box=$('connection-status'),before=[box.textContent,box.className];
+ if(button){button.classList.add('loading');button.setAttribute('aria-busy','true');notice(label);}
+ try{await fn();}catch(e){error(friendly(e));}finally{busy=false;buttons.forEach(x=>x.disabled=false);if(button){button.classList.remove('loading');button.removeAttribute('aria-busy');if(box.textContent===label){box.textContent=before[0];box.className=before[1];}}}
 }
 function shortDate(iso){return new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(iso));}
 function date(iso){return new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(iso));}

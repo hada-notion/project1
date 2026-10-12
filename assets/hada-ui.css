@@ -81,9 +81,13 @@ select:disabled{color:var(--text-subtle);background-color:var(--brand-tint)}
 .actions{display:flex;gap:var(--space-3);flex-wrap:wrap;margin:var(--space-4) 0}
 .actions .primary{width:auto;flex:1}
 .primary.inline{width:auto}
-/* 처리 중: 누른 버튼에 회전 표시와 대기 문구 */
+/* 처리 중: 누른 버튼에 회전 표시. 관리 화면은 버튼 크기가 흔들리지 않게 글자를 숨기고 같은 자리 가운데에 회전 표시만
+   두며, 진행 문구는 화면 위 알림 줄에 쓴다. 기기 화면(키오스크)은 큰 버튼 안에 "확인 중…" 글자와 함께 보인다 */
 .loading{opacity:.85}
 .loading::before{content:"";display:inline-block;width:var(--icon-sm);height:var(--icon-sm);margin-right:var(--space-2);vertical-align:-2px;border:2px solid currentColor;border-right-color:transparent;border-radius:var(--radius-pill);animation:hada-spin .8s linear infinite}
+html:not(.device) .loading{position:relative;color:transparent!important}
+html:not(.device) .loading::before{position:absolute;inset:0;margin:auto;border-color:var(--brand-deep);border-right-color:transparent}
+html:not(.device) .primary.loading:not(:disabled)::before{border-color:var(--surface);border-right-color:transparent}
 @keyframes hada-spin{to{transform:rotate(360deg)}}
 
 /* 짧은 알림(토스트): 화면 아래 가운데에 2초. 복사처럼 결과를 바로 알려야 하는 동작에 쓴다 */
