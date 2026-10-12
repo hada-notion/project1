@@ -3,7 +3,7 @@
 // Run: node tests/design-lint.cjs   (no dependencies)
 const fs=require('fs');
 // Pages converted to the shared tokens. Add a page here when it moves to assets/hada-ui.css.
-const PAGES=['admin_settings.html','attendance_kiosk.html'];
+const PAGES=['admin_settings.html','attendance_kiosk.html','school_search.html'];
 const SHARED='assets/hada-ui.css';
 const errors=[];
 function cssOf(file){

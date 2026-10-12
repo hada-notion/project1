@@ -3,6 +3,10 @@
 버전별 변경 기록입니다. 최신 버전이 맨 위에 옵니다. 상세 실행 지침은 `docs/updates/vX.Y.md`에 있습니다.
 패치를 올릴 때마다 한 줄 이상 추가하고, 해당 버전의 지침 파일을 함께 만듭니다. (템플릿: `docs/updates/_TEMPLATE.md`)
 
+## v2.5.16 — 2026-10-13
+
+- 디자인 통일 2단계: 학교 검색 화면을 공용 디자인(상단 바·바로가기·처리 중 표시)으로 변경하고 어두운 모드 제거(검색·연결 로직 변경 없음). 키오스크는 로고를 빼고 카드 아래에 학원 이름을 작게 표시. 학원 이름은 `list-students` 키오스크 목록 응답의 `academyName`(Notion 최상위 페이지 제목, 함수 배포 필요). 바로가기 목록은 `assets/hada-shortcuts.js` 하나로 통합. **`school_search.html`의 `ENDPOINT`, 키오스크의 `SUPABASE_URL`·`SUPABASE_ANON_KEY`는 운영 값 유지.** 마이그레이션·Secrets 변경 없음. 지침: `docs/updates/v2.5.16.md`
+
 ## v2.5.15 — 2026-10-13
 
 - 웹 화면 디자인 통일 1단계. 공용 디자인 파일(`assets/hada-ui.css`: Notion 콘텐츠 디자인 기준과 같은 색 토큰·글자·간격·버튼), 규칙 문서(`docs/DESIGN.md`), 디자인 규칙 검사(`tests/design-lint.cjs`), HADA 로고 추가. 관리자 설정은 모든 화면 같은 폭·두 칸 대시보드·상단 로고·다른 화면 바로가기, 출결 키오스크는 브랜드 색·로고·처리 중 표시로 변경하고 어두운 모드 제거(출석 처리 로직 변경 없음). **키오스크 파일의 `SUPABASE_URL`·`SUPABASE_ANON_KEY`는 운영 값 유지.** 함수·마이그레이션·Secrets·Notion 변경 없음. 지침: `docs/updates/v2.5.15.md`

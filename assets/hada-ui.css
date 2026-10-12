@@ -34,7 +34,7 @@
 /* 기본 */
 *{box-sizing:border-box}
 body{margin:0;background:var(--brand-tint);color:var(--text-ink);font:var(--text-body)/1.6 var(--font-sans);word-break:keep-all}
-button,input{font:inherit}button{cursor:pointer}button:disabled{cursor:not-allowed}
+button,input,select{font:inherit}button{cursor:pointer}button:disabled{cursor:not-allowed}
 a{color:var(--brand-deep)}
 [hidden]{display:none!important}
 :focus-visible{outline:3px solid var(--info);outline-offset:3px}
@@ -59,6 +59,7 @@ h2{font-size:var(--text-title);line-height:1.4;margin:0 0 var(--space-3)}
 .subhead{font-size:var(--text-lead);margin:var(--space-6) 0 var(--space-2)}
 .notice{padding:var(--space-4) var(--space-5);border:1px solid var(--warning-border);background:var(--warning-soft);color:var(--warning-ink);border-radius:var(--radius-md);font-size:var(--text-small);margin-bottom:var(--space-6)}
 .notice strong{display:block;margin-bottom:var(--space-1)}
+.notice.error{border-color:var(--danger);background:var(--danger-soft);color:var(--danger-ink)}
 .foot{margin:var(--space-6) 0 0;font-size:var(--text-small);color:var(--text-muted)}
 .foot strong{color:var(--brand-deep)}
 .divider{border:0;border-top:1px solid var(--brand-border);margin:var(--space-6) 0}
@@ -71,8 +72,10 @@ h2{font-size:var(--text-title);line-height:1.4;margin:0 0 var(--space-3)}
 
 /* 폼 */
 label{display:block;font-weight:600;margin:var(--space-6) 0 var(--space-2)}
-input{width:100%;height:var(--control-h);border:1px solid var(--control-border);border-radius:var(--radius-md);background:var(--surface);color:var(--text-ink);padding:var(--space-3) var(--space-4);min-width:0}
+input,select{width:100%;height:var(--control-h);border:1px solid var(--control-border);border-radius:var(--radius-md);background:var(--surface);color:var(--text-ink);padding:var(--space-3) var(--space-4);min-width:0}
 input[aria-invalid=true]{border-color:var(--danger-ink)}
+/* 좁은 폼: 넓은 카드 안에서 가운데 */
+.narrow{max-width:var(--form-max);margin-left:auto;margin-right:auto}
 .help{font-size:var(--text-small);color:var(--text-muted);margin:var(--space-2) 0 var(--space-6)}
 .error{color:var(--danger-ink);font-size:var(--text-small);margin:var(--space-2) 0 var(--space-3)}
 
@@ -89,6 +92,7 @@ input[aria-invalid=true]{border-color:var(--danger-ink)}
 .wide{width:100%;margin-top:var(--space-3)}
 .actions{display:flex;gap:var(--space-3);flex-wrap:wrap;margin:var(--space-4) 0}
 .actions .primary{width:auto;flex:1}
+.primary.inline{width:auto}
 /* 처리 중: 누른 버튼에 회전 표시와 대기 문구 */
 .loading{opacity:.85}
 .loading::before{content:"";display:inline-block;width:var(--icon-sm);height:var(--icon-sm);margin-right:var(--space-2);vertical-align:-2px;border:2px solid currentColor;border-right-color:transparent;border-radius:var(--radius-pill);animation:hada-spin .8s linear infinite}

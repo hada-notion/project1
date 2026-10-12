@@ -191,8 +191,6 @@ $('change-form').onsubmit=e=>{e.preventDefault();task(async()=>{if($('new-passwo
 $('logout').onclick=()=>task(async()=>{try{await request('logout');}finally{forgetSession();loggedOutFacts();panel('login-form','로그아웃했습니다','관리자 비밀번호로 다시 로그인할 수 있어요.');}});
 $('retry').onclick=()=>task(initialize);
 $('open-facts').onclick=()=>$('facts-dialog').showModal();
-$('open-links').onclick=()=>$('links-dialog').showModal();
-$('close-links').onclick=()=>$('links-dialog').close();
 $('close-facts').onclick=()=>$('facts-dialog').close();
 $('close-help').onclick=()=>$('help-dialog').close();
 $('open-webhook').onclick=e=>task(openWebhook,e.currentTarget,webhook.rotating&&!links?'불러오는 중… (처음엔 Notion 링크를 찾느라 최대 1분)':'불러오는 중…');
