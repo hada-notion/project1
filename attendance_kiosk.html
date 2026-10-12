@@ -27,7 +27,7 @@
 .confirm-row{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)}
 .confirm-row .primary,.confirm-row .secondary{width:100%;height:var(--control-lg);font-size:var(--text-body);font-weight:700}
 /* 키보드로 고른 버튼: 바깥 테두리(키보드를 쓴 뒤에만) */
-.confirm-row .chosen{outline:3px solid var(--brand-deep);outline-offset:3px}
+.confirm-row .chosen,.pick .chosen{outline:3px solid var(--brand-deep);outline-offset:3px}
 /* 처리 결과: 카드 레이아웃을 흔들지 않도록 모달로 띄운다. 성공·이미 처리는 잠시 뒤 자동으로 닫힌다 */
 dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - var(--space-8));padding:var(--space-6) var(--space-5);text-align:center}
 .result-icon{width:calc(var(--icon-lg) * 1.5);height:calc(var(--icon-lg) * 1.5);margin:0 auto var(--space-3);padding:var(--space-2);border-radius:var(--radius-pill)}
@@ -46,8 +46,9 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
 .candidate-btn{width:100%;padding:var(--space-3) var(--space-4);border:1px solid var(--brand-border);border-radius:var(--radius-md);background:var(--brand-tint);color:var(--text-ink);font-size:var(--text-body);font-weight:700;text-align:left}
 .candidate-btn:active{background:var(--brand-soft)}
 .candidate-btn .sub{display:block;font-size:var(--text-caption);font-weight:400;color:var(--text-muted);margin-top:2px}
-/* 학원 이름: 카드 아래에 작게. 값은 서버가 Notion 최상위 페이지 제목에서 가져온다 */
-.academy-name{position:absolute;left:var(--space-5);right:var(--space-5);bottom:var(--space-2);margin:0;text-align:center;font-size:var(--text-caption);color:var(--text-subtle);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 학원 이름: 마지막 버튼(등원·하원, 취소) 아래에 일정한 간격으로 작게. 카드 바닥에 붙이지 않는다.
+   값은 서버가 Notion 최상위 페이지 제목에서 가져온다 */
+.academy-name{margin:var(--space-5) 0 0;text-align:center;font-size:var(--text-caption);color:var(--text-subtle);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pick-cancel{width:100%;height:var(--control-h);margin-top:var(--space-1);font-size:var(--text-body)}
 /* 한 글자 지우기: 숫자와 같은 굵기의 선형 아이콘 */
 .key.back{color:var(--text-ink)}
@@ -187,6 +188,29 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
     kioskHead.hidden = false;
   }
 
+  // 학생 선택 화면의 키보드 이동: 학생 버튼들과 맨 아래 "취소"를 차례로 고른다.
+  let pickIndex = -1;
+  function pickItems() { return [...candidatesList.querySelectorAll(".candidate-btn"), cancelCandidatesBtn]; }
+  function renderPick() { pickItems().forEach((b, i) => b.classList.toggle("chosen", i === pickIndex)); }
+  function pickKey(e) {
+    if (e.ctrlKey || e.metaKey || e.altKey || e.target instanceof HTMLInputElement) return;
+    const items = pickItems();
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      kbUsed = true;
+      const step = e.key === "ArrowDown" ? 1 : -1;
+      pickIndex = pickIndex < 0 ? 0 : (pickIndex + step + items.length) % items.length;
+      renderPick();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      kbUsed = true;
+      if (pickIndex < 0) { pickIndex = 0; renderPick(); return; }
+      items[pickIndex].click();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      cancelCandidatesBtn.click();
+    }
+  }
   function showCandidates(candidates, type) {
     pendingType = type;
     candidatesList.innerHTML = "";
@@ -205,6 +229,9 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
     candidatesView.hidden = false;
     // The pick view has its own icon and title, so the phone-number header is hidden while choosing.
     kioskHead.hidden = true;
+    // 키보드로 왔으면 첫 학생을 골라 둔다(↑/↓로 이동, Enter로 선택, Esc로 취소).
+    pickIndex = kbUsed ? 0 : -1;
+    renderPick();
   }
 
   cancelCandidatesBtn.addEventListener("click", () => {
@@ -290,7 +317,9 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
   // ←/→ = 등원·하원 고르기, Enter = 고른 쪽으로 처리(위 renderChoice 주석 참고).
   document.addEventListener("keydown", (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (document.getElementById("app-screen").hidden || mainView.hidden) return;
+    if (document.getElementById("app-screen").hidden) return;
+    if (!candidatesView.hidden) { pickKey(e); return; }
+    if (mainView.hidden) return;
     if (e.target instanceof HTMLInputElement) return;
     // 결과 모달이 떠 있으면 Enter·Esc는 모달 닫기만 한다(처리가 두 번 되지 않게).
     if (resultEl.open && (e.key === "Enter" || e.key === "Escape")) { e.preventDefault(); clearResult(); return; }
