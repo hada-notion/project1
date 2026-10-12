@@ -125,7 +125,8 @@ async function loadLinks(refresh=false){
 }
 const safeDb=url=>/^https:\/\/www\.notion\.so\/[0-9a-f]{32}$/.test(url||'');
 const safeView=url=>/^https:\/\/www\.notion\.so\/[0-9a-f]{32}\?v=[0-9a-f]{32}$/.test(url||'');
-const ICONS={[BUTTON]:'<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="3" width="11" height="7.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8.3 7.6l6 2.4-2.5 1-1 2.5z" fill="currentColor"/></svg>',[AUTO]:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.6 1 3 9.2h4.2L6.3 15l6.7-8.3H8.7z" fill="currentColor"/></svg>'};
+// Feather Icons: mouse-pointer (Notion 버튼), zap (자동화).
+const ICONS={[BUTTON]:'<svg class="line" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"></path><path d="M13 13l6 6"></path></svg>',[AUTO]:'<svg class="line" viewBox="0 0 24 24" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>'};
 function el(tag,cls,content){const x=document.createElement(tag);if(cls)x.className=cls;if(content!==undefined)x.textContent=content;return x;}
 function link(url,label,title,cls='link-chip'){const a=el('a',cls,label);a.href=url;a.target='_blank';a.rel='noopener noreferrer';a.title=title;return a;}
 async function loadWebhook(){
@@ -186,15 +187,18 @@ const DESC={
 // 삭제 is the same in every DB: the page and its child records are removed; shared records are only unlinked.
 const itemDesc=id=>DESC[id]||(id.endsWith('-delete')?'이 페이지와 하위 기록을 삭제합니다. 여러 곳에서 쓰는 공용 기록은 연결만 풉니다. 하위 페이지는 이어달리기로 차례로 처리됩니다.':'');
 // Notion-like checkbox glyphs for trigger chips (checked / unchecked).
-const BOX_ON='<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="1.5" width="13" height="13" rx="3" fill="currentColor"/><path d="M4.5 8.2l2.3 2.3 4.7-5" fill="none" class="tick" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-const BOX_OFF='<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>';
+// Feather check-square / square for the checkbox condition chip.
+const BOX_ON='<svg class="line" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>';
+const BOX_OFF='<svg class="line" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>';
+// Feather plus (페이지 추가) and edit-2 (속성 편집) for the trigger chips.
+const TRIG_ICONS={'페이지 추가':'<svg class="line" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>',edit:'<svg class="line" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>'};
 // The trigger line ("트리거 [＋ 페이지 추가] 조건 [☑ 개인정보 동의] 체크됨") and the one-line note for unusual buttons.
 function describe(extra){
  const out=[];const t=extra.trigger;
  if(t){
   const row=el('div','trigger');row.append(el('span','trigger-label','트리거'));
-  // Event chips carry Notion's own trigger glyphs: ＋ for 페이지 추가, a pencil corner for 속성 편집.
-  if(t.when)for(const w of t.when.split(' · ')){const c=el('span','trig');c.append(el('span','trig-glyph',w==='페이지 추가'?'＋':'∠'),w);row.append(c);}
+  // Event chips carry a Feather icon: plus for 페이지 추가, edit-2 for 속성 편집.
+  if(t.when)for(const w of t.when.split(' · ')){const c=el('span','trig');const g=el('span','trig-glyph');g.innerHTML=TRIG_ICONS[w]||TRIG_ICONS.edit;c.append(g,w);row.append(c);}
   if(t.check){
    const [prop,on]=t.check;if(t.when)row.append(el('span','trigger-label','조건'));
    // The state sits inside the chip so "체크됨" never ends up alone on a line.
@@ -220,8 +224,8 @@ function renderChecklist(){
   const l=links&&links[dbKey(db)];const nav=el('div','dblinks');
   // The "웹훅 등록" view is the link people use most, so it is the filled chip; the DB link is the outlined one.
   const hasView=l&&safeView(l.view);
-  if(hasView)nav.append(link(l.view,'웹훅 등록 ↗',db+' DB의 "웹훅 등록" 보기 열기','link-chip main'));
-  if(l&&safeDb(l.db))nav.append(link(l.db,'DB 열기 ↗',db+' DB 열기',hasView?'link-chip':'link-chip main'));
+  if(hasView)nav.append(link(l.view,'웹훅 등록',db+' DB의 "웹훅 등록" 보기 열기','link-chip main icon-ext'));
+  if(l&&safeDb(l.db))nav.append(link(l.db,'DB 열기',db+' DB 열기',hasView?'link-chip icon-ext':'link-chip main icon-ext'));
   if(!nav.childNodes.length)nav.append(el('span','muted','Notion에서 이 DB를 찾지 못했습니다'));
   head.append(nav);
   card.append(head);

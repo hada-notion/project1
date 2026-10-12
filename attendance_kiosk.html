@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>출결 체크 키오스크 | 하다 학원관리</title>
-<link rel="stylesheet" href="assets/hada-ui.css?v=5a0a9128">
+<link rel="stylesheet" href="assets/hada-ui.css?v=b520e251">
 <style>
 /* 출결 키오스크 전용. 값은 assets/hada-ui.css 토큰만 쓴다(docs/DESIGN.md).
    html.device 모드라 카드 폭에 맞춰 모든 크기가 함께 커진다. */
@@ -322,8 +322,8 @@ dialog.settings-dialog{width:calc(var(--device-w) * .9);max-width:calc(100vw - v
   // 처리 결과는 모달로 보여 준다. 성공·이미 처리는 3초 뒤 자동으로 닫고, 오류는 확인을 눌러 닫는다.
   const RESULT_ICONS = {
     success: '<polyline points="20 6 9 17 4 12"></polyline>',
-    info: '<circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="8"></line><line x1="12" y1="11" x2="12" y2="16"></line>',
-    error: '<circle cx="12" cy="12" r="9"></circle><line x1="12" y1="7" x2="12" y2="13"></line><line x1="12" y1="16.5" x2="12" y2="16.5"></line>',
+    info: '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>',
+    error: '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>',
   };
   let resultTimer = null;
   function clearResult() {
