@@ -852,22 +852,18 @@ function buildReportTabHtml(r) {
         <div class="donut-count-below">(${doneHomework}/${homeworkItems.length})</div>
       </div>
     </div>
-    <section class="rep-session">
-      <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span>평가 기록</h3>
-      <div class="rep-band">
+    <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span>평가 기록</h3>
+    <div class="card">
       ${buildTestTrendChartHtml(computeTestTrendPoints(tests, reportPeriod, reportOffset))}
-      </div>
-    </section>
-    <section class="rep-session">
-      <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></span>선생님 한마디</h3>
-      <div class="rep-band">
+    </div>
+    <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></span>선생님 한마디</h3>
+    <div class="card">
       ${(() => {
         const kind = reportPeriod === "week" ? "주간 보고서" : "월간 보고서"
         const matched = reportComments.filter((c) => c.kind === kind && c.start && (c.end || c.start) >= rangeStart && c.start <= rangeEnd)
         return matched.length ? matched.map((c) => `<div class="speech">${esc(c.comment)}</div>`).join("") : `<div class="empty">아직 등록된 한마디가 없어요.</div>`
       })()}
-      </div>
-    </section>
+    </div>
     </div>
   `
 }
@@ -944,12 +940,11 @@ function buildDailyBodyHtml(r, date) {
   const attStatus = attendanceRow ? (attendanceRow.status || "상태 미입력") : "해당 없음"
   const checkIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>`
   const msgIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>`
-  // 보고서 세션: 흰 세션 박스(제목 포함) 안에 바깥 박스 끝까지 차는 베이지 띠. 학습은 교재마다 띠 하나,
-  // 과제·평가는 하위 묶음(지난/이번 과제, 이번 평가/추이)마다 띠 하나.
-  const band = (inner) => `<div class="rep-band">${inner}</div>`
+  // 보고서 세션(다른 탭과 같은 규칙): 세션 제목은 박스 밖, 기록마다 개별 박스. 박스 안은 흰 머리 + 베이지 본문(늘 펼침).
+  const band = (inner) => `<div class="card rep-card">${inner}</div>`
   const empty = (text) => band(`<div class="empty">${text}</div>`)
-  const groupBand = (items, render, emptyText) => (items.length ? band(items.map(render).join("")) : empty(emptyText))
-  const session = (icon, text, inner) => `<section class="rep-session"><h3 class="sec-title"><span class="sec-icon">${icon}</span>${text}</h3>${inner}</section>`
+  const groupBand = (items, render, emptyText) => (items.length ? items.map((it) => band(render(it))).join("") : empty(emptyText))
+  const session = (icon, text, inner) => `<h3 class="sec-title"><span class="sec-icon">${icon}</span>${text}</h3>${inner}`
   const sub = (text) => `<div class="rep-sub">${text}</div>`
 
   const studyHtml = todaysLogs.length ? todaysLogs.map((l) => band(reportItemHtml(r, l))).join("") : empty("이날 기록된 학습 내용이 없어요.")
