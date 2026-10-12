@@ -1,4 +1,4 @@
-// 공용 Notion API 헬퍼. sync-registration-timetable에서 검증된 재시도/병렬처리 로직과
+// 공용 Notion API 헬퍼. 등록 동기화 함수에서 검증된 재시도/병렬처리 로직과
 // sync-registration-textbook에서 발견된 페이지ID 추출 버그 수정을 합쳐서 한 곳에 둔다.
 // 이렇게 하면 한쪽에서 고친 버그나 개선사항이 다른 쪽에도 자동으로 적용된다 (로드맵 5-9).
 

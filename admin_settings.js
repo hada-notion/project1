@@ -55,8 +55,7 @@ const CHECKLIST=[
   ['reg-textbook','교재 생성',BUTTON,route('sync-registration-textbook'),{path:'/create-individual'}],
   ['reg-enroll','시간표 설정',BUTTON,route('sync-registration-enroll')],
   ['reg-session','수업 생성',BUTTON,route('sync-registration-class-session')],
-  ['reg-end','종료 처리',BUTTON,route('sync-registration-end')],
-  ['reg-timetable','클래스 연결 (속성 편집 자동화)',AUTO,route('sync-registration-timetable')]]],
+  ['reg-end','종료 처리',BUTTON,route('sync-registration-end')]]],
  ['클래스(학원)',[
   ['class-tuition','월 수강료 생성',BUTTON,route('generate-tuition')],
   ['class-textbook-fee','교재비 생성',BUTTON,route('sync-textbook-distribution'),{path:'/from-class-carts'}],
@@ -99,10 +98,8 @@ const CHECKLIST=[
  ['일정(학원)',[['schedule-report-sync','레코드 편집',AUTO,route('sync-report-cache')]]],
 ];
 // Webhook routes with no Notion button or automation, so they are not checklist items:
-// mark-report-source-dirty (the template records the date with a native Notion automation),
-// sync-attendance (GitHub Actions manual run; its GitHub Secret is noted below the checklist),
-// sync-student-report (no caller in the template).
-const OUTSIDE_NOTION=[route('mark-report-source-dirty'),route('sync-attendance'),route('sync-student-report')];
+// sync-attendance (GitHub Actions manual run; its GitHub Secret is noted below the checklist).
+const OUTSIDE_NOTION=[route('sync-attendance')];
 function route(name){return name;}
 // Notion database / "웹훅등록" view links (normalized DB title -> {db, view}), cached on the server.
 let links=null,linksUpdated=null;
@@ -132,7 +129,7 @@ function hint(routeName,checkedAt){
  if(v.old&&checkedAt&&v.old.last_at>checkedAt)return ['bad',`체크 후에도 이 함수로 이전 키 호출 (${shortDate(v.old.last_at)})`];
  if(v.old)return ['bad',`이 함수로 이전 키 호출 있음 (${shortDate(v.old.last_at)} · ${v.old.calls}회)`];
  if(v.new)return ['good',`새 키 호출 확인 (${shortDate(v.new.last_at)})`];
- return ['none','교체 후 호출 기록 없음'];
+ return ['none',''];
 }
 function renderChecklist(){
  const box=$('db-cards');box.replaceChildren();let done=0,total=0,oldRoutes=new Set();
@@ -165,7 +162,8 @@ function renderChecklist(){
    const badge2=el('span','kind '+(kind===AUTO?'auto':'button'));badge2.innerHTML=ICONS[kind];badge2.append(kind);
    const nameEl=el('span','name',name);nameEl.append(badge2);label.append(box2,nameEl);
    const meta=el('div','meta');
-   meta.append(el('code','',routeName+(extra.path||'')),el('span','hint '+tone,msg));
+   // No call yet is the normal state, so only an actual call record is shown.
+   meta.append(el('code','',routeName+(extra.path||'')));if(msg)meta.append(el('span','hint '+tone,msg));
    // Webhook URL (and extra header) for this button, built from this academy's Supabase address.
    const copies=el('div','copies');const url=base+'/functions/v1/'+routeName+(extra.path||'');
    copies.append(copyButton('웹훅','웹훅 URL 복사: '+url,b=>copyText(url,'웹훅 URL을 복사했습니다',b).catch(e=>error(e.message))));

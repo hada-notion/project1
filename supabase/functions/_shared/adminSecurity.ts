@@ -1,17 +1,17 @@
 // Server-only owner authentication. Never return internal or webhook keys to a browser.
 export const SECURITY_WEBHOOK_ROUTES = new Set([
   'cascade-delete','create-assignment','create-learning-record','fix-attendance',
-  'generate-classes','generate-report','generate-tuition','mark-report-source-dirty',
+  'generate-classes','generate-report','generate-tuition',
   'send-report','send-daily-report','send-class-daily-reports','send-tuition-notice',
   'send-textbook-notice','send-selected-notifications','send-inquiry-receipt',
   'sync-attendance','sync-class-report-cache','sync-dashboard-link','sync-exam-scope',
   'sync-registration-class-session','sync-registration-end','sync-registration-enroll',
-  'sync-registration-textbook','sync-registration-timetable','sync-report-cache',
-  'sync-school-calendar','sync-student-report','sync-textbook-distribution','toggle-report-link',
+  'sync-registration-textbook','sync-report-cache',
+  'sync-school-calendar','sync-textbook-distribution','toggle-report-link',
 ]);
 export const SECURITY_BROWSER_ROUTES = new Set([
   'list-students','kiosk-checkin','get-legal-document-data','school-api',
-  'sync-school-calendar','sync-school-schedules','sync-student-report','toggle-report-link',
+  'sync-school-calendar','sync-school-schedules','toggle-report-link',
 ]);
 // toggle-report-link is called by Notion link buttons/automations with the webhook key, so it is also in the
 // webhook set above; it stays here only for session compatibility.

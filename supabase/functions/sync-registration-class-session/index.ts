@@ -15,10 +15,10 @@ import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 //   - body 없이 호출하면 전체 스캔: 등록일이 있고 아직 종료되지 않은 모든 등록에 대해 처리
 //     (cron 안전망용, 선택적).
 //
-// 수업/출석 생성의 실제 로직은 sync-registration-timetable의 복원(restore) 로직과 거의 동일했기
-// 때문에 _shared/registrationSync.ts로 옮겼다.
+// 수업/출석 생성의 실제 로직은 _shared/registrationSync.ts에 있다. 종료일 연장 등으로 다시 눌러도
+// 안전하다(재실행 가능).
 //
-// (2026-09-20, 웹훅 코드 정리 2단계) 이 버튼도 sync-registration-enroll/end/timetable/textbook과
+// (2026-09-20, 웹훅 코드 정리 2단계) 이 버튼도 sync-registration-enroll/end/textbook과
 // 동일하게 큐 기반으로 전환했다. 실제 처리 로직은 _shared/registrationClassSessionTarget.ts로
 // 옮겼고, 이 파일은 다른 등록 버튼들과 동일하게 웹훅 body 파싱 + 사전 잠금 확인만 담당한다. body 없이
 // 호출하는 cron 전체 스캔 경로는 버튼이 기다리는 응답이 아니므로 기존과 동일하게 동기 처리를 유지한다.

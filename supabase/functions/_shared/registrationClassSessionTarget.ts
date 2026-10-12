@@ -73,8 +73,7 @@ export async function createSessionsAndAttendanceForRegistration(reg: any, log: 
 }
 
 // 안전망: 등록일이 있고 아직 종료되지 않은 모든 등록을 훑어서 누락분을 보정한다 (선택적 cron용).
-// 버튼이 기다리는 응답이 아니므로, index.ts에서 큐를 거치지 않고 그대로 동기 호출한다
-// (sync-registration-timetable의 매일 cron 전체 스캔 경로와 동일한 패턴).
+// 버튼이 기다리는 응답이 아니므로, index.ts에서 큐를 거치지 않고 그대로 동기 호출한다.
 export async function createSessionsForAllPending(log: string[]) {
 	const data = await queryDataSource(DS_REGISTRATION, {
 		filter: {
