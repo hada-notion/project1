@@ -57,7 +57,17 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
 /* 한 글자 지우기: 숫자와 같은 굵기의 선형 아이콘 */
 .key.back{color:var(--text-ink)}
 .key.back svg{width:var(--icon-md);height:var(--icon-md)}
-/* 로그인 */
+/* 키오스크 설정 창 */
+dialog.settings-dialog{width:calc(var(--device-w) * .9);max-width:calc(100vw - var(--space-8));padding:var(--space-5)}
+.settings-section{padding:var(--space-3) 0;border-top:1px solid var(--divider)}
+.settings-section h3{margin:0 0 var(--space-2);font-size:var(--text-small);color:var(--text-muted)}
+.settings-section .tabs button{min-height:var(--control-h)}
+.settings-help{margin:var(--space-2) 0;font-size:var(--text-caption);color:var(--text-muted)}
+.settings-section .secondary,.settings-logout,.settings-auth .primary{width:100%;height:var(--control-h)}
+.settings-auth{display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-3) 0;border-top:1px solid var(--divider)}
+.settings-auth label{font-size:var(--text-small);font-weight:700}
+.settings-msg{min-height:var(--space-4);margin:var(--space-2) 0;font-size:var(--text-small);color:var(--text-muted)}
+.settings-msg.error{color:var(--danger-ink)}/* 로그인 */
 .login-card{width:var(--device-w);text-align:center}
 .login-card h1{font-size:var(--text-lead);line-height:1.4;letter-spacing:0;margin:0 0 var(--space-1);display:flex;align-items:center;justify-content:center;gap:var(--space-2)}
 .title-icon{width:var(--text-lead);height:var(--text-lead);display:inline-flex}
@@ -78,7 +88,7 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
     <div class="login-error" id="login-error"></div>
   </div>
   <div class="kiosk" id="app-screen" hidden>
-    <button class="icon-btn" id="logoutBtn" aria-label="로그아웃" title="로그아웃"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></button>
+    <button class="icon-btn" id="settingsBtn" aria-label="키오스크 설정" title="설정"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
     <div class="kiosk-head" id="kioskHead">
       <div class="kiosk-icon"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg></div>
       <h1>출결 체크</h1>
@@ -117,7 +127,30 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
     <p class="academy-name" id="academyName" hidden></p>
     <p class="prepared-at" id="preparedAt" hidden></p>
   </div>
-  <dialog class="card result-dialog" id="result" aria-live="assertive">
+  <!-- 키오스크 설정: 체크 방식·출석 동기화는 관리자 비밀번호 확인 후 바꾼다(학생이 바꾸지 못하게). 로그아웃은 확인창만. -->
+  <dialog class="card settings-dialog" id="settings" aria-labelledby="settingsTitle">
+    <div class="dialog-head"><h2 id="settingsTitle">키오스크 설정</h2><button class="ghost" id="settingsClose" type="button">닫기</button></div>
+    <section class="settings-section">
+      <h3>등하원 체크 방식</h3>
+      <div class="tabs" id="modeTabs" role="radiogroup" aria-label="등하원 체크 방식">
+        <button type="button" data-mode="once" role="radio">1일 1회</button>
+        <button type="button" data-mode="every" role="radio">매번 기록</button>
+      </div>
+      <p class="settings-help" id="modeHelp"></p>
+    </section>
+    <section class="settings-section">
+      <h3>출석 동기화</h3>
+      <p class="settings-help" id="settingsSyncAt"></p>
+      <button class="secondary" id="syncNowBtn" type="button">지금 동기화</button>
+    </section>
+    <div class="settings-auth" id="settingsAuth" hidden>
+      <label for="settingsPw">관리자 비밀번호</label>
+      <input type="password" id="settingsPw" autocomplete="current-password" placeholder="변경하려면 관리자 비밀번호를 입력하세요">
+      <button class="primary" id="settingsAuthOk" type="button">확인</button>
+    </div>
+    <p class="settings-msg" id="settingsMsg" aria-live="polite"></p>
+    <button class="secondary settings-logout" id="logoutBtn" type="button">로그아웃</button>
+  </dialog>  <dialog class="card result-dialog" id="result" aria-live="assertive">
     <div class="result-icon" id="resultIcon"></div>
     <p class="result-text" id="resultText"></p>
     <button class="primary" id="resultClose" type="button">확인</button>
@@ -179,18 +212,26 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
   // 출석 동기화(오늘 출석 준비, v2.5.37): 새벽 준비 시각을 "출석 동기화 HH:mm"으로 연하게 보여 준다. 준비가 없어서 서버가 지금 준비 중이면
   // 30초 뒤 목록을 한 번 다시 받아 시각을 갱신한다.
   let preparedRetry = null;
+  let preparedRetried = false;
+  let preparedInfo = null;
+  function preparedText(info) {
+    if (info && info.today && info.at) return "출석 동기화 " + new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(info.at));
+    if (info && info.preparing) return "출석 동기화 중";
+    return "";
+  }
   function showPrepared(info) {
     const el = document.getElementById("preparedAt");
+    preparedInfo = info || null;
     clearTimeout(preparedRetry);
-    if (info && info.today && info.at) {
-      el.textContent = "출석 동기화 " + new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(info.at));
-    } else if (info && info.preparing) {
-      el.textContent = "출석 동기화 중";
-      preparedRetry = setTimeout(() => refreshKioskDirectory(true).catch(() => {}), 30000);
-    } else {
-      el.textContent = "";
-    }
+    el.textContent = preparedText(info);
     el.hidden = !el.textContent;
+    if (info && info.today) preparedRetried = false;
+    // 서버가 지금 준비 중이면 30초 뒤 한 번만 다시 확인한다(그 뒤로는 평소 5분 목록 갱신 때 확인).
+    else if (info && info.preparing && !preparedRetried) {
+      preparedRetried = true;
+      preparedRetry = setTimeout(() => refreshKioskDirectory(true).catch(() => {}), 30000);
+    }
+    if (settingsEl.open) renderSettings();
   }
   function clearKioskDirectory() { kioskDirectoryVersion++; kioskCandidates = []; kioskCandidatesAt = 0; kioskDirectoryPending = null; }
   const display = document.getElementById("display");
@@ -201,6 +242,7 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
   const candidatesView = document.getElementById("candidatesView");
   const candidatesList = document.getElementById("candidatesList");
   const logoutBtn = document.getElementById("logoutBtn");
+  const settingsEl = document.getElementById("settings");
   const cancelCandidatesBtn = document.getElementById("cancelCandidatesBtn");
   const kioskHead = document.getElementById("kioskHead");
 
@@ -340,6 +382,8 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
   document.addEventListener("keydown", (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (document.getElementById("app-screen").hidden) return;
+    // 설정 창이 열려 있거나 등원·하원 처리 중이면 키보드 입력을 받지 않는다(처리 중 Enter로 두 번 처리되지 않게).
+    if (settingsEl.open || checkinBtn.disabled) return;
     if (!candidatesView.hidden) { pickKey(e); return; }
     if (mainView.hidden) return;
     if (e.target instanceof HTMLInputElement) return;
@@ -399,7 +443,7 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
         if (candidates.length > 1) { digits = requestPhone; updateDisplay(); showCandidates(candidates, type); return; }
         if (candidates.length === 1) registrationId = candidates[0].registrationId;
       }
-      const body = { phone: requestPhone, type };
+      const body = { phone: requestPhone, type, mode: checkMode() };
       if (registrationId) body.registrationId = registrationId;
       const res = await fetch(`${SUPABASE_URL}/functions/v1/kiosk-checkin`, {
         method: "POST",
@@ -434,6 +478,8 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
         activeBtn.classList.remove("loading");
         digits = requestPhone; updateDisplay(); showCandidates(data.candidates, type);
         return;
+      } else if (res.ok && data.matched && data.alreadyDone && data.recent) {
+        showResult("info", `방금 ${data.alreadyAt ? data.alreadyAt + "에 " : ""}${label} 처리되었습니다.`);
       } else if (res.ok && data.matched && data.alreadyDone) {
         showResult("info", `이미 ${data.alreadyAt ? data.alreadyAt + "에 " : ""}${label} 처리되었습니다.`);
       } else if (res.ok && data.matched) {
@@ -495,11 +541,122 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
   }
   logoutBtn.addEventListener("click", () => {
     if (!confirm("로그아웃 하시겠습니까?")) return;
+    closeSettings();
     localStorage.removeItem(ADMIN_KEY_STORAGE);
     digits = "";
     updateDisplay();
     showLoginScreen();
   });
+  // ============ 키오스크 설정(v2.5.39): 체크 방식·출석 동기화·로그아웃 ============
+  // 체크 방식은 이 기기 브라우저에 저장하고 등원·하원 요청에 함께 보낸다(기기마다 따로 설정). 기본은 1일 1회.
+  const CHECK_MODE_KEY = "kiosk_check_mode";
+  const MODE_HELP = {
+    once: "그날 이미 등원(하원)했으면 다시 기록하지 않고 \"이미 처리\"로 안내합니다.",
+    every: "누를 때마다 새 시각으로 기록하고 학부모님께 알림을 보냅니다(외출 후 재입장 등).",
+  };
+  function checkMode() {
+    try { return localStorage.getItem(CHECK_MODE_KEY) === "every" ? "every" : "once"; } catch (e) { return "once"; }
+  }
+  // 체크 방식 변경·지금 동기화는 관리자 비밀번호를 확인한 뒤에만 한다. 확인은 설정 창을 닫을 때까지 유지한다.
+  let settingsVerified = false;
+  let pendingSettingsAction = null;
+  function settingsMessage(text, isError) {
+    const el = document.getElementById("settingsMsg");
+    el.textContent = text || "";
+    el.classList.toggle("error", !!isError);
+  }
+  function renderSettings() {
+    const mode = checkMode();
+    document.querySelectorAll("#modeTabs button").forEach(b => {
+      const on = b.dataset.mode === mode;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-checked", on ? "true" : "false");
+    });
+    document.getElementById("modeHelp").textContent = MODE_HELP[mode];
+    document.getElementById("settingsSyncAt").textContent = preparedText(preparedInfo) || "아직 동기화 기록이 없습니다.";
+  }
+  function openSettings() {
+    settingsVerified = false;
+    pendingSettingsAction = null;
+    document.getElementById("settingsAuth").hidden = true;
+    document.getElementById("settingsPw").value = "";
+    settingsMessage("");
+    renderSettings();
+    settingsEl.showModal();
+  }
+  function closeSettings() {
+    settingsVerified = false;
+    pendingSettingsAction = null;
+    if (settingsEl.open) settingsEl.close();
+  }
+  function withAdminCheck(action) {
+    if (settingsVerified) return action();
+    pendingSettingsAction = action;
+    document.getElementById("settingsAuth").hidden = false;
+    settingsMessage("변경하려면 관리자 비밀번호를 입력하세요.");
+    setTimeout(() => document.getElementById("settingsPw").focus(), 30);
+  }
+  async function confirmSettingsPassword() {
+    const input = document.getElementById("settingsPw");
+    const okBtn = document.getElementById("settingsAuthOk");
+    const pw = input.value;
+    if (!pw) { settingsMessage("비밀번호를 입력하세요.", true); return; }
+    okBtn.disabled = true; okBtn.classList.add("loading");
+    try {
+      // 키오스크 로그인과 같은 확인. 보안 모드면 새 키오스크 세션으로 바꿔 둔다.
+      // 보안 모드가 아닌 서버는 비밀번호를 그대로 돌려주므로 저장된 키와 같은지로 확인한다.
+      const session = await HadaAdminAuth.login(SUPABASE_URL, pw, "kiosk");
+      if (session === pw && pw !== getAdminKey()) throw new Error("비밀번호가 맞지 않습니다.");
+      if (session !== pw) localStorage.setItem(ADMIN_KEY_STORAGE, session);
+      settingsVerified = true;
+      input.value = "";
+      document.getElementById("settingsAuth").hidden = true;
+      settingsMessage("");
+      const action = pendingSettingsAction; pendingSettingsAction = null;
+      if (action) await action();
+    } catch (err) {
+      settingsMessage("확인하지 못했습니다: " + err.message, true);
+    } finally {
+      okBtn.disabled = false; okBtn.classList.remove("loading");
+    }
+  }
+  async function syncNow() {
+    const btn = document.getElementById("syncNowBtn");
+    btn.disabled = true; btn.classList.add("loading");
+    settingsMessage("출석 정보를 Notion과 다시 맞추는 중입니다…");
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/list-students?kiosk=1&sync=1`, {
+        cache: "no-store",
+        headers: { "x-admin-key": getAdminKey(), "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "apikey": SUPABASE_ANON_KEY },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !Array.isArray(data.candidates)) throw new Error(res.status === 401 ? "로그인이 만료되었습니다." : "동기화하지 못했습니다.");
+      kioskCandidates = data.candidates; kioskCandidatesAt = Date.now();
+      showPrepared(data.kioskPrepared);
+      const info = data.kioskPrepared || {};
+      if (info.syncError) settingsMessage(info.syncError, true);
+      else settingsMessage(info.synced === false ? "1분 안에 이미 동기화했습니다." : "출석 동기화를 마쳤습니다.");
+    } catch (err) {
+      settingsMessage(err.message, true);
+    } finally {
+      btn.disabled = false; btn.classList.remove("loading");
+    }
+  }
+  document.getElementById("settingsBtn").addEventListener("click", openSettings);
+  document.getElementById("settingsClose").addEventListener("click", closeSettings);
+  settingsEl.addEventListener("close", () => { settingsVerified = false; pendingSettingsAction = null; });
+  document.getElementById("modeTabs").addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-mode]");
+    if (!btn || btn.dataset.mode === checkMode()) return;
+    withAdminCheck(() => {
+      try { localStorage.setItem(CHECK_MODE_KEY, btn.dataset.mode); } catch (err) {}
+      renderSettings();
+      settingsMessage("체크 방식을 \"" + btn.textContent + "\"으로 바꿨습니다.");
+    });
+  });
+  document.getElementById("syncNowBtn").addEventListener("click", () => withAdminCheck(syncNow));
+  document.getElementById("settingsAuthOk").addEventListener("click", confirmSettingsPassword);
+  document.getElementById("settingsPw").addEventListener("keydown", (e) => { if (e.key === "Enter") confirmSettingsPassword(); });
   async function submitLogin() {
     const input = document.getElementById("login-input");
     const key = input.value.trim();

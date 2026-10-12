@@ -104,13 +104,15 @@ export async function readKioskTodayRow(registrationId: string): Promise<KioskTo
   return rows[0] ?? null
 }
 
-// kiosk-checkin이 출석을 기록한 뒤 같은 날 중복 기록을 막도록 행을 맞춘다.
-export async function markKioskTodayStamp(registrationId: string, field: "checkin_at" | "checkout_at", iso: string, status: string): Promise<void> {
+// kiosk-checkin이 출석을 기록(또는 Notion 값을 확인)한 뒤 오늘 행을 Notion과 맞춘다. 행이 없으면(오늘
+// 새 등록 등) 아무것도 바뀌지 않는다. attendancePageId를 주면 새로 만든 보강 출석도 다음부터 빠른 경로로 처리된다.
+export async function markKioskTodayStamp(registrationId: string, field: "checkin_at" | "checkout_at", iso: string | null, status: string, attendancePageId?: string): Promise<void> {
   const id = compactKioskId(registrationId)
-  await rest(`kiosk_today?registration_id=eq.${id}`, {
+  if (!/^[0-9a-f]{32}$/.test(id)) return
+  await rest(`kiosk_today?registration_id=eq.${id}&kst_date=eq.${kstDate()}`, {
     method: "PATCH",
     headers: { Prefer: "return=minimal" },
-    body: JSON.stringify({ [field]: iso, attendance_status: status, updated_at: new Date().toISOString() }),
+    body: JSON.stringify({ [field]: iso, attendance_status: status, ...(attendancePageId ? { attendance_page_id: attendancePageId } : {}), updated_at: new Date().toISOString() }),
   })
 }
 
