@@ -14,7 +14,7 @@ Supabase 프로젝트 정보를 이번 학원의 값으로 한 번에 치환하�
 
 무엇을 바꾸지 "않는지" (이 스크립트 범위 밖, 별도로 처리 필요):
   - GitHub Actions Secrets / Supabase Edge Function Secrets (docs/새-학원-이식-체크리스트.md 참고)
-  - Notion 쪽의 "등록(학원) DB → 안내 링크" 수식에 박힌 GitHub Pages 주소
+  - Notion 쪽의 "등록(학원) DB → 학생 페이지" 수식(예전 이름 "안내 링크")에 박힌 GitHub Pages 주소
     (예: https://hada-notion.github.io/project1/student_report.html?token=...)
     이건 코드가 아니라 Notion 수식이라 이 학원의 Notion 워크스페이스에서 직접 고쳐야 합니다.
 
@@ -112,7 +112,7 @@ def main() -> int:
     print("\n⚠️  이 스크립트가 다루지 않는 항목 (직접 처리 필요):")
     print("  - GitHub Actions Secrets / Supabase Edge Function Secrets 설정")
     print("    (docs/새-학원-이식-체크리스트.md 참고)")
-    print("  - Notion '등록(학원) DB → 안내 링크' 수식의 GitHub Pages 주소")
+    print("  - Notion '등록(학원) DB → 학생 페이지' 수식(예전 이름 '안내 링크')의 GitHub Pages 주소")
     print("    (Notion 워크스페이스에서 직접 이 학원의 주소로 수정)")
     print("\ngit diff로 변경 내역을 확인한 뒤 커밋하세요.")
     return 0
