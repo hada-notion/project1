@@ -32,18 +32,17 @@
 .column-action{display:inline-flex;align-items:center;gap:2px;vertical-align:middle;padding:2px var(--space-1);margin-left:2px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--brand-deep);font-size:var(--text-caption);line-height:1.2}
 .column-action svg.line{width:var(--icon-sm);height:var(--icon-sm)}
 .column-action:hover,.column-action:focus-visible{background:var(--brand-soft)}
+.column-action.filtered{background:var(--brand-soft);box-shadow:inset 0 0 0 1px var(--brand-deep)}
 .view-summary{display:flex;gap:var(--space-3);flex-wrap:wrap;align-items:center;margin:var(--space-2) 0 var(--space-4);font-size:var(--text-caption);color:var(--text-muted)}
 .view-summary button{border:1px solid var(--brand-border);border-radius:var(--radius-sm);background:var(--surface);padding:var(--space-1) var(--space-2)}
-.column-menu{position:fixed;z-index:1000;width:var(--menu-w);max-width:calc(100vw - var(--space-4));max-height:calc(100vh - var(--space-4));overflow:auto;padding:var(--space-4);border:1px solid var(--brand-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);background:var(--surface);font-size:var(--text-small)}
+.column-menu{position:fixed;z-index:1000;display:flex;gap:var(--space-2);align-items:center;width:var(--menu-w);max-width:calc(100vw - var(--space-4));padding:var(--space-2);border:1px solid var(--brand-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);background:var(--surface);font-size:var(--text-small)}
 .column-menu[hidden]{display:none}
-.column-menu h3{margin:0 0 var(--space-3);font-size:var(--text-small)}
-.column-menu label{display:block;margin:var(--space-3) 0 0;color:var(--text-muted);font-weight:400}
-.column-menu input,.column-menu select{display:block;width:100%;height:auto;margin-top:var(--space-1);padding:var(--space-2)}
-.column-menu .sort-actions{display:flex;gap:var(--space-2);flex-wrap:wrap}
-.column-menu button{padding:var(--space-1) var(--space-2);border:1px solid var(--brand-border);border-radius:var(--radius-sm);background:var(--brand-tint)}
-.column-menu .menu-close{float:right}
-.column-menu .menu-reset{margin-top:var(--space-3)}
-:root{--menu-w:260px}
+/* 정렬 한 버튼(누를 때마다 오름차순 → 내림차순 → 원래 순서)과 열 검색 칸만. 바깥을 누르거나 Esc·Enter면 닫힌다 */
+.column-menu .sort-toggle{display:inline-flex;align-items:center;gap:var(--space-1);flex-shrink:0;white-space:nowrap;padding:var(--space-2) var(--space-3);border:1px solid var(--brand-border);border-radius:var(--radius-md);background:var(--brand-tint);color:var(--text-ink);font-weight:600}
+.column-menu .sort-toggle[aria-pressed=true]{background:var(--brand-soft);border-color:var(--brand-deep)}
+.column-menu .sort-toggle svg.line{width:var(--icon-sm);height:var(--icon-sm)}
+.column-menu input{flex:1;min-width:0;height:auto;margin:0;padding:var(--space-2) var(--space-3)}
+:root{--menu-w:300px}
 #print-panel{padding:0;overflow:hidden}
 /* 조회 전에는 빈 출력 카드를 숨긴다 */
 #print-panel:has(#print-area:empty){display:none}
@@ -52,6 +51,7 @@
 /* design-lint: print-document */
   table.doc-table td.note-cell { text-align:left; white-space:normal; overflow-wrap:anywhere; }
   .table-scroll table.doc-table th.has-column-tools { white-space:normal; }
+  @media screen { .table-scroll table.doc-table th.has-column-tools { white-space:nowrap; } }
   .head-label { display:inline-block; }  #print-area { background: #fff; padding: 24px; }
   #print-area h2 { text-align: center; font-size: 18px; margin: 0 0 4px; }
   #print-area .doc-sub { text-align: center; font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
@@ -637,15 +637,16 @@
     if(c.sort)rows.sort((a,b)=>{const x=a.values[c.sort.col],y=b.values[c.sort.col],empty=v=>v===""||v==="미입력"||v==="미확인";const cmp=compareValues(x,y);return (empty(x)||empty(y)?cmp:cmp*(c.sort.direction==="ascending"?1:-1)) || a.index-b.index;});
     let visible=0;
     for(const entry of rows){
-      const show=[...c.filters.entries()].every(([col,f])=>entry.values[col].toLocaleLowerCase().includes(f.search.toLocaleLowerCase()) && (f.exact===null || entry.values[col]===f.exact));
+      const show=[...c.filters.entries()].every(([col,f])=>entry.values[col].toLocaleLowerCase().includes(f.search.toLocaleLowerCase()));
       entry.row.hidden=!show;if(show)visible++;c.table.tBodies[0].appendChild(entry.row);
     }
-    c.headers.forEach((th,col)=>{const sort=c.sort?.col===col ? c.sort.direction : "none";th.setAttribute("aria-sort",sort);const active=c.filters.has(col);th.querySelector(".column-action").innerHTML=columnIcon(sort,active);});
+    c.headers.forEach((th,col)=>{const sort=c.sort?.col===col ? c.sort.direction : "none";th.setAttribute("aria-sort",sort);const active=c.filters.has(col);const action=th.querySelector(".column-action");action.innerHTML=columnIcon(sort);action.classList.toggle("filtered",active);});
     c.count.textContent=`화면 ${visible}/${c.rows.length}행 · 정렬·필터는 화면 확인용`;
   }
-  // 표 머리 정렬·필터 버튼 아이콘(Feather): 기본 chevron-down, 오름차순 arrow-up, 내림차순 arrow-down, 필터 중이면 filter를 덧붙인다.
-  const COLUMN_ICONS={none:'<polyline points="6 9 12 15 18 9"></polyline>',ascending:'<line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline>',descending:'<line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline>',filter:'<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>'};
-  function columnIcon(sort,filtered){const svg=d=>`<svg class="line" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;return svg(COLUMN_ICONS[sort] || COLUMN_ICONS.none)+(filtered ? svg(COLUMN_ICONS.filter) : "");}
+  // 표 머리 정렬·필터 버튼 아이콘(Feather): 기본 chevron-down, 오름차순 arrow-up, 내림차순 arrow-down.
+  // 검색으로 걸러진 열은 아이콘을 더 붙이지 않고 버튼 바탕색(.filtered)으로 표시한다.
+  const COLUMN_ICONS={none:'<polyline points="6 9 12 15 18 9"></polyline>',ascending:'<line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline>',descending:'<line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline>'};
+  function columnIcon(sort){return `<svg class="line" viewBox="0 0 24 24" aria-hidden="true">${COLUMN_ICONS[sort] || COLUMN_ICONS.none}</svg>`;}
   function setupColumnTools(pane){
     return [...pane.querySelectorAll("table.doc-table")].filter(t=>t.tHead && t.tBodies.length).map(table=>{
       const headers=[...table.tHead.rows[0].cells];const c={table,headers,rows:[...table.tBodies[0].rows].map((row,index)=>({row,index,values:[...row.cells].map(cell=>cell.textContent.trim())})),sort:null,filters:new Map()};
@@ -653,23 +654,23 @@
       const reset=document.createElement("button");reset.type="button";reset.textContent="정렬·필터 초기화";reset.addEventListener("click",()=>{c.sort=null;c.filters.clear();closeColumnMenu();applyColumnView(c);});summary.appendChild(reset);table.parentElement.after(summary);
       headers.forEach((th,col)=>{
         const label=th.textContent.trim();th.classList.add("has-column-tools");th.setAttribute("scope","col");th.replaceChildren();const title=document.createElement("span");title.className="head-label";title.textContent=label;th.appendChild(title);
-        const button=document.createElement("button");button.type="button";button.className="column-action";button.innerHTML=columnIcon("none",false);button.setAttribute("aria-label",`${label} 정렬 및 필터`);button.setAttribute("aria-haspopup","dialog");button.setAttribute("aria-expanded","false");button.title=`${label} 정렬 및 필터`;button.addEventListener("click",()=>openColumnMenu(c,col,label,button));th.appendChild(button);
+        const button=document.createElement("button");button.type="button";button.className="column-action";button.innerHTML=columnIcon("none");button.setAttribute("aria-label",`${label} 정렬 및 필터`);button.setAttribute("aria-haspopup","dialog");button.setAttribute("aria-expanded","false");button.title=`${label} 정렬 및 필터`;button.addEventListener("click",()=>openColumnMenu(c,col,label,button));th.appendChild(button);
       });applyColumnView(c);return c;
     });
   }
   function openColumnMenu(c,col,label,button){
     if(openMenuButton===button && !menu.hidden){closeColumnMenu();return;}
     closeColumnMenu();openMenuButton=button;button.setAttribute("aria-expanded","true");menu.replaceChildren();menu.hidden=false;
-    const close=document.createElement("button");close.type="button";close.className="menu-close";close.textContent="닫기";close.addEventListener("click",()=>{closeColumnMenu();button.focus();});menu.appendChild(close);
-    const title=document.createElement("h3");title.textContent=label;menu.appendChild(title);
-    const actions=document.createElement("div");actions.className="sort-actions";
-    for(const [text,direction] of [["오름차순 ↑","ascending"],["내림차순 ↓","descending"],["원래 순서",null]]){const b=document.createElement("button");b.type="button";b.textContent=text;b.addEventListener("click",()=>{c.sort=direction?{col,direction}:null;applyColumnView(c);});actions.appendChild(b);}menu.appendChild(actions);
-    const previous=c.filters.get(col) || {search:"",exact:null};
-    const searchLabel=document.createElement("label");searchLabel.textContent="열 안에서 검색";const search=document.createElement("input");search.type="search";search.value=previous.search;search.placeholder="검색어 입력";searchLabel.appendChild(search);menu.appendChild(searchLabel);
-    const valueLabel=document.createElement("label");valueLabel.textContent="값 선택";const select=document.createElement("select");select.add(new Option("전체 값","all"));const values=[...new Set(c.rows.map(r=>r.values[col]))].sort(collator.compare);values.forEach((v,i)=>select.add(new Option(v || "(빈칸)",String(i))));select.value=previous.exact===null ? "all" : String(values.indexOf(previous.exact));valueLabel.appendChild(select);menu.appendChild(valueLabel);
-    function change(){const f={search:search.value,exact:select.value==="all"?null:values[Number(select.value)]};if(!f.search && f.exact===null)c.filters.delete(col);else c.filters.set(col,f);applyColumnView(c);}
-    search.addEventListener("input",change);select.addEventListener("change",change);
-    const reset=document.createElement("button");reset.type="button";reset.className="menu-reset";reset.textContent="이 열 필터 해제";reset.addEventListener("click",()=>{search.value="";select.value="all";change();});menu.appendChild(reset);
+    menu.setAttribute("aria-label",`${label} 정렬·필터`);
+    // 정렬 한 버튼: 원래 순서 → 오름차순 → 내림차순 → 원래 순서. 다른 열을 정렬 중이면 이 열 오름차순부터.
+    const NEXT={none:"ascending",ascending:"descending",descending:"none"},LABEL={none:"정렬",ascending:"오름차순",descending:"내림차순"};
+    const sortBtn=document.createElement("button");sortBtn.type="button";sortBtn.className="sort-toggle";
+    const paintSort=()=>{const now=c.sort?.col===col ? c.sort.direction : "none";sortBtn.innerHTML=columnIcon(now);sortBtn.append(LABEL[now]);sortBtn.setAttribute("aria-pressed",String(now!=="none"));sortBtn.title=`${label}: 누를 때마다 오름차순 → 내림차순 → 원래 순서`;};
+    sortBtn.addEventListener("click",()=>{const next=NEXT[c.sort?.col===col ? c.sort.direction : "none"];c.sort=next==="none" ? null : {col,direction:next};applyColumnView(c);paintSort();});paintSort();
+    const search=document.createElement("input");search.type="search";search.value=c.filters.get(col)?.search || "";search.placeholder=`${label} 검색`;search.setAttribute("aria-label",`${label} 검색`);
+    search.addEventListener("input",()=>{if(search.value)c.filters.set(col,{search:search.value});else c.filters.delete(col);applyColumnView(c);});
+    search.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();closeColumnMenu();button.focus();}});
+    menu.append(sortBtn,search);
     const rect=button.getBoundingClientRect();const width=menu.getBoundingClientRect().width,height=menu.getBoundingClientRect().height;
     menu.style.left=Math.max(8,Math.min(rect.left,innerWidth-width-8))+"px";menu.style.top=Math.max(8,Math.min(rect.bottom+6,innerHeight-height-8))+"px";search.focus();
   }
