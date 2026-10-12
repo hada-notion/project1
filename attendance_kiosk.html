@@ -50,7 +50,7 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
 .candidate-btn .sub{display:block;font-size:var(--text-caption);font-weight:400;color:var(--text-muted);margin-top:2px}
 /* 학원 이름: 마지막 버튼(등원·하원, 취소) 아래에 일정한 간격으로 작게. 카드 바닥에 붙이지 않는다.
    값은 서버가 Notion 최상위 페이지 제목에서 가져온다 */
-/* 오늘 출석 준비 시각: 학원 이름 아래 더 작고 연하게(학생 눈에 띄지 않게) */
+/* 출석 동기화 시각(오늘 출석 준비): 학원 이름 아래 더 작고 연하게(학생 눈에 띄지 않게) */
 .prepared-at{margin:var(--space-1) 0 0;text-align:center;font-size:var(--text-caption);color:var(--text-subtle);opacity:.6}
 .academy-name{margin:var(--space-5) 0 0;text-align:center;font-size:var(--text-caption);color:var(--text-subtle);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pick-cancel{width:100%;height:var(--control-h);margin-top:var(--space-1);font-size:var(--text-body)}
@@ -176,16 +176,16 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
     el.textContent = typeof name === "string" ? name.slice(0, 60) : "";
     el.hidden = !el.textContent;
   }
-  // 오늘 출석 준비(v2.5.37): 새벽 준비 시각을 연하게 보여 준다. 준비가 없어서 서버가 지금 준비 중이면
+  // 출석 동기화(오늘 출석 준비, v2.5.37): 새벽 준비 시각을 "출석 동기화 HH:mm"으로 연하게 보여 준다. 준비가 없어서 서버가 지금 준비 중이면
   // 30초 뒤 목록을 한 번 다시 받아 시각을 갱신한다.
   let preparedRetry = null;
   function showPrepared(info) {
     const el = document.getElementById("preparedAt");
     clearTimeout(preparedRetry);
     if (info && info.today && info.at) {
-      el.textContent = "오늘 출석 준비 " + new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(info.at));
+      el.textContent = "출석 동기화 " + new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(info.at));
     } else if (info && info.preparing) {
-      el.textContent = "오늘 출석 준비 중";
+      el.textContent = "출석 동기화 중";
       preparedRetry = setTimeout(() => refreshKioskDirectory(true).catch(() => {}), 30000);
     } else {
       el.textContent = "";
