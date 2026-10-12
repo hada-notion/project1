@@ -102,7 +102,7 @@
 <body>
 <div class="shell">
 <nav class="top" aria-label="서비스 정보"><div class="brand"><img class="logo" src="assets/brand/hada-wordmark.png" alt="HADA" width="96" height="36"><div class="wordmark">하다<span>학원관리</span></div></div><div class="app-nav" id="app-nav"></div><div class="topright"><button class="ghost" id="open-facts" type="button">보안 설정 현황</button><span class="badge">관리자 전용</span></div></nav>
-<header><h1>관리자 설정</h1><p class="muted">키오스크와 관리자 서류 화면에서 쓰는 관리자 비밀번호를 변경하고, 필요할 때 Notion 웹훅 키를 교체합니다.</p></header>
+<header><h1>관리자 설정</h1><p class="muted">키오스크와 법정 서류 화면에서 쓰는 관리자 비밀번호를 변경하고, 필요할 때 Notion 웹훅 키를 교체합니다.</p></header>
 <div class="notice info" role="status" id="connection-status"><strong>인증 서버 연결을 확인하고 있어요.</strong>비밀번호를 바꿔도 Notion 버튼·자동화의 웹훅 키는 바뀌지 않습니다.</div>
 <main class="layout">
 <section class="card" id="main-card" aria-labelledby="panel-title">
@@ -118,12 +118,12 @@
 <label for="new-password">새 관리자 비밀번호</label><input type="password" id="new-password" autocomplete="new-password" minlength="8" maxlength="128" required>
 <p class="help">앞뒤 공백 없이 8~128자. 초기 비밀번호 0000은 사용할 수 없습니다.</p>
 <label for="confirm-password">새 비밀번호 확인</label><input type="password" id="confirm-password" autocomplete="new-password" minlength="8" maxlength="128" required>
-<div class="status">변경하면 키오스크·관리자 서류 화면의 로그인이 모두 해제되고 새 비밀번호로 다시 로그인합니다. Notion 웹훅 키는 그대로 유지됩니다.</div>
+<div class="status">변경하면 키오스크·법정 서류 화면의 로그인이 모두 해제되고 새 비밀번호로 다시 로그인합니다. Notion 웹훅 키는 그대로 유지됩니다.</div>
 <button class="primary" type="submit">비밀번호 변경</button>
 <button class="secondary wide" id="cancel-change" type="button">취소</button>
 </form>
 <div id="dashboard" hidden><div class="dash-grid">
-<section class="dash-col"><h3 class="subhead">관리자 비밀번호</h3><p class="help">키오스크·관리자 서류·학교 화면에서 씁니다.</p><div class="status" id="due-status"></div><button class="primary" id="start-change" type="button">비밀번호 변경</button></section>
+<section class="dash-col"><h3 class="subhead">관리자 비밀번호</h3><p class="help">키오스크·법정 서류·학교 검색 화면에서 씁니다.</p><div class="status" id="due-status"></div><button class="primary" id="start-change" type="button">비밀번호 변경</button></section>
 <section class="dash-col"><h3 class="subhead">Notion 웹훅 키</h3><p class="help">Notion 버튼·자동화가 서버를 부를 때 씁니다.</p><div class="status" id="webhook-summary"></div><button class="secondary wide" id="open-webhook" type="button">웹훅 키 교체</button></section>
 </div><div class="dash-foot"><button class="secondary" id="logout" type="button">로그아웃</button></div></div>
 <form id="webhook-form" class="narrow" hidden>
@@ -182,6 +182,6 @@
 <noscript><p class="notice">관리자 설정을 사용하려면 JavaScript가 필요합니다.</p></noscript>
 </div>
 <script src="assets/hada-shortcuts.js?v=956b3656"></script>
-<script src="admin_auth.js?v=2529a461"></script><script src="admin_settings.js?v=b57dc1b8"></script>
+<script src="admin_auth.js?v=2529a461"></script><script src="admin_settings.js?v=ed0284ab"></script>
 </body>
 </html>

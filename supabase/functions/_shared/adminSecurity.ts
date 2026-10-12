@@ -9,12 +9,12 @@ export const SECURITY_WEBHOOK_ROUTES = new Set([
   'sync-registration-textbook','sync-report-cache',
   'sync-school-calendar','sync-textbook-distribution','toggle-report-link',
 ]);
+// Only routes a logged-in admin page actually calls (kiosk, legal documents, school search). Notion-only
+// functions such as toggle-report-link and sync-school-calendar take the webhook key, never a browser session,
+// so a leaked browser session cannot reach them (v2.5.51).
 export const SECURITY_BROWSER_ROUTES = new Set([
   'list-students','kiosk-checkin','get-legal-document-data','school-api',
-  'sync-school-calendar','sync-school-schedules','toggle-report-link',
 ]);
-// toggle-report-link is called by Notion link buttons/automations with the webhook key, so it is also in the
-// webhook set above; it stays here only for session compatibility.
 export function securityEnabled(): boolean { return Deno.env.get('ADMIN_SECURITY_ENABLED') === 'true'; }
 export class SecurityError extends Error {
   constructor(public status: number, message: string) { super(message); }

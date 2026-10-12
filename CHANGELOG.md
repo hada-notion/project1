@@ -3,6 +3,10 @@
 버전별 변경 기록입니다. 최신 버전이 맨 위에 옵니다. 상세 실행 지침은 `docs/updates/vX.Y.md`에 있습니다.
 패치를 올릴 때마다 한 줄 이상 추가하고, 해당 버전의 지침 파일을 함께 만듭니다. (템플릿: `docs/updates/_TEMPLATE.md`)
 
+## v2.5.51 — 2026-10-12
+
+- 코드·문서·매뉴얼 정합성 점검 반영. 관리자 로그인으로 부를 수 있는 함수를 관리 화면이 실제로 쓰는 4개로 줄임(`toggle-report-link`·`sync-school-calendar`는 Notion 웹훅 키로만). 정기 학사일정 수집이 폐지된 뒤 410만 돌려주던 `sync-school-schedules` 삭제(회귀 가드에 추가). 화면·문서만 바꾼 PR에서도 디자인 규칙·체크리스트 대조·회귀 가드를 도는 `web-checks.yml` 추가, 출석 수동 동기화 워크플로 파일명에서 `-cron` 제거. 화면 이름을 "법정 서류"로 통일. 문서: 이식 체크리스트에 빠진 `DATA_SOURCE_PAYMENT_ID`(법정 서류 영수증·현금출납부)·`NEIS_API_KEY`·`WEBHOOK_SECRET`, Vault 키가 예약 실행 5개 모두에 쓰인다는 설명, 치환 대상 개수, 키오스크 처리 흐름(v2.5.40 기준), 웹훅 매핑 호출처, 법정 서류 화면 설명, README 구성표 정정. 함수 배포 있음(병합 시 자동). **키오스크·법정 서류 `SUPABASE_URL`·`SUPABASE_ANON_KEY`, 학교 검색 `ENDPOINT`는 운영 값 유지.** 지침: `docs/updates/v2.5.51.md`
+
 ## v2.5.50 — 2026-10-12
 
 - 법정 서류 정렬 버튼(정렬 / 오름차순 / 내림차순)의 아이콘·글자를 가운데 대신 왼쪽 정렬로. 버튼 폭은 그대로. 화면만 변경. **`legal_documents.html`의 `SUPABASE_URL`·`SUPABASE_ANON_KEY`는 운영 값 유지.** 지침: `docs/updates/v2.5.50.md`
