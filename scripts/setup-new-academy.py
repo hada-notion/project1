@@ -40,6 +40,7 @@ TARGET_FILES_URL_KEY = [
     "supabase/migrations/20260923010000_sync_queue_audited_at.sql",
     "supabase/migrations/20260924010000_backfill_assignment_deadlines_cron.sql",
     "supabase/migrations/20260926020000_status_watchdog_cron_15min.sql",
+    "supabase/migrations/20261013030000_kiosk_today.sql",
     "attendance_kiosk.html",
     "legal_documents.html",
     "student_report_part1.js",

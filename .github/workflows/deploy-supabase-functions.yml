@@ -31,7 +31,7 @@ jobs:
           done
 
       - name: Test kiosk identity and directory guards
-        run: deno test --allow-env supabase/functions/_shared/kioskIdentity_test.ts supabase/functions/_shared/kioskSendLog_test.ts supabase/functions/_shared/academyName_test.ts supabase/functions/_shared/stepTiming_test.ts
+        run: deno test --allow-env supabase/functions/_shared/kioskIdentity_test.ts supabase/functions/_shared/kioskSendLog_test.ts supabase/functions/_shared/academyName_test.ts supabase/functions/_shared/stepTiming_test.ts supabase/functions/_shared/kioskToday_test.ts
 
       - name: Test assignment deadlines and chronological bulk order
         run: deno test --allow-env supabase/functions/_shared/assignmentDeadline_test.ts supabase/functions/_shared/bulkClassOrder_test.ts supabase/functions/generate-classes/index_test.ts

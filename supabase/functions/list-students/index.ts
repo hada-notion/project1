@@ -11,6 +11,13 @@ import {
 
 import { buildKioskDirectory, queryAllKioskPages, ACTIVE_KIOSK_STATUS } from "../_shared/kioskIdentity.ts"
 import { academyName } from "../_shared/academyName.ts"
+import { kstDate, prepareKioskToday, readKioskPrepared } from "../_shared/kioskToday.ts"
+
+// 응답 뒤에도 끝까지 처리할 작업(Supabase Edge Runtime의 waitUntil). 없으면 기다리지 않고 진행만 시킨다.
+function runAfterResponse(promise: Promise<unknown>): void {
+  const edgeRuntime = (globalThis as Record<string, unknown>).EdgeRuntime as { waitUntil?: (p: Promise<unknown>) => void } | undefined
+  if (edgeRuntime && typeof edgeRuntime.waitUntil === "function") edgeRuntime.waitUntil(promise)
+}
 
 function todayKst(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date())
@@ -47,7 +54,20 @@ Deno.serve(async (req: Request) => {
       })
       // academyName: 키오스크 아래에 작게 표시하는 학원 이름(Notion 최상위 페이지 제목).
       const name = await academyName(registrationDbId)
-      return new Response(JSON.stringify({ candidates: buildKioskDirectory(registrations, students), academyName: name, generatedAt: new Date().toISOString() }), {
+      // 오늘 출석 준비(v2.5.37): 새벽 준비가 없으면 방금 읽은 목록으로 뒤에서 자동 준비한다(화면은 기다리지 않음).
+      // kioskPrepared.at은 키오스크 아래에 "오늘 출석 준비 HH:mm"으로 연하게 표시된다.
+      let kioskPrepared: { at: string | null; today: boolean; preparing: boolean } = { at: null, today: false, preparing: false }
+      try {
+        const prepared = await readKioskPrepared()
+        const today = prepared?.kst_date === kstDate()
+        kioskPrepared = { at: prepared?.prepared_at ?? null, today, preparing: !today }
+        if (!today) {
+          runAfterResponse(prepareKioskToday("auto", { registrations, students }).catch(err => console.error("kiosk auto prepare error:", (err as Error).message)))
+        }
+      } catch (err) {
+        console.error("kiosk prepared read error:", (err as Error).message)
+      }
+      return new Response(JSON.stringify({ candidates: buildKioskDirectory(registrations, students), academyName: name, kioskPrepared, generatedAt: new Date().toISOString() }), {
         headers: { ...CORS_HEADERS, "Content-Type": "application/json", "Cache-Control": "no-store" },
       })
     }
