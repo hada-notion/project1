@@ -68,6 +68,13 @@
 .hint.bad{color:var(--danger-ink);font-weight:600}
 .hint.good{color:var(--success-ink)}
 .hint.none{color:var(--text-subtle)}
+/* 새 웹훅 키 막대: 체크리스트를 내려가도 위에 붙어 있어 URL과 키를 번갈아 복사할 수 있다 */
+.key-bar{position:sticky;top:var(--space-2);z-index:5;display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;padding:var(--space-3) var(--space-4);margin:0 0 var(--space-4);background:var(--surface);border:1px solid var(--brand-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-md)}
+.key-bar-label{font-weight:700;font-size:var(--text-small)}
+.key-bar-value{flex:1;min-width:0;overflow-wrap:anywhere;font-size:var(--text-small)}
+.key-bar .primary{min-height:var(--hit-area)}
+.copies{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-2);margin:var(--space-2) 0 0 var(--space-8)}
+.copy-btn{font-size:var(--text-caption);padding:2px var(--space-2)}
 .links-row{display:flex;justify-content:flex-end;align-items:center;gap:var(--space-3);margin:var(--space-3) 0;font-size:var(--text-label)}
 @media(max-width:860px){.guide-grid,.dash-grid{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:700px){.cards{grid-template-columns:minmax(0,1fr)}.topright .badge{display:none}.progress-head{flex-wrap:wrap}}
@@ -110,16 +117,17 @@
 <div id="webhook-key" class="narrow" hidden>
 <label for="new-webhook-key">새 웹훅 키</label><input type="text" id="new-webhook-key" readonly autocomplete="off" spellcheck="false">
 <div class="actions"><button class="primary" id="copy-webhook-key" type="button">복사</button></div>
-<div class="status warn"><strong>이 화면을 벗어나면 키를 다시 볼 수 없습니다.</strong>안전한 곳에 복사한 뒤, Notion 버튼·자동화의 <code>x-admin-key</code> 헤더(또는 본문 <code>adminKey</code>)를 이 값으로 바꿔 주세요. 채팅·문서·스크린샷에 남기지 마세요. 복사하기 전에 키를 잃었다면 교체를 취소하고 다시 시작하세요.</div>
-<button class="secondary wide" id="webhook-key-done" type="button">복사했어요 · 교체 현황 보기</button>
+<div class="status warn"><strong>교체를 마칠 때까지 이 탭의 교체 현황 화면 위쪽에서 언제든 다시 복사할 수 있습니다.</strong>교체를 완료·취소하거나 로그아웃·탭을 닫으면 지워지고, 서버는 키를 저장하지 않아 다시 보여 줄 수 없습니다. Notion 버튼·자동화의 <code>x-admin-key</code> 헤더(또는 본문 <code>adminKey</code>)를 이 값으로 바꿔 주세요. 채팅·문서·스크린샷에 남기지 마세요. 다른 탭·기기에서 키를 잃었다면 교체를 취소하고 다시 시작하세요.</div>
+<button class="secondary wide" id="webhook-key-done" type="button">교체 현황 보기</button>
 </div>
 <div id="webhook-progress" hidden>
+<div class="key-bar" id="key-bar" role="group" aria-label="새 웹훅 키"><span class="key-bar-label">새 웹훅 키</span><code class="key-bar-value" id="key-bar-value"></code><button class="ghost" id="key-bar-show" type="button">보기</button><button class="primary inline" id="key-bar-copy" type="button">키 복사</button></div>
 <div class="status" id="webhook-started"></div>
 <details class="guide" open><summary>교체 방법 (공통) · 어디에 붙여 넣나요?</summary>
 <div class="guide-grid">
 <div>
 <h4><span class="kind button"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="3" width="11" height="7.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8.3 7.6l6 2.4-2.5 1-1 2.5z" fill="currentColor"/></svg>버튼</span></h4>
-<ol class="flow"><li>아래 DB 카드의 <strong>웹훅등록 보기 열기</strong>를 누릅니다. 그 DB의 버튼만 모아 둔 보기가 열립니다.</li><li>바꿀 버튼 <strong>열의 머리글(열 이름)</strong>을 클릭하고 <strong>자동화 편집</strong>을 누릅니다.</li><li>작업 <strong>웹훅 보내기</strong>에서 키 <code>x-admin-key</code> 옆 <strong>값</strong> 칸을 새 키로 바꾸고 <strong>저장</strong>합니다.</li><li>이 화면에서 그 항목을 체크합니다. 같은 DB의 다음 버튼으로 이어서 진행합니다.</li></ol>
+<ol class="flow"><li>아래 DB 카드의 <strong>웹훅등록 보기 열기</strong>를 누릅니다. 그 DB의 버튼만 모아 둔 보기가 열립니다.</li><li>바꿀 버튼 <strong>열의 머리글(열 이름)</strong>을 클릭하고 <strong>자동화 편집</strong>을 누릅니다.</li><li>작업 <strong>웹훅 보내기</strong>에서 키 <code>x-admin-key</code> 옆 <strong>값</strong> 칸을 새 키로 바꾸고 <strong>저장</strong>합니다. 새로 배포하는 학원은 <strong>URL</strong> 칸도 항목의 <strong>URL 복사</strong> 값으로 채우고, <strong>추가 헤더</strong>가 적힌 항목은 그 헤더도 넣습니다. 새 키는 위쪽 <strong>키 복사</strong>로 언제든 다시 복사합니다.</li><li>이 화면에서 그 항목을 체크합니다. 같은 DB의 다음 버튼으로 이어서 진행합니다.</li></ol>
 <h4><span class="kind auto"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.6 1 3 9.2h4.2L6.3 15l6.7-8.3H8.7z" fill="currentColor"/></svg>자동화</span></h4>
 <ol class="flow"><li>카드의 <strong>DB 열기</strong>로 DB를 열고 오른쪽 위 <strong>번개 모양(자동화)</strong> 아이콘을 누릅니다.</li><li>목록에서 해당 자동화(예: 클래스 연결, 링크 비활성화)를 엽니다. 체크됨/체크 해제됨처럼 조건이 다른 자동화는 각각 따로 바꿉니다.</li><li>버튼과 같은 방법으로 <strong>웹훅 보내기 → 값</strong> 칸을 새 키로 바꾸고 저장합니다.</li><li>이 화면에서 체크합니다.</li></ol>
 </div>
