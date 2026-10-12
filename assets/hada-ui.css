@@ -34,6 +34,9 @@ h2{font-size:var(--text-title);line-height:1.4;margin:0 0 var(--space-3)}
 .notice{padding:var(--space-4) var(--space-5);border:1px solid var(--warning-border);background:var(--warning-soft);color:var(--warning-ink);border-radius:var(--radius-md);font-size:var(--text-small);margin-bottom:var(--space-6)}
 .notice strong{display:block;margin-bottom:var(--space-1)}
 .notice.error{border-color:var(--danger);background:var(--danger-soft);color:var(--danger-ink)}
+/* 알림 줄 종류: 기본(노랑)=주의·연결 확인 / .info=평소 안내·진행 중 / .success=저장·연결 완료 / .error=실패 */
+.notice.info{border-color:var(--brand-border);background:var(--surface);color:var(--text-ink)}
+.notice.success{border-color:var(--success);background:var(--success-soft);color:var(--success-ink)}
 .foot{margin:var(--space-6) 0 0;font-size:var(--text-small);color:var(--text-muted)}
 .foot strong{color:var(--brand-deep)}
 .divider{border:0;border-top:1px solid var(--brand-border);margin:var(--space-6) 0}
