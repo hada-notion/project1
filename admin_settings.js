@@ -114,7 +114,7 @@ const safeDb=url=>/^https:\/\/www\.notion\.so\/[0-9a-f]{32}$/.test(url||'');
 const safeView=url=>/^https:\/\/www\.notion\.so\/[0-9a-f]{32}\?v=[0-9a-f]{32}$/.test(url||'');
 const ICONS={[BUTTON]:'<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="3" width="11" height="7.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8.3 7.6l6 2.4-2.5 1-1 2.5z" fill="currentColor"/></svg>',[AUTO]:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.6 1 3 9.2h4.2L6.3 15l6.7-8.3H8.7z" fill="currentColor"/></svg>'};
 function el(tag,cls,content){const x=document.createElement(tag);if(cls)x.className=cls;if(content!==undefined)x.textContent=content;return x;}
-function link(url,label,title){const a=el('a','',label);a.href=url;a.target='_blank';a.rel='noopener noreferrer';a.title=title;return a;}
+function link(url,label,title,cls='link-chip'){const a=el('a',cls,label);a.href=url;a.target='_blank';a.rel='noopener noreferrer';a.title=title;return a;}
 async function loadWebhook(){
  webhook=await request('webhook-status');webhook.checks=webhook.checks||{};
  text('webhook-fact',webhook.rotating?`교체 진행 중 (${date(webhook.started_at)} 시작)`:webhook.changed_at?`마지막 교체 ${date(webhook.changed_at)}`:'평소 유지 · 사고 시 별도 교체');
@@ -145,8 +145,10 @@ function renderChecklist(){
   const badge=el('span','dbcount'+(count===items.length?' complete':''),`${count} / ${items.length}`);
   head.append(title,badge);
   const l=links&&links[dbKey(db)];const nav=el('div','dblinks');
-  if(l&&safeView(l.view))nav.append(link(l.view,'웹훅등록 보기 열기 ↗',db+' DB의 웹훅등록 보기'));
-  if(l&&safeDb(l.db))nav.append(link(l.db,safeView(l.view)?'DB ↗':'DB 열기 ↗',db+' DB'));
+  // The 웹훅등록 view is the link people use most, so it is the filled chip; the DB link is the outlined one.
+  const hasView=l&&safeView(l.view);
+  if(hasView)nav.append(link(l.view,'웹훅등록 보기 ↗',db+' DB의 웹훅등록 보기 열기','link-chip main'));
+  if(l&&safeDb(l.db))nav.append(link(l.db,hasView?'DB ↗':'DB 열기 ↗',db+' DB 열기',hasView?'link-chip':'link-chip main'));
   if(!nav.childNodes.length)nav.append(el('span','muted','Notion에서 이 DB를 찾지 못했습니다'));
   if(help){const q=el('button','help-btn','?');q.type='button';q.title='찾는 위치 보기';q.setAttribute('aria-label',db.replace('(학원)','')+' 버튼 찾는 위치 보기');q.onclick=()=>showHelp(db,help);nav.append(q);}
   head.append(nav);
