@@ -157,6 +157,19 @@ async function findTodayAttendance(attendanceDbId: string, registrationId: strin
   return (json.results ?? [])[0] ?? null
 }
 
+// 응답을 보낸 뒤에도 끝까지 처리할 작업. Supabase Edge Runtime이면 waitUntil에 맡기고,
+// 그 기능이 없는 환경(로컬 테스트 등)에서는 응답 전에 기다린다.
+function runAfterResponse(promise: Promise<unknown>): Promise<unknown> | void {
+  const edgeRuntime = (globalThis as Record<string, unknown>).EdgeRuntime as
+    | { waitUntil?: (p: Promise<unknown>) => void }
+    | undefined
+  if (edgeRuntime && typeof edgeRuntime.waitUntil === "function") {
+    edgeRuntime.waitUntil(promise)
+    return
+  }
+  return promise
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS })
 
@@ -295,79 +308,90 @@ Deno.serve(async (req: Request) => {
       stateChanged = true
     }
 
-    // 카카오 알림톡 (등원/하원 통합 템플릿이 아직 설정 전이면 조용히 건너뛴다)
+    // 카카오 알림톡 (등원/하원 통합 템플릿이 아직 설정 전이면 조용히 건너뛴다).
+    // [v2.5.36] 출석 기록까지만 기다리고 바로 응답한다. 알림톡 설정 조회·발송·전송로그는 응답 뒤에
+    // EdgeRuntime.waitUntil로 마저 처리한다(측정: 화면 대기 약 1.4초 단축). 실패는 지금처럼 전송로그에 남는다.
     if (stateChanged) {
-      const category = "키오스크 알림톡"
-      // [FIX, 2026-09-19] "알림톡 설정(학원) DB"의 "발신번호"가 비어 있으면(운영 중인 모든 행이 그렇다)
-      // 다른 발송 함수들(send-daily-report 등, _shared/alimtalkShared.ts)처럼 Secrets의
-      // SOLAPI_SENDER_NUMBER로 대체해야 하는데, 여기만 빈 문자열 fallback을 써서 Solapi 발송이
-      // "from"이 비어 있다는 이유로 매번 조용히 실패하고 있었다(전송로그에는 실패로 남았지만
-      // 활성화 전 정상 skip과 구분이 잘 안 됐음).
-      const config = await getAlimtalkConfig(category, {
-        pfId: "",
-        templateId: "",
-        senderNumber: Deno.env.get("SOLAPI_SENDER_NUMBER") ?? "",
-      })
-      timing.mark("alimtalk_config")
-      if (config.pfId && config.templateId) {
+      const notify = async () => {
+        const bg = new StepTiming()
         try {
-          const parentPhone = await resolveParentPhone(attendance, registrationId)
-          if (!parentPhone) throw new Error("학부모 연락처를 찾을 수 없습니다.")
-          timing.mark("parent_phone")
+          const category = "키오스크 알림톡"
+          // [FIX, 2026-09-19] "알림톡 설정(학원) DB"의 "발신번호"가 비어 있으면(운영 중인 모든 행이 그렇다)
+          // 다른 발송 함수들(send-daily-report 등, _shared/alimtalkShared.ts)처럼 Secrets의
+          // SOLAPI_SENDER_NUMBER로 대체해야 하는데, 여기만 빈 문자열 fallback을 써서 Solapi 발송이
+          // "from"이 비어 있다는 이유로 매번 조용히 실패하고 있었다(전송로그에는 실패로 남았지만
+          // 활성화 전 정상 skip과 구분이 잘 안 됐음).
+          const config = await getAlimtalkConfig(category, {
+            pfId: "",
+            templateId: "",
+            senderNumber: Deno.env.get("SOLAPI_SENDER_NUMBER") ?? "",
+          })
+          bg.mark("alimtalk_config")
+          if (config.pfId && config.templateId) {
+            try {
+              const parentPhone = await resolveParentPhone(attendance, registrationId)
+              if (!parentPhone) throw new Error("학부모 연락처를 찾을 수 없습니다.")
+              bg.mark("parent_phone")
 
-          const { SolapiMessageService } = await import("npm:solapi")
-          const messageService = new SolapiMessageService(
-            Deno.env.get("SOLAPI_API_KEY")!,
-            Deno.env.get("SOLAPI_API_SECRET")!,
-          )
-          const recipients = await resolveAlimtalkRecipients({
-            registrationId,
-            primaryPhone: parentPhone,
-            recipientTarget: config.recipientTarget,
-          })
-          timing.mark("recipients")
-          for (const recipient of recipients) {
-            await messageService.send({
-              to: recipient.phone,
-              from: normalizePhone(config.senderNumber),
-              kakaoOptions: {
-                pfId: config.pfId,
-                templateId: config.templateId,
-                variables: {
-                  "학생이름": studentName,
-                  "구분": type === "checkin" ? "등원" : "하원",
-                  "일자": formatKstDateKorean(todayKst()),
-                  "시간": formatKstTimeKorean(nowIso),
-                },
-                disableSms: false,
-              },
-            }, { allowDuplicates: true })
+              const { SolapiMessageService } = await import("npm:solapi")
+              const messageService = new SolapiMessageService(
+                Deno.env.get("SOLAPI_API_KEY")!,
+                Deno.env.get("SOLAPI_API_SECRET")!,
+              )
+              const recipients = await resolveAlimtalkRecipients({
+                registrationId,
+                primaryPhone: parentPhone,
+                recipientTarget: config.recipientTarget,
+              })
+              bg.mark("recipients")
+              for (const recipient of recipients) {
+                await messageService.send({
+                  to: recipient.phone,
+                  from: normalizePhone(config.senderNumber),
+                  kakaoOptions: {
+                    pfId: config.pfId,
+                    templateId: config.templateId,
+                    variables: {
+                      "학생이름": studentName,
+                      "구분": type === "checkin" ? "등원" : "하원",
+                      "일자": formatKstDateKorean(todayKst()),
+                      "시간": formatKstTimeKorean(nowIso),
+                    },
+                    disableSms: false,
+                  },
+                }, { allowDuplicates: true })
+              }
+              bg.mark("send")
+              await createSendLogEntry({
+                registrationId,
+                attendanceId: attendance.id,
+                attendanceType: type === "checkin" ? "등원" : "하원",
+                title: studentName,
+                category,
+                status: "성공",
+              })
+              bg.mark("send_log")
+            } catch (sendErr) {
+              await createSendLogEntry({
+                registrationId,
+                attendanceId: attendance.id,
+                attendanceType: type === "checkin" ? "등원" : "하원",
+                title: studentName,
+                category,
+                status: "실패",
+                failReason: extractErrorMessage(sendErr),
+              })
+              bg.mark("send_fail_log")
+            }
           }
-          timing.mark("send")
-          await createSendLogEntry({
-            registrationId,
-            attendanceId: attendance.id,
-            attendanceType: type === "checkin" ? "등원" : "하원",
-            title: studentName,
-            category,
-            status: "성공",
-          })
-          timing.mark("send_log")
-        } catch (sendErr) {
-          await createSendLogEntry({
-            registrationId,
-            attendanceId: attendance.id,
-            attendanceType: type === "checkin" ? "등원" : "하원",
-            title: studentName,
-            category,
-            status: "실패",
-            failReason: extractErrorMessage(sendErr),
-          })
-          timing.mark("send_fail_log")
+        } catch (bgErr) {
+          console.error("kiosk-checkin alimtalk error:", extractErrorMessage(bgErr))
+        } finally {
+          console.log("[kiosk-checkin timing alimtalk]", JSON.stringify(bg.summary()))
         }
       }
+      await runAfterResponse(notify())
     }
-
     outcome = alreadyDone ? "already" : "done"
     return new Response(JSON.stringify({ matched: true, studentName, alreadyDone, alreadyAt }), {
       headers: { ...CORS_HEADERS, "Content-Type": "application/json", "Server-Timing": timing.header(), "Timing-Allow-Origin": "*" },

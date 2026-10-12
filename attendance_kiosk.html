@@ -419,7 +419,7 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
       } else if (res.ok && data.matched) {
         showResult(
           "success",
-          (data.studentName ? data.studentName + " 학생 " : "") + label + " 처리되었습니다. 학부모님께 알림을 보냈습니다."
+          (data.studentName ? data.studentName + " 학생 " : "") + label + " 처리되었습니다. 학부모님께 알림을 보냅니다."
         );
       } else if (res.ok && data.matched === false) {
         showResult("error", "일치하는 연락처를 찾을 수 없습니다. 등록된 번호인지 확인해주세요.");
