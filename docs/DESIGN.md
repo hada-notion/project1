@@ -315,8 +315,10 @@ font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto San
 | 종류 배지 | `.kind.button`, `.kind.auto` | Notion 버튼(파랑, 버튼 아이콘) / 자동화(노랑, 번개 아이콘) |
 | 대화상자 | `dialog.card` + `.dialog-head` | 제목 + 닫기 버튼 |
 | 입력 | `label` + `input` + `.help` + `.error` | 라벨은 위, 도움말은 아래, 오류는 빨간 글자 |
+| 선택 상자 | `select` | 입력 칸과 같은 높이·안쪽 여백(글자 시작 위치가 같다). 브라우저 기본 화살표 대신 오른쪽 여백 안에 Feather `chevron-down`(20×20, `--icon-chevron-down`). 비활성은 옅은 바탕·옅은 글자 |
 
-- 아이콘은 1부 12장(Feather 스타일 선형 SVG, 고정 정사각 박스)을 따른다. 외부 서비스의 아이콘 파일은 가져와 쓰지 않는다.
+- 아이콘은 1부 12장(Feather 스타일 선형 SVG, 고정 정사각 박스)을 따른다. 새 아이콘은 Feather Icons(feathericons.com, MIT)의 원본 SVG 경로를 그대로 가져와 쓴다(2026-10-12 사용자 지정). 다른 외부 서비스의 아이콘 파일은 가져와 쓰지 않는다.
+- CSS 배경으로만 그릴 수 있는 아이콘(선택 상자 화살표 등)은 `assets/hada-tokens.css`에 `--icon-*` 토큰(데이터 URL)으로 두고, 선 색은 그 토큰에만 적는다.
 - 이미지 안내는 카드 안에 바로 넣지 않고 `?` 도움말 대화상자로 연다(카드 높이가 흔들리지 않게).
 
 ### 기타 화면 공통

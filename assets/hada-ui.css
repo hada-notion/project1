@@ -52,6 +52,9 @@ h2{font-size:var(--text-title);line-height:1.4;margin:0 0 var(--space-3)}
 label{display:block;font-weight:600;margin:var(--space-6) 0 var(--space-2)}
 input,select{width:100%;height:var(--control-h);border:1px solid var(--control-border);border-radius:var(--radius-md);background:var(--surface);color:var(--text-ink);padding:var(--space-3) var(--space-4);min-width:0}
 input[aria-invalid=true]{border-color:var(--danger-ink)}
+/* 선택 상자: 브라우저 기본 화살표(상자 끝에 붙음) 대신 입력 칸 여백 안에 Feather chevron-down(20×20) */
+select{appearance:none;-webkit-appearance:none;padding-right:var(--space-12);text-overflow:ellipsis;background-image:var(--icon-chevron-down);background-position:right var(--space-3) center;background-size:var(--icon-md) var(--icon-md);background-repeat:no-repeat}
+select:disabled{color:var(--text-subtle);background-color:var(--brand-tint)}
 /* 좁은 폼: 넓은 카드 안에서 가운데 */
 .narrow{max-width:var(--form-max);margin-left:auto;margin-right:auto}
 .help{font-size:var(--text-small);color:var(--text-muted);margin:var(--space-2) 0 var(--space-6)}

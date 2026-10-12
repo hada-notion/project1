@@ -3,6 +3,10 @@
 버전별 변경 기록입니다. 최신 버전이 맨 위에 옵니다. 상세 실행 지침은 `docs/updates/vX.Y.md`에 있습니다.
 패치를 올릴 때마다 한 줄 이상 추가하고, 해당 버전의 지침 파일을 함께 만듭니다. (템플릿: `docs/updates/_TEMPLATE.md`)
 
+## v2.5.42 — 2026-10-12
+
+- 공용 선택 상자(`select`) 정리: 브라우저 기본 화살표(상자 끝에 붙음) 대신 입력 칸 여백 안에 Feather 아이콘 `chevron-down`(토큰 `--icon-chevron-down`), 글자 시작 위치를 입력 칸과 맞춤, 비활성 상태 옅게. 학교 검색·법정 서류에 적용(`assets/hada-ui.css`, `assets/hada-tokens.css`). 새 아이콘은 Feather Icons 원본을 쓰도록 `DESIGN.md`에 명시. 화면만 변경. 지침: `docs/updates/v2.5.42.md`
+
 ## v2.5.41 — 2026-10-12
 
 - 학교 검색 화면 정리: 로그아웃을 상단 바로(로그인 후에만), 알림 줄 색을 상황별로(평소 흰 바탕·연결 완료 초록·오류 빨강, 공용 `.notice.info`·`.notice.success` 추가), 검색 결과를 "학교 정보 | 이 학교로 연결" 한 줄로(이름과 겹치는 학교 종류 생략, 홈페이지는 작은 링크), 연결 후 학교 정보와 [Notion 학교 페이지 열기]·[다른 학교 다시 찾기], 입력 칸 자동 이동(비밀번호 → 지역 → 첫 결과). 화면만 변경. **`school_search.html`의 `ENDPOINT`는 운영 값 유지.** 지침: `docs/updates/v2.5.41.md`
