@@ -109,12 +109,12 @@ const CHECKLIST=[
 // sync-attendance (GitHub Actions manual run; its GitHub Secret is noted below the checklist).
 const OUTSIDE_NOTION=[route('sync-attendance')];
 function route(name){return name;}
-// Notion database / "웹훅등록" view links (normalized DB title -> {db, view}), cached on the server.
+// Notion database / "웹훅 등록" view links (normalized DB title -> {db, view}), cached on the server.
 let links=null,linksUpdated=null;
 const dbKey=name=>name.replace(/\s+/g,'');
 async function loadLinks(refresh=false){
  if(links&&!refresh)return;
- if(refresh)notice('Notion에서 DB와 웹훅등록 보기를 찾고 있습니다. 1분 정도 걸릴 수 있어요.');
+ if(refresh)notice('Notion에서 DB와 "웹훅 등록" 보기를 찾고 있습니다. 1분 정도 걸릴 수 있어요.');
  try{const data=await request('webhook-links',{names:CHECKLIST.filter(([db])=>db).map(([db])=>dbKey(db)),refresh},90000);links=data.links||{};linksUpdated=data.updated_at;}
  catch(e){links=links||{};if(refresh)throw e;}
 }
@@ -213,7 +213,7 @@ function renderChecklist(){
   const badge=el('span','dbcount'+(count===items.length?' complete':''),`${count} / ${items.length}`);
   head.append(title,badge);
   const l=links&&links[dbKey(db)];const nav=el('div','dblinks');
-  // The 웹훅등록 view is the link people use most, so it is the filled chip; the DB link is the outlined one.
+  // The "웹훅 등록" view is the link people use most, so it is the filled chip; the DB link is the outlined one.
   const hasView=l&&safeView(l.view);
   if(hasView)nav.append(link(l.view,'웹훅 등록 ↗',db+' DB의 "웹훅 등록" 보기 열기','link-chip main'));
   if(l&&safeDb(l.db))nav.append(link(l.db,'DB 열기 ↗',db+' DB 열기',hasView?'link-chip':'link-chip main'));
