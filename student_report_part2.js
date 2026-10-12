@@ -461,23 +461,23 @@ function buildHomeTabHtml(r) {
   const comment = (r.teacher_comments || []).filter((c) => c.text).slice().sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))[0]
   return `
     <div class="feed-narrow-wrap">
+      <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line></svg></span>오늘 ${esc(formatDateLabel(MOCK_TODAY).replace(/^\d+년 /, ""))}</h3>
       <div class="card">
-        <div class="home-today-title"><span class="inline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line></svg></span>오늘 ${esc(formatDateLabel(MOCK_TODAY).replace(/^\d+년 /, ""))}</div>
         <div class="home-stats">
           <div class="home-stat ${attTone}"><b>${esc(attText)}</b><small>출석</small></div>
           <div class="home-stat ${pending.length ? "bad" : ""}"><b>${pending.length}개</b><small>남은 과제</small></div>
           <div class="home-stat"><b>${esc(nextClassInfo(r))}</b><small>다음 수업</small></div>
         </div>
       </div>
-      <div class="home-section-label">곧 마감</div>
+      <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></span>곧 마감</h3>
       <div class="card">${pending.length ? pending.slice(0, 3).map((h) => kindBlockHtml("과제", { title: [h.book, h.range].filter(Boolean).join(" · ") || "과제", pill: h.status, pillTone: homeworkPillTone(h.status), sub: `마감 ${shortDateDow(h.due)}` })).join("") : `<div class="empty">남은 과제가 없어요.</div>`}</div>
-      <div class="home-section-label">진도</div>
+      <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></span>진도</h3>
       <div class="card">${books.length ? books.map((b) => `
         <div class="home-progress-row" onclick="openBookStudy('${esc(b.title).replace(/'/g, "&#39;")}')" style="cursor:pointer">
           <div class="home-progress-title">${esc(b.title)}</div>
           <div class="progress-line"><div class="track"><div class="fill" style="width:${b.progress ?? 0}%"></div></div><b>${b.progress ?? 0}%</b></div>
         </div>`).join("") : `<div class="empty">진행 중인 교재가 없어요.</div>`}</div>
-      <div class="home-section-label">선생님 한마디</div>
+      <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></span>선생님 한마디</h3>
       <div class="card">${comment ? `<div class="speech">${esc(comment.text)}<small>${esc([comment.by, comment.date ? shortDateDow(comment.date) : ""].filter(Boolean).join(" · "))}</small></div>` : `<div class="empty">아직 등록된 한마디가 없어요.</div>`}</div>
     </div>
   `
@@ -852,16 +852,16 @@ function buildReportTabHtml(r) {
         <div class="donut-count-below">(${doneHomework}/${homeworkItems.length})</div>
       </div>
     </div>
+    <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span>평가 기록</h3>
     <div class="card">
-      <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span>평가 기록</h2>
       ${buildTestTrendChartHtml(computeTestTrendPoints(tests, reportPeriod, reportOffset))}
     </div>
+    <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></span>선생님 한마디</h3>
     <div class="card">
-      <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></span>선생님 한마디</h2>
       ${(() => {
         const kind = reportPeriod === "week" ? "주간 보고서" : "월간 보고서"
         const matched = reportComments.filter((c) => c.kind === kind && c.start && (c.end || c.start) >= rangeStart && c.start <= rangeEnd)
-        return matched.length ? matched.map((c) => `<div class="list-item"><div>${esc(c.comment)}</div></div>`).join("") : `<div class="list-item empty-hint">아직 등록된 한마디가 없어요</div>`
+        return matched.length ? matched.map((c) => `<div class="speech">${esc(c.comment)}</div>`).join("") : `<div class="empty">아직 등록된 한마디가 없어요.</div>`
       })()}
     </div>
     </div>
@@ -909,6 +909,20 @@ function findLatestComment(r, date) {
   return (r.teacher_comments || []).find((c) => c.date && String(c.date).slice(0, 10) === date) || null
 }
 
+// 보고서 항목 한 건: "교재 · 범위" + 상태 알약 + 메타 줄, 본문은 접지 않고 전부 보여준다.
+function reportItemHtml(r, item, opts) {
+  const { pill, pillTone, extraRows } = opts || {}
+  const title = [item.book, item.range].filter(Boolean).join(" · ") || "기록"
+  const meta = renderLogMetaRows(item.unit, item.note, extraRows || [])
+  const body = buildLogBodyHtml(item)
+  return `
+    <div class="rep-item">
+      <div class="rep-title">${esc(title)}${pill ? `<span class="log-pill ${pillTone || ""}">${esc(pill)}</span>` : ""}</div>
+      ${meta ? `<div class="rep-meta">${meta}</div>` : ""}
+      ${body ? `<div class="rep-body">${body}</div>` : ""}
+    </div>
+  `
+}
 function buildDailyBodyHtml(r, date) {
   const attendanceRow = (r.attendance_rows || []).find((a) => a.date === date)
   // 과제상태는 "그날 수업이 있었는지"가 아니라 "그날이 마감일인 과제가 있는지" 기준으로 판단한다.
@@ -919,47 +933,51 @@ function buildDailyBodyHtml(r, date) {
       : { text: "미제출", cls: "미제출" }
     : null
   const todaysLogs = (r.study_logs || []).filter((l) => l.date === date)
+  // 이번 과제: 출제일 기준(findNextHomeworkItems). 지난 과제: 이날 마감인 과제(위 이날 마감 과제와 같은 기준).
   const nextHomeworkItems = findNextHomeworkItems(r, date)
   const todaysTests = (r.tests || []).filter((t) => String(t.date || "").slice(0, 10) === date)
   const comment = findLatestComment(r, date)
   const attStatus = attendanceRow ? (attendanceRow.status || "상태 미입력") : "해당 없음"
+  const checkIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>`
+  const msgIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>`
+  // 보고서 세션(다른 탭과 같은 규칙): 세션 제목은 박스 밖, 기록마다 개별 박스. 박스 안은 흰 머리 + 베이지 본문(늘 펼침).
+  const band = (inner) => `<div class="card rep-card">${inner}</div>`
+  const empty = (text) => band(`<div class="empty">${text}</div>`)
+  const groupBand = (items, render, emptyText) => (items.length ? items.map((it) => band(render(it))).join("") : empty(emptyText))
+  const session = (icon, text, inner) => `<h3 class="sec-title"><span class="sec-icon">${icon}</span>${text}</h3>${inner}`
+  const sub = (text) => `<div class="rep-sub">${text}</div>`
 
-  // 위쪽 요약: 출석과 그날 마감 과제를 한 카드 두 칸으로 보여준다(과제 칸은 누르면 마감 과제 목록).
-  // 아래 기록: 학습·다음 과제·평가를 학습기록 탭과 같은 분류 아이콘으로 한 카드에 묶는다.
+  const studyHtml = todaysLogs.length ? todaysLogs.map((l) => band(reportItemHtml(r, l))).join("") : empty("이날 기록된 학습 내용이 없어요.")
+  const homeworkHtml =
+    sub("지난 과제") +
+    groupBand(dueTodayHomework, (h) => reportItemHtml(r, h, { pill: h.status, pillTone: homeworkPillTone(h.status), extraRows: h.classDate ? [`출제: ${withDow(h.classDate)}`] : [] }), "이날 마감인 과제가 없어요.") +
+    sub("이번 과제") +
+    groupBand(nextHomeworkItems, (h) => reportItemHtml(r, h, { pill: h.status, pillTone: homeworkPillTone(h.status), extraRows: [h.classDate ? `출제: ${withDow(h.classDate)}` : null, `마감: ${withDow(h.due)}`].filter(Boolean) }), "출제된 과제가 없어요.")
+  const testHtml =
+    sub("이번 평가") +
+    groupBand(todaysTests, (t) => reportItemHtml(r, t, { pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0) }), "이날 평가가 없어요.") +
+    sub("최근 평가 추이") +
+    band(buildTestTrendChartHtml(computeRecentTestPoints(r.tests || [], date, 3)))
+  const commentHtml = comment
+    ? band(`<div class="speech">${esc(comment.text)}${comment.by ? `<small>${esc(comment.by)}</small>` : ""}</div>`)
+    : empty("등록된 코멘트가 없습니다.")
+
   return `
-    <div class="day-summary">
-      <div>
-        <small><span class="inline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg></span>출석</small>
-        <div class="val"><span class="badge ${esc(attStatus)}">${esc(attStatus)}</span></div>
+    <div class="report-donut-row">
+      <div class="donut-card">
+        <div class="donut-title"><span class="inline-icon">${checkIcon}</span>출석</div>
+        <div class="day-status"><span class="badge ${esc(attStatus)}">${esc(attStatus)}</span></div>
       </div>
-      <div${homeworkStatusToday ? ` class="clickable" onclick="showHomeworkDayModal('${date}')"` : ""}>
-        <small><span class="inline-icon">${KIND_ICONS["과제"]}</span>이날 마감 과제</small>
-        <div class="val">${homeworkStatusToday ? `<span class="badge ${homeworkStatusToday.cls}">${homeworkStatusToday.text}</span>${dueTodayHomework.length}건` : `<span class="badge">해당 없음</span>`}</div>
+      <div class="donut-card${homeworkStatusToday ? " clickable" : ""}"${homeworkStatusToday ? ` onclick="showHomeworkDayModal('${date}')"` : ""}>
+        <div class="donut-title"><span class="inline-icon">${KIND_ICONS["과제"]}</span>이날 마감 과제</div>
+        <div class="day-status">${homeworkStatusToday ? `<span class="badge ${homeworkStatusToday.cls}">${homeworkStatusToday.text}</span>` : `<span class="badge">해당 없음</span>`}</div>
+        ${homeworkStatusToday ? `<div class="donut-count-below">${dueTodayHomework.length}건</div>` : ""}
       </div>
     </div>
-
-    <div class="card">
-      <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></span>이날 기록</h2>
-      ${todaysLogs.length
-        ? todaysLogs.map((l) => kindBlockHtml("학습", { title: [l.book, l.range].filter(Boolean).join(" · ") || "학습 기록", item: l })).join("")
-        : kindEmptyHtml("학습", "이날 기록된 학습 내용이 없어요")}
-      ${nextHomeworkItems.length
-        ? nextHomeworkItems.map((h) => kindBlockHtml("과제", { title: [h.book, h.range].filter(Boolean).join(" · ") || "과제", pill: h.status, pillTone: homeworkPillTone(h.status), sub: `다음 과제 · 마감 ${shortDateDow(h.due)}`, item: h, metaExtra: h.classDate ? [`출제: ${withDow(h.classDate)}`] : [] })).join("")
-        : kindEmptyHtml("과제", "출제된 과제가 없어요")}
-      ${todaysTests.length
-        ? todaysTests.map((t) => kindBlockHtml("평가", { title: [t.book, t.range].filter(Boolean).join(" · ") || "평가", pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), item: t })).join("")
-        : kindEmptyHtml("평가", "이날 평가가 없어요")}
-    </div>
-
-    <div class="card">
-      <h2><span class="page-title-icon">${KIND_ICONS["평가"]}</span>최근 평가 추이</h2>
-      ${buildTestTrendChartHtml(computeRecentTestPoints(r.tests || [], date, 3))}
-    </div>
-
-    <div class="card">
-      <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></span>선생님 코멘트</h2>
-      ${comment ? `<div class="speech">${esc(comment.text)}${comment.by ? `<small>${esc(comment.by)}</small>` : ""}</div>` : '<div class="empty">등록된 코멘트가 없습니다.</div>'}
-    </div>
+    ${session(KIND_ICONS["학습"], "학습", studyHtml)}
+    ${session(KIND_ICONS["과제"], "과제", homeworkHtml)}
+    ${session(KIND_ICONS["평가"], "평가", testHtml)}
+    ${session(msgIcon, "선생님 코멘트", commentHtml)}
   `
 }
 
