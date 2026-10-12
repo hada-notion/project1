@@ -51,7 +51,8 @@
 // 다시 1로 되돌렸다 -- 아래 CONCURRENCY 선언부 주석 참고). 마스터플랜:
 // https://app.notion.com/p/903c90386c1d473494c5df6306c53517
 
-// [현재 상태, 2026-09-26] 대시보드 관련 자동화와 직접 enqueue 호출은 제거됐다. sync-dashboard-link를
+// [현재 상태, 2026-09-26] 대시보드로 거는 직접 enqueue 호출은 제거됐다(대시보드 DB의 웹훅 자동화 2개는
+// sync-dashboard-link를 동기로 호출하므로 이 큐를 거치지 않는다). sync-dashboard-link를
 // 다른 target들과 분리했던 이유(물량 적체로 다른 target들이 뒤에서 오래 기다리는 문제, 2026-09-24
 // 분리큐 1단계)가 더 이상 발생하지 않으므로, 전용 레인 분리는 되돌리고 다시 레인 하나로 합쳤다
 // (아래 lane() 호출부 참고). 혹시 예전에 쌓인 sync-dashboard-link 항목이 남아 있어도 이 레인에서
@@ -127,8 +128,8 @@ const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Pro
 // (2026-09-24, sync_queue 분리큐 1단계 -> 2026-09-26, 되돌림) sync-dashboard-link만 물량이
 // 압도적으로 많았던 시기(대기 중인 항목 1056건)에 다른 target들이 뒤에서 오래 기다리는 문제(레인
 // 기아)를 막기 위해, sync-dashboard-link 전용 레인과 나머지 6개 target 전용 레인을 분리해 동시에
-// 돌렸었다. 대시보드 관련 자동화가 완전히 제거되어 sync-dashboard-link로는 더 이상 새 작업이
-// 적재되지 않으므로, 분리해야 할 이유가 사라졌다 -- 아래에서 다시 레인 하나로 합쳤다(모든 target을
+// 돌렸었다. 대량 적재를 일으키던 수업·출석 쪽 경로가 제거되어 sync-dashboard-link로는 더 이상 새 작업이
+// 적재되지 않으므로(대시보드 DB 자동화는 큐 없이 동기 호출), 분리해야 할 이유가 사라졌다 -- 아래에서 다시 레인 하나로 합쳤다(모든 target을
 // 큐에 쌓인 순서 그대로 처리, 위 Phase 6 후속 교훈과 동일).
 const TIME_BUDGET_MS = 100_000
 

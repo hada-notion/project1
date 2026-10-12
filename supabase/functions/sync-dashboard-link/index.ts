@@ -2,12 +2,11 @@ import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 // Supabase Edge Function: sync-dashboard-link
 //
 // 같은 날짜의 수업·출석·일정과 대시보드 페이지를 연결하는 엔드포인트다.
-// [현재 상태, 2026-09-25] Notion 생성 자동화, generate-classes/kiosk-checkin 직접 적재,
-// nightly-dashboard-link-audit가 모두 제거되어 현재 이 엔드포인트를 호출하는 운영 경로는 없다.
-// 수업 생성 중 Notion API 호출량을 줄이기 위해 제거 상태를 유지한다.
-//
-// 아래 코드는 대시보드 연결을 별도 pull/수동 방식으로 재설계할 가능성에 대비해 남아 있지만,
-// 호출자가 없는 휴면 코드다. 삭제 여부는 실행 로직 변경이므로 문구 정리와 별도로 결정한다.
+// [현재 상태, 2026-10-13 원본 Notion 확인] 대시보드(학원) DB의 웹훅 자동화 2개가 호출한다:
+// "날짜 속성 편집" 시, "페이지 추가" 시. 둘 다 그 대시보드 페이지 id를 보내고, 이 함수가 그 날짜의
+// 수업·출석·일정을 찾아 대시보드 쪽 relation에 채운다(응답을 기다리는 동기 처리).
+// 반대 방향 호출(수업·출석·일정 DB 자동화, generate-classes/kiosk-checkin의 직접 적재,
+// nightly-dashboard-link-audit)은 수업 생성 중 Notion API 호출량 때문에 제거했고 다시 연결하지 않는다.
 
 import { extractPageId } from "../_shared/notionClient.ts"
 import { processDashboardLinkQueueItem } from "../_shared/dashboardLinkTarget.ts"
