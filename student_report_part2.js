@@ -237,11 +237,6 @@ function attendanceByDate(r) {
   ;(r.attendance_rows || []).forEach((a) => { if (a.date) map[a.date] = a.status || "" })
   return map
 }
-function homeworkDayByDate(r) {
-  const map = {}
-  ;(r.homework_days || []).forEach((h) => { if (h.date) map[String(h.date).slice(0, 10)] = h.status })
-  return map
-}
 // 한 달의 수업 목록: [{ date, status, planned }]. 지난 수업(출석 행)은 status, 남은 수업은 planned.
 function monthSessions(r, y, m) {
   const monthKey = `${y}-${String(m).padStart(2, "0")}`
@@ -251,59 +246,89 @@ function monthSessions(r, y, m) {
   const daysInMonth = new Date(y, m, 0).getDate()
   for (let day = 1; day <= daysInMonth; day++) {
     const dateStr = `${monthKey}-${String(day).padStart(2, "0")}`
-    if (dateStr < MOCK_TODAY || att[dateStr] !== undefined) continue
-    if (isPlannedClassDate(r, dateStr, closed)) list.push({ date: dateStr, status: "", planned: true })
+    if (att[dateStr] !== undefined || !isPlannedClassDate(r, dateStr, closed)) continue
+    // 오늘 이후는 남은 수업, 지난 날은 기록 없는 수업(빗금)으로 센다.
+    list.push({ date: dateStr, status: "", planned: dateStr >= MOCK_TODAY, missing: dateStr < MOCK_TODAY })
   }
   return list.sort((a, b) => a.date.localeCompare(b.date))
 }
 
 // ===== 캘린더 탭 =====
+// 과제 마감일별 묶음과 그날 상태: 모두 제출 → 완료, 일부 제출 → 부분완료, 제출 없이 마감 지남 → 미완료,
+// 아직 마감 전 → 예정(테두리)
+function homeworkDueMap(r) {
+  const map = {}
+  ;(r.homework || []).forEach((h) => { const d = String(h.due || "").slice(0, 10); if (d) (map[d] = map[d] || []).push(h) })
+  return map
+}
+function homeworkDueStatus(list, dateStr) {
+  const done = list.filter((h) => h.status === "제출").length
+  if (done === list.length) return "완료"
+  if (dateStr >= MOCK_TODAY) return "plan"
+  return done ? "부분완료" : "미완료"
+}
+function buildHomeworkBarHtml(r, y, m, withChips) {
+  const monthKey = `${y}-${String(m).padStart(2, "0")}`
+  const items = (r.homework || []).filter((h) => String(h.due || "").startsWith(monthKey)).sort((a, b) => String(a.due).localeCompare(String(b.due)))
+  const state = (h) => h.status === "제출" ? "완료" : String(h.due).slice(0, 10) < MOCK_TODAY ? "미완료" : ""
+  const done = items.filter((h) => state(h) === "완료").length
+  const late = items.filter((h) => state(h) === "미완료").length
+  const chips = withChips ? `<div class="session-chips"><div class="present"><b>${done}</b>완료</div><div class="absent"><b>${late}</b>미제출</div><div><b>${items.length - done - late}</b>남은 과제</div></div>` : ""
+  return `
+    <div class="session-bar-card">
+      <div class="session-bar"><span class="lbl">${m}월 과제</span><div class="cells">${items.map((h) => `<i class="${state(h)}"></i>`).join("") || "<i></i>"}</div><b>${done} / ${items.length} 완료</b></div>
+      ${chips}
+    </div>
+  `
+}
 function buildSessionBarHtml(r, y, m, mode, withChips) {
+  if (mode !== "attendance") return buildHomeworkBarHtml(r, y, m, withChips)
   const sessions = monthSessions(r, y, m)
-  const hw = homeworkDayByDate(r)
   const past = sessions.filter((s) => !s.planned)
   const remaining = sessions.length - past.length
   const cells = sessions.map((s) => {
     if (s.planned) return "<i></i>"
-    if (mode === "attendance") {
-      const st = ["출석", "결석", "보강"].find((k) => String(s.status).includes(k))
-      return `<i class="${st || "지남"}"></i>`
-    }
-    return `<i class="${hw[s.date] || "지남"}"></i>`
+    const st = ["출석", "결석", "보강"].find((k) => String(s.status).includes(k))
+    return `<i class="${st || "지남"}"></i>`
   }).join("")
   const count = (kw) => past.filter((s) => String(s.status).includes(kw)).length
-  const monthHw = (r.homework_days || []).filter((h) => h.date && String(h.date).startsWith(`${y}-${String(m).padStart(2, "0")}`))
-  const hwCount = (st) => monthHw.filter((h) => h.status === st).length
-  const label = mode === "attendance" ? `${m}월 수업` : `${m}월 과제`
-  const right = mode === "attendance" ? `${past.length} / ${sessions.length}회` : `${hwCount("완료")} / ${monthHw.length} 완료`
-  const chips = !withChips ? "" : mode === "attendance"
+  const chips = withChips
     ? `<div class="session-chips"><div class="present"><b>${count("출석")}</b>출석</div><div class="absent"><b>${count("결석")}</b>결석</div><div class="makeup"><b>${count("보강")}</b>보강</div><div><b>${remaining}</b>남은 수업</div></div>`
-    : `<div class="session-chips"><div class="present"><b>${hwCount("완료")}</b>완료</div><div class="partial"><b>${hwCount("부분완료")}</b>일부</div><div class="absent"><b>${hwCount("미완료")}</b>미완료</div><div><b>${remaining}</b>남은 수업</div></div>`
+    : ""
   return `
     <div class="session-bar-card">
-      <div class="session-bar"><span class="lbl">${label}</span><div class="cells">${cells || "<i></i>"}</div><b>${right}</b></div>
+      <div class="session-bar"><span class="lbl">${m}월 수업</span><div class="cells">${cells || "<i></i>"}</div><b>${past.length} / ${sessions.length}회</b></div>
       ${chips}
     </div>
   `
 }
 function calDayCellHtml(r, dateStr, mode, maps) {
   const [, , dd] = dateStr.split("-").map(Number)
-  const status = mode === "attendance"
-    ? (["출석", "결석", "보강"].find((k) => String(maps.att[dateStr] || "").includes(k)) || "")
-    : (maps.hw[dateStr] || "")
-  const planned = !status && maps.att[dateStr] === undefined && dateStr >= MOCK_TODAY && isPlannedClassDate(r, dateStr, maps.closed)
-  const classes = ["cal-day", status || (planned ? "plan" : "empty-day")]
+  let status = ""
+  let planned = false
+  let missing = false
+  if (mode === "attendance") {
+    status = ["출석", "결석", "보강"].find((k) => String(maps.att[dateStr] || "").includes(k)) || ""
+    const scheduled = !status && maps.att[dateStr] === undefined && isPlannedClassDate(r, dateStr, maps.closed)
+    planned = scheduled && dateStr >= MOCK_TODAY
+    missing = scheduled && dateStr < MOCK_TODAY
+  } else if (maps.due[dateStr]) {
+    const st = homeworkDueStatus(maps.due[dateStr], dateStr)
+    if (st === "plan") planned = true
+    else status = st
+  }
+  const classes = ["cal-day", status || (planned ? "plan" : missing ? "missing" : "empty-day")]
   if (dateStr === MOCK_TODAY) classes.push("today")
   if (dateStr === selectedCalDate) classes.push("picked")
   return `<div class="${classes.join(" ")}" onclick="selectCalDay('${dateStr}')"><span>${dd}</span></div>`
 }
 function buildRegCalendarHtml(r, mode) {
   if (!r) return '<div class="empty">등록 정보가 없습니다.</div>'
-  const maps = { att: attendanceByDate(r), hw: homeworkDayByDate(r), closed: closedDateSet() }
+  const maps = { att: attendanceByDate(r), due: homeworkDueMap(r), closed: closedDateSet() }
   const dowHeader = ["월", "화", "수", "목", "금", "토", "일"].map((l, i) => `<div class="cal-dow${i === 5 ? " sat" : i === 6 ? " sun" : ""}">${l}</div>`).join("")
   const legend = mode === "attendance"
-    ? `<div class="cal-legend"><span><span class="dot" style="background:var(--success)"></span>출석</span><span><span class="dot" style="background:var(--danger)"></span>결석</span><span><span class="dot" style="background:var(--info)"></span>보강</span><span><span class="dot" style="background:transparent;box-shadow:inset 0 0 0 1.5px var(--brand-border)"></span>예정</span></div>`
-    : `<div class="cal-legend"><span><span class="dot" style="background:var(--success)"></span>완료</span><span><span class="dot" style="background:var(--warning)"></span>일부</span><span><span class="dot" style="background:var(--danger)"></span>미완료</span><span><span class="dot" style="background:transparent;box-shadow:inset 0 0 0 1.5px var(--brand-border)"></span>예정</span></div>`
+    ? `<div class="cal-legend"><span><span class="dot" style="background:var(--success)"></span>출석</span><span><span class="dot" style="background:var(--danger)"></span>결석</span><span><span class="dot" style="background:var(--info)"></span>보강</span><span><span class="dot" style="background:transparent;box-shadow:inset 0 0 0 1.5px var(--brand-border)"></span>예정</span><span><span class="dot" style="background:repeating-linear-gradient(135deg, var(--brand-light) 0 2px, transparent 2px 4px)"></span>기록 없음</span><span><span class="dot" style="background:transparent;box-shadow:inset 0 0 0 1.5px var(--danger)"></span>오늘</span></div>`
+    : `<div class="cal-legend"><span><span class="dot" style="background:var(--success)"></span>제출</span><span><span class="dot" style="background:var(--warning)"></span>일부</span><span><span class="dot" style="background:var(--danger)"></span>미제출</span><span><span class="dot" style="background:transparent;box-shadow:inset 0 0 0 1.5px var(--brand-border)"></span>마감 예정</span><span><span class="dot" style="background:transparent;box-shadow:inset 0 0 0 1.5px var(--danger)"></span>오늘</span></div>`
 
   // 날짜를 고른 상태: 그 주 한 줄 + 아래에 그날 기록
   if (selectedCalDate) {
@@ -369,7 +394,7 @@ function buildCalDayPanelHtml(r, date) {
   const homework = (r.homework || []).filter((h) => h.classDate === date)
   const tests = (r.tests || []).filter((t) => String(t.date || "").slice(0, 10) === date)
   const planned = !att && date >= MOCK_TODAY && isPlannedClassDate(r, date, closedDateSet())
-  const badge = att ? `<span class="badge ${esc(att.status)}">${esc(att.status || "기록 없음")}</span>` : `<span class="badge">${planned ? "수업 예정" : "수업 없음"}</span>`
+  const badge = att ? `<span class="badge ${esc(att.status)}">${esc(att.status || "상태 미입력")}</span>` : `<span class="badge">${planned ? "수업 예정" : "수업 없음"}</span>`
   const blocks = [
     ...logs.map((l) => kindBlockHtml("학습", { title: [l.book, l.range].filter(Boolean).join(" · ") || "학습 기록", item: l })),
     ...homework.map((h) => kindBlockHtml("과제", { title: [h.book, h.range].filter(Boolean).join(" · ") || "과제", pill: h.status, pillTone: homeworkPillTone(h.status), sub: h.due ? `마감 ${shortDateDow(h.due)}` : "", item: h })),
@@ -410,11 +435,8 @@ function buildHomeHeroHtml(r) {
   return `
     <div class="home-hero">
       <div class="home-hero-row">
-        <div class="home-hero-icon">${r.emoji ? esc(r.emoji) : KIND_ICONS["학습"]}</div>
-        <div>
-          <div class="home-hero-title">${esc(r.class_name)}</div>
-          ${sub ? `<div class="home-hero-sub">${esc(sub)}</div>` : ""}
-        </div>
+        <div class="home-hero-title">${r.emoji ? `<span class="home-hero-emoji">${esc(r.emoji)}</span>` : ""}${esc(r.class_name)}</div>
+        ${sub ? `<div class="home-hero-sub">${esc(sub)}</div>` : ""}
       </div>
     </div>
   `
@@ -892,7 +914,7 @@ function buildDailyBodyHtml(r, date) {
   const nextHomeworkItems = findNextHomeworkItems(r, date)
   const todaysTests = (r.tests || []).filter((t) => String(t.date || "").slice(0, 10) === date)
   const comment = findLatestComment(r, date)
-  const attStatus = attendanceRow ? attendanceRow.status : "해당 없음"
+  const attStatus = attendanceRow ? (attendanceRow.status || "상태 미입력") : "해당 없음"
 
   // 위쪽 요약: 출석과 그날 마감 과제를 한 카드 두 칸으로 보여준다(과제 칸은 누르면 마감 과제 목록).
   // 아래 기록: 학습·다음 과제·평가를 학습기록 탭과 같은 분류 아이콘으로 한 카드에 묶는다.
@@ -909,13 +931,13 @@ function buildDailyBodyHtml(r, date) {
     </div>
 
     <div class="card">
-      <h2><span class="page-title-icon">${KIND_ICONS["학습"]}</span>이날 기록</h2>
+      <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></span>이날 기록</h2>
       ${todaysLogs.length
         ? todaysLogs.map((l) => kindBlockHtml("학습", { title: [l.book, l.range].filter(Boolean).join(" · ") || "학습 기록", item: l })).join("")
         : kindEmptyHtml("학습", "이날 기록된 학습 내용이 없어요")}
       ${nextHomeworkItems.length
         ? nextHomeworkItems.map((h) => kindBlockHtml("과제", { title: [h.book, h.range].filter(Boolean).join(" · ") || "과제", pill: h.status, pillTone: homeworkPillTone(h.status), sub: `다음 과제 · 마감 ${shortDateDow(h.due)}`, item: h, metaExtra: h.classDate ? [`출제: ${withDow(h.classDate)}`] : [] })).join("")
-        : kindEmptyHtml("과제", "예정된 과제가 없어요")}
+        : kindEmptyHtml("과제", "출제된 과제가 없어요")}
       ${todaysTests.length
         ? todaysTests.map((t) => kindBlockHtml("평가", { title: [t.book, t.range].filter(Boolean).join(" · ") || "평가", pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), item: t })).join("")
         : kindEmptyHtml("평가", "이날 평가가 없어요")}
