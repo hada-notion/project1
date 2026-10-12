@@ -22,7 +22,7 @@
 .display.placeholder{color:var(--text-subtle);font-weight:400;font-size:var(--text-body);letter-spacing:0}
 .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-3);margin-bottom:var(--space-4)}
 .key{height:var(--control-lg);border-radius:var(--radius-md);border:1px solid var(--brand-border);background:var(--surface);font-size:var(--text-lead);font-weight:600;color:var(--text-ink);display:flex;align-items:center;justify-content:center;transition:background .1s ease}
-.key:active{background:var(--brand-soft)}
+.key:active,.key.pressed{background:var(--brand-soft)}
 .key.func{color:var(--text-muted);font-size:var(--text-small);font-weight:500}
 .confirm-row{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)}
 .confirm-row .primary,.confirm-row .secondary{width:100%;height:var(--control-lg);font-size:var(--text-body);font-weight:700}
@@ -252,10 +252,7 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
   }
   document.getElementById("resultClose").addEventListener("click", clearResult);
 
-  document.getElementById("keypad").addEventListener("click", (e) => {
-    const btn = e.target.closest(".key");
-    if (!btn) return;
-    const val = btn.dataset.val;
+  function pressKey(val) {
     if (val === "back") {
       digits = digits.slice(0, -1);
     } else if (val === "clear") {
@@ -265,6 +262,28 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
     }
     updateDisplay();
     clearResult();
+  }
+
+  document.getElementById("keypad").addEventListener("click", (e) => {
+    const btn = e.target.closest(".key");
+    if (btn) pressKey(btn.dataset.val);
+  });
+
+  // 키보드 입력(PC·노트북 키오스크): 숫자(숫자패드 포함), Backspace = 한 글자 지우기, Delete = 전체 지우기.
+  // 등원·하원은 실수로 처리되지 않도록 키보드로 정하지 않고 화면 버튼으로만 누른다.
+  document.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (document.getElementById("app-screen").hidden || mainView.hidden) return;
+    if (e.target instanceof HTMLInputElement) return;
+    // 숫자패드는 NumLock이 꺼져 있으면 e.key가 숫자가 아니므로 키 위치(e.code)로도 받는다.
+    const pad = /^Numpad([0-9])$/.exec(e.code);
+    const val = /^[0-9]$/.test(e.key) ? e.key : pad ? pad[1] : e.key === "Backspace" ? "back" : e.key === "Delete" ? "clear" : null;
+    if (!val) return;
+    e.preventDefault();
+    pressKey(val);
+    // 누른 키를 화면 숫자판에도 잠깐 표시한다.
+    const btn = document.querySelector('.key[data-val="' + val + '"]');
+    if (btn) { btn.classList.add("pressed"); setTimeout(() => btn.classList.remove("pressed"), 120); }
   });
 
   async function runCheckin(type, registrationId) {
