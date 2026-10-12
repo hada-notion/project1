@@ -5,7 +5,7 @@
 
 ## v2.5.42 — 2026-10-12
 
-- 공용 선택 상자(`select`) 정리: 브라우저 기본 화살표(상자 끝에 붙음) 대신 입력 칸 여백 안에 Feather 아이콘 `chevron-down`(토큰 `--icon-chevron-down`), 글자 시작 위치를 입력 칸과 맞춤, 비활성 상태 옅게. 학교 검색·법정 서류에 적용(`assets/hada-ui.css`, `assets/hada-tokens.css`). 새 아이콘은 Feather Icons 원본을 쓰도록 `DESIGN.md`에 명시. 화면만 변경. 지침: `docs/updates/v2.5.42.md`
+- 공용 선택 상자(`select`) 정리: 브라우저 기본 화살표(상자 끝에 붙음) 대신 입력 칸 여백 안에 Feather 아이콘 `chevron-down`(토큰 `--icon-chevron-down`), 화살표는 날짜 칸 달력 아이콘과 세로 한 줄, 글자 시작 위치를 입력 칸과 맞춤, 비활성 상태 옅게. 학교 검색·법정 서류에 적용(`assets/hada-ui.css`, `assets/hada-tokens.css`). 새 아이콘은 Feather Icons 원본을 쓰도록 `DESIGN.md`에 명시. 화면만 변경. 지침: `docs/updates/v2.5.42.md`
 
 ## v2.5.41 — 2026-10-12
 
