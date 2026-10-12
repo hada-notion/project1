@@ -335,8 +335,8 @@ function buildRegCalendarHtml(r, mode) {
   const maps = { att: attendanceByDate(r), due: homeworkDueMap(r), closed: closedDateSet() }
   const dowHeader = ["월", "화", "수", "목", "금", "토", "일"].map((l, i) => `<div class="cal-dow${i === 5 ? " sat" : i === 6 ? " sun" : ""}">${l}</div>`).join("")
   const legend = mode === "attendance"
-    ? `<div class="cal-legend"><span><span class="dot" style="background:var(--success)"></span>출석</span><span><span class="dot" style="background:var(--danger)"></span>결석</span><span><span class="dot" style="background:var(--info)"></span>보강</span><span><span class="dot" style="background:transparent;box-shadow:inset 0 0 0 1.5px var(--brand-border)"></span>예정</span><span><span class="dot" style="background:repeating-linear-gradient(135deg, var(--brand-light) 0 2px, transparent 2px 4px)"></span>출결 미입력</span><span><span class="dot" style="background:transparent;box-shadow:inset 0 0 0 1.5px var(--danger)"></span>오늘</span></div>`
-    : `<div class="cal-legend"><span><span class="dot" style="background:var(--success)"></span>제출</span><span><span class="dot" style="background:var(--warning)"></span>일부</span><span><span class="dot" style="background:var(--danger)"></span>미제출</span><span><span class="dot" style="background:transparent;box-shadow:inset 0 0 0 1.5px var(--brand-border)"></span>마감 예정</span><span><span class="dot" style="background:transparent;box-shadow:inset 0 0 0 1.5px var(--danger)"></span>오늘</span></div>`
+    ? `<div class="cal-legend"><span><span class="dot" style="background:var(--success)"></span>출석</span><span><span class="dot" style="background:var(--danger)"></span>결석</span><span><span class="dot" style="background:var(--info)"></span>보강</span></div>`
+    : `<div class="cal-legend"><span><span class="dot" style="background:var(--success)"></span>제출</span><span><span class="dot" style="background:var(--warning)"></span>일부</span><span><span class="dot" style="background:var(--danger)"></span>미제출</span></div>`
 
   // 날짜를 고른 상태: 그 주 한 줄 + 아래에 그날 기록
   if (selectedCalDate) {
