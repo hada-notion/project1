@@ -3,6 +3,10 @@
 버전별 변경 기록입니다. 최신 버전이 맨 위에 옵니다. 상세 실행 지침은 `docs/updates/vX.Y.md`에 있습니다.
 패치를 올릴 때마다 한 줄 이상 추가하고, 해당 버전의 지침 파일을 함께 만듭니다. (템플릿: `docs/updates/_TEMPLATE.md`)
 
+## v2.5.38 — 2026-10-12
+
+- 키오스크 준비 시각 표시 문구를 "출석 동기화 HH:mm"(준비 중: "출석 동기화 중")으로 변경. 화면만 변경. **키오스크 `SUPABASE_URL`·`SUPABASE_ANON_KEY`는 운영 값 유지.** 지침: `docs/updates/v2.5.38.md`
+
 ## v2.5.37 — 2026-10-12
 
 - 키오스크 "오늘 출석 준비": 매일 04:00 KST에 오늘 수강 중인 등록·오늘 출석 페이지를 Supabase 표(`kiosk_today`, `kiosk_prepared`, 전화번호는 해시)에 저장(`kiosk-prepare`, pg_cron). 등원·하원은 이 표로 Notion 조회 없이 바로 기록, 표에 없으면 예전 방식. 새벽 준비가 없으면 키오스크를 열 때 자동 준비. 키오스크 아래 "오늘 출석 준비 HH:mm" 표시. **마이그레이션 `20261013030000_kiosk_today.sql` 필요(예약 실행 URL은 운영 주소로 치환).** **키오스크 `SUPABASE_URL`·`SUPABASE_ANON_KEY`는 운영 값 유지.** Secrets·Notion 변경 없음. 지침: `docs/updates/v2.5.37.md`
