@@ -1,4 +1,5 @@
 import { SecurityError,securityEnabled,securityRpc,sha256,randomToken,validatePassword,hashPassword,verifyPassword,nextRecommended,ensureInitialized,fixedWebhookKey,SECURITY_WEBHOOK_ROUTES } from '../_shared/adminSecurity.ts';
+import { NOTION_API,NOTION_TOKEN,NOTION_VERSION } from '../_shared/constants.ts';
 // While security is disabled the function only answers with a fixed 503 message and no secrets, so the
 // browser must be able to read it for the legacy-login fallback even before ADMIN_ALLOWED_ORIGINS is set.
 function cors(req:Request,enforceOrigin:boolean):Record<string,string> {
@@ -6,6 +7,28 @@ function cors(req:Request,enforceOrigin:boolean):Record<string,string> {
   const allowed=(Deno.env.get('ADMIN_ALLOWED_ORIGINS')??'').split(',').map(x=>x.trim()).filter(Boolean);
   if(enforceOrigin&&origin&&!allowed.includes(origin))throw new SecurityError(403,'허용되지 않은 관리 페이지입니다.');
   return {'Content-Type':'application/json','Cache-Control':'no-store','Vary':'Origin',...(origin?{'Access-Control-Allow-Origin':origin}:{}),'Access-Control-Allow-Headers':'content-type, x-admin-key, authorization, apikey','Access-Control-Allow-Methods':'POST, OPTIONS'};
+}
+// Links for the webhook checklist: each academy's own "(학원)" databases, found through its Notion
+// integration so no per-academy configuration is needed. Normalized title (no spaces, no trailing "DB")
+// -> database URL; trashed sources are skipped and the most recently edited wins on duplicate titles.
+export async function notionDatabaseLinks():Promise<Record<string,string>> {
+  if(!NOTION_TOKEN)return {};
+  const found=new Map<string,{url:string,edited:string}>();let cursor:string|undefined;
+  for(let page=0;page<5;page++){
+    const res=await fetch(`${NOTION_API}/search`,{method:'POST',headers:{Authorization:`Bearer ${NOTION_TOKEN}`,'Notion-Version':NOTION_VERSION,'Content-Type':'application/json'},
+      body:JSON.stringify({filter:{property:'object',value:'data_source'},page_size:100,...(cursor?{start_cursor:cursor}:{})}),signal:AbortSignal.timeout(10000)});
+    if(!res.ok){console.error('notion search failed',res.status);break;}
+    const data=await res.json();
+    for(const r of data.results??[]){
+      if(r.in_trash||r.archived)continue;
+      const title=(r.title??[]).map((t:any)=>t.plain_text??'').join('').replace(/\s+/g,'').replace(/DB$/i,'');
+      const id=String(r.parent?.database_id??'').replace(/-/g,'');
+      if(!title.includes('(학원)')||!/^[0-9a-f]{32}$/.test(id))continue;
+      const prev=found.get(title);if(!prev||String(r.last_edited_time)>prev.edited)found.set(title,{url:`https://www.notion.so/${id}`,edited:String(r.last_edited_time)});
+    }
+    if(!data.has_more||!data.next_cursor)break;cursor=data.next_cursor;
+  }
+  return Object.fromEntries([...found].map(([k,v])=>[k,v.url]));
 }
 export async function handleAdminSecurity(req:Request):Promise<Response> {
   let headers:Record<string,string>={'Content-Type':'application/json','Cache-Control':'no-store'};
@@ -53,6 +76,11 @@ export async function handleAdminSecurity(req:Request):Promise<Response> {
       const st=await securityRpc('webhook-status',{session_hash:await sha256(session)});
       const usage=(Array.isArray(st.usage)?st.usage:[]).filter((u:any)=>SECURITY_WEBHOOK_ROUTES.has(u.route));
       return result({rotating:!!st.rotating,started_at:st.started_at,changed_at:st.changed_at,weak:!st.changed_at&&fixedWebhookKey().length<32,usage});
+    }
+    if(b.action==='webhook-links'){
+      // Same session check (and must_change block) as the rotation status.
+      await securityRpc('webhook-status',{session_hash:await sha256(session)});
+      return result({links:await notionDatabaseLinks()});
     }
     if(b.action==='webhook-start'||b.action==='webhook-cancel'){
       const sessionHash=await sha256(session);
