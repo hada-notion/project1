@@ -5,7 +5,7 @@
 
 ## v2.5.15 — 2026-10-13
 
-- 웹 화면 디자인 통일 1단계. 공용 디자인 파일(`assets/hada-ui.css`: Notion 콘텐츠 디자인 기준과 같은 색 토큰·글자·간격·버튼), 규칙 문서(`docs/DESIGN.md`), 디자인 규칙 검사(`tests/design-lint.cjs`), HADA 로고 추가. 관리자 설정은 모든 화면 같은 폭·두 칸 대시보드·상단 로고, 출결 키오스크는 브랜드 색·로고·처리 중 표시로 변경하고 어두운 모드 제거(출석 처리 로직 변경 없음). **키오스크 파일의 `SUPABASE_URL`·`SUPABASE_ANON_KEY`는 운영 값 유지.** 함수·마이그레이션·Secrets·Notion 변경 없음. 지침: `docs/updates/v2.5.15.md`
+- 웹 화면 디자인 통일 1단계. 공용 디자인 파일(`assets/hada-ui.css`: Notion 콘텐츠 디자인 기준과 같은 색 토큰·글자·간격·버튼), 규칙 문서(`docs/DESIGN.md`), 디자인 규칙 검사(`tests/design-lint.cjs`), HADA 로고 추가. 관리자 설정은 모든 화면 같은 폭·두 칸 대시보드·상단 로고·다른 화면 바로가기, 출결 키오스크는 브랜드 색·로고·처리 중 표시로 변경하고 어두운 모드 제거(출석 처리 로직 변경 없음). **키오스크 파일의 `SUPABASE_URL`·`SUPABASE_ANON_KEY`는 운영 값 유지.** 함수·마이그레이션·Secrets·Notion 변경 없음. 지침: `docs/updates/v2.5.15.md`
 
 ## v2.5.14 — 2026-10-13
 
