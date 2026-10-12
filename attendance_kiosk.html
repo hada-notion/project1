@@ -26,10 +26,8 @@
 .key.func{color:var(--text-muted);font-size:var(--text-small);font-weight:500}
 .confirm-row{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)}
 .confirm-row .primary,.confirm-row .secondary{width:100%;height:var(--control-lg);font-size:var(--text-body);font-weight:700}
-/* 키보드로 고른 버튼: 바깥 테두리. 방향키 안내(←/→)는 키보드를 쓴 뒤에만 보인다 */
+/* 키보드로 고른 버튼: 바깥 테두리(키보드를 쓴 뒤에만) */
 .confirm-row .chosen{outline:3px solid var(--brand-deep);outline-offset:3px}
-.kb-hint{display:none;margin:0 var(--space-1);font-weight:600;opacity:.7}
-.kiosk.kb .kb-hint{display:inline}
 /* 처리 결과: 카드 레이아웃을 흔들지 않도록 모달로 띄운다. 성공·이미 처리는 잠시 뒤 자동으로 닫힌다 */
 dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - var(--space-8));padding:var(--space-6) var(--space-5);text-align:center}
 .result-icon{width:calc(var(--icon-lg) * 1.5);height:calc(var(--icon-lg) * 1.5);margin:0 auto var(--space-3);padding:var(--space-2);border-radius:var(--radius-pill)}
@@ -99,8 +97,8 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
         <button class="key func back" data-val="back" aria-label="한 글자 지우기"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"></path><line x1="18" y1="9" x2="12" y2="15"></line><line x1="12" y1="9" x2="18" y2="15"></line></svg></button>
       </div>
       <div class="confirm-row">
-        <button class="primary" id="checkinBtn"><span class="kb-hint" aria-hidden="true">←</span>등원</button>
-        <button class="secondary" id="checkoutBtn">하원<span class="kb-hint" aria-hidden="true">→</span></button>
+        <button class="primary" id="checkinBtn">등원</button>
+        <button class="secondary" id="checkoutBtn">하원</button>
       </div>
     </div>
 
@@ -263,7 +261,6 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
   let kbUsed = false;
   let choice = null;
   function renderChoice() {
-    document.getElementById("app-screen").classList.toggle("kb", kbUsed);
     checkinBtn.classList.toggle("chosen", kbUsed && choice === "checkin");
     checkoutBtn.classList.toggle("chosen", kbUsed && choice === "checkout");
   }
