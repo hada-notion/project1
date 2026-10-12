@@ -242,6 +242,12 @@ if [ -n "$retired_hits" ]; then
   fail=1
 fi
 
+# 출석(학원) DB의 속성 이름은 "선생님 한마디"다. 오타 "한마때"로 읽으면 출석의 선생님 한마디가 리포트에 들어가지 않는다(v2.5.61).
+if grep -rq '선생님 한마때' supabase/functions; then
+  echo "❌ 출석의 선생님 한마디를 오타 속성 이름(한마때)으로 읽고 있습니다."
+  fail=1
+fi
+
 if [ "$fail" != 0 ]; then
   echo ""
   echo "회귀 가드 실패 -- 위 문제를 고친 뒤 다시 배포하세요."
