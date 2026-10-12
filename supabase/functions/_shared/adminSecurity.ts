@@ -93,11 +93,13 @@ export function routeName(req:Request):string {
 export async function authorizeKey(req:Request,provided:unknown,legacy:string):Promise<boolean> {
   if(typeof provided!=='string'||!provided||provided.length>1024)return false;
   if(!securityEnabled())return !!legacy && equalSecret(provided,legacy);
-  const candidate=await sha256(provided);
-  let result=await securityRpc('authorize',{candidate});
+  const candidate=await sha256(provided),route=routeName(req);
+  // Lets the server count webhook calls per function during a webhook key rotation. Only known webhook
+  // routes are sent so arbitrary paths cannot fill the usage table.
+  const data={candidate,route:SECURITY_WEBHOOK_ROUTES.has(route)?route:''};
+  let result=await securityRpc('authorize',data);
   // First request after activation (often a Notion webhook) creates the owner state.
-  if(result.kind==='uninitialized'){await ensureInitialized();result=await securityRpc('authorize',{candidate});}
-  const route=routeName(req);
+  if(result.kind==='uninitialized'){await ensureInitialized();result=await securityRpc('authorize',data);}
   if(result.kind==='internal')return true;
   if(result.kind==='session')return SECURITY_BROWSER_ROUTES.has(route);
   if(result.kind==='webhook')return SECURITY_WEBHOOK_ROUTES.has(route);
