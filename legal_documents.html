@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>법정 서류 출력 | 하다 학원관리</title>
-<link rel="stylesheet" href="assets/hada-ui.css?v=ea07a132">
+<link rel="stylesheet" href="assets/hada-ui.css?v=5a0a9128">
 <style>
 /* 법정 서류 출력 화면 전용. 조회 화면은 assets/hada-ui.css 토큰만 쓴다(docs/DESIGN.md).
    아래 "인쇄 문서" 구역은 출석부·대장·영수증 공식 서식(검은 글자·회색 선·mm 단위)이라 화면 토큰 대신 인쇄 규칙을 따른다. */
@@ -38,7 +38,7 @@
 .column-menu{position:fixed;z-index:1000;display:flex;gap:var(--space-2);align-items:center;width:var(--menu-w);max-width:calc(100vw - var(--space-4));padding:var(--space-2);border:1px solid var(--brand-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);background:var(--surface);font-size:var(--text-small)}
 .column-menu[hidden]{display:none}
 /* 정렬 한 버튼(누를 때마다 오름차순 → 내림차순 → 원래 순서)과 열 검색 칸만. 바깥을 누르거나 Esc·Enter면 닫힌다 */
-.column-menu .sort-toggle{display:inline-flex;align-items:center;gap:var(--space-1);flex-shrink:0;white-space:nowrap;padding:var(--space-2) var(--space-3);border:1px solid var(--brand-border);border-radius:var(--radius-md);background:var(--brand-tint);color:var(--text-ink);font-weight:600}
+.column-menu .sort-toggle{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-1);flex-shrink:0;min-width:calc(4em + var(--icon-sm) + var(--space-1) + var(--space-3) * 2);white-space:nowrap;padding:var(--space-2) var(--space-3);border:1px solid var(--brand-border);border-radius:var(--radius-md);background:var(--brand-tint);color:var(--text-ink);font-weight:600}
 .column-menu .sort-toggle[aria-pressed=true]{background:var(--brand-soft);border-color:var(--brand-deep)}
 .column-menu .sort-toggle svg.line{width:var(--icon-sm);height:var(--icon-sm)}
 .column-menu input{flex:1;min-width:0;height:auto;margin:0;padding:var(--space-2) var(--space-3)}
@@ -292,7 +292,7 @@
     const btn = document.getElementById("login-btn");
     const errEl = document.getElementById("login-error");
     if (!key) { errEl.textContent = "비밀번호를 입력하세요."; return; }
-    btn.disabled = true; btn.textContent = "확인 중…"; btn.classList.add("loading"); errEl.textContent = "";
+    btn.disabled = true; btn.classList.add("loading"); btn.setAttribute("aria-busy","true"); errEl.textContent = "";
     try {
       const session = await HadaAdminAuth.login(SUPABASE_URL, key);
       const res = await fetch(`${SUPABASE_URL}/functions/v1/get-legal-document-data`, {
@@ -310,7 +310,7 @@
     } catch (err) {
       errEl.textContent = "로그인에 실패했습니다: " + err.message;
     } finally {
-      btn.disabled = false; btn.textContent = "로그인"; btn.classList.remove("loading");
+      btn.disabled = false; btn.classList.remove("loading"); btn.removeAttribute("aria-busy");
     }
   }
   document.getElementById("login-input").addEventListener("keydown", (e) => { if (e.key === "Enter") submitLogin(); });
@@ -563,10 +563,10 @@
     const state=tabStates.get(currentDocType),busy=!!state?.loading;
     queryBtn.disabled=busy || metaLoading || metaUnavailable || classSel.disabled;
     queryBtn.setAttribute("aria-busy",String(busy));
-    queryBtn.classList.toggle("loading",busy);queryBtn.textContent=busy ? "조회 중…" : "조회";
-    if(busy)showDocStatus("조회 중…");else if(state?.status)showDocStatus(state.status,state.statusKind);else showDocStatus("서류 종류와 기간을 고른 뒤 [조회]를 누르세요.");
+    queryBtn.classList.toggle("loading",busy);
+    if(busy)showDocStatus("조회 중…");else if(state?.exporting)showDocStatus("엑셀 파일을 만드는 중…");else if(state?.status)showDocStatus(state.status,state.statusKind);else showDocStatus("서류 종류와 기간을 고른 뒤 [조회]를 누르세요.");
     document.getElementById("btn-excel").disabled=busy || !!state?.exporting || !state?.document;
-    document.getElementById("btn-excel").textContent=state?.exporting ? "엑셀 생성 중…" : "Excel 다운로드";document.getElementById("btn-excel").classList.toggle("loading",!!state?.exporting);
+    document.getElementById("btn-excel").classList.toggle("loading",!!state?.exporting);document.getElementById("btn-excel").setAttribute("aria-busy",String(!!state?.exporting));
     state?.pane.setAttribute("aria-busy",String(busy));
     document.getElementById("btn-print").disabled=busy || !state?.document;
   }
