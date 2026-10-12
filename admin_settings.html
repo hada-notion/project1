@@ -63,6 +63,17 @@
 .item input[type=checkbox]{width:var(--icon-md);height:var(--icon-md);margin:2px 0 0;flex-shrink:0;accent-color:var(--success-ink)}
 .item.done .name{color:var(--text-muted);text-decoration:line-through}
 .item.alert{background:var(--danger-soft)}
+.trigger,.note{margin:var(--space-1) 0 0 var(--space-8);font-size:var(--text-caption);color:var(--text-muted)}
+.trigger{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-1)}
+.trigger-label{font-weight:700;color:var(--text-subtle);margin-right:var(--space-1)}
+.trigger-label:not(:first-child){margin-left:var(--space-1)}
+.trig{display:inline-flex;align-items:center;gap:var(--space-1);padding:0 var(--space-2);border:1px solid var(--divider);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-ink);font-weight:600}
+.box-icon svg{display:block;width:var(--icon-sm);height:var(--icon-sm)}
+.trig.box.on .box-icon{color:var(--info)}
+.trig.box .box-icon{color:var(--text-subtle)}
+.box-icon .tick{stroke:var(--surface)}
+.trigger-state{font-weight:700;color:var(--info-ink);margin-left:var(--space-1)}
+.trig-glyph{color:var(--text-subtle);font-weight:700}
 .meta{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-2);align-items:center;margin:var(--space-1) 0 0 var(--space-8);font-size:var(--text-caption)}
 .hint.bad{color:var(--danger-ink);font-weight:600}
 .hint.good{color:var(--success-ink)}
@@ -78,8 +89,9 @@
 .copy-btn.copied{border-color:var(--success);color:var(--success-ink)}
 .key-bar.missing .key-bar-value{font-family:var(--font-sans);color:var(--text-muted)}
 .links-row{display:flex;justify-content:flex-end;align-items:center;gap:var(--space-3);margin:var(--space-3) 0;font-size:var(--text-label)}
+@media(max-width:1100px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:860px){.guide-grid,.dash-grid{grid-template-columns:minmax(0,1fr)}}
-@media(max-width:700px){.topright .badge{display:none}.progress-head{flex-wrap:wrap}}
+@media(max-width:700px){.topright .badge{display:none}.progress-head{flex-wrap:wrap}.cards{grid-template-columns:minmax(0,1fr)}}
 </style>
 </head>
 <body>
