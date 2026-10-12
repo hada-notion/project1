@@ -551,37 +551,39 @@ body {
 .cal-month-nav > .cal-nav-right { justify-self: end; }
 .cal-nav-btn { background: var(--brand-soft); border: none; width: clamp(28px, 4vw, 40px); height: clamp(28px, 4vw, 40px); border-radius: 50%; color: var(--brand-deep); font-size: clamp(15px, 2.4vw, 20px); font-weight: 700; cursor: pointer; }
 .cal-nav-btn:disabled { opacity: 0.3; cursor: default; }
-/* ===== 전역 동기화 FAB (2026-09-19: 캘린더 탭 전용 버튼에서 화면 전역 플로팅 버튼으로 이동, 10-12 참고) ===== */
+/* ===== 전역 새로고침 버튼 (2026-09-19 화면 전역 버튼으로 이동, 2026-10-12 떠 있는 버튼 → 오른쪽 위 아이콘) ===== */
 .global-sync-fab {
   position: fixed;
-  right: 16px;
-  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  top: 10px;
+  right: 56px;
   z-index: 70;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: var(--brand-deep);
-  color: #fff;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-primary);
   border: none;
-  font-size: 20px;
-  box-shadow: 0 3px 10px rgba(107,93,77,0.22);
+  box-shadow: none;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: bottom 0.2s ease, transform 0.15s ease;
+  transition: transform 0.15s ease;
 }
-.global-sync-fab svg { width: 24px; height: 24px; display: block; fill: none; stroke: currentColor; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; }
+.global-sync-fab svg { width: 20px; height: 20px; display: block; fill: none; stroke: currentColor; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; }
 .global-sync-fab:active { transform: scale(0.92); }
 .global-sync-fab:disabled { opacity: 0.75; cursor: default; }
 .global-sync-fab.syncing svg { animation: global-sync-spin 0.9s linear infinite; }
 @keyframes global-sync-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-body.has-tabbar .global-sync-fab { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+/* 새로고침은 모든 화면에서 오른쪽 위: 첫 화면은 메뉴(≡) 왼쪽, 반·교재 상세는 접힌 헤더 오른쪽 끝 (2026-10-12) */
+body.has-detail-header .global-sync-fab { top: 6px; right: 10px; color: var(--brand-on-primary); }
+body.has-detail-header .reg-header-top { padding-right: 44px; }
 body.has-tabbar .reg-tab-content { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
 .global-sync-toast {
   position: fixed;
   right: 16px;
-  bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  top: calc(62px + env(safe-area-inset-top, 0px));
   z-index: 70;
   background: rgba(30,30,34,0.9);
   color: #fff;
@@ -592,12 +594,11 @@ body.has-tabbar .reg-tab-content { padding-bottom: calc(96px + env(safe-area-ins
   max-width: 240px;
   text-align: right;
   opacity: 0;
-  transform: translateY(6px);
+  transform: translateY(-6px);
   pointer-events: none;
-  transition: opacity 0.2s ease, transform 0.2s ease, bottom 0.2s ease;
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 .global-sync-toast.show { opacity: 1; transform: translateY(0); }
-body.has-tabbar .global-sync-toast { bottom: calc(130px + env(safe-area-inset-bottom, 0px)); }
 .schedule-cal-wrap { width: 100%; margin: 0 auto; max-width: min(var(--content-w), 68vh); overflow: hidden; }
 .schedule-source { font-size: 11px; color: var(--text-muted); text-align: right; margin-top: 4px; }
 .attendance-cal-wrap { width: 100%; margin: 0 auto; max-width: min(var(--content-w), 62vh); overflow: hidden; transition: max-width 0.24s ease; }
