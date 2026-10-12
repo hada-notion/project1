@@ -65,8 +65,7 @@ input[aria-invalid=true]{border-color:var(--danger-ink)}
 .ghost:hover{border-color:var(--brand-deep)}
 .help-btn{width:var(--space-6);height:var(--space-6);border-radius:var(--radius-pill);border:1px solid var(--brand-border);background:var(--surface);color:var(--brand-deep);font-weight:700;font-size:var(--text-label);line-height:1;padding:0}
 .help-btn:hover{border-color:var(--brand-deep)}
-.help-btn.corner{margin-left:auto}/* card help: top right of a flex title row */
-/* Small move-to links inside a card (e.g. "웹훅등록 보기 ↗"): a chip like the copy buttons, no underline. */
+/* Small move-to links inside a card (e.g. "웹훅 등록 ↗"): a chip like the copy buttons, no underline. */
 .link-chip{display:inline-flex;align-items:center;gap:var(--space-1);padding:2px var(--space-2);border:1px solid var(--brand-border);border-radius:var(--radius-md);background:var(--surface);color:var(--brand-deep);font-size:var(--text-caption);font-weight:600;text-decoration:none;white-space:nowrap}
 .link-chip:hover{border-color:var(--brand-deep)}
 .link-chip.main{background:var(--brand-soft);border-color:var(--brand-soft);color:var(--brand-on-primary)}
