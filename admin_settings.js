@@ -134,11 +134,10 @@ function hint(routeName,checkedAt){
 function renderChecklist(){
  const box=$('db-cards');box.replaceChildren();let done=0,total=0,oldRoutes=new Set();
  for(const u of webhook.usage)if(u.key==='old')oldRoutes.add(u.route);
- // Cards are packed into columns, biggest DB first, each into the currently shortest column, so the grid has no
- // tall gaps (등록 → 클래스 → 수업 → …). Column count follows the available width.
- const cols=Math.max(1,Math.min(3,Math.floor((box.clientWidth||960)/320)));const columns=[],heights=[];
- for(let i=0;i<cols;i++){const c=el('div','card-col');columns.push(c);heights.push(0);box.append(c);}
- const place=(card,size)=>{const i=heights.indexOf(Math.min(...heights));columns[i].append(card);heights[i]+=size;};
+ // Cards sit in rows: each row starts at the same height, biggest DB first so cards in one row are of similar
+ // length (등록 → 클래스 → 수업 → …). Column count follows the available width.
+ const cols=Math.max(1,Math.min(3,Math.floor((box.clientWidth||960)/320)));
+ box.style.gridTemplateColumns=`repeat(${cols},minmax(0,1fr))`;
  for(const [db,items,help] of [...CHECKLIST].sort((a,b)=>b[1].length-a[1].length)){
   const card=el('section','dbcard');
   const head=el('div','dbhead');const title=el('h4','',db.replace('(학원)',''));
@@ -170,7 +169,7 @@ function renderChecklist(){
    if(extra.header){const [hn,hv]=extra.header;copies.append(copyButton('헤더',`추가 헤더 값 복사: ${hn}: ${hv}`,b=>copyText(hv,`추가 헤더 값(${hn}: ${hv})을 복사했습니다`,b).catch(e=>error(e.message))));}
    li.append(label,meta,copies);list.append(li);
   }
-  card.append(list);place(card,2+items.length*1.6);
+  card.append(list);box.append(card);
  }
  unchecked=total-done;
  text('usage-summary',`완료 ${done} / ${total}`+(oldRoutes.size?` · 이전 키 호출이 남은 함수 ${oldRoutes.size}개`:''));
