@@ -125,8 +125,8 @@ async function loadLinks(refresh=false){
 }
 const safeDb=url=>/^https:\/\/www\.notion\.so\/[0-9a-f]{32}$/.test(url||'');
 const safeView=url=>/^https:\/\/www\.notion\.so\/[0-9a-f]{32}\?v=[0-9a-f]{32}$/.test(url||'');
-// Feather Icons: mouse-pointer (Notion 버튼), zap (자동화).
-const ICONS={[BUTTON]:'<svg class="line" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"></path><path d="M13 13l6 6"></path></svg>',[AUTO]:'<svg class="line" viewBox="0 0 24 24" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>'};
+// Notion's own button/automation marks (kept as they look in Notion; the user asked to keep these two).
+const ICONS={[BUTTON]:'<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="3" width="11" height="7.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8.3 7.6l6 2.4-2.5 1-1 2.5z" fill="currentColor"/></svg>',[AUTO]:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.6 1 3 9.2h4.2L6.3 15l6.7-8.3H8.7z" fill="currentColor"/></svg>'};
 function el(tag,cls,content){const x=document.createElement(tag);if(cls)x.className=cls;if(content!==undefined)x.textContent=content;return x;}
 function link(url,label,title,cls='link-chip'){const a=el('a',cls,label);a.href=url;a.target='_blank';a.rel='noopener noreferrer';a.title=title;return a;}
 async function loadWebhook(){

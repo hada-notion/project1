@@ -112,7 +112,7 @@ html:not(.device) .primary.loading:not(:disabled)::before{border-color:var(--sur
 
 /* 종류 배지 (버튼 / 자동화) */
 .kind{border-radius:var(--radius-sm);padding:0 var(--space-1);font-weight:700;display:inline-flex;align-items:center;gap:2px}
-.kind svg,.kind svg.line{width:var(--icon-sm);height:var(--icon-sm);flex-shrink:0}
+.kind svg{width:13px;height:13px;flex-shrink:0}
 .kind.button{background:var(--info-soft);color:var(--info-ink)}
 .kind.auto{background:var(--warning-soft);color:var(--warning-ink)}
 

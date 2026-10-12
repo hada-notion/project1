@@ -289,7 +289,7 @@ font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto San
 | 필터 줄 | 데스크탑 한 줄, 태블릿 3칸(버튼은 칸 너비 가득), 휴대폰 한 칸씩 |
 | 붙어 다니는 막대 | `position:sticky` 막대(웹훅 키 등)는 데스크탑·태블릿만. 휴대폰에서는 제자리에 두어 화면을 가리지 않는다 |
 | 줄바꿈 | 한국어는 띄어쓰기 단위(`word-break:keep-all`), 칸보다 긴 낱말만 칸 안에서 끊는다(`overflow-wrap:break-word`). 키·코드·URL처럼 긴 값은 **한 줄 전체 폭**을 주고 그 안에서만 아무 데서나 끊는다(`anywhere`). 좁은 옆 칸에 긴 값을 두지 않는다(한 글자씩 세로로 늘어지는 원인) |
-| 아이콘 | **Feather Icons만**(데스크탑·휴대폰 모두). "↗ ▶ ✓ ＋" 같은 글자 기호나 브라우저 기본 아이콘(날짜 달력, 검색 지우기 ×, 접기 ▶)을 아이콘 대신 쓰지 않는다. 글자 옆 14, 칸 안·버튼 20. 새 탭 링크는 `.icon-ext`(arrow-up-right), 접기 제목은 `summary`(chevron-right) |
+| 아이콘 | **Feather Icons만**(데스크탑·휴대폰 모두). 예외: 관리자 설정의 Notion 버튼·자동화 종류 표시(`.kind`)는 Notion 모양 아이콘을 그대로 쓴다(2026-10-12 사용자 지정). "↗ ▶ ✓ ＋" 같은 글자 기호나 브라우저 기본 아이콘(날짜 달력, 검색 지우기 ×, 접기 ▶)을 아이콘 대신 쓰지 않는다. 글자 옆 14, 칸 안·버튼 20. 새 탭 링크는 `.icon-ext`(arrow-up-right), 접기 제목은 `summary`(chevron-right) |
 
 검사(`hada-ui-tests`의 `layout-extra.cjs`)가 모든 관리 화면·모든 폭에서 버튼 글자 줄바꿈, 좁은 칸에 끼인 글자, 라벨 줄바꿈, 글자 기호 아이콘, 28px 넘는 아이콘을 잡는다.
 
