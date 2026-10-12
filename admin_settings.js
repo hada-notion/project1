@@ -46,56 +46,62 @@ let webhook={rotating:false,usage:[],checks:{}},unchecked=0;
 // extra.header is an additional Notion webhook header. adminSecurity_test.ts checks that the routes here are exactly
 // SECURITY_WEBHOOK_ROUTES, so a new webhook function cannot be left out of the checklist.
 const BUTTON='버튼',AUTO='자동화';
+// extra.trigger: {when, check:[property, checked]} draws the automation trigger as Notion-like chips. extra.note is one
+// short line for a button that differs from the usual (sub-route, extra header, unusual place).
+// 삭제: the 삭제 button only ticks "삭제 체크"; the automation on that checkbox sends the webhook and the server works
+// through the child pages one relay step at a time.
+const DELETE={trigger:{check:['삭제 체크',true]},note:'삭제 버튼은 체크만 합니다. 키는 "삭제 체크" 자동화에 있습니다.'};
 const CHECKLIST=[
  ['등록(학원)',[
-  ['reg-link-regenerate','링크 재발급',BUTTON,route('toggle-report-link'),{header:['x-link-action','regenerate']}],
-  ['reg-link-disable','링크 비활성화 (체크됨일 때)',AUTO,route('toggle-report-link'),{header:['x-link-action','disable']}],
-  ['reg-link-enable','링크 활성화 (체크 해제됨일 때)',AUTO,route('toggle-report-link'),{header:['x-link-action','enable']}],
+  ['reg-link-regenerate','링크 재발급',BUTTON,route('toggle-report-link'),{header:['x-link-action','regenerate'],note:'추가 헤더가 하나 더 있습니다. 헤더 버튼으로 값을 복사합니다.'}],
+  ['reg-link-disable','링크 비활성화',AUTO,route('toggle-report-link'),{header:['x-link-action','disable'],trigger:{check:['링크 비활성화',true]}}],
+  ['reg-link-enable','링크 활성화',AUTO,route('toggle-report-link'),{header:['x-link-action','enable'],trigger:{check:['링크 비활성화',false]}}],
   ['reg-report-sync','학생 페이지 동기화',BUTTON,route('sync-report-cache')],
-  ['reg-textbook','교재 생성',BUTTON,route('sync-registration-textbook'),{path:'/create-individual'}],
+  ['reg-textbook','교재 생성',BUTTON,route('sync-registration-textbook'),{path:'/create-individual',note:'주소 끝의 /create-individual까지 넣습니다. 클래스의 교재 생성과 주소가 다릅니다.'}],
   ['reg-enroll','시간표 설정',BUTTON,route('sync-registration-enroll')],
   ['reg-session','수업 생성',BUTTON,route('sync-registration-class-session')],
   ['reg-end','종료 처리',BUTTON,route('sync-registration-end')]]],
  ['클래스(학원)',[
   ['class-tuition','월 수강료 생성',BUTTON,route('generate-tuition')],
-  ['class-textbook-fee','교재비 생성',BUTTON,route('sync-textbook-distribution'),{path:'/from-class-carts'}],
-  ['class-textbook','교재 생성',BUTTON,route('sync-registration-textbook'),{path:'/create-class'}],
+  ['class-textbook-fee','교재비 생성',BUTTON,route('sync-textbook-distribution'),{path:'/from-class-carts',note:'주소 끝의 /from-class-carts까지 넣습니다.'}],
+  ['class-textbook','교재 생성',BUTTON,route('sync-registration-textbook'),{path:'/create-class',note:'주소 끝의 /create-class까지 넣습니다. 등록의 교재 생성과 주소가 다릅니다.'}],
   ['class-report-sync','학생 페이지 동기화',BUTTON,route('sync-class-report-cache')],
   ['class-report','보고서 생성',BUTTON,route('generate-report')]]],
  ['시간표(학원)',[['timetable-classes','수업추가',BUTTON,route('generate-classes')]]],
- ['메뉴(학원)',[['menu-bulk-classes','다음주 수업 일괄 생성',BUTTON,route('generate-classes'),{path:'?mode=bulk'}]],{
+ ['메뉴(학원)',[['menu-bulk-classes','다음주 수업 일괄 생성',BUTTON,route('generate-classes'),{path:'?mode=bulk',note:'메뉴 페이지 위쪽 속성 줄에 있습니다(? 참고). 주소 끝의 ?mode=bulk까지 넣습니다.'}]],{
   text:'메뉴 DB의 어떤 페이지(예: 수업 HOME)를 열어도 제목 아래 속성 줄에 "다음주 수업 일괄 생성" 버튼이 있습니다. 속성 이름을 클릭하고 "자동화 편집"을 눌러 웹훅 보내기의 값 칸을 바꿉니다. 메뉴 DB에는 웹훅등록 보기가 없어도 됩니다.',
   image:'assets/admin-settings/menu-bulk-button.png',alt:'메뉴 페이지 상단 속성 줄의 다음주 수업 일괄 생성 버튼'}],
  ['수업(학원)',[
   ['session-record','학습기록 생성',BUTTON,route('create-learning-record')],
   ['session-attendance','출석 조정',BUTTON,route('fix-attendance')],
   ['session-reports','보고서 일괄 전송',BUTTON,route('send-class-daily-reports')],
-  ['session-delete','삭제',BUTTON,route('cascade-delete')]]],
+  ['session-delete','삭제',AUTO,route('cascade-delete'),DELETE]]],
  ['출석(학원)',[
   ['attendance-record','학습기록 생성',BUTTON,route('create-learning-record')],
   ['attendance-report','보고서 전송',BUTTON,route('send-daily-report')],
-  ['attendance-delete','삭제',BUTTON,route('cascade-delete')]]],
+  ['attendance-delete','삭제',AUTO,route('cascade-delete'),DELETE]]],
  ['학습기록(학원)',[
   ['record-assignment','학습활동 생성',BUTTON,route('create-assignment')],
-  ['record-delete','삭제',BUTTON,route('cascade-delete')]]],
- ['학습활동(학원)',[['assignment-delete','삭제',BUTTON,route('cascade-delete')]]],
+  ['record-delete','삭제',AUTO,route('cascade-delete'),DELETE]]],
+ ['학습활동(학원)',[['assignment-delete','삭제',AUTO,route('cascade-delete'),DELETE]]],
  ['보고서(학원)',[['report-send','보고서 전송',BUTTON,route('send-report')]]],
  ['알림톡 발송함(학원)',[['outbox-send','일괄 전송',BUTTON,route('send-selected-notifications')]]],
  ['수강료(학원)',[['tuition-notice','수강료 안내 발송',BUTTON,route('send-tuition-notice')]]],
  ['교재비(학원)',[
   ['cart-notice','안내문 전송',BUTTON,route('send-textbook-notice')],
-  ['cart-progress-book','진도교재 담기',BUTTON,route('sync-textbook-distribution'),{path:'/from-cart'}],
-  ['cart-delete','삭제',BUTTON,route('cascade-delete')]]],
- ['교재배부(학원)',[['distribution-delete','삭제',BUTTON,route('cascade-delete')]]],
- ['교재결제(학원)',[['payment-delete','삭제',BUTTON,route('cascade-delete')]]],
+  ['cart-progress-book','진도교재 담기',BUTTON,route('sync-textbook-distribution'),{path:'/from-cart',note:'주소 끝의 /from-cart까지 넣습니다.'}],
+  ['cart-delete','삭제',AUTO,route('cascade-delete'),DELETE]]],
+ ['교재배부(학원)',[['distribution-delete','삭제',AUTO,route('cascade-delete'),DELETE]]],
+ ['교재결제(학원)',[['payment-delete','삭제',AUTO,route('cascade-delete'),DELETE]]],
  ['학생(학원)',[
-  ['student-inquiry-auto','페이지 추가 (상담 폼, 개인정보 동의 조건)',AUTO,route('send-inquiry-receipt')],
-  ['student-inquiry','접수안내 발송',BUTTON,route('send-inquiry-receipt')]]],
+  ['student-inquiry-auto','상담 신청 접수안내',AUTO,route('send-inquiry-receipt'),{trigger:{when:'페이지 추가',check:['개인정보 동의',true]}}],
+  ['student-inquiry','접수안내 직접 발송',BUTTON,route('send-inquiry-receipt'),{note:'관리자가 직접 입력한 학생에게 보낼 때 누릅니다.'}]]],
  ['시험정보(학원)',[['exam-scope','응시학생 등록',BUTTON,route('sync-exam-scope')]]],
  ['학교(학원)',[['school-calendar','학사일정 가져오기',BUTTON,route('sync-school-calendar')]]],
- ['대시보드(학원)',[['dashboard-link','레코드 생성/편집 (하위 항목 연결)',AUTO,route('sync-dashboard-link')]]],
- ['정규교재(학원)',[['book-report-sync','레코드 편집 (북커버 등)',AUTO,route('sync-report-cache')]]],
- ['일정(학원)',[['schedule-report-sync','레코드 편집',AUTO,route('sync-report-cache')]]],
+ ['대시보드(학원)',[['dashboard-link','하위 항목 자동 연결',AUTO,route('sync-dashboard-link'),{trigger:{when:'페이지 추가 · 속성 편집'}}]]],
+ ['정규교재(학원)',[['book-report-sync','교재 수정 반영',AUTO,route('sync-report-cache'),{trigger:{when:'속성 편집'}}],
+  ['book-report-sync-new','새 교재 반영',AUTO,route('sync-report-cache'),{trigger:{when:'페이지 추가'}}]]],
+ ['일정(학원)',[['schedule-report-sync','일정 수정 반영',AUTO,route('sync-report-cache'),{trigger:{when:'속성 편집'}}]]],
 ];
 // Webhook routes with no Notion button or automation, so they are not checklist items:
 // sync-attendance (GitHub Actions manual run; its GitHub Secret is noted below the checklist).
@@ -131,13 +137,32 @@ function hint(routeName,checkedAt){
  if(v.new)return ['good',`새 키 호출 확인 (${shortDate(v.new.last_at)})`];
  return ['none',''];
 }
+// Notion-like checkbox glyphs for trigger chips (checked / unchecked).
+const BOX_ON='<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="1.5" width="13" height="13" rx="3" fill="currentColor"/><path d="M4.5 8.2l2.3 2.3 4.7-5" fill="none" class="tick" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const BOX_OFF='<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>';
+// The trigger line ("트리거 [＋ 페이지 추가] 조건 [☑ 개인정보 동의] 체크됨") and the one-line note for unusual buttons.
+function describe(extra){
+ const out=[];const t=extra.trigger;
+ if(t){
+  const row=el('div','trigger');row.append(el('span','trigger-label','트리거'));
+  // Event chips carry Notion's own trigger glyphs: ＋ for 페이지 추가, a pencil corner for 속성 편집.
+  if(t.when)for(const w of t.when.split(' · ')){const c=el('span','trig');c.append(el('span','trig-glyph',w==='페이지 추가'?'＋':'∠'),w);row.append(c);}
+  if(t.check){
+   const [prop,on]=t.check;if(t.when)row.append(el('span','trigger-label','조건'));
+   // The state sits inside the chip so "체크됨" never ends up alone on a line.
+   const chip=el('span','trig box'+(on?' on':''));const i=el('span','box-icon');i.innerHTML=on?BOX_ON:BOX_OFF;
+   chip.append(i,prop,el('span','trigger-state',on?'체크됨':'체크 해제됨'));row.append(chip);
+  }
+  out.push(row);
+ }
+ if(extra.note)out.push(el('div','note',extra.note));
+ return out;
+}
 function renderChecklist(){
  const box=$('db-cards');box.replaceChildren();let done=0,total=0,oldRoutes=new Set();
  for(const u of webhook.usage)if(u.key==='old')oldRoutes.add(u.route);
  // Cards sit in rows: each row starts at the same height, biggest DB first so cards in one row are of similar
- // length (등록 → 클래스 → 수업 → …). Column count follows the available width.
- const cols=Math.max(1,Math.min(3,Math.floor((box.clientWidth||960)/320)));
- box.style.gridTemplateColumns=`repeat(${cols},minmax(0,1fr))`;
+ // length (등록 → 클래스 → 수업 → …). Column count follows the screen width in CSS (.cards).
  for(const [db,items,help] of [...CHECKLIST].sort((a,b)=>b[1].length-a[1].length)){
   const card=el('section','dbcard');
   const head=el('div','dbhead');const title=el('h4','',db.replace('(학원)',''));
@@ -170,7 +195,8 @@ function renderChecklist(){
    const copies=el('div','copies');const url=base+'/functions/v1/'+routeName+(extra.path||'');
    copies.append(copyButton('웹훅','웹훅 URL 복사: '+url,b=>copyText(url,'웹훅 URL을 복사했습니다',b).catch(e=>error(e.message))));
    if(extra.header){const [hn,hv]=extra.header;copies.append(copyButton('헤더',`추가 헤더 값 복사: ${hn}: ${hv}`,b=>copyText(hv,`추가 헤더 값(${hn}: ${hv})을 복사했습니다`,b).catch(e=>error(e.message))));}
-   li.append(label,meta,copies);list.append(li);
+   const about=describe(extra);
+   li.append(label,...about,meta,copies);list.append(li);
   }
   card.append(list);box.append(card);
  }
@@ -256,6 +282,5 @@ $('webhook-cancel').onclick=()=>task(async()=>{
 $('key-bar-copy').onclick=e=>copyText(newKey(),'새 웹훅 키를 복사했습니다',e.currentTarget).catch(err=>error(err.message));
 $('key-bar-show').onclick=()=>{const bar=$('key-bar');bar.dataset.shown=bar.dataset.shown==='1'?'':'1';renderKeyBar();};
 // Re-pack the checklist when the window width changes the column count.
-let packTimer=null;addEventListener('resize',()=>{clearTimeout(packTimer);packTimer=setTimeout(()=>{if(!$('webhook-progress').hidden)renderChecklist();},150);});
 initialize();
 })();
