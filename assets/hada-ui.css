@@ -74,6 +74,9 @@ input[aria-invalid=true]{border-color:var(--danger-ink)}
 .loading::before{content:"";display:inline-block;width:var(--icon-sm);height:var(--icon-sm);margin-right:var(--space-2);vertical-align:-2px;border:2px solid currentColor;border-right-color:transparent;border-radius:var(--radius-pill);animation:hada-spin .8s linear infinite}
 @keyframes hada-spin{to{transform:rotate(360deg)}}
 
+/* 짧은 알림(토스트): 화면 아래 가운데에 2초. 복사처럼 결과를 바로 알려야 하는 동작에 쓴다 */
+.toast{position:fixed;left:50%;bottom:var(--space-8);transform:translateX(-50%);z-index:100;max-width:calc(100vw - var(--space-8));padding:var(--space-3) var(--space-5);border-radius:var(--radius-pill);background:var(--text-ink);color:var(--surface);font-size:var(--text-small);font-weight:600;box-shadow:var(--shadow-md)}
+
 /* 종류 배지 (버튼 / 자동화) */
 .kind{border-radius:var(--radius-sm);padding:0 var(--space-1);font-weight:700;display:inline-flex;align-items:center;gap:2px}
 .kind svg{width:13px;height:13px}
