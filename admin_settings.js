@@ -144,13 +144,14 @@ function renderChecklist(){
   const count=items.filter(([id])=>webhook.checks[id]).length;done+=count;total+=items.length;
   const badge=el('span','dbcount'+(count===items.length?' complete':''),`${count} / ${items.length}`);
   head.append(title,badge);
+  // Help for the card sits at the top right of the title row, apart from the links.
+  if(help){const q=el('button','help-btn corner','?');q.type='button';q.title='찾는 위치 보기';q.setAttribute('aria-label',db.replace('(학원)','')+' 버튼 찾는 위치 보기');q.onclick=()=>showHelp(db,help);head.append(q);}
   const l=links&&links[dbKey(db)];const nav=el('div','dblinks');
   // The 웹훅등록 view is the link people use most, so it is the filled chip; the DB link is the outlined one.
   const hasView=l&&safeView(l.view);
   if(hasView)nav.append(link(l.view,'웹훅 등록 ↗',db+' DB의 "웹훅 등록" 보기 열기','link-chip main'));
   if(l&&safeDb(l.db))nav.append(link(l.db,'DB 열기 ↗',db+' DB 열기',hasView?'link-chip':'link-chip main'));
   if(!nav.childNodes.length)nav.append(el('span','muted','Notion에서 이 DB를 찾지 못했습니다'));
-  if(help){const q=el('button','help-btn','?');q.type='button';q.title='찾는 위치 보기';q.setAttribute('aria-label',db.replace('(학원)','')+' 버튼 찾는 위치 보기');q.onclick=()=>showHelp(db,help);nav.append(q);}
   head.append(nav);
   card.append(head);
   const list=el('ul','items');
