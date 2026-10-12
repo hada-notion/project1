@@ -547,7 +547,7 @@ let selectedBookTitle = null
 let scheduleMonthIndex = 0
 let expandedSection = null // "basic" | "registrations" | null
 let selectedCalDate = null
-let regTab = "books" // "books" | "calendar" | "study" | "report"
+let regTab = "home" // "home" | "books" | "calendar" | "study" | "report"
 let calMode = "attendance" // "attendance" | "homework"
 let regCalMonthIndex = 0
 // [NEW, 2026-09-19] 우측 하단 동기화 버튼(FAB) 상태. 캘린더 탭에만 있던 버튼을 화면 전역으로 옮기면서,
@@ -604,7 +604,8 @@ function toggleSection(name) {
 
 function openRegistration(token) {
   selectedToken = token
-  regTab = "books"
+  regTab = "home"
+  selectedCalDate = null
   bookStatusTab = "진행중"
   selectedBookTitle = null
   calMode = "attendance"
@@ -635,6 +636,7 @@ function normBookTitle(v) {
 }
 function regTabsList() {
   return [
+    { id: "home", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>`, label: "홈" },
     { id: "books", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>`, label: "교재" },
     { id: "calendar", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`, label: "캘린더" },
     { id: "study", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`, label: "학습기록" },
@@ -798,6 +800,7 @@ function setBookLogFilter(filter) {
 }
 function setRegTab(tab) {
   regTab = tab
+  selectedCalDate = null
   renderApp()
   window.scrollTo({ top: 0 })
 }
@@ -809,8 +812,18 @@ function goIntro() {
   renderApp()
 }
 
+// 캘린더에서 날짜를 누르면 보고서로 넘어가지 않고, 달력을 그 주 한 줄로 접은 뒤 아래에 그날 기록을 보여준다.
+// 같은 날짜를 다시 누르면 월 보기로 돌아간다. 보고서는 그날 기록 아래 [이날 보고서 보기]로 연다.
 function selectCalDay(date) {
-  selectedCalDate = date
+  selectedCalDate = selectedCalDate === date ? null : date
+  renderApp()
+}
+function clearCalDay() {
+  selectedCalDate = null
+  renderApp()
+}
+function openDayReport(date) {
+  selectedCalDate = null
   regTab = "report"
   reportPeriod = "day"
   reportDayDate = date
