@@ -242,13 +242,16 @@ function monthSessions(r, y, m) {
   const monthKey = `${y}-${String(m).padStart(2, "0")}`
   const att = attendanceByDate(r)
   const closed = closedDateSet()
-  const list = Object.keys(att).filter((d) => d.startsWith(monthKey)).map((d) => ({ date: d, status: att[d], planned: false }))
+  // 지난 수업은 실제 출석 행만 센다(시간표만으로는 그날 수업이 실제로 열렸는지 알 수 없다). 상태가 빈 행은
+  // 출결 미입력(빗금), 오늘 상태가 빈 행은 아직 수업 전이라 남은 수업으로 본다.
+  const list = Object.keys(att).filter((d) => d.startsWith(monthKey))
+    .map((d) => ({ date: d, status: att[d], planned: !att[d] && d >= MOCK_TODAY }))
+  // 앞으로의 수업은 리포트 저장본에 출석 행이 없으므로 시간표로 계산한다(휴원·등록 기간 밖 제외).
   const daysInMonth = new Date(y, m, 0).getDate()
   for (let day = 1; day <= daysInMonth; day++) {
     const dateStr = `${monthKey}-${String(day).padStart(2, "0")}`
-    if (att[dateStr] !== undefined || !isPlannedClassDate(r, dateStr, closed)) continue
-    // 오늘 이후는 남은 수업, 지난 날은 기록 없는 수업(빗금)으로 센다.
-    list.push({ date: dateStr, status: "", planned: dateStr >= MOCK_TODAY, missing: dateStr < MOCK_TODAY })
+    if (dateStr < MOCK_TODAY || att[dateStr] !== undefined || !isPlannedClassDate(r, dateStr, closed)) continue
+    list.push({ date: dateStr, status: "", planned: true })
   }
   return list.sort((a, b) => a.date.localeCompare(b.date))
 }
@@ -309,9 +312,14 @@ function calDayCellHtml(r, dateStr, mode, maps) {
   let missing = false
   if (mode === "attendance") {
     status = ["출석", "결석", "보강"].find((k) => String(maps.att[dateStr] || "").includes(k)) || ""
-    const scheduled = !status && maps.att[dateStr] === undefined && isPlannedClassDate(r, dateStr, maps.closed)
-    planned = scheduled && dateStr >= MOCK_TODAY
-    missing = scheduled && dateStr < MOCK_TODAY
+    const hasRow = maps.att[dateStr] !== undefined
+    if (!status && hasRow) {
+      // 출석 행은 있는데 상태가 비었음: 지난 날은 출결 미입력, 오늘은 아직 수업 전(예정)
+      missing = dateStr < MOCK_TODAY
+      planned = dateStr >= MOCK_TODAY
+    } else if (!hasRow) {
+      planned = dateStr >= MOCK_TODAY && isPlannedClassDate(r, dateStr, maps.closed)
+    }
   } else if (maps.due[dateStr]) {
     const st = homeworkDueStatus(maps.due[dateStr], dateStr)
     if (st === "plan") planned = true
@@ -327,7 +335,7 @@ function buildRegCalendarHtml(r, mode) {
   const maps = { att: attendanceByDate(r), due: homeworkDueMap(r), closed: closedDateSet() }
   const dowHeader = ["월", "화", "수", "목", "금", "토", "일"].map((l, i) => `<div class="cal-dow${i === 5 ? " sat" : i === 6 ? " sun" : ""}">${l}</div>`).join("")
   const legend = mode === "attendance"
-    ? `<div class="cal-legend"><span><span class="dot" style="background:var(--success)"></span>출석</span><span><span class="dot" style="background:var(--danger)"></span>결석</span><span><span class="dot" style="background:var(--info)"></span>보강</span><span><span class="dot" style="background:transparent;box-shadow:inset 0 0 0 1.5px var(--brand-border)"></span>예정</span><span><span class="dot" style="background:repeating-linear-gradient(135deg, var(--brand-light) 0 2px, transparent 2px 4px)"></span>기록 없음</span><span><span class="dot" style="background:transparent;box-shadow:inset 0 0 0 1.5px var(--danger)"></span>오늘</span></div>`
+    ? `<div class="cal-legend"><span><span class="dot" style="background:var(--success)"></span>출석</span><span><span class="dot" style="background:var(--danger)"></span>결석</span><span><span class="dot" style="background:var(--info)"></span>보강</span><span><span class="dot" style="background:transparent;box-shadow:inset 0 0 0 1.5px var(--brand-border)"></span>예정</span><span><span class="dot" style="background:repeating-linear-gradient(135deg, var(--brand-light) 0 2px, transparent 2px 4px)"></span>출결 미입력</span><span><span class="dot" style="background:transparent;box-shadow:inset 0 0 0 1.5px var(--danger)"></span>오늘</span></div>`
     : `<div class="cal-legend"><span><span class="dot" style="background:var(--success)"></span>제출</span><span><span class="dot" style="background:var(--warning)"></span>일부</span><span><span class="dot" style="background:var(--danger)"></span>미제출</span><span><span class="dot" style="background:transparent;box-shadow:inset 0 0 0 1.5px var(--brand-border)"></span>마감 예정</span><span><span class="dot" style="background:transparent;box-shadow:inset 0 0 0 1.5px var(--danger)"></span>오늘</span></div>`
 
   // 날짜를 고른 상태: 그 주 한 줄 + 아래에 그날 기록
@@ -444,7 +452,7 @@ function buildHomeHeroHtml(r) {
 function buildHomeTabHtml(r) {
   const todayAtt = (r.attendance_rows || []).find((a) => a.date === MOCK_TODAY)
   const todayPlanned = isPlannedClassDate(r, MOCK_TODAY, closedDateSet())
-  const attText = todayAtt ? (todayAtt.status || "기록 없음") : todayPlanned ? "수업 전" : "수업 없음"
+  const attText = todayAtt ? (todayAtt.status || "수업 전") : todayPlanned ? "수업 전" : "수업 없음"
   const attTone = todayAtt ? (String(todayAtt.status).includes("결석") ? "bad" : String(todayAtt.status).includes("보강") ? "info" : "good") : ""
   const pending = (r.homework || [])
     .filter((h) => h.status !== "제출" && h.due && h.due >= MOCK_TODAY && (!h.classDate || h.classDate <= MOCK_TODAY))
