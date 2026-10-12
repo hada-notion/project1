@@ -23,8 +23,10 @@
 // - 없으면(시험기간 등 정규 수업이 없는 날의 방문) 출석 페이지를 새로 만들고 "출석 상태"를
 //   "🔵 보강"으로 설정한다. 하원인데 등원 기록이 없던 경우엔 하원스템프만 채우고 등원스템프는
 //   비워둔다.
-// - 등원인데 이미 등원스템프가 있으면, 하원인데 이미 하원스템프가 있으면 각각 덮어쓰지 않고
-//   { alreadyDone: true, alreadyAt }로 안내하고 알림톡도 다시 보내지 않는다(중복 처리 방지).
+// - [v2.5.39] 이미 스템프가 있을 때의 처리는 키오스크 설정의 방식(body.mode)을 따른다(_shared/kioskPolicy.ts).
+//   once(1일 1회, 기본): 덮어쓰지 않고 { alreadyDone: true, alreadyAt }로 안내, 알림톡도 다시 보내지 않는다.
+//   every(매번 기록): 새 시각으로 덮어쓰고 알림톡을 보낸다. 두 방식 모두 같은 버튼 2분 안 재입력은
+//   { alreadyDone: true, recent: true }로 무시한다. 아래 FIX 메모는 once 방식의 배경이다.
 //   [FIX, 2026-09-19] 원래는 하원에는 이 중복 방지가 없어서 하원 버튼을 다시 누르면 스템프를
 //   덮어쓰고 알림톡도 매번 다시 발송하는 문제가 있었다. 등원과 동일하게 맞춘다.
 // - 카카오 알림톡: 등원/하원을 별도 템플릿 두 개로 운영하면 Solapi 템플릿 승인을 두 번 받아야 해서
@@ -58,19 +60,11 @@ import { normalizePhone, resolveParentPhone, resolveAlimtalkRecipients } from ".
 // (예전 import는 `import { enqueueDashboardLink } from "../_shared/dashboardLinkTarget.ts"`,
 // 호출부는 stateChanged 블록 안 한 곳이었다.)
 
-import { resolveKioskHint, queryAllKioskPages } from "../_shared/kioskIdentity.ts"
+import { resolveKioskHint, queryAllKioskPages, ACTIVE_KIOSK_STATUS } from "../_shared/kioskIdentity.ts"
+import { runAfterResponse } from "../_shared/afterResponse.ts"
+import { decideStamp, kioskCheckMode } from "../_shared/kioskPolicy.ts"
 import { StepTiming } from "../_shared/stepTiming.ts"
 import { hashPhone, kstDate, markKioskTodayStamp, readKioskPrepared, readKioskTodayRow, type KioskPrepared, type KioskTodayRow } from "../_shared/kioskToday.ts"
-
-function plainText(prop: any): string {
-  if (!prop) return ""
-  const arr = prop.title ?? prop.rich_text ?? []
-  return arr.map((t: any) => t.plain_text).join("")
-}
-
-function formulaText(prop: any): string {
-  return prop?.formula?.string ?? ""
-}
 
 // "학생이름(등록)"/"클래스명(등록)" 같은 rollup(title 대상) 속성에서 표시 텍스트를 뽑아낸다.
 function rollupFirstText(prop: any): string {
@@ -81,10 +75,6 @@ function rollupFirstText(prop: any): string {
   if (item?.type === "rich_text") return (item.rich_text ?? []).map((t: any) => t.plain_text).join("")
   if (item?.type === "formula") return item.formula?.string ?? String(item.formula?.number ?? "")
   return ""
-}
-
-function todayKst(): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date())
 }
 
 function formatKstTime(iso: string | null | undefined): string {
@@ -127,7 +117,7 @@ async function findActiveRegistrationsForStudent(registrationDbId: string, stude
     filter: {
       and: [
         { property: "학생정보", relation: { contains: studentId } },
-        { property: "수강상태", formula: { string: { equals: "🟢 수강 중" } } },
+        { property: "수강상태", formula: { string: { equals: ACTIVE_KIOSK_STATUS } } },
       ],
     },
   })
@@ -143,8 +133,8 @@ function toCandidate(reg: any): Candidate {
 }
 
 async function findTodayAttendance(attendanceDbId: string, registrationId: string): Promise<any | null> {
-  const start = todayKst() + "T00:00:00+09:00"
-  const end = todayKst() + "T23:59:59+09:00"
+  const start = kstDate() + "T00:00:00+09:00"
+  const end = kstDate() + "T23:59:59+09:00"
   const json = await notionQueryDatabase(attendanceDbId, {
     filter: {
       and: [
@@ -156,19 +146,6 @@ async function findTodayAttendance(attendanceDbId: string, registrationId: strin
     page_size: 10,
   })
   return (json.results ?? [])[0] ?? null
-}
-
-// 응답을 보낸 뒤에도 끝까지 처리할 작업. Supabase Edge Runtime이면 waitUntil에 맡기고,
-// 그 기능이 없는 환경(로컬 테스트 등)에서는 응답 전에 기다린다.
-function runAfterResponse(promise: Promise<unknown>): Promise<unknown> | void {
-  const edgeRuntime = (globalThis as Record<string, unknown>).EdgeRuntime as
-    | { waitUntil?: (p: Promise<unknown>) => void }
-    | undefined
-  if (edgeRuntime && typeof edgeRuntime.waitUntil === "function") {
-    edgeRuntime.waitUntil(promise)
-    return
-  }
-  return promise
 }
 
 Deno.serve(async (req: Request) => {
@@ -191,14 +168,39 @@ Deno.serve(async (req: Request) => {
 
     const hintId: string | null =
       typeof body?.registrationId === "string" && body.registrationId ? body.registrationId : null
+    // 처리 방식(키오스크 설정): once = 1일 1회, every = 매번 기록. 둘 다 2분 안 같은 버튼은 무시(_shared/kioskPolicy.ts).
+    const mode = kioskCheckMode(body?.mode)
+    const field = type === "checkin" ? "checkin_at" : "checkout_at"
+    const stampProp = type === "checkin" ? "등원스템프" : "하원스템프"
     const nowIso = new Date().toISOString()
+    const nowMs = Date.parse(nowIso)
     let attendance: any = null
     let registrationId: string | null = hintId
     let studentName = ""
     let stateChanged = false
     let alreadyDone = false
     let alreadyAt = ""
+    let recent = false
     let fastDone = false
+
+    // 이미 찍힌 스템프를 방식대로 처리하고, 기록이 필요하면 true. "이미/방금"이면 응답 값을 채운다.
+    const needsWrite = (existingIso: string | null | undefined): boolean => {
+      const decision = decideStamp(mode, existingIso, nowMs)
+      if (decision === "write") return true
+      alreadyDone = true
+      recent = decision === "recent"
+      alreadyAt = formatKstTime(existingIso)
+      return false
+    }
+    // 정규 수업 출석은 등원·하원하면 "🟢 출석". 이미 "🔵 보강"인 기록(정규 수업 없는 날의 방문)은 그대로 둔다.
+    const writePatch = (currentStatus: string): { patch: Record<string, unknown>; status: string } => {
+      const patch: Record<string, unknown> = { [stampProp]: { date: { start: nowIso } } }
+      if (currentStatus !== "🔵 보강") patch["출석 상태"] = { select: { name: "🟢 출석" } }
+      return { patch, status: currentStatus === "🔵 보강" ? currentStatus : "🟢 출석" }
+    }
+    // 오늘 준비 행을 Notion과 맞춘다(실패해도 출결 처리에는 영향 없음).
+    const syncToday = (regId: string, iso: string | null, status: string, pageId?: string) =>
+      markKioskTodayStamp(regId, field, iso, status, pageId).catch(err => console.error("kiosk today stamp error:", extractErrorMessage(err)))
 
     // [v2.5.37] 오늘 출석 준비(_shared/kioskToday.ts)가 있으면 Notion 조회 없이 바로 기록한다.
     // 준비된 행은 오늘(KST) 날짜·전화번호 해시가 맞을 때만 쓴다. 출석 페이지가 없거나(보강 생성 필요)
@@ -213,30 +215,38 @@ Deno.serve(async (req: Request) => {
     timing.mark("cache")
     const today = kstDate()
     if (prepared?.kst_date === today && row && row.kst_date === today && row.attendance_page_id && row.phone_hashes.includes(await hashPhone(phone))) {
-      const field = type === "checkin" ? "checkin_at" : "checkout_at"
+      const pageId = row.attendance_page_id
       studentName = row.student_name || "이름 미상"
       registrationId = row.registration_id
-      if (row[field]) {
-        alreadyDone = true
-        alreadyAt = formatKstTime(row[field])
-        fastDone = true
-      } else {
-        const status = row.attendance_status === "🔵 보강" ? row.attendance_status : "🟢 출석"
-        const patch: Record<string, unknown> = { [type === "checkin" ? "등원스템프" : "하원스템프"]: { date: { start: nowIso } } }
-        if (row.attendance_status !== "🔵 보강") patch["출석 상태"] = { select: { name: "🟢 출석" } }
-        try {
-          await notionPatchPageProperties(row.attendance_page_id, patch)
-          timing.mark("attendance_write")
-          attendance = { id: row.attendance_page_id }
-          stateChanged = true
-          fastDone = true
-          await markKioskTodayStamp(row.registration_id, field, nowIso, status).catch(err => console.error("kiosk today stamp error:", extractErrorMessage(err)))
-          timing.mark("cache_write")
-        } catch (fastErr) {
-          console.error("kiosk fast path fallback:", extractErrorMessage(fastErr))
-          studentName = ""
-          registrationId = hintId
+      try {
+        let existing = row[field]
+        let currentStatus = row.attendance_status
+        // [v2.5.39] 준비 표가 "이미 처리"라고 하면 1일 1회에서는 Notion을 한 번 더 확인한다(그 사이 Notion에서
+        // 스템프를 지웠으면 다시 기록할 수 있게). 2분 안 재입력은 확인 없이 무시한다.
+        if (existing && decideStamp(mode, existing, nowMs) === "already") {
+          const page = await notionGetPage(pageId)
+          timing.mark("notion_recheck")
+          existing = page.properties?.[stampProp]?.date?.start ?? null
+          currentStatus = page.properties?.["출석 상태"]?.select?.name ?? currentStatus
+          if (!existing) await syncToday(row.registration_id, null, currentStatus)
         }
+        if (needsWrite(existing)) {
+          const { patch, status } = writePatch(currentStatus)
+          await notionPatchPageProperties(pageId, patch)
+          timing.mark("attendance_write")
+          attendance = { id: pageId }
+          stateChanged = true
+          await syncToday(row.registration_id, nowIso, status)
+          timing.mark("cache_write")
+        }
+        fastDone = true
+      } catch (fastErr) {
+        console.error("kiosk fast path fallback:", extractErrorMessage(fastErr))
+        studentName = ""
+        registrationId = hintId
+        alreadyDone = false
+        recent = false
+        alreadyAt = ""
       }
     }
 
@@ -248,14 +258,12 @@ Deno.serve(async (req: Request) => {
         : await Promise.all([resolveRelatedDatabaseId(registrationDbId, "학생정보"), resolveRelatedDatabaseId(registrationDbId, "출석")])
       timing.mark("db_ids")
 
-      let registrationPage: any = null
-      if (registrationId) {
-        // 등록 ID는 클라이언트 힌트. 타 DB/종료 등록/다른 연락처를 출결 처리하지 않는다.
-        registrationPage = await resolveKioskHint({ registrationId, phone, registrationDbId, studentDbId, getPage: notionGetPage })
-        timing.mark("verify")
-        if (!registrationPage) { outcome = "refresh"; return new Response(JSON.stringify({ refreshCandidates: true, error: "학생 목록이 변경되었습니다. 다시 선택해주세요." }), {
+      // 등록 ID는 클라이언트 힌트. 타 DB/종료 등록/다른 연락처를 출결 처리하지 않는다.
+      const refreshCandidates = () => {
+        outcome = "refresh"
+        return new Response(JSON.stringify({ refreshCandidates: true, error: "학생 목록이 변경되었습니다. 다시 선택해주세요." }), {
           status: 409, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-        }) }
+        })
       }
 
       if (!registrationId) {
@@ -295,13 +303,9 @@ Deno.serve(async (req: Request) => {
         studentName = candidates[0].studentName
       }
 
-      if (!registrationPage) {
-        registrationPage = await resolveKioskHint({ registrationId, phone, registrationDbId, studentDbId, getPage: notionGetPage })
-        timing.mark("verify")
-        if (!registrationPage) return new Response(JSON.stringify({ refreshCandidates: true, error: "학생 목록이 변경되었습니다. 다시 선택해주세요." }), {
-          status: 409, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-        })
-      }
+      const registrationPage = await resolveKioskHint({ registrationId, phone, registrationDbId, studentDbId, getPage: notionGetPage })
+      timing.mark("verify")
+      if (!registrationPage) return refreshCandidates()
       if (!studentName) {
         studentName = rollupFirstText(registrationPage.properties?.["학생이름(등록)"]) || "이름 미상"
       }
@@ -311,25 +315,16 @@ Deno.serve(async (req: Request) => {
       timing.mark("attendance_find")
 
       if (attendance) {
-        // [FIX, 2026-09-19] 등원/하원 모두 동일하게: 이미 처리된 스템프면 건너뛰고, 새로 처리하는
-        // 경우에만 스템프를 찍고 "출석 상태"도 함께 갱신한다.
-        const stampProp = type === "checkin" ? "등원스템프" : "하원스템프"
-        const existingStamp = attendance.properties?.[stampProp]?.date?.start
-        if (existingStamp) {
-          alreadyDone = true
-          alreadyAt = formatKstTime(existingStamp)
-        } else {
-          const currentStatus = attendance.properties?.["출석 상태"]?.select?.name ?? ""
-          const patch: Record<string, unknown> = { [stampProp]: { date: { start: nowIso } } }
-          // 이미 "🔵 보강"으로 표시된 기록(정규 수업 없는 날의 방문)은 그대로 유지하고,
-          // 그 외(기본값·결석 등으로 만들어져 있던 정규 수업 출석 페이지)는 실제로 등원/하원했으니
-          // "🟢 출석"으로 갱신한다.
-          if (currentStatus !== "🔵 보강") {
-            patch["출석 상태"] = { select: { name: "🟢 출석" } }
-          }
+        const existing = attendance.properties?.[stampProp]?.date?.start ?? null
+        const currentStatus = attendance.properties?.["출석 상태"]?.select?.name ?? ""
+        if (needsWrite(existing)) {
+          const { patch, status } = writePatch(currentStatus)
           await notionPatchPageProperties(attendance.id, patch)
           timing.mark("attendance_write")
           stateChanged = true
+          await syncToday(registrationId, nowIso, status, attendance.id)
+        } else {
+          await syncToday(registrationId, existing, currentStatus, attendance.id)
         }
       } else {
         // 정규 수업이 없는 날의 방문(시험기간 등 특수 상황) -- 출석 페이지를 새로 만들고 보강으로 표시.
@@ -340,7 +335,7 @@ Deno.serve(async (req: Request) => {
           teacherIds = (classPage.properties?.["담당강사"]?.relation ?? []).map((r: any) => r.id)
         }
         timing.mark("class")
-        const title = `${studentName} ${todayKst()} 보강(${type === "checkin" ? "등원" : "하원"})`
+        const title = `${studentName} ${today} 보강(${type === "checkin" ? "등원" : "하원"})`
         const properties: Record<string, unknown> = {
           "출석": { title: [{ text: { content: title.slice(0, 200) } }] },
           "등록": { relation: [{ id: registrationId }] },
@@ -349,14 +344,15 @@ Deno.serve(async (req: Request) => {
         }
         if (classIds.length) properties["클래스"] = { relation: classIds.map((id) => ({ id })) }
         if (teacherIds.length) properties["담당강사"] = { relation: teacherIds.map((id) => ({ id })) }
-        properties[type === "checkin" ? "등원스템프" : "하원스템프"] = { date: { start: nowIso } }
+        properties[stampProp] = { date: { start: nowIso } }
 
         attendance = await notionCreatePage(attendanceDbId, properties)
         timing.mark("attendance_write")
         stateChanged = true
+        // 새로 만든 보강 출석을 준비 표에 연결해 다음 등원·하원부터 빠른 경로로 처리한다.
+        await syncToday(registrationId, nowIso, "🔵 보강", attendance.id)
       }
     }
-
     // 카카오 알림톡 (등원/하원 통합 템플릿이 아직 설정 전이면 조용히 건너뛴다).
     // [v2.5.36] 출석 기록까지만 기다리고 바로 응답한다. 알림톡 설정 조회·발송·전송로그는 응답 뒤에
     // EdgeRuntime.waitUntil로 마저 처리한다(측정: 화면 대기 약 1.4초 단축). 실패는 지금처럼 전송로그에 남는다.
@@ -405,7 +401,7 @@ Deno.serve(async (req: Request) => {
                     variables: {
                       "학생이름": studentName,
                       "구분": type === "checkin" ? "등원" : "하원",
-                      "일자": formatKstDateKorean(todayKst()),
+                      "일자": formatKstDateKorean(kstDate()),
                       "시간": formatKstTimeKorean(nowIso),
                     },
                     disableSms: false,
@@ -444,7 +440,7 @@ Deno.serve(async (req: Request) => {
       await runAfterResponse(notify())
     }
     outcome = alreadyDone ? "already" : "done"
-    return new Response(JSON.stringify({ matched: true, studentName, alreadyDone, alreadyAt }), {
+    return new Response(JSON.stringify({ matched: true, studentName, alreadyDone, alreadyAt, recent }), {
       headers: { ...CORS_HEADERS, "Content-Type": "application/json", "Server-Timing": timing.header(), "Timing-Allow-Origin": "*" },
     })
   } catch (err) {

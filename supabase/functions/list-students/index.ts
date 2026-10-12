@@ -13,15 +13,7 @@ import { buildKioskDirectory, queryAllKioskPages, ACTIVE_KIOSK_STATUS } from "..
 import { academyName } from "../_shared/academyName.ts"
 import { kstDate, prepareKioskToday, readKioskPrepared } from "../_shared/kioskToday.ts"
 
-// 응답 뒤에도 끝까지 처리할 작업(Supabase Edge Runtime의 waitUntil). 없으면 기다리지 않고 진행만 시킨다.
-function runAfterResponse(promise: Promise<unknown>): void {
-  const edgeRuntime = (globalThis as Record<string, unknown>).EdgeRuntime as { waitUntil?: (p: Promise<unknown>) => void } | undefined
-  if (edgeRuntime && typeof edgeRuntime.waitUntil === "function") edgeRuntime.waitUntil(promise)
-}
-
-function todayKst(): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date())
-}
+import { runAfterResponse } from "../_shared/afterResponse.ts"
 
 function plainText(prop: any): string {
   if (!prop) return ""
@@ -54,18 +46,27 @@ Deno.serve(async (req: Request) => {
       })
       // academyName: 키오스크 아래에 작게 표시하는 학원 이름(Notion 최상위 페이지 제목).
       const name = await academyName(registrationDbId)
-      // 오늘 출석 준비(v2.5.37): 새벽 준비가 없으면 방금 읽은 목록으로 뒤에서 자동 준비한다(화면은 기다리지 않음).
-      // kioskPrepared.at은 키오스크 아래에 "오늘 출석 준비 HH:mm"으로 연하게 표시된다.
-      let kioskPrepared: { at: string | null; today: boolean; preparing: boolean } = { at: null, today: false, preparing: false }
+      // 출석 동기화(오늘 출석 준비, v2.5.37): 새벽 준비가 없으면 방금 읽은 목록으로 뒤에서 자동 준비한다(화면은 기다리지 않음).
+      // kioskPrepared.at은 키오스크 아래에 "출석 동기화 HH:mm"으로 연하게 표시된다.
+      // [v2.5.39] &sync=1: 키오스크 설정의 "지금 동기화"(관리자 비밀번호 확인 후). 응답 전에 다시 준비한다.
+      // 1분 안에 이미 준비했으면 다시 하지 않는다(연속 클릭으로 Notion 조회가 몰리지 않게).
+      const forceSync = new URL(req.url).searchParams.get("sync") === "1"
+      let kioskPrepared: { at: string | null; today: boolean; preparing: boolean; synced?: boolean; syncError?: string } = { at: null, today: false, preparing: false }
       try {
-        const prepared = await readKioskPrepared()
+        let prepared = await readKioskPrepared()
+        if (forceSync) {
+          const recentlyPrepared = prepared?.prepared_at && Date.now() - Date.parse(prepared.prepared_at) < 60_000
+          if (!recentlyPrepared) prepared = await prepareKioskToday("manual", { registrations, students })
+          kioskPrepared.synced = !recentlyPrepared
+        }
         const today = prepared?.kst_date === kstDate()
-        kioskPrepared = { at: prepared?.prepared_at ?? null, today, preparing: !today }
+        kioskPrepared = { ...kioskPrepared, at: prepared?.prepared_at ?? null, today, preparing: !today }
         if (!today) {
           runAfterResponse(prepareKioskToday("auto", { registrations, students }).catch(err => console.error("kiosk auto prepare error:", (err as Error).message)))
         }
       } catch (err) {
-        console.error("kiosk prepared read error:", (err as Error).message)
+        console.error("kiosk prepared error:", (err as Error).message)
+        if (forceSync) kioskPrepared.syncError = "출석 동기화에 실패했습니다. 잠시 후 다시 시도해주세요."
       }
       return new Response(JSON.stringify({ candidates: buildKioskDirectory(registrations, students), academyName: name, kioskPrepared, generatedAt: new Date().toISOString() }), {
         headers: { ...CORS_HEADERS, "Content-Type": "application/json", "Cache-Control": "no-store" },
@@ -80,7 +81,7 @@ Deno.serve(async (req: Request) => {
       resolveRelatedDatabaseId(registrationDbId, "출석"),
     )
 
-    const today = todayKst()
+    const today = kstDate()
 
     const students = await Promise.all(
       registrations.map(async (reg: any) => {
