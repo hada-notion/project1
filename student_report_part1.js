@@ -944,6 +944,8 @@ function buildScheduleCalendarHtml() {
     byDay[d] = byDay[d] || []
     byDay[d].push(n)
   })
+  // 나이스 학사일정이 이 달에 있으면 이용약관 제11조에 따라 출처를 함께 보여준다.
+  const hasSchoolSchedule = Object.values(byDay).some((list) => list.some((n) => normalizeCategoryName(n.category) === "학사 일정"))
   let cells = ""
   for (let i = 0; i < leading + daysInMonth + trailing; i++) {
     const dateStr = addDaysStr(firstCellDate, i)
@@ -970,6 +972,7 @@ function buildScheduleCalendarHtml() {
         <div class="cal-weekdays">${["월", "화", "수", "목", "금", "토", "일"].map((w, i) => `<div class="${i === 5 ? "sat" : i === 6 ? "sun" : ""}">${w}</div>`).join("")}</div>
         <div class="cal-grid">${cells}</div>
       </div>
+      ${hasSchoolSchedule ? '<div class="schedule-source">학사일정 출처: 나이스 교육정보 개방 포털</div>' : ""}
     </div>
   `
 }

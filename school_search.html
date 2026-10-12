@@ -20,6 +20,8 @@
 .result>button{flex-shrink:0}
 /* 연결 완료: 같은 줄 오른쪽에 Notion 열기(주 동작)와 다시 찾기 */
 .done-actions{display:flex;gap:var(--space-3);flex-shrink:0}
+/* 나이스 이용약관 제11조 출처 표시: 카드 맨 아래 */
+.source-note{margin:var(--space-5) 0 0}
 .done-actions a.primary{display:inline-flex;align-items:center;justify-content:center;width:auto;text-decoration:none}
 @media(max-width:700px){
  .topright .badge{display:none}
@@ -39,6 +41,7 @@
 <div class="status">검색 결과 선택 후 교육청·학교 코드, 주소, 홈페이지를 저장합니다. 학사일정은 Notion의 ‘학사일정 가져오기’ 버튼으로 가져옵니다.</div>
 <form id="searchForm"><div class="field-row"><div><label for="query">학교명</label><input id="query" placeholder="예: 천왕중학교" required minlength="2" maxlength="80"></div><div><label for="region">지역 · 선택 사항</label><input id="region" placeholder="예: 구로구" maxlength="80"></div><button class="primary">검색</button></div></form>
 <div id="results"></div>
+<p class="help source-note">학교 정보 출처: 나이스 교육정보 개방 포털</p>
 </section>
 </main>
 <p class="foot"><strong>비밀번호는 타인에게 전달하지 마세요.</strong> 공용 기기에서는 사용 후 창을 닫으세요.</p>
