@@ -1,4 +1,4 @@
-import { SecurityError,securityEnabled,securityRpc,sha256,randomToken,validatePassword,hashPassword,verifyPassword,nextRecommended,ensureInitialized,fixedWebhookKey } from '../_shared/adminSecurity.ts';
+import { SecurityError,securityEnabled,securityRpc,sha256,randomToken,validatePassword,hashPassword,verifyPassword,nextRecommended,ensureInitialized,fixedWebhookKey,SECURITY_WEBHOOK_ROUTES } from '../_shared/adminSecurity.ts';
 // While security is disabled the function only answers with a fixed 503 message and no secrets, so the
 // browser must be able to read it for the legacy-login fallback even before ADMIN_ALLOWED_ORIGINS is set.
 function cors(req:Request,enforceOrigin:boolean):Record<string,string> {
@@ -20,7 +20,7 @@ export async function handleAdminSecurity(req:Request):Promise<Response> {
     // Public status: never says whether the initial password is still active.
     if(b.action==='status'){await ensureInitialized();return result({ready:true,webhook_key_weak:fixedWebhookKey().length<32});}
     // Persistent global buckets; independent of spoofable browser IP headers.
-    if(b.action==='login'||b.action==='change')await securityRpc('limit',{bucket:'security-'+b.action,max:60,seconds:3600});
+    if(['login','change','webhook-start','webhook-cancel'].includes(b.action))await securityRpc('limit',{bucket:'security-'+b.action,max:60,seconds:3600});
     const session=req.headers.get('x-admin-key')??'';
     if(b.action==='login'){
       await ensureInitialized();
@@ -46,6 +46,27 @@ export async function handleAdminSecurity(req:Request):Promise<Response> {
       const internalKey=randomToken();
       const response=await securityRpc('change',{session_hash:await sha256(session),expected_version:ctx.version,password_hash:await hashPassword(password),internal_key:internalKey,internal_hash:await sha256(internalKey)});
       return result({ok:true,changed_at:response.changed_at,message:'변경 완료. 모든 기존 로그인 세션이 해제되었습니다.'});
+    }
+    // Webhook key rotation. The new key is returned once, on start, because the owner must paste it into
+    // Notion; it is never stored in readable form and cannot be fetched again.
+    if(b.action==='webhook-status'){
+      const st=await securityRpc('webhook-status',{session_hash:await sha256(session)});
+      const usage=(Array.isArray(st.usage)?st.usage:[]).filter((u:any)=>SECURITY_WEBHOOK_ROUTES.has(u.route));
+      return result({rotating:!!st.rotating,started_at:st.started_at,changed_at:st.changed_at,weak:!st.changed_at&&fixedWebhookKey().length<32,usage});
+    }
+    if(b.action==='webhook-start'||b.action==='webhook-cancel'){
+      const sessionHash=await sha256(session);
+      const ctx=await securityRpc('profile',{session_hash:sessionHash});
+      if(!await verifyPassword(b.current_password,ctx.password_hash))throw new SecurityError(401,'현재 비밀번호가 올바르지 않습니다.');
+      if(b.action==='webhook-cancel'){await securityRpc('webhook-cancel',{session_hash:sessionHash});return result({ok:true});}
+      const key=randomToken(24);
+      const response=await securityRpc('webhook-start',{session_hash:sessionHash,webhook_hash:await sha256(key)});
+      return result({ok:true,key,started_at:response.started_at});
+    }
+    if(b.action==='webhook-finish'){
+      const response=await securityRpc('webhook-finish',{session_hash:await sha256(session),force:b.force===true});
+      if(response.needs_confirm)return new Response(JSON.stringify({error:'최근 7일 안에 옛 키로 호출된 버튼이 있습니다. 지금 완료하면 그 버튼은 동작하지 않습니다.',needs_confirm:true}),{status:409,headers});
+      return result({ok:true,changed_at:response.changed_at});
     }
     throw new SecurityError(400,'지원하지 않는 작업입니다.');
   }catch(e){const status=e instanceof SecurityError?e.status:503;return new Response(JSON.stringify({error:e instanceof SecurityError?e.message:'처리하지 못했습니다. 서버 연결 상태를 확인해 주세요.'}),{status,headers});}
