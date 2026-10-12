@@ -12,6 +12,9 @@
 .centered #panel-title,.centered #panel-description,.centered #form-error{max-width:var(--form-max);margin-left:auto;margin-right:auto}
 .facts-dialog{max-width:var(--dialog-sm)}
 .help-dialog{max-width:var(--dialog-md)}
+.help-dialog .trigger,.help-dialog .note{margin:var(--space-3) 0 0;font-size:var(--text-small)}
+.item .check .item-help{margin-left:auto;flex-shrink:0}
+.help-desc{margin:var(--space-2) 0 0;color:var(--text-ink)}
 .help-dialog img{display:block;max-width:100%;height:auto;border:1px solid var(--brand-border);border-radius:var(--radius-md);margin:var(--space-3) 0}
 .aside-title{font-size:var(--text-lead)}
 .rules{font-size:var(--text-small);padding-left:var(--space-5);margin:var(--space-5) 0 0;color:var(--text-muted)}
@@ -174,7 +177,7 @@
 <ul class="link-list"></ul>
 <p class="help">학부모 리포트는 학생마다 주소가 달라 Notion 등록 페이지의 리포트 링크로 엽니다.</p>
 </dialog>
-<dialog class="card help-dialog" id="help-dialog" aria-labelledby="help-title"><div class="dialog-head"><h2 class="aside-title" id="help-title">찾는 위치</h2><button class="ghost" id="close-help" type="button">닫기</button></div><img id="help-image" alt=""><p id="help-text" class="muted"></p></dialog>
+<dialog class="card help-dialog" id="help-dialog" aria-labelledby="help-title"><div class="dialog-head"><h2 class="aside-title" id="help-title">찾는 위치</h2><button class="ghost" id="close-help" type="button">닫기</button></div><div id="help-extra"></div><img id="help-image" alt="" hidden><p id="help-text" class="muted"></p></dialog>
 <dialog class="card facts-dialog" id="facts-dialog" aria-labelledby="security-title"><div class="dialog-head"><h2 class="aside-title" id="security-title">보안 설정 현황</h2><button class="ghost" id="close-facts" type="button" aria-label="닫기">닫기</button></div>
 <dl class="facts"><div><dt>비밀번호 상태</dt><dd id="owner-status">확인 중</dd></div><div><dt>마지막 비밀번호 변경일</dt><dd id="last-change">로그인 후 표시</dd></div><div><dt>다음 권장 변경일</dt><dd id="next-change">변경 완료 후 3개월 기준</dd></div><div><dt>웹훅 인증키</dt><dd id="webhook-fact">평소 유지 · 사고 시 별도 교체</dd></div></dl>
 <hr class="divider"><ul class="rules"><li>처음에는 초기 비밀번호 0000으로 로그인해 바로 변경</li><li>변경 전에는 키오스크·서류 화면을 사용할 수 없음</li><li>비밀번호를 바꾸면 내부 인증키도 함께 갱신</li><li>비밀번호를 바꿔도 Notion 웹훅 키는 그대로 유지</li><li>웹훅 키는 유출이 의심될 때만 별도로 교체</li><li>비밀번호를 잊으면 배포 담당자에게 초기화 요청</li></ul></dialog>
