@@ -129,8 +129,8 @@ async function loadWebhook(){
 // this only supports the manual check: it cannot tell which button made the call.
 function hint(routeName,checkedAt){
  const v={};for(const u of webhook.usage)if(u.route===routeName)v[u.key]=u;
- if(v.old&&checkedAt&&v.old.last_at>checkedAt)return ['bad',`체크 후에도 이 함수로 옛 키 호출 (${shortDate(v.old.last_at)})`];
- if(v.old)return ['bad',`이 함수로 옛 키 호출 있음 (${shortDate(v.old.last_at)} · ${v.old.calls}회)`];
+ if(v.old&&checkedAt&&v.old.last_at>checkedAt)return ['bad',`체크 후에도 이 함수로 이전 키 호출 (${shortDate(v.old.last_at)})`];
+ if(v.old)return ['bad',`이 함수로 이전 키 호출 있음 (${shortDate(v.old.last_at)} · ${v.old.calls}회)`];
  if(v.new)return ['good',`새 키 호출 확인 (${shortDate(v.new.last_at)})`];
  return ['none','교체 후 호출 기록 없음'];
 }
@@ -173,7 +173,7 @@ function renderChecklist(){
   card.append(list);place(card,2+items.length*1.6);
  }
  unchecked=total-done;
- text('usage-summary',`완료 ${done} / ${total}`+(oldRoutes.size?` · 옛 키 호출이 남은 함수 ${oldRoutes.size}개`:''));
+ text('usage-summary',`완료 ${done} / ${total}`+(oldRoutes.size?` · 이전 키 호출이 남은 함수 ${oldRoutes.size}개`:''));
  $('progress-bar').style.width=total?`${Math.round(done*100/total)}%`:'0%';
  text('links-updated',linksUpdated?`링크 기준: ${date(linksUpdated)}`:'');
 }
@@ -191,7 +191,7 @@ function renderKeyBar(){
 async function showProgress(){
  await loadLinks();
  renderKeyBar();
- text('webhook-started',`${date(webhook.started_at)}부터 옛 키와 새 키가 모두 동작하고 있습니다.`);
+ text('webhook-started',`${date(webhook.started_at)}부터 이전 키와 새 키가 모두 동작하고 있습니다.`);
  panel('webhook-progress','웹훅 키 교체 진행 중','DB별로 버튼·자동화의 키를 새 키로 바꾸고 체크합니다. 모두 끝나면 교체를 완료합니다.');
  renderChecklist(); // after the panel is visible so the column count uses the real width
 }
@@ -238,19 +238,19 @@ $('webhook-back').onclick=()=>task(profile);
 $('progress-back').onclick=()=>task(profile);
 $('webhook-form').onsubmit=e=>{e.preventDefault();task(async()=>{
  const data=await request('webhook-start',{current_password:$('webhook-password').value});clearPasswords();
- $('new-webhook-key').value=data.key;keepNewKey(data.key);panel('webhook-key','새 웹훅 키가 만들어졌습니다','지금부터 옛 키와 새 키가 모두 동작합니다. 아래 키를 복사해 주세요.');$('new-webhook-key').select();});};
+ $('new-webhook-key').value=data.key;keepNewKey(data.key);panel('webhook-key','새 웹훅 키가 만들어졌습니다','지금부터 이전 키와 새 키가 모두 동작합니다. 아래 키를 복사해 주세요.');$('new-webhook-key').select();});};
 $('copy-webhook-key').onclick=async()=>{const field=$('new-webhook-key');try{await navigator.clipboard.writeText(field.value);notice('새 웹훅 키를 복사했습니다. 모든 버튼·자동화에 같은 키를 붙여 넣습니다.');}catch{field.select();notice('자동 복사가 막혔습니다. 선택된 키를 Ctrl+C로 복사해 주세요.');}};
 $('webhook-key-done').onclick=e=>{task(async()=>{$('new-webhook-key').value='';await loadWebhook();await showProgress();},e.currentTarget,'체크리스트 불러오는 중… (처음엔 최대 1분)');};
 $('webhook-refresh').onclick=e=>task(async()=>{await loadWebhook();await showProgress();},e.currentTarget);
 $('links-refresh').onclick=e=>task(async()=>{await loadLinks(true);renderChecklist();notice('Notion 링크를 다시 찾았습니다.');},e.currentTarget,'Notion에서 찾는 중… (최대 1분)');
 $('webhook-finish').onclick=()=>task(async()=>{
- if(!confirm((unchecked?`아직 체크하지 않은 항목이 ${unchecked}개 있습니다. 그 버튼·자동화의 키도 바꿨는지 확인해 주세요.\n`:'')+'교체를 완료하면 옛 키로 오는 Notion 호출은 모두 거부됩니다. 완료할까요?'))return;
+ if(!confirm((unchecked?`아직 체크하지 않은 항목이 ${unchecked}개 있습니다. 그 버튼·자동화의 키도 바꿨는지 확인해 주세요.\n`:'')+'교체를 완료하면 이전 키가 삭제되어, 이전 키로 오는 Notion 호출은 모두 거부됩니다. 완료할까요?'))return;
  let done;try{done=await request('webhook-finish');}catch(e){if(!e.needsConfirm)throw e;if(!confirm(e.message+' 그래도 완료할까요?'))return;done=await request('webhook-finish',{force:true});}
- keepNewKey('');await profile();notice(`웹훅 키 교체를 완료했습니다(${date(done.changed_at)}). 옛 키는 더 이상 동작하지 않습니다.`);});
+ keepNewKey('');await profile();notice(`웹훅 키 교체를 완료했습니다(${date(done.changed_at)}). 이전 키를 삭제했습니다.`);});
 $('webhook-cancel').onclick=()=>task(async()=>{
  if(!$('cancel-password').value)throw new Error('교체를 취소하려면 현재 관리자 비밀번호를 입력해 주세요.');
- if(!confirm('새 키를 버리고 옛 키로 되돌립니다. 이미 새 키로 바꾼 버튼은 다시 옛 키로 돌려야 합니다. 취소할까요?'))return;
- await request('webhook-cancel',{current_password:$('cancel-password').value});clearPasswords();keepNewKey('');await profile();notice('웹훅 키 교체를 취소했습니다. 옛 키만 동작합니다.');});
+ if(!confirm('새 키를 버리고 이전 키로 되돌립니다. 이미 새 키로 바꾼 버튼은 다시 이전 키로 돌려야 합니다. 취소할까요?'))return;
+ await request('webhook-cancel',{current_password:$('cancel-password').value});clearPasswords();keepNewKey('');await profile();notice('웹훅 키 교체를 취소했습니다. 이전 키만 동작합니다.');});
 $('key-bar-copy').onclick=e=>copyText(newKey(),'새 웹훅 키를 복사했습니다',e.currentTarget).catch(err=>error(err.message));
 $('key-bar-show').onclick=()=>{const bar=$('key-bar');bar.dataset.shown=bar.dataset.shown==='1'?'':'1';renderKeyBar();};
 // Re-pack the checklist when the window width changes the column count.

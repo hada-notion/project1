@@ -139,7 +139,7 @@ export async function handleAdminSecurity(req:Request):Promise<Response> {
     }
     if(b.action==='webhook-finish'){
       const response=await securityRpc('webhook-finish',{session_hash:await sha256(session),force:b.force===true});
-      if(response.needs_confirm)return new Response(JSON.stringify({error:'최근 7일 안에 옛 키로 호출된 버튼이 있습니다. 지금 완료하면 그 버튼은 동작하지 않습니다.',needs_confirm:true}),{status:409,headers});
+      if(response.needs_confirm)return new Response(JSON.stringify({error:'최근 7일 안에 이전 키로 호출된 버튼이 있습니다. 지금 완료하면 그 버튼은 동작하지 않습니다.',needs_confirm:true}),{status:409,headers});
       return result({ok:true,changed_at:response.changed_at});
     }
     throw new SecurityError(400,'지원하지 않는 작업입니다.');
