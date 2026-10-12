@@ -17,8 +17,8 @@
 // (2026-09-18, Phase 2~3 / 2026-09-20, 웹훅 코드 정리 2단계) 한때 이 워커가 처리하던 target은
 // cascade-delete / create-assignment / create-learning-record / sync-textbook-distribution
 // (from-cart, from-class-carts) / sync-class-report-cache / fix-attendance / sync-exam-scope /
-// sync-registration-enroll / sync-registration-end / sync-registration-timetable / sync-registration-textbook
-// (create-individual) / sync-dashboard-link / sync-registration-class-session까지 총 15개였다.
+// sync-registration-enroll / sync-registration-end / sync-registration-textbook
+// (create-individual) / sync-dashboard-link / sync-registration-class-session 등 총 15개였다(지금은 폐기된 함수 포함).
 // 당시에는 "여러 DB에서 동시에 웹훅이 몰릴 수 있으니 전부 큐로" 라는 방향으로 일관되게 통일했었다.
 //
 // (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환) 그런데 돌이켜보면 이 target들 중 대부분은

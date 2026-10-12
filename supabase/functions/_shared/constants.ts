@@ -1,4 +1,4 @@
-// 여러 Supabase Edge Function(sync-registration-timetable, sync-registration-textbook 등)이
+// 여러 Supabase Edge Function(sync-registration-end, sync-registration-textbook 등)이
 // 공통으로 참조하는 Notion 접속 정보와 데이터소스/속성 이름만 여기 둔다.
 // 함수 하나에서만 쓰이는 데이터소스 ID나 속성명은 공용 모듈로 옮기지 않고 각 함수 폴더에 그대로 둔다.
 

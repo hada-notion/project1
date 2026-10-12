@@ -1,7 +1,7 @@
 // _shared/registrationSync.ts
 //
-// sync-registration-class-session / sync-registration-end / sync-registration-timetable
-// 세 함수가 거의 그대로 복붙한 동일한 로직을 각자 들고 있었다 (출석 삭제, 수업 roster 해제,
+// sync-registration-class-session / sync-registration-end 등 등록 함수들이
+// 거의 그대로 복붙한 동일한 로직을 각자 들고 있었다 (출석 삭제, 수업 roster 해제,
 // 수업/출석 생성 또는 복원, 진도교재 정리 호출). 이번 리팩토링에서 이 로직들을 하나로 모은다.
 //
 // 설계 원칙: 여기 함수들은 카운트만 리턴하고 log.push는 직접 하지 않는다. 로그 문구는
@@ -78,8 +78,7 @@ export function makeSyncStatusSetter(selfFlagProp: string, startedAtProp?: strin
 }
 
 // ---------- 1) 종료일 이후 출석 삭제 (+함께 딸려있던 학습활동/학습기록 정리) ----------
-// sync-registration-end.deleteAttendanceAfterEndDate 와 sync-registration-timetable의 동일한
-// 이름 함수를 하나로 합쳤다. 실제 Notion 조작(조회/아카이브)만 하고 개수만 리턴하며, 로그는
+// sync-registration-end.deleteAttendanceAfterEndDate 가 쓰는 공용 로직이다. 실제 Notion 조작(조회/아카이브)만 하고 개수만 리턴하며, 로그는
 // 호출부가 직접 구성한다.
 export async function archiveAttendanceAfterEndDate(
 	registrationId: string,
@@ -138,9 +137,8 @@ export async function disconnectClassSessionsAfterEndDate(
 }
 
 // ---------- 3) 수업 roster 연결 + 출석 생성/복원 (생성 버튼과 종료일 삭제/연장 후 복원이 거의 동일 로직) ----------
-// - sync-registration-class-session.createSessionsAndAttendanceForRegistration 과
-//   sync-registration-timetable.restoreClassSessionsAndAttendance 둘 다 이 함수를 통해 실행된다.
-// - opts.retryOnEmpty: timetable의 "복원" 경로에만 있다 — 방금 종료일을 지우거나 연장해서 시간표가
+// - sync-registration-class-session.createSessionsAndAttendanceForRegistration 이 이 함수를 통해 실행된다.
+// - opts.retryOnEmpty: 예전 "복원" 경로용 옵션이다 — 방금 종료일을 지우거나 연장해서 시간표가
 //   다시 연결된 직후라 Notion 관계 필터 검색이 지연 인덱싱될 수 있어서, 비었으면 1.5초 후 한 번 더
 //   지핀다 (생성 버튼 경로는 이 지연이 발생하지 않았으므로 원래 retry 없음).
 export async function attachSessionsAndAttendance(

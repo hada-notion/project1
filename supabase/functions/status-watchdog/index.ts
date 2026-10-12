@@ -6,8 +6,8 @@
 // 아니라 Notion 페이지의 "상태"(select) 속성을 대상으로 한다.
 // 마스터플랜: https://app.notion.com/p/903c90386c1d473494c5df6306c53517
 //
-// Phase 2 대상(시간표 DB + 메뉴 DB)에 이어, Phase 3에서 등록(학원) DB의 5개 상태(종료/시간표/
-// 수업/등록/교재)를 추가했다. 나머지 DB/함수들을 상태(select) 방식으로 전환할 때마다 TARGETS
+// Phase 2 대상(시간표 DB + 메뉴 DB)에 이어, Phase 3에서 등록(학원) DB의 상태(종료/수업/등록/교재)를
+// 추가했다. 나머지 DB/함수들을 상태(select) 방식으로 전환할 때마다 TARGETS
 // 배열에 항목을 추가하면 된다. Phase 4에서 pg_cron이 이 엔드포인트를 5분마다 호출하도록
 // 등록했다(20260922150000_status_watchdog_cron.sql). 필요하면 관리자가 수동 호출할 수도 있다.
 //
@@ -39,7 +39,6 @@ import {
 	DS_TEXTBOOK_PAYMENT,
 } from "../_shared/constants.ts"
 import { END_STATUS_SPEC } from "../_shared/registrationEndTarget.ts"
-import { TIMETABLE_STATUS_SPEC as REG_TIMETABLE_STATUS_SPEC } from "../_shared/registrationTimetableTarget.ts"
 import { CLASS_SESSION_STATUS_SPEC } from "../_shared/registrationClassSessionTarget.ts"
 import { ENROLL_STATUS_SPEC } from "../_shared/registrationEnrollTarget.ts"
 import { TEXTBOOK_STATUS_SPEC, CLASS_TEXTBOOK_STATUS_SPEC } from "../_shared/registrationTextbookTarget.ts"
@@ -114,9 +113,8 @@ const ATTENDANCE_BACKFILL_STATUS_SPEC: StatusSpec = {
 const TARGETS: Array<{ label: string; dataSourceId: string; spec: StatusSpec }> = [
 	{ label: "시간표", dataSourceId: DS_TIMETABLE, spec: TIMETABLE_STATUS_SPEC },
 	{ label: "메뉴", dataSourceId: DS_MENU, spec: TIMETABLE_STATUS_SPEC },
-	// (2026-09-22, Phase 3) 등록(학원) DB 5개 상태.
+	// (2026-09-22, Phase 3) 등록(학원) DB 상태.
 	{ label: "등록:종료", dataSourceId: DS_REGISTRATION, spec: END_STATUS_SPEC },
-	{ label: "등록:시간표", dataSourceId: DS_REGISTRATION, spec: REG_TIMETABLE_STATUS_SPEC },
 	{ label: "등록:수업", dataSourceId: DS_REGISTRATION, spec: CLASS_SESSION_STATUS_SPEC },
 	{ label: "등록:등록", dataSourceId: DS_REGISTRATION, spec: ENROLL_STATUS_SPEC },
 	{ label: "등록:교재", dataSourceId: DS_REGISTRATION, spec: TEXTBOOK_STATUS_SPEC },

@@ -25,12 +25,12 @@ import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 // 라우트:
 //   POST /sync-registration-textbook/create-individual  <- 등록 DB "개별교재 생성" 버튼
 //   POST /sync-registration-textbook/create-class        <- 클래스(학원) DB "교재 생성" 버튼
-//   POST /sync-registration-textbook/cleanup-on-end      <- sync-registration-timetable이 등록
-//                                                            종료 확정 시 내부적으로 호출
+//   POST /sync-registration-textbook/cleanup-on-end      <- sync-registration-end가 등록
+//                                                            종료 처리 시 내부적으로 호출
 //
 // (2026-09-18, 큐 기반 순차 처리 도입, Phase 3) create-individual 라우트만 큐로 옮겨서
 // process-sync-queue 워커가 순서대로 처리하도록 바꿨다 (_shared/registrationTextbookTarget.ts). cleanup-on-end
-// 는 sync-registration-timetable/sync-registration-end의 registrationSync.ts가 내부적으로 동기 호출(fetch)해서
+// 는 sync-registration-end의 registrationSync.ts가 내부적으로 동기 호출(fetch)해서
 // 즉시 결과를 받아야 하므로 큐를 거치지 않고 그대로 동기 처리된다.
 //
 // (2026-09-20, 웹훅 코드 정리 4단계) create-individual 라우트의 "락 확인 -> 처리중 표시 -> 큐 적재 ->
