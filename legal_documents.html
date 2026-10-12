@@ -182,7 +182,7 @@
   <h2>관리자 확인</h2>
   <label for="login-input">관리자 비밀번호</label>
   <input type="password" id="login-input" autocomplete="current-password">
-  <p class="help">관리자 설정과 같은 비밀번호입니다. 로그인은 학교 검색과 함께 쓰이고, 이 탭을 닫거나 로그아웃하면 해제됩니다.</p>
+  <p class="help">관리자 설정과 같은 비밀번호입니다. 로그인은 관리자 설정·학교 검색과 함께 쓰이고, 이 탭을 닫거나 로그아웃하면 해제됩니다.</p>
   <button class="primary" id="login-btn" onclick="submitLogin()">로그인</button>
   <p class="error" id="login-error"></p>
 </div></section>
@@ -222,12 +222,12 @@
 <p class="foot"><strong>출력한 서류에는 개인정보가 있습니다.</strong> 공용 기기에서는 사용 후 로그아웃하세요.</p>
 </div>
 <div id="column-menu" class="column-menu" role="dialog" aria-label="열 정렬 및 필터" hidden></div>
-<script src="admin_auth.js?v=528143ec"></script>
+<script src="admin_auth.js?v=2529a461"></script>
 <script src="assets/hada-shortcuts.js?v=956b3656"></script>
 <script>
   const SUPABASE_URL = "https://twczhsxybkcvjkdfdxvs.supabase.co";
   const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR3Y3poc3h5YmtjdmprZGZkeHZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyOTcwMDQsImV4cCI6MjEwMzg3MzAwNH0.t7Ltb_iSYqE4gHSoGSm-OlpiLjGqIcgrhzGJ-t56EDc";
-  // 로그인은 학교 검색과 같은 탭 안에서 공유한다(admin_auth.js). 키오스크의 "admin_key"와는 따로 둔다.
+  // 로그인은 관리자 설정·학교 검색과 같은 탭 안에서 공유한다(admin_auth.js). 키오스크의 "admin_key"와는 따로 둔다.
   function getAdminKey() { return HadaAdminAuth.savedSession(); }
 
   function showLoginScreen(errorMsg) {

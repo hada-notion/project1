@@ -3,8 +3,12 @@
 const $=id=>document.getElementById(id);
 const forms=['login-form','change-form','dashboard','webhook-form','webhook-key','webhook-progress'];
 let base='',session='',mustChange=false,busy=false;
-const sessionKey='hada_owner_session_v1';
-try{session=sessionStorage.getItem(sessionKey)||'';sessionStorage.removeItem('hada_admin_owner_email_draft_v1');}catch{}
+// The login is shared with legal documents and school search in this tab (admin_auth.js): the server issues the same
+// kind of administrator session to all three. A session from the initial password (0000) is kept only in memory until
+// the password is changed. The old settings-only key is read once and removed.
+const legacySessionKey='hada_owner_session_v1';
+session=HadaAdminAuth.savedSession();
+try{if(!session)session=sessionStorage.getItem(legacySessionKey)||'';sessionStorage.removeItem(legacySessionKey);sessionStorage.removeItem('hada_admin_owner_email_draft_v1');}catch{}
 function text(id,value){$(id).textContent=value;}
 // kind: info(평소 안내·연결 상태) / success(사용자가 한 일이 끝남) / warn(주의, 노랑) / error(실패) — docs/DESIGN.md 알림 줄
 function notice(message,kind='info'){text('connection-status',message);['info','success','error'].forEach(k=>$('connection-status').classList.toggle(k,k===kind));}
@@ -12,7 +16,7 @@ function friendly(e){return e instanceof TypeError||e.name==='TimeoutError'||e.n
 function error(message){text('form-error',message);$('form-error').hidden=!message;}
 function panel(id,title,description){forms.forEach(x=>$(x).hidden=x!==id);text('panel-title',title);text('panel-description',description);error('');$('retry').hidden=true;$('main-card').classList.toggle('centered',!!id&&!['dashboard','webhook-progress'].includes(id));}
 function clearPasswords(){document.querySelectorAll('input[type=password]').forEach(x=>x.value='');$('new-webhook-key').value='';}
-function forgetSession(){session='';mustChange=false;try{sessionStorage.removeItem(sessionKey);}catch{}keepNewKey('');clearPasswords();}
+function forgetSession(){session='';mustChange=false;HadaAdminAuth.saveSession('');keepNewKey('');clearPasswords();}
 function loggedOutFacts(){text('owner-status','로그인 후 확인');text('last-change','로그인 후 표시');text('next-change','로그인 후 표시');text('webhook-fact','평소 유지 · 사고 시 별도 교체');}
 async function request(action,values={},timeout=20000){
  const res=await fetch(base+'/functions/v1/admin-security',{method:'POST',headers:{'Content-Type':'application/json',...(session?{'x-admin-key':session}:{})},body:JSON.stringify({action,...values}),cache:'no-store',signal:AbortSignal.timeout(timeout)});
@@ -284,6 +288,7 @@ async function profile(){
  const info=await request('profile');mustChange=info.must_change;
  text('last-change',date(info.changed_at));text('next-change',mustChange?'변경 후 3개월 기준':date(info.recommended_at));
  notice('관리자 인증 서버에 연결되었습니다.');
+ HadaAdminAuth.saveSession(mustChange?'':session);
  if(mustChange){text('owner-status','초기 비밀번호 사용 중');notice('초기 비밀번호를 사용 중입니다. 새 비밀번호로 변경해 주세요.','warn');showChange(true);return;}
  text('owner-status','변경 완료');
  try{await loadWebhook();}catch{text('webhook-summary','웹훅 키 상태를 확인하지 못했습니다. 잠시 후 다시 로그인해 주세요.');}
@@ -295,11 +300,13 @@ async function initialize(){
   if(!base){const res=await fetch('admin_config.json',{cache:'no-store'});if(!res.ok)throw new Error('학원별 공개 연결 설정 파일이 필요합니다.');const config=await res.json();const url=new URL(config.supabaseUrl);if(url.protocol!=='https:'||!url.hostname.endsWith('.supabase.co')||url.pathname!=='/'||url.search||url.hash||url.username||url.password)throw new Error('Supabase 연결 주소 설정을 확인해 주세요.');base=url.origin;}
   await request('status');
   notice('관리자 인증 서버에 연결되었습니다.');
-  if(session){try{await profile();return;}catch{forgetSession();}}
+  // Another page's login in this tab opens the dashboard directly. Only a rejected session is forgotten (that also
+  // logs the other pages out); a network error just shows the login form.
+  if(session){try{await profile();return;}catch(e){if(e.status===401)forgetSession();else session='';}}
   loggedOutFacts();panel('login-form','관리자 로그인','관리자 비밀번호로 로그인해 주세요.');
  }catch(e){panel('','인증 서버 연결 준비가 필요해요','기존 출결·웹훅 설정은 변경하지 않았습니다. 관리자 보안 기능이 활성화되면 이 화면에서 비밀번호를 관리할 수 있어요.');text('owner-status','서버 연결 후 확인');notice(friendly(e),'error');$('retry').hidden=false;}
 }
-$('login-form').onsubmit=e=>{e.preventDefault();task(async()=>{const data=await request('login',{password:$('login-password').value,scope:'settings'});session=data.session;try{sessionStorage.setItem(sessionKey,session);}catch{}clearPasswords();await profile();},e.submitter,'로그인 중…');};
+$('login-form').onsubmit=e=>{e.preventDefault();task(async()=>{const data=await request('login',{password:$('login-password').value,scope:'settings'});session=data.session;clearPasswords();await profile();},e.submitter,'로그인 중…');};
 $('start-change').onclick=()=>showChange(false);
 $('cancel-change').onclick=()=>task(profile);
 $('change-form').onsubmit=e=>{e.preventDefault();task(async()=>{if($('new-password').value!==$('confirm-password').value)throw new Error('새 비밀번호와 확인 값이 일치하지 않습니다.');await request('change',{current_password:$('current-password').value,new_password:$('new-password').value});forgetSession();loggedOutFacts();panel('login-form','비밀번호를 변경했습니다','내부 인증키도 함께 갱신되었습니다. 새 비밀번호로 다시 로그인해 주세요.');notice('변경 완료. 기존 로그인은 모두 해제되었고 Notion 웹훅 키는 유지됩니다.','success');});};
