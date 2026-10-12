@@ -10,6 +10,7 @@ import {
 } from "../_shared/adminShared.ts"
 
 import { buildKioskDirectory, queryAllKioskPages, ACTIVE_KIOSK_STATUS } from "../_shared/kioskIdentity.ts"
+import { academyName } from "../_shared/academyName.ts"
 
 function todayKst(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date())
@@ -44,7 +45,9 @@ Deno.serve(async (req: Request) => {
       const registrations = await queryAllKioskPages(body => notionQueryDatabase(registrationDbId, body), {
         filter: { property: "수강상태", formula: { string: { equals: ACTIVE_KIOSK_STATUS } } },
       })
-      return new Response(JSON.stringify({ candidates: buildKioskDirectory(registrations, students), generatedAt: new Date().toISOString() }), {
+      // academyName: 키오스크 아래에 작게 표시하는 학원 이름(Notion 최상위 페이지 제목).
+      const name = await academyName(registrationDbId)
+      return new Response(JSON.stringify({ candidates: buildKioskDirectory(registrations, students), academyName: name, generatedAt: new Date().toISOString() }), {
         headers: { ...CORS_HEADERS, "Content-Type": "application/json", "Cache-Control": "no-store" },
       })
     }
