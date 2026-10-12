@@ -49,7 +49,8 @@
 .usage-summary{font-weight:600;margin:0;white-space:nowrap}
 .bar{flex:1;height:var(--space-2);background:var(--brand-soft);border-radius:var(--radius-pill);overflow:hidden}
 .bar span{display:block;height:100%;background:var(--success-ink);width:0;transition:width .3s}
-.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:var(--space-4)}
+.cards{display:flex;gap:var(--space-4);align-items:flex-start}
+.card-col{flex:1;min-width:0;display:flex;flex-direction:column;gap:var(--space-4)}
 .dbcard{border:1px solid var(--brand-border);border-radius:var(--radius-lg);padding:var(--space-3) var(--space-4);background:var(--surface)}
 .dbhead{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-1) var(--space-3);margin-bottom:var(--space-2)}
 .dbhead h4{margin:0;font-size:var(--text-lead)}
@@ -73,11 +74,14 @@
 .key-bar-label{font-weight:700;font-size:var(--text-small)}
 .key-bar-value{flex:1;min-width:0;overflow-wrap:anywhere;font-size:var(--text-small)}
 .key-bar .primary{min-height:var(--hit-area)}
-.copies{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-2);margin:var(--space-2) 0 0 var(--space-8)}
-.copy-btn{font-size:var(--text-caption);padding:2px var(--space-2)}
+.copies{display:flex;flex-wrap:nowrap;gap:var(--space-2);margin:var(--space-2) 0 0 var(--space-8)}
+.copy-btn{display:inline-flex;align-items:center;gap:var(--space-1);font-size:var(--text-caption);padding:2px var(--space-2)}
+.copy-icon{display:inline-flex;width:var(--icon-sm);height:var(--icon-sm)}
+.copy-btn.copied{border-color:var(--success);color:var(--success-ink)}
+.key-bar.missing .key-bar-value{font-family:var(--font-sans);color:var(--text-muted)}
 .links-row{display:flex;justify-content:flex-end;align-items:center;gap:var(--space-3);margin:var(--space-3) 0;font-size:var(--text-label)}
 @media(max-width:860px){.guide-grid,.dash-grid{grid-template-columns:minmax(0,1fr)}}
-@media(max-width:700px){.cards{grid-template-columns:minmax(0,1fr)}.topright .badge{display:none}.progress-head{flex-wrap:wrap}}
+@media(max-width:700px){.topright .badge{display:none}.progress-head{flex-wrap:wrap}}
 </style>
 </head>
 <body>
@@ -121,7 +125,7 @@
 <button class="secondary wide" id="webhook-key-done" type="button">교체 현황 보기</button>
 </div>
 <div id="webhook-progress" hidden>
-<div class="key-bar" id="key-bar" role="group" aria-label="새 웹훅 키"><span class="key-bar-label">새 웹훅 키</span><code class="key-bar-value" id="key-bar-value"></code><button class="ghost" id="key-bar-show" type="button">보기</button><button class="primary inline" id="key-bar-copy" type="button">키 복사</button></div>
+<div class="key-bar" id="key-bar" role="group" aria-label="새 웹훅 키"><span class="key-bar-label">새 웹훅 키</span><code class="key-bar-value" id="key-bar-value"></code><button class="ghost" id="key-bar-show" type="button">보기</button><button class="primary inline" id="key-bar-copy" type="button"><span class="copy-icon"></span>키 복사</button></div>
 <div class="status" id="webhook-started"></div>
 <details class="guide" open><summary>교체 방법 (공통) · 어디에 붙여 넣나요?</summary>
 <div class="guide-grid">
@@ -151,6 +155,7 @@
 <button class="secondary wide" id="progress-back" type="button">돌아가기</button>
 </div>
 <p id="form-error" class="error" role="alert" hidden></p>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <button class="secondary" id="retry" type="button" hidden>연결 다시 확인</button>
 </section>
 </main>

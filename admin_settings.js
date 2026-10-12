@@ -23,10 +23,22 @@ async function request(action,values={},timeout=20000){
 const NEW_KEY='hada_webhook_new_key_v1';
 function keepNewKey(key){try{if(key)sessionStorage.setItem(NEW_KEY,key);else sessionStorage.removeItem(NEW_KEY);}catch{}}
 function newKey(){try{return sessionStorage.getItem(NEW_KEY)||'';}catch{return '';}}
-async function copyText(value,label){
+// Copies a value and confirms it where the owner is looking: a short toast at the bottom of the screen and a check
+// mark on the pressed button for a moment (the notice line at the top is usually scrolled away).
+const COPY_ICON='<svg class="line" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+const CHECK_ICON='<svg class="line" viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+let toastTimer=null;
+function toast(message){const t=$('toast');t.textContent=message;t.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>{t.hidden=true;},2000);}
+async function copyText(value,message,button){
  try{await navigator.clipboard.writeText(value);}
  catch{const t=document.createElement('textarea');t.value=value;t.setAttribute('readonly','');t.className='sr-only';document.body.append(t);t.select();const ok=document.execCommand('copy');t.remove();if(!ok)throw new Error('복사하지 못했습니다. 값을 직접 선택해 복사해 주세요.');}
- notice('복사 완료: '+label);
+ toast(message);
+ const icon=button&&button.querySelector('.copy-icon');
+ if(icon){icon.innerHTML=CHECK_ICON;button.classList.add('copied');setTimeout(()=>{icon.innerHTML=COPY_ICON;button.classList.remove('copied');},1500);}
+}
+function copyButton(label,title,onClick){
+ const b=el('button','ghost copy-btn');b.type='button';b.title=title;b.setAttribute('aria-label',title);
+ const i=el('span','copy-icon');i.innerHTML=COPY_ICON;b.append(i,label);b.onclick=()=>onClick(b);return b;
 }
 let webhook={rotating:false,usage:[],checks:{}},unchecked=0;
 // Every Notion button/automation that sends the webhook key, grouped by database (docs/버튼-웹훅-매핑.md).
@@ -125,7 +137,12 @@ function hint(routeName,checkedAt){
 function renderChecklist(){
  const box=$('db-cards');box.replaceChildren();let done=0,total=0,oldRoutes=new Set();
  for(const u of webhook.usage)if(u.key==='old')oldRoutes.add(u.route);
- for(const [db,items,help] of CHECKLIST){
+ // Cards are packed into columns, biggest DB first, each into the currently shortest column, so the grid has no
+ // tall gaps (등록 → 클래스 → 수업 → …). Column count follows the available width.
+ const cols=Math.max(1,Math.min(3,Math.floor((box.clientWidth||960)/320)));const columns=[],heights=[];
+ for(let i=0;i<cols;i++){const c=el('div','card-col');columns.push(c);heights.push(0);box.append(c);}
+ const place=(card,size)=>{const i=heights.indexOf(Math.min(...heights));columns[i].append(card);heights[i]+=size;};
+ for(const [db,items,help] of [...CHECKLIST].sort((a,b)=>b[1].length-a[1].length)){
   const card=el('section','dbcard');
   const head=el('div','dbhead');const title=el('h4','',db.replace('(학원)',''));
   const count=items.filter(([id])=>webhook.checks[id]).length;done+=count;total+=items.length;
@@ -149,12 +166,11 @@ function renderChecklist(){
    meta.append(badge2,el('code','',routeName+(extra.path||'')),el('span','hint '+tone,msg));
    // Webhook URL (and extra header) for this button, built from this academy's Supabase address.
    const copies=el('div','copies');const url=base+'/functions/v1/'+routeName+(extra.path||'');
-   const urlBtn=el('button','ghost copy-btn','URL 복사');urlBtn.type='button';urlBtn.title=url;urlBtn.onclick=()=>copyText(url,name+' 웹훅 URL').catch(e=>error(e.message));
-   copies.append(urlBtn);
-   if(extra.header){const [hn,hv]=extra.header;const hb=el('button','ghost copy-btn',`추가 헤더 ${hn}: ${hv}`);hb.type='button';hb.title='값 복사: '+hv;hb.onclick=()=>copyText(hv,hn+' 값').catch(e=>error(e.message));copies.append(hb);}
+   copies.append(copyButton('웹훅','웹훅 URL 복사: '+url,b=>copyText(url,'웹훅 URL을 복사했습니다',b).catch(e=>error(e.message))));
+   if(extra.header){const [hn,hv]=extra.header;copies.append(copyButton('헤더',`추가 헤더 값 복사: ${hn}: ${hv}`,b=>copyText(hv,`추가 헤더 값(${hn}: ${hv})을 복사했습니다`,b).catch(e=>error(e.message))));}
    li.append(label,meta,copies);list.append(li);
   }
-  card.append(list);box.append(card);
+  card.append(list);place(card,2+items.length*1.6);
  }
  unchecked=total-done;
  text('usage-summary',`완료 ${done} / ${total}`+(oldRoutes.size?` · 옛 키 호출이 남은 함수 ${oldRoutes.size}개`:''));
@@ -166,15 +182,18 @@ function showHelp(db,help){
  const img=$('help-image');img.src=help.image;img.alt=help.alt;$('help-dialog').showModal();
 }
 function renderKeyBar(){
- const key=newKey();$('key-bar-copy').disabled=!key;$('key-bar-show').disabled=!key;
- $('key-bar-value').textContent=key?($('key-bar').dataset.shown==='1'?key:key.slice(0,4)+'•'.repeat(12)+key.slice(-4)):'이 탭에는 새 키가 없습니다(교체를 시작한 탭에서만 다시 복사할 수 있습니다)';
+ const icon=$('key-bar-copy').querySelector('.copy-icon');if(!icon.innerHTML)icon.innerHTML=COPY_ICON;
+ const key=newKey();$('key-bar-copy').hidden=!key;$('key-bar-show').hidden=!key;$('key-bar').classList.toggle('missing',!key);
+ if(!key)$('key-bar').dataset.shown='';
+ $('key-bar-value').textContent=key?($('key-bar').dataset.shown==='1'?key:key.slice(0,4)+'•'.repeat(12)+key.slice(-4)):'이 탭에는 새 키가 없습니다. 교체를 시작한 탭에서만 다시 복사할 수 있어요. 키를 잃었다면 아래 "교체 취소" 후 새 웹훅 키를 다시 만들면 여기서 복사할 수 있습니다.';
+ $('key-bar-show').textContent=$('key-bar').dataset.shown==='1'?'가리기':'보기';
 }
 async function showProgress(){
  await loadLinks();
  renderKeyBar();
  text('webhook-started',`${date(webhook.started_at)}부터 옛 키와 새 키가 모두 동작하고 있습니다.`);
- renderChecklist();
  panel('webhook-progress','웹훅 키 교체 진행 중','DB별로 버튼·자동화의 키를 새 키로 바꾸고 체크합니다. 모두 끝나면 교체를 완료합니다.');
+ renderChecklist(); // after the panel is visible so the column count uses the real width
 }
 async function openWebhook(){await loadWebhook();if(webhook.rotating){await showProgress();return;}clearPasswords();panel('webhook-form','웹훅 키 교체','유출이 의심될 때 Notion 버튼·자동화를 멈추지 않고 새 키로 옮깁니다.');$('webhook-password').focus();}
 // Runs one server action at a time. The clicked button shows a spinner and a waiting label meanwhile.
@@ -232,7 +251,9 @@ $('webhook-cancel').onclick=()=>task(async()=>{
  if(!$('cancel-password').value)throw new Error('교체를 취소하려면 현재 관리자 비밀번호를 입력해 주세요.');
  if(!confirm('새 키를 버리고 옛 키로 되돌립니다. 이미 새 키로 바꾼 버튼은 다시 옛 키로 돌려야 합니다. 취소할까요?'))return;
  await request('webhook-cancel',{current_password:$('cancel-password').value});clearPasswords();keepNewKey('');await profile();notice('웹훅 키 교체를 취소했습니다. 옛 키만 동작합니다.');});
-$('key-bar-copy').onclick=()=>copyText(newKey(),'새 웹훅 키').catch(e=>error(e.message));
-$('key-bar-show').onclick=()=>{const bar=$('key-bar');bar.dataset.shown=bar.dataset.shown==='1'?'':'1';$('key-bar-show').textContent=bar.dataset.shown?'가리기':'보기';renderKeyBar();};
+$('key-bar-copy').onclick=e=>copyText(newKey(),'새 웹훅 키를 복사했습니다',e.currentTarget).catch(err=>error(err.message));
+$('key-bar-show').onclick=()=>{const bar=$('key-bar');bar.dataset.shown=bar.dataset.shown==='1'?'':'1';renderKeyBar();};
+// Re-pack the checklist when the window width changes the column count.
+let packTimer=null;addEventListener('resize',()=>{clearTimeout(packTimer);packTimer=setTimeout(()=>{if(!$('webhook-progress').hidden)renderChecklist();},150);});
 initialize();
 })();
