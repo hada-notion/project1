@@ -75,7 +75,7 @@
 </head>
 <body>
 <div class="shell">
-<nav class="top" aria-label="서비스 정보"><div class="brand"><img class="logo" src="assets/brand/hada-wordmark.png" alt="HADA" width="96" height="36"><div class="wordmark">하다<span>학원관리</span></div></div><div class="topright"><button class="ghost" id="open-facts" type="button">보안 설정 현황</button><span class="badge">관리자 전용</span></div></nav>
+<nav class="top" aria-label="서비스 정보"><div class="brand"><img class="logo" src="assets/brand/hada-wordmark.png" alt="HADA" width="96" height="36"><div class="wordmark">하다<span>학원관리</span></div></div><div class="topright"><button class="ghost" id="open-links" type="button">바로가기</button><button class="ghost" id="open-facts" type="button">보안 설정 현황</button><span class="badge">관리자 전용</span></div></nav>
 <header><h1>관리자 설정</h1><p class="muted">키오스크와 관리자 서류 화면에서 쓰는 관리자 비밀번호를 변경하고, 필요할 때 Notion 웹훅 키를 교체합니다.</p></header>
 <div class="notice" role="status" id="connection-status"><strong>인증 서버 연결을 확인하고 있어요.</strong>비밀번호를 바꿔도 Notion 버튼·자동화의 웹훅 키는 바뀌지 않습니다.</div>
 <main class="layout">
@@ -146,6 +146,15 @@
 <button class="secondary" id="retry" type="button" hidden>연결 다시 확인</button>
 </section>
 </main>
+<dialog class="card links-dialog" id="links-dialog" aria-labelledby="links-title"><div class="dialog-head"><h2 id="links-title">바로가기</h2><button class="ghost" id="close-links" type="button">닫기</button></div>
+<p class="muted">학원관리 웹 화면입니다. 새 탭에서 열립니다.</p>
+<ul class="link-list">
+<li><a class="link-card" href="attendance_kiosk.html" target="_blank" rel="noopener"><span class="link-icon"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg></span><span class="link-text"><strong>출결 키오스크 ↗</strong><span>학원 입구 태블릿에서 전화번호로 등원·하원을 체크합니다.</span></span></a></li>
+<li><a class="link-card" href="legal_documents.html" target="_blank" rel="noopener"><span class="link-icon"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="13" y2="17"></line></svg></span><span class="link-text"><strong>법정 서류 출력 ↗</strong><span>출석부·원부·영수증 서식을 기간별로 조회하고 출력합니다.</span></span></a></li>
+<li><a class="link-card" href="school_search.html" target="_blank" rel="noopener"><span class="link-icon"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></span><span class="link-text"><strong>학교 검색·연결 ↗</strong><span>나이스에서 학교를 찾아 연결합니다. Notion 학교 페이지의 "학교 검색" 링크로 열면 그 학교가 자동 선택됩니다.</span></span></a></li>
+</ul>
+<p class="help">학부모 리포트는 학생마다 주소가 달라 Notion 등록 페이지의 리포트 링크로 엽니다.</p>
+</dialog>
 <dialog class="card help-dialog" id="help-dialog" aria-labelledby="help-title"><div class="dialog-head"><h2 class="aside-title" id="help-title">찾는 위치</h2><button class="ghost" id="close-help" type="button">닫기</button></div><img id="help-image" alt=""><p id="help-text" class="muted"></p></dialog>
 <dialog class="card facts-dialog" id="facts-dialog" aria-labelledby="security-title"><div class="dialog-head"><h2 class="aside-title" id="security-title">보안 설정 현황</h2><button class="ghost" id="close-facts" type="button" aria-label="닫기">닫기</button></div>
 <dl class="facts"><div><dt>비밀번호 상태</dt><dd id="owner-status">확인 중</dd></div><div><dt>마지막 비밀번호 변경일</dt><dd id="last-change">로그인 후 표시</dd></div><div><dt>다음 권장 변경일</dt><dd id="next-change">변경 완료 후 3개월 기준</dd></div><div><dt>웹훅 인증키</dt><dd id="webhook-fact">평소 유지 · 사고 시 별도 교체</dd></div></dl>
