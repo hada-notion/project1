@@ -6,7 +6,8 @@ let base='',session='',mustChange=false,busy=false;
 const sessionKey='hada_owner_session_v1';
 try{session=sessionStorage.getItem(sessionKey)||'';sessionStorage.removeItem('hada_admin_owner_email_draft_v1');}catch{}
 function text(id,value){$(id).textContent=value;}
-function notice(message){text('connection-status',message);}
+// kind: info(평소 안내·연결 상태) / success(사용자가 한 일이 끝남) / warn(주의, 노랑) / error(실패) — docs/DESIGN.md 알림 줄
+function notice(message,kind='info'){text('connection-status',message);['info','success','error'].forEach(k=>$('connection-status').classList.toggle(k,k===kind));}
 function friendly(e){return e instanceof TypeError||e.name==='TimeoutError'||e.name==='AbortError'?'인증 서버에 연결하지 못했습니다. 연결 설정과 네트워크를 확인해 주세요.':(e.message||'처리하지 못했습니다.');}
 function error(message){text('form-error',message);$('form-error').hidden=!message;}
 function panel(id,title,description){forms.forEach(x=>$(x).hidden=x!==id);text('panel-title',title);text('panel-description',description);error('');$('retry').hidden=true;$('main-card').classList.toggle('centered',!!id&&!['dashboard','webhook-progress'].includes(id));}
@@ -283,7 +284,7 @@ async function profile(){
  const info=await request('profile');mustChange=info.must_change;
  text('last-change',date(info.changed_at));text('next-change',mustChange?'변경 후 3개월 기준':date(info.recommended_at));
  notice('관리자 인증 서버에 연결되었습니다.');
- if(mustChange){text('owner-status','초기 비밀번호 사용 중');showChange(true);return;}
+ if(mustChange){text('owner-status','초기 비밀번호 사용 중');notice('초기 비밀번호를 사용 중입니다. 새 비밀번호로 변경해 주세요.','warn');showChange(true);return;}
  text('owner-status','변경 완료');
  try{await loadWebhook();}catch{text('webhook-summary','웹훅 키 상태를 확인하지 못했습니다. 잠시 후 다시 로그인해 주세요.');}
  text('due-status',info.change_due?'마지막 변경 후 3개월이 지났습니다. 보안을 위해 비밀번호를 변경해 주세요.':'현재 권장 변경 기간 내에 있습니다. 유출이 의심되면 즉시 변경해 주세요.');
@@ -296,12 +297,12 @@ async function initialize(){
   notice('관리자 인증 서버에 연결되었습니다.');
   if(session){try{await profile();return;}catch{forgetSession();}}
   loggedOutFacts();panel('login-form','관리자 로그인','관리자 비밀번호로 로그인해 주세요.');
- }catch(e){panel('','인증 서버 연결 준비가 필요해요','기존 출결·웹훅 설정은 변경하지 않았습니다. 관리자 보안 기능이 활성화되면 이 화면에서 비밀번호를 관리할 수 있어요.');text('owner-status','서버 연결 후 확인');notice(friendly(e));$('retry').hidden=false;}
+ }catch(e){panel('','인증 서버 연결 준비가 필요해요','기존 출결·웹훅 설정은 변경하지 않았습니다. 관리자 보안 기능이 활성화되면 이 화면에서 비밀번호를 관리할 수 있어요.');text('owner-status','서버 연결 후 확인');notice(friendly(e),'error');$('retry').hidden=false;}
 }
 $('login-form').onsubmit=e=>{e.preventDefault();task(async()=>{const data=await request('login',{password:$('login-password').value,scope:'settings'});session=data.session;try{sessionStorage.setItem(sessionKey,session);}catch{}clearPasswords();await profile();},e.submitter,'로그인 중…');};
 $('start-change').onclick=()=>showChange(false);
 $('cancel-change').onclick=()=>task(profile);
-$('change-form').onsubmit=e=>{e.preventDefault();task(async()=>{if($('new-password').value!==$('confirm-password').value)throw new Error('새 비밀번호와 확인 값이 일치하지 않습니다.');await request('change',{current_password:$('current-password').value,new_password:$('new-password').value});forgetSession();loggedOutFacts();panel('login-form','비밀번호를 변경했습니다','내부 인증키도 함께 갱신되었습니다. 새 비밀번호로 다시 로그인해 주세요.');notice('변경 완료. 기존 로그인은 모두 해제되었고 Notion 웹훅 키는 유지됩니다.');});};
+$('change-form').onsubmit=e=>{e.preventDefault();task(async()=>{if($('new-password').value!==$('confirm-password').value)throw new Error('새 비밀번호와 확인 값이 일치하지 않습니다.');await request('change',{current_password:$('current-password').value,new_password:$('new-password').value});forgetSession();loggedOutFacts();panel('login-form','비밀번호를 변경했습니다','내부 인증키도 함께 갱신되었습니다. 새 비밀번호로 다시 로그인해 주세요.');notice('변경 완료. 기존 로그인은 모두 해제되었고 Notion 웹훅 키는 유지됩니다.','success');});};
 $('logout').onclick=()=>task(async()=>{try{await request('logout');}finally{forgetSession();loggedOutFacts();panel('login-form','로그아웃했습니다','관리자 비밀번호로 다시 로그인할 수 있어요.');}});
 $('retry').onclick=()=>task(initialize);
 $('open-facts').onclick=()=>$('facts-dialog').showModal();
@@ -313,18 +314,18 @@ $('progress-back').onclick=()=>task(profile);
 $('webhook-form').onsubmit=e=>{e.preventDefault();task(async()=>{
  const data=await request('webhook-start',{current_password:$('webhook-password').value});clearPasswords();
  $('new-webhook-key').value=data.key;keepNewKey(data.key);panel('webhook-key','새 웹훅 키가 만들어졌습니다','지금부터 이전 키와 새 키가 모두 동작합니다. 아래 키를 복사해 주세요.');$('new-webhook-key').select();});};
-$('copy-webhook-key').onclick=async()=>{const field=$('new-webhook-key');try{await navigator.clipboard.writeText(field.value);notice('새 웹훅 키를 복사했습니다. 모든 버튼·자동화에 같은 키를 붙여 넣습니다.');}catch{field.select();notice('자동 복사가 막혔습니다. 선택된 키를 Ctrl+C로 복사해 주세요.');}};
+$('copy-webhook-key').onclick=async()=>{const field=$('new-webhook-key');try{await navigator.clipboard.writeText(field.value);notice('새 웹훅 키를 복사했습니다. 모든 버튼·자동화에 같은 키를 붙여 넣습니다.','success');}catch{field.select();notice('자동 복사가 막혔습니다. 선택된 키를 Ctrl+C로 복사해 주세요.','warn');}};
 $('webhook-key-done').onclick=e=>{task(async()=>{$('new-webhook-key').value='';await loadWebhook();await showProgress();},e.currentTarget,'체크리스트 불러오는 중… (처음엔 최대 1분)');};
 $('webhook-refresh').onclick=e=>task(async()=>{await loadWebhook();await showProgress();},e.currentTarget);
-$('links-refresh').onclick=e=>task(async()=>{await loadLinks(true);renderChecklist();notice('Notion 링크를 다시 찾았습니다.');},e.currentTarget,'Notion에서 찾는 중… (최대 1분)');
+$('links-refresh').onclick=e=>task(async()=>{await loadLinks(true);renderChecklist();notice('Notion 링크를 다시 찾았습니다.','success');},e.currentTarget,'Notion에서 찾는 중… (최대 1분)');
 $('webhook-finish').onclick=()=>task(async()=>{
  if(!confirm((unchecked?`아직 체크하지 않은 항목이 ${unchecked}개 있습니다. 그 버튼·자동화의 키도 바꿨는지 확인해 주세요.\n`:'')+'교체를 완료하면 이전 키가 삭제되어, 이전 키로 오는 Notion 호출은 모두 거부됩니다. 완료할까요?'))return;
  let done;try{done=await request('webhook-finish');}catch(e){if(!e.needsConfirm)throw e;if(!confirm(e.message+' 그래도 완료할까요?'))return;done=await request('webhook-finish',{force:true});}
- keepNewKey('');await profile();notice(`웹훅 키 교체를 완료했습니다(${date(done.changed_at)}). 이전 키를 삭제했습니다.`);});
+ keepNewKey('');await profile();notice(`웹훅 키 교체를 완료했습니다(${date(done.changed_at)}). 이전 키를 삭제했습니다.`,'success');});
 $('webhook-cancel').onclick=()=>task(async()=>{
  if(!$('cancel-password').value)throw new Error('교체를 취소하려면 현재 관리자 비밀번호를 입력해 주세요.');
  if(!confirm('새 키를 버리고 이전 키로 되돌립니다. 이미 새 키로 바꾼 버튼은 다시 이전 키로 돌려야 합니다. 취소할까요?'))return;
- await request('webhook-cancel',{current_password:$('cancel-password').value});clearPasswords();keepNewKey('');await profile();notice('웹훅 키 교체를 취소했습니다. 이전 키만 동작합니다.');});
+ await request('webhook-cancel',{current_password:$('cancel-password').value});clearPasswords();keepNewKey('');await profile();notice('웹훅 키 교체를 취소했습니다. 이전 키만 동작합니다.','success');});
 $('key-bar-copy').onclick=e=>copyText(newKey(),'새 웹훅 키를 복사했습니다',e.currentTarget).catch(err=>error(err.message));
 $('key-bar-show').onclick=()=>{const bar=$('key-bar');bar.dataset.shown=bar.dataset.shown==='1'?'':'1';renderKeyBar();};
 // Re-pack the checklist when the window width changes the column count.
