@@ -6,7 +6,7 @@
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.supabase.co; base-uri 'none'; form-action 'none'">
 <title>관리자 설정 | 하다 학원관리</title>
-<link rel="stylesheet" href="assets/hada-ui.css?v=cec86ff7">
+<link rel="stylesheet" href="assets/hada-ui.css?v=ea07a132">
 <style>
 /* 관리자 설정 화면 전용. 값은 assets/hada-ui.css 토큰만 쓴다(docs/DESIGN.md). */
 .centered #panel-title,.centered #panel-description,.centered #form-error{max-width:var(--form-max);margin-left:auto;margin-right:auto}
@@ -99,7 +99,7 @@
 </head>
 <body>
 <div class="shell">
-<nav class="top" aria-label="서비스 정보"><div class="brand"><img class="logo" src="assets/brand/hada-wordmark.png" alt="HADA" width="96" height="36"><div class="wordmark">하다<span>학원관리</span></div></div><div class="topright"><button class="ghost" id="open-links" type="button">바로가기</button><button class="ghost" id="open-facts" type="button">보안 설정 현황</button><span class="badge">관리자 전용</span></div></nav>
+<nav class="top" aria-label="서비스 정보"><div class="brand"><img class="logo" src="assets/brand/hada-wordmark.png" alt="HADA" width="96" height="36"><div class="wordmark">하다<span>학원관리</span></div></div><div class="app-nav" id="app-nav"></div><div class="topright"><button class="ghost" id="open-facts" type="button">보안 설정 현황</button><span class="badge">관리자 전용</span></div></nav>
 <header><h1>관리자 설정</h1><p class="muted">키오스크와 관리자 서류 화면에서 쓰는 관리자 비밀번호를 변경하고, 필요할 때 Notion 웹훅 키를 교체합니다.</p></header>
 <div class="notice info" role="status" id="connection-status"><strong>인증 서버 연결을 확인하고 있어요.</strong>비밀번호를 바꿔도 Notion 버튼·자동화의 웹훅 키는 바뀌지 않습니다.</div>
 <main class="layout">
@@ -172,11 +172,6 @@
 <button class="secondary" id="retry" type="button" hidden>연결 다시 확인</button>
 </section>
 </main>
-<dialog class="card links-dialog" id="links-dialog" aria-labelledby="links-title"><div class="dialog-head"><h2 id="links-title">바로가기</h2><button class="ghost" id="close-links" type="button">닫기</button></div>
-<p class="muted">학원관리 웹 화면입니다. 새 탭에서 열립니다.</p>
-<ul class="link-list"></ul>
-<p class="help">학부모 리포트는 학생마다 주소가 달라 Notion 등록 페이지의 리포트 링크로 엽니다.</p>
-</dialog>
 <dialog class="card help-dialog" id="help-dialog" aria-labelledby="help-title"><div class="dialog-head"><h2 class="aside-title" id="help-title">찾는 위치</h2><button class="ghost" id="close-help" type="button">닫기</button></div><div id="help-extra"></div><img id="help-image" alt="" hidden><p id="help-text" class="muted"></p></dialog>
 <dialog class="card facts-dialog" id="facts-dialog" aria-labelledby="security-title"><div class="dialog-head"><h2 class="aside-title" id="security-title">보안 설정 현황</h2><button class="ghost" id="close-facts" type="button" aria-label="닫기">닫기</button></div>
 <dl class="facts"><div><dt>비밀번호 상태</dt><dd id="owner-status">확인 중</dd></div><div><dt>마지막 비밀번호 변경일</dt><dd id="last-change">로그인 후 표시</dd></div><div><dt>다음 권장 변경일</dt><dd id="next-change">변경 완료 후 3개월 기준</dd></div><div><dt>웹훅 인증키</dt><dd id="webhook-fact">평소 유지 · 사고 시 별도 교체</dd></div></dl>
@@ -184,7 +179,7 @@
 <p class="foot"><strong>비밀번호는 타인에게 전달하지 마세요.</strong> 공용 기기에서는 사용 후 로그아웃하세요.</p>
 <noscript><p class="notice">관리자 설정을 사용하려면 JavaScript가 필요합니다.</p></noscript>
 </div>
-<script src="assets/hada-shortcuts.js?v=85515f37"></script>
+<script src="assets/hada-shortcuts.js?v=956b3656"></script>
 <script src="admin_settings.js?v=1c4c0998"></script>
 </body>
 </html>
