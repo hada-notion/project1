@@ -14,6 +14,12 @@ const get = (kind: string, id: string) => Promise.resolve(tree[`${kind}/${id}`] 
 Deno.test("academy name is the title of the top-level page above the registration DB", async () => {
   assert((await findAcademyName("reg", get)).name === "하다 학원관리 v2.0")
 })
+Deno.test("academy name is the connected root when its parent page is not shared (teamspace page above it)", async () => {
+  const above = (kind: string, id: string) => Promise.resolve(
+    id === "root" ? { ...tree["pages/root"], parent: { type: "page_id", page_id: "teamspace-home" } } : tree[`${kind}/${id}`] ?? null)
+  const r = await findAcademyName("reg", above)
+  assert(r.name === "하다 학원관리 v2.0" && !r.stoppedAt, JSON.stringify(r))
+})
 Deno.test("academy name also starts from a data source ID", async () => {
   const withDs = (kind: string, id: string) => Promise.resolve(kind === "data_sources" && id === "regds" ? { parent: { type: "database_id", database_id: "reg" } } : tree[`${kind}/${id}`] ?? null)
   assert((await findAcademyName("regds", withDs)).name === "하다 학원관리 v2.0")

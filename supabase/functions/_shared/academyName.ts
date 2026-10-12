@@ -1,8 +1,8 @@
-// 학원 이름 = 이 학원 Notion 최상위 페이지의 제목(원본: "하다 학원관리 v2.0").
+// 학원 이름 = Notion 연결(integration)이 걸린 학원 루트 페이지의 제목(원본: "하다 학원관리 v2.0").
 // 운영은 그 페이지 제목만 바꾸면 키오스크 등에 표시되는 이름이 따라 바뀐다.
-// 등록 DB에서 부모를 따라 올라가 workspace 바로 아래 페이지의 제목을 쓴다. 중간에 접근할 수 없는
-// 부모가 있으면(최상위 페이지가 연결에 공유되지 않음) 잘못된 이름 대신 빈 문자열을 돌려주고,
-// 멈춘 단계를 함수 로그에 남긴다(값은 Notion 내부 ID와 응답 코드뿐, 비밀값 없음).
+// 등록 DB에서 부모를 따라 올라가며, 더 위 부모를 읽을 수 없거나 workspace에 닿으면 그때까지 올라온
+// 가장 위 페이지의 제목을 쓴다(연결은 루트에 걸고 아래로 상속되므로 읽히는 가장 위 페이지가 루트다).
+// 이름을 못 찾으면 멈춘 단계를 함수 로그에 남긴다(값은 Notion 내부 ID뿐, 비밀값 없음).
 import { NOTION_API } from "./constants.ts"
 import { anyTitleText, fetchWithRetry, notionHeaders } from "./notionClient.ts"
 
@@ -18,13 +18,14 @@ async function notionGet(kind: Kind, id: string): Promise<any | null> {
 
 export async function findAcademyName(registrationDbId: string, get: Getter = notionGet): Promise<AcademyNameResult> {
   let node: { kind: Kind; id: string } | null = { kind: "databases", id: registrationDbId }
-  let lastTitle = ""
+  let lastTitle = "", reachedPage = false
   for (let step = 0; node && step < 15; step++) {
     let obj = await get(node.kind, node.id)
     // The configured registration ID may be a data source ID rather than a database ID.
     if (!obj && step === 0) { node = { kind: "data_sources", id: registrationDbId }; obj = await get(node.kind, node.id) }
-    if (!obj) return { name: "", stoppedAt: `${node.kind}:${node.id}:not-accessible` }
-    if (node.kind === "pages") lastTitle = anyTitleText(obj).trim()
+    // The parent above the connected root is not readable: the highest page reached is the root.
+    if (!obj) return step > 0 && reachedPage ? { name: lastTitle, stoppedAt: lastTitle ? undefined : `${node.kind}:${node.id}:not-accessible` } : { name: "", stoppedAt: `${node.kind}:${node.id}:not-accessible` }
+    if (node.kind === "pages") { lastTitle = anyTitleText(obj).trim(); reachedPage = true }
     const p = obj.parent ?? {}
     if (p.type === "workspace") return node.kind === "pages" ? { name: lastTitle } : { name: "", stoppedAt: `${node.kind}:${node.id}:top-is-not-a-page` }
     if (p.type === "page_id") node = { kind: "pages", id: p.page_id }
