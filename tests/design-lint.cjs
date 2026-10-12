@@ -3,7 +3,7 @@
 // Run: node tests/design-lint.cjs   (no dependencies)
 const fs=require('fs');
 // Pages converted to the shared tokens. Add a page here when it moves to assets/hada-ui.css.
-const PAGES=['admin_settings.html','attendance_kiosk.html','school_search.html'];
+const PAGES=['admin_settings.html','attendance_kiosk.html','school_search.html','legal_documents.html'];
 const SHARED='assets/hada-ui.css';
 const errors=[];
 function cssOf(file){
@@ -18,7 +18,9 @@ function check(file){
   for(const {css,offset,text} of cssOf(file)){
     // Token definitions live only in the shared :root blocks.
     const body=file===SHARED?css.replace(/:root\{[^}]*\}/g,m=>' '.repeat(m.length)):css;
-    const clean=body.replace(/\/\*[\s\S]*?\*\//g,m=>' '.repeat(m.length));
+    // Official print documents (attendance book, register, receipts) follow print rules, not screen tokens.
+    const printFree=body.replace(/\/\* design-lint: print-document \*\/[\s\S]*?\/\* design-lint: end \*\//g,m=>m.replace(/[^\n]/g,' '));
+    const clean=printFree.replace(/\/\*[\s\S]*?\*\//g,m=>' '.repeat(m.length));
     for(const block of clean.matchAll(/\{([^{}]*)\}/g)){
       let at=block.index+1;
       for(const decl of block[1].split(';')){
@@ -41,7 +43,8 @@ for(const file of [SHARED,...PAGES])check(file);
 for(const page of PAGES){
   const html=fs.readFileSync(page,'utf8');
   if(!html.includes('href="assets/hada-ui.css"'))errors.push(`${page}: assets/hada-ui.css를 불러오지 않습니다`);
-  if(/\sstyle="/.test(html))errors.push(`${page}: 인라인 style 속성 대신 클래스를 씁니다`);
+  // Scripts may build document tables with computed widths; only the static markup is checked.
+  if(/\sstyle="/.test(html.replace(/<script[\s\S]*?<\/script>/g,'')))errors.push(`${page}: 인라인 style 속성 대신 클래스를 씁니다`);
 }
 if(errors.length){console.error(errors.join('\n'));console.error(`디자인 규칙 위반 ${errors.length}건`);process.exit(1);}
 console.log(`디자인 규칙 검사 통과: ${[SHARED,...PAGES].join(', ')}`);

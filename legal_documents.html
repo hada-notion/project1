@@ -3,113 +3,60 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>법정 서류 출력</title>
+<title>법정 서류 출력 | 하다 학원관리</title>
+<link rel="stylesheet" href="assets/hada-ui.css">
 <style>
-  :root {
-    --text-primary: #2C2C2B;
-    --text-secondary: #7D7A75;
-    --canvas: #FFFFFF;
-    --surface: #F9F8F7;
-    --surface-2: #F0EFED;
-    --border: #E6E5E3;
-    --blue: #2783DE;
-    --blue-soft: #E5F2FC;
-    --red: #E56458;
-  }
-  * { box-sizing: border-box; }
-  html, body {
-    margin: 0; padding: 0;
-    background: var(--surface);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", Roboto, Helvetica, Arial, sans-serif;
-    color: var(--text-primary);
-    font-size: 14px;
-  }
-  #login-screen {
-    display: none; min-height: 100vh; align-items: center; justify-content: center; flex-direction: column;
-  }
-  #login-screen .box {
-    background: var(--canvas); border: 1px solid var(--border); border-radius: 12px; padding: 32px;
-    width: min(90vw, 320px); display: flex; flex-direction: column; gap: 10px;
-  }
-  #login-screen h1 { font-size: 16px; margin: 0 0 8px; text-align: center; }
-  #login-input, #login-btn { padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); font-size: 14px; }
-  #login-btn { background: var(--blue); color: #fff; border: none; cursor: pointer; }
-  .login-error { color: var(--red); font-size: 12px; min-height: 14px; text-align: center; }
-
-  #app-screen { display: none; flex-direction: column; min-height: 100vh; }
-  header.app-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 14px 20px; background: var(--canvas); border-bottom: 1px solid var(--border);
-  }
-  header.app-header h1 { font-size: 16px; margin: 0; }
-  header.app-header button { background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 13px; }
-
-  main { padding: 20px; display: flex; flex-direction: column; gap: 16px; max-width: none; width: 100%; min-width: 0; margin: 0 auto; }
-
-  .panel { min-width: 0; background: var(--canvas); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
-
-  .doc-type-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
-  .doc-type-tabs button {
-    padding: 8px 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2);
-    cursor: pointer; font-size: 13px; color: var(--text-primary);
-  }
-  .doc-type-tabs button.active { background: var(--blue); color: #fff; border-color: var(--blue); }
-
-  .filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; margin-top: 14px; }
-  .filters .field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-secondary); }
-  .filters input, .filters select {
-    padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border); font-size: 13px; min-width: 140px;
-  }
-  .filters .fixed-select-field { flex:0 0 180px; width:180px; min-width:180px; }
-  .filters .fixed-select-field select { width:100%; min-width:0; max-width:100%; height:36px; }
-  .filters button {
-    padding: 9px 18px; border-radius: 6px; border: none; background: var(--blue); color: #fff; cursor: pointer; font-size: 13px;
-  }
-
-  .toolbar { display:flex; gap:8px; justify-content:flex-end; align-items:center; flex-wrap:wrap; }
-  .toolbar .export-note { line-height:1.5; }
-  #receipt-layout-field:not([hidden]) { display:inline-flex; align-items:center; gap:8px; min-height:36px; font-size:13px; }
-  #receipt-layout { height:36px; box-sizing:border-box; padding:0 10px; border:1px solid var(--border); border-radius:6px; font-size:13px; background:#fff; max-width:100%; }
-  .toolbar button { height:36px; box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center; white-space:nowrap; }
-  .toolbar button {
-    padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); cursor: pointer; font-size: 13px;
-  }
-
-  #doc-status { font-size:13px; color:var(--text-secondary); overflow-wrap:anywhere; }
-  .query-actions { display:flex; align-items:center; gap:12px; flex-wrap:wrap; min-height:36px; min-width:0; max-width:100%; }
-  #btn-query { min-width:92px; height:36px; display:inline-flex; gap:7px; align-items:center; justify-content:center; }
-  #btn-query:disabled { cursor:wait; opacity:.75; }
-  .query-spinner { display:block; width:18px; height:18px; flex:none; transform-origin:50% 50%; animation:query-spin 1s linear infinite; }
-  @keyframes query-spin { to { transform:rotate(-360deg); } }
-  @media(prefers-reduced-motion:reduce) { .query-spinner { animation:none; } }
-  .export-note { align-self:center; font-size:12px; color:var(--text-secondary); }
-  .doc-pane[hidden] { display:none !important; }
+/* 법정 서류 출력 화면 전용. 조회 화면은 assets/hada-ui.css 토큰만 쓴다(docs/DESIGN.md).
+   아래 "인쇄 문서" 구역은 출석부·대장·영수증 공식 서식(검은 글자·회색 선·mm 단위)이라 화면 토큰 대신 인쇄 규칙을 따른다. */
+.tabs{display:flex;gap:var(--space-2);flex-wrap:wrap}
+.tabs button{padding:var(--space-2) var(--space-4);border-radius:var(--radius-pill);border:1px solid var(--brand-border);background:var(--surface);color:var(--text-ink);font-size:var(--text-small);font-weight:600}
+.tabs button:hover{border-color:var(--brand-deep)}
+.tabs button.active{background:var(--brand-deep);border-color:var(--brand-deep);color:var(--surface)}
+.filters{display:flex;gap:var(--space-3);flex-wrap:wrap;align-items:flex-end;margin-top:var(--space-5)}
+.filters .field{display:flex;flex-direction:column;gap:var(--space-1);min-width:0}
+.filters .field label{margin:0;font-size:var(--text-label);color:var(--text-muted);font-weight:600}
+.filters .field input,.filters .field select{width:auto;min-width:var(--field-w)}
+.filters .fixed-select-field select{width:var(--field-w)}
+.query-actions{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;min-width:0}
+#doc-status{font-size:var(--text-small);color:var(--text-muted);overflow-wrap:anywhere}
+.meta-line{margin:var(--space-3) 0 0;font-size:var(--text-label);color:var(--text-muted)}
+.toolbar{display:flex;gap:var(--space-2);justify-content:flex-end;align-items:center;flex-wrap:wrap;margin:var(--space-5) 0 var(--space-3)}
+.export-note{font-size:var(--text-label);color:var(--text-muted);line-height:1.5}
+#receipt-layout-field:not([hidden]){display:inline-flex;align-items:center;gap:var(--space-2);margin:0;font-size:var(--text-small);font-weight:600}
+#receipt-layout{width:auto;height:var(--control-h)}
+.toolbar .secondary{white-space:nowrap}
+.empty-note{text-align:center;color:var(--text-subtle);margin:var(--space-8) 0}
+.doc-pane[hidden]{display:none!important}
+/* 표 머리 정렬·필터 버튼과 메뉴 */
+.column-action{padding:2px var(--space-1);margin-left:2px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--brand-deep);font-size:var(--text-caption);line-height:1.2}
+.column-action:hover,.column-action:focus-visible{background:var(--brand-soft)}
+.view-summary{display:flex;gap:var(--space-3);flex-wrap:wrap;align-items:center;margin:var(--space-2) 0 var(--space-4);font-size:var(--text-caption);color:var(--text-muted)}
+.view-summary button{border:1px solid var(--brand-border);border-radius:var(--radius-sm);background:var(--surface);padding:var(--space-1) var(--space-2)}
+.column-menu{position:fixed;z-index:1000;width:var(--menu-w);max-width:calc(100vw - var(--space-4));max-height:calc(100vh - var(--space-4));overflow:auto;padding:var(--space-4);border:1px solid var(--brand-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);background:var(--surface);font-size:var(--text-small)}
+.column-menu[hidden]{display:none}
+.column-menu h3{margin:0 0 var(--space-3);font-size:var(--text-small)}
+.column-menu label{display:block;margin:var(--space-3) 0 0;color:var(--text-muted);font-weight:400}
+.column-menu input,.column-menu select{display:block;width:100%;height:auto;margin-top:var(--space-1);padding:var(--space-2)}
+.column-menu .sort-actions{display:flex;gap:var(--space-2);flex-wrap:wrap}
+.column-menu button{padding:var(--space-1) var(--space-2);border:1px solid var(--brand-border);border-radius:var(--radius-sm);background:var(--brand-tint)}
+.column-menu .menu-close{float:right}
+.column-menu .menu-reset{margin-top:var(--space-3)}
+:root{--field-w:180px;--menu-w:260px}
+#print-panel{padding:0;overflow:hidden}
+/* 조회 전에는 빈 출력 카드를 숨긴다 */
+#print-panel:has(#print-area:empty){display:none}
+@media(max-width:700px){.filters .field,.filters .fixed-select-field{flex:1 1 100%}.filters .field input,.filters .field select,.filters .fixed-select-field select{width:100%;min-width:0}.toolbar{justify-content:stretch}.toolbar .secondary{flex:1}}
+/* design-lint: print-document */
   table.doc-table td.note-cell { text-align:left; white-space:normal; overflow-wrap:anywhere; }
-  .column-action { padding:2px 3px; margin-left:3px; border:0; border-radius:4px; background:transparent; color:var(--blue); cursor:pointer; font-size:12px; line-height:1.2; }
-  .column-action:hover, .column-action:focus-visible { background:var(--blue-soft); }
   .table-scroll table.doc-table th.has-column-tools { white-space:normal; }
-  .head-label { display:inline-block; }
-  .view-summary { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:8px 0 16px; font-size:12px; color:var(--text-secondary); }
-  .view-summary button { border:1px solid var(--border); border-radius:5px; background:#fff; padding:4px 8px; cursor:pointer; }
-  .column-menu { position:fixed; z-index:1000; width:260px; max-width:calc(100vw - 16px); max-height:calc(100vh - 16px); overflow:auto; padding:14px; border:1px solid var(--border); border-radius:10px; box-shadow:0 4px 20px #0002; background:#fff; font-size:13px; }
-  .column-menu[hidden] { display:none; }
-  .column-menu h3 { margin:0 0 10px; font-size:14px; }
-  .column-menu label { display:block; margin-top:12px; color:var(--text-secondary); }
-  .column-menu input, .column-menu select { display:block; width:100%; margin-top:5px; border:1px solid var(--border); border-radius:5px; padding:7px; font-size:13px; }
-  .column-menu .sort-actions { display:flex; gap:6px; flex-wrap:wrap; }
-  .column-menu button { padding:6px 8px; border:1px solid var(--border); border-radius:5px; background:var(--surface); cursor:pointer; }
-  .column-menu .menu-close { float:right; }
-  .column-menu .menu-reset { margin-top:12px; }
-
-
-  #print-area { background: #fff; padding: 24px; }
+  .head-label { display:inline-block; }  #print-area { background: #fff; padding: 24px; }
   #print-area h2 { text-align: center; font-size: 18px; margin: 0 0 4px; }
-  #print-area .doc-sub { text-align: center; font-size: 12px; color: var(--text-secondary); margin-bottom: 16px; }
+  #print-area .doc-sub { text-align: center; font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
   table.doc-table { width: 100%; border-collapse: collapse; font-size: 12px; }
   table.doc-table th, table.doc-table td { border: 1px solid #999; padding: 4px 6px; text-align: center; }
   table.doc-table th { background: #f2f2f2; }
   table.doc-table td.name-cell, table.doc-table th.name-cell { text-align: center; white-space: nowrap; }
-  .legend { margin-top: 10px; font-size: 12px; color: var(--text-secondary); }
+  .legend { margin-top: 10px; font-size: 12px; color: var(--text-muted); }
   .sign-line { margin-top: 40px; text-align: right; font-size: 13px; }
 
   .warnings { border:1px solid #e5bd74; background:#fff7e7; padding:10px 12px; margin-bottom:16px; font-size:12px; line-height:1.6; }
@@ -151,11 +98,11 @@
   .receipt-bottom td { height:64px; }
   .receipt-official .expense-labels td { height:20px; padding:2px; }
   .screen-only { display:block; }
-  .table-scroll-hint { margin:6px 0; font-size:12px; color:var(--text-secondary); }
+  .table-scroll-hint { margin:6px 0; font-size:12px; color:var(--text-muted); }
   @media screen {
     #print-panel, #print-area { min-width:0; max-width:100%; }
     .table-scroll { width:100%; max-width:100%; overflow-x:auto; overscroll-behavior-x:contain; -webkit-overflow-scrolling:touch; }
-    .table-scroll:focus-visible { outline:2px solid var(--blue); outline-offset:3px; }
+    .table-scroll:focus-visible { outline:2px solid var(--brand-deep); outline-offset:3px; }
     .table-scroll .doc-table { font-size:13px; }
     .table-scroll .doc-table th, .table-scroll .doc-table td { padding:8px 10px; }
     .table-scroll .doc-table th { white-space:nowrap; }
@@ -177,8 +124,6 @@
     .attendance-table th:nth-child(n+2) .head-label { white-space:nowrap; overflow-wrap:normal; word-break:normal; }
   }
   @media screen and (max-width:650px) {
-    main { padding:12px; }
-    .panel { padding:12px; }
     #print-area { padding:12px; }
     .receipt-pair { grid-template-columns:1fr; }
     .attendance-table { --name-width:88px; }
@@ -216,66 +161,71 @@
     thead {display:table-header-group;}
     tr {break-inside:avoid;}
 
-    header.app-header, .panel:not(#print-panel), .toolbar { display: none !important; }
+    .top, header, #login-screen, .query-card, .toolbar, .foot, #links-dialog { display: none !important; }
     body { background: #fff; }
-    main { padding: 0; max-width: none; }
+    .shell { padding: 0; max-width: none; }
     #print-panel { border: none; padding: 0; }
   }
+/* design-lint: end */
 </style>
 </head>
 <body>
+<div class="shell">
+<nav class="top" aria-label="서비스 정보"><div class="brand"><img class="logo" src="assets/brand/hada-wordmark.png" alt="HADA" width="96" height="36"><div class="wordmark">하다<span>학원관리</span></div></div><div class="topright"><button class="ghost" id="open-links" type="button">바로가기</button><button class="ghost" id="logout-btn" type="button" hidden>로그아웃</button><span class="badge">관리자 전용</span></div></nav>
+<header><h1>법정 서류 출력</h1><p class="muted">수강생 출석부·수강생 대장·교습비등 영수증 원부·현금출납부를 기간별로 조회하고 인쇄(PDF)·엑셀로 내려받습니다.</p></header>
 
-<div id="login-screen">
-  <div class="box">
-    <h1>🔒 법정 서류 출력 (관리자용)</h1>
-    <input type="password" id="login-input" placeholder="관리자 비밀번호" autocomplete="current-password">
-    <button id="login-btn" onclick="submitLogin()">로그인</button>
-    <div class="login-error" id="login-error"></div>
+<section class="card" id="login-screen" hidden><div class="narrow">
+  <h2>관리자 확인</h2>
+  <label for="login-input">관리자 비밀번호</label>
+  <input type="password" id="login-input" autocomplete="current-password">
+  <p class="help">관리자 설정과 같은 비밀번호입니다.</p>
+  <button class="primary" id="login-btn" onclick="submitLogin()">로그인</button>
+  <p class="error" id="login-error"></p>
+</div></section>
+
+<div id="app-screen" hidden>
+  <section class="card query-card">
+    <div class="tabs" id="doc-type-tabs">
+      <button data-type="attendance" class="active">수강생 출석부</button>
+      <button data-type="student-register">수강생 대장</button>
+      <button data-type="receipt-ledger">교습비등 영수증 원부</button>
+      <button data-type="cash-journal">현금출납부</button>
+    </div>
+    <div class="filters">
+      <div class="field"><label for="f-start">시작일</label><input type="date" id="f-start"></div>
+      <div class="field"><label for="f-end">종료일</label><input type="date" id="f-end"></div>
+      <div class="field fixed-select-field"><label for="f-class">클래스</label><select id="f-class"><option value="">전체 클래스</option></select></div>
+      <div class="field fixed-select-field"><label for="f-student">학생</label><select id="f-student" disabled><option value="">클래스를 먼저 선택하세요</option></select></div>
+      <div class="field"><label for="f-search">검색(이름)</label><input type="text" id="f-search" placeholder="학생 이름"></div>
+      <div class="query-actions"><button class="primary inline" id="btn-query" aria-busy="false">조회</button><span id="doc-status" role="status" aria-live="polite" aria-atomic="true"></span></div>
+    </div>
+    <p class="meta-line"><span id="meta-status" role="status" aria-live="polite"></span> <button class="ghost" id="btn-meta-retry" type="button" hidden>재시도</button></p>
+  </section>
+
+  <div class="toolbar">
+    <span class="export-note">PDF·엑셀: 원래 조회 결과 전체 출력 (화면 정렬·필터 미반영)</span>
+    <label id="receipt-layout-field" hidden>영수증 출력 방식 <select id="receipt-layout"><option value="list">관리용 목록</option><option value="form">원부·영수증 서식</option></select></label>
+    <button class="secondary" id="btn-print" disabled>인쇄(PDF)</button>
+    <button class="secondary" id="btn-excel" disabled>Excel 다운로드</button>
   </div>
+
+  <div id="document-warnings" hidden aria-live="polite"></div>
+  <section class="card" id="print-panel">
+    <div id="print-area">
+      <p class="empty-note">위에서 서류 종류와 기간을 선택한 뒤 [조회]를 눌러주세요.</p>
+    </div>
+  </section>
 </div>
-
-<div id="app-screen">
-  <header class="app-header">
-    <h1>📑 법정 서류 출력</h1>
-    <button id="logout-btn">로그아웃</button>
-  </header>
-  <main>
-    <div class="panel">
-      <div class="doc-type-tabs" id="doc-type-tabs">
-        <button data-type="attendance" class="active">수강생 출석부</button>
-        <button data-type="student-register">수강생 대장</button>
-        <button data-type="receipt-ledger">교습비등 영수증 원부</button>
-        <button data-type="cash-journal">현금출납부</button>
-      </div>
-      <div class="filters">
-        <div class="field"><label>시작일</label><input type="date" id="f-start"></div>
-        <div class="field"><label>종료일</label><input type="date" id="f-end"></div>
-        <div class="field fixed-select-field"><label>클래스</label><select id="f-class"><option value="">전체 클래스</option></select></div>
-        <div class="field fixed-select-field"><label>학생</label><select id="f-student" disabled><option value="">클래스를 먼저 선택하세요</option></select></div>
-        <div class="field"><label>검색(이름)</label><input type="text" id="f-search" placeholder="학생 이름"></div>
-        <div class="query-actions"><button id="btn-query" aria-busy="false">조회</button><span id="doc-status" role="status" aria-live="polite" aria-atomic="true"></span></div>
-      </div>
-      <div style="margin-top:6px;font-size:12px;color:var(--text-secondary)"><span id="meta-status" role="status" aria-live="polite"></span> <button id="btn-meta-retry" type="button" hidden>재시도</button></div>
-    </div>
-
-    <div class="toolbar">
-      <span class="export-note">PDF·엑셀: 원래 조회 결과 전체 출력 (화면 정렬·필터 미반영)</span>
-      <label id="receipt-layout-field" hidden>영수증 출력 방식 <select id="receipt-layout"><option value="list">관리용 목록</option><option value="form">원부·영수증 서식</option></select></label>
-      <button id="btn-print" disabled>🖨️ 인쇄(PDF)</button>
-      <button id="btn-excel" disabled>⬇️ Excel 다운로드</button>
-    </div>
-
-    <div id="document-warnings" hidden aria-live="polite"></div>
-    <div class="panel" id="print-panel">
-      <div id="print-area">
-        <p style="text-align:center;color:#999">위에서 서류 종류와 기간을 선택한 뒤 [조회]를 눌러주세요.</p>
-      </div>
-    </div>
-  </main>
+<p class="foot"><strong>출력한 서류에는 개인정보가 있습니다.</strong> 공용 기기에서는 사용 후 로그아웃하세요.</p>
+<dialog class="card links-dialog" id="links-dialog" aria-labelledby="links-title"><div class="dialog-head"><h2 id="links-title">바로가기</h2><button class="ghost" id="close-links" type="button">닫기</button></div>
+<p class="muted">학원관리 웹 화면입니다. 새 탭에서 열립니다.</p>
+<ul class="link-list"></ul>
+<p class="help">학부모 리포트는 학생마다 주소가 달라 Notion 등록 페이지의 리포트 링크로 엽니다.</p>
+</dialog>
 </div>
-
 <div id="column-menu" class="column-menu" role="dialog" aria-label="열 정렬 및 필터" hidden></div>
 <script src="admin_auth.js"></script>
+<script src="assets/hada-shortcuts.js"></script>
 <script>
   const SUPABASE_URL = "https://twczhsxybkcvjkdfdxvs.supabase.co";
   const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR3Y3poc3h5YmtjdmprZGZkeHZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyOTcwMDQsImV4cCI6MjEwMzg3MzAwNH0.t7Ltb_iSYqE4gHSoGSm-OlpiLjGqIcgrhzGJ-t56EDc";
@@ -298,18 +248,20 @@
     document.getElementById("document-warnings").replaceChildren();document.getElementById("document-warnings").hidden=true;
     document.getElementById("doc-status").textContent="";
     metaLoading=false;metaUnavailable=false;
-    queryBtn.textContent="조회";queryBtn.setAttribute("aria-busy","false");
+    queryBtn.textContent="조회";queryBtn.classList.remove("loading");queryBtn.setAttribute("aria-busy","false");
     document.getElementById("btn-print").disabled=true;
     document.getElementById("btn-excel").disabled = true;
-    document.getElementById("login-screen").style.display = "flex";
-    document.getElementById("app-screen").style.display = "none";
+    document.getElementById("login-screen").hidden = false;
+    document.getElementById("app-screen").hidden = true;
+    document.getElementById("logout-btn").hidden = true;
     document.getElementById("login-error").textContent = errorMsg || "";
     document.getElementById("login-input").value = "";
     setTimeout(() => document.getElementById("login-input").focus(), 50);
   }
   async function showAppScreen(initialClasses) {
-    document.getElementById("login-screen").style.display = "none";
-    document.getElementById("app-screen").style.display = "flex";
+    document.getElementById("login-screen").hidden = true;
+    document.getElementById("app-screen").hidden = false;
+    document.getElementById("logout-btn").hidden = false;
     setDefaultDates();
     await loadClasses(initialClasses);
   }
@@ -342,7 +294,7 @@
     const btn = document.getElementById("login-btn");
     const errEl = document.getElementById("login-error");
     if (!key) { errEl.textContent = "비밀번호를 입력하세요."; return; }
-    btn.disabled = true; btn.textContent = "확인 중..."; errEl.textContent = "";
+    btn.disabled = true; btn.textContent = "확인 중…"; btn.classList.add("loading"); errEl.textContent = "";
     try {
       const session = await HadaAdminAuth.login(SUPABASE_URL, key);
       const res = await fetch(`${SUPABASE_URL}/functions/v1/get-legal-document-data`, {
@@ -360,7 +312,7 @@
     } catch (err) {
       errEl.textContent = "로그인에 실패했습니다: " + err.message;
     } finally {
-      btn.disabled = false; btn.textContent = "로그인";
+      btn.disabled = false; btn.textContent = "로그인"; btn.classList.remove("loading");
     }
   }
   document.getElementById("login-input").addEventListener("keydown", (e) => { if (e.key === "Enter") submitLogin(); });
@@ -594,7 +546,7 @@
     if(!tabStates.has(type)){
       const area=document.getElementById("print-area");if(!area.querySelector(".doc-pane"))area.replaceChildren();
       const pane=document.createElement("div");pane.className="doc-pane";pane.dataset.docType=type;pane.hidden=type!==currentDocType;
-      pane.innerHTML='<p style="text-align:center;color:#999">기간과 조건을 선택한 뒤 [조회]를 눌러주세요.</p>';area.appendChild(pane);
+      pane.innerHTML='<p class="empty-note">기간과 조건을 선택한 뒤 [조회]를 눌러주세요.</p>';area.appendChild(pane);
       tabStates.set(type,{type,pane,filters:captureControls(),document:null,status:"",loading:false,requestId:0,controllers:[]});
     }
     return tabStates.get(type);
@@ -611,10 +563,10 @@
     const state=tabStates.get(currentDocType),busy=!!state?.loading;
     queryBtn.disabled=busy || metaLoading || metaUnavailable || classSel.disabled;
     queryBtn.setAttribute("aria-busy",String(busy));
-    if(busy){queryBtn.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="query-spinner" aria-hidden="true" focusable="false"><polyline points="1 4 1 10 7 10"></polyline><polyline points="23 20 23 14 17 14"></polyline><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path></svg><span>조회 중…</span>';}else queryBtn.textContent="조회";
+    queryBtn.classList.toggle("loading",busy);queryBtn.textContent=busy ? "조회 중…" : "조회";
     document.getElementById("doc-status").textContent=busy ? "" : state?.status || "";
     document.getElementById("btn-excel").disabled=busy || !!state?.exporting || !state?.document;
-    document.getElementById("btn-excel").textContent=state?.exporting ? "엑셀 생성 중…" : "⬇️ Excel 다운로드";
+    document.getElementById("btn-excel").textContent=state?.exporting ? "엑셀 생성 중…" : "Excel 다운로드";document.getElementById("btn-excel").classList.toggle("loading",!!state?.exporting);
     state?.pane.setAttribute("aria-busy",String(busy));
     document.getElementById("btn-print").disabled=busy || !state?.document;
   }
