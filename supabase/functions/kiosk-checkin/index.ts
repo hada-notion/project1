@@ -59,6 +59,7 @@ import { normalizePhone, resolveParentPhone, resolveAlimtalkRecipients } from ".
 // 호출부는 stateChanged 블록 안 한 곳이었다.)
 
 import { resolveKioskHint, queryAllKioskPages } from "../_shared/kioskIdentity.ts"
+import { StepTiming } from "../_shared/stepTiming.ts"
 
 function plainText(prop: any): string {
   if (!prop) return ""
@@ -159,7 +160,11 @@ async function findTodayAttendance(attendanceDbId: string, registrationId: strin
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS })
 
+  // 단계별 소요 시간(ms)만 로그에 남긴다(속도 개선 측정용, 개인정보 없음). "[kiosk-checkin timing]"으로 검색.
+  const timing = new StepTiming()
+  let outcome = "error"
   const authError = await requireAdminKey(req)
+  timing.mark("auth")
   if (authError) return authError
 
   try {
@@ -173,6 +178,7 @@ Deno.serve(async (req: Request) => {
     const registrationDbId = getRegistrationDbId()
     const studentDbId = await resolveRelatedDatabaseId(registrationDbId, "학생정보")
     const attendanceDbId = await resolveRelatedDatabaseId(registrationDbId, "출석")
+    timing.mark("db_ids")
 
     let registrationId: string | null =
       typeof body?.registrationId === "string" && body.registrationId ? body.registrationId : null
@@ -181,9 +187,10 @@ Deno.serve(async (req: Request) => {
     if (registrationId) {
       // 등록 ID는 클라이언트 힌트. 타 DB/종료 등록/다른 연락처를 출결 처리하지 않는다.
       registrationPage = await resolveKioskHint({ registrationId, phone, registrationDbId, studentDbId, getPage: notionGetPage })
-      if (!registrationPage) return new Response(JSON.stringify({ refreshCandidates: true, error: "학생 목록이 변경되었습니다. 다시 선택해주세요." }), {
+      timing.mark("verify")
+      if (!registrationPage) { outcome = "refresh"; return new Response(JSON.stringify({ refreshCandidates: true, error: "학생 목록이 변경되었습니다. 다시 선택해주세요." }), {
         status: 409, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      })
+      }) }
     }
 
     if (!registrationId) {
@@ -206,12 +213,15 @@ Deno.serve(async (req: Request) => {
         candidates.push(...regs.map(toCandidate))
       }
 
+      timing.mark("full_lookup")
       if (candidates.length === 0) {
+        outcome = "no_match"
         return new Response(JSON.stringify({ matched: false }), {
           headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
         })
       }
       if (candidates.length > 1) {
+        outcome = "pick"
         return new Response(JSON.stringify({ needsSelection: true, candidates }), {
           headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
         })
@@ -222,6 +232,7 @@ Deno.serve(async (req: Request) => {
 
     if (!registrationPage) {
       registrationPage = await resolveKioskHint({ registrationId, phone, registrationDbId, studentDbId, getPage: notionGetPage })
+      timing.mark("verify")
       if (!registrationPage) return new Response(JSON.stringify({ refreshCandidates: true, error: "학생 목록이 변경되었습니다. 다시 선택해주세요." }), {
         status: 409, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
       })
@@ -236,9 +247,11 @@ Deno.serve(async (req: Request) => {
       const classPage = await notionGetPage(classIds[0])
       teacherIds = (classPage.properties?.["담당강사"]?.relation ?? []).map((r: any) => r.id)
     }
+    timing.mark("class")
 
     const nowIso = new Date().toISOString()
     let attendance = await findTodayAttendance(attendanceDbId, registrationId)
+    timing.mark("attendance_find")
     let stateChanged = false
     let alreadyDone = false
     let alreadyAt = ""
@@ -261,6 +274,7 @@ Deno.serve(async (req: Request) => {
           patch["출석 상태"] = { select: { name: "🟢 출석" } }
         }
         await notionPatchPageProperties(attendance.id, patch)
+        timing.mark("attendance_write")
         stateChanged = true
       }
     } else {
@@ -277,6 +291,7 @@ Deno.serve(async (req: Request) => {
       properties[type === "checkin" ? "등원스템프" : "하원스템프"] = { date: { start: nowIso } }
 
       attendance = await notionCreatePage(attendanceDbId, properties)
+      timing.mark("attendance_write")
       stateChanged = true
     }
 
@@ -293,10 +308,12 @@ Deno.serve(async (req: Request) => {
         templateId: "",
         senderNumber: Deno.env.get("SOLAPI_SENDER_NUMBER") ?? "",
       })
+      timing.mark("alimtalk_config")
       if (config.pfId && config.templateId) {
         try {
           const parentPhone = await resolveParentPhone(attendance, registrationId)
           if (!parentPhone) throw new Error("학부모 연락처를 찾을 수 없습니다.")
+          timing.mark("parent_phone")
 
           const { SolapiMessageService } = await import("npm:solapi")
           const messageService = new SolapiMessageService(
@@ -308,6 +325,7 @@ Deno.serve(async (req: Request) => {
             primaryPhone: parentPhone,
             recipientTarget: config.recipientTarget,
           })
+          timing.mark("recipients")
           for (const recipient of recipients) {
             await messageService.send({
               to: recipient.phone,
@@ -325,6 +343,7 @@ Deno.serve(async (req: Request) => {
               },
             }, { allowDuplicates: true })
           }
+          timing.mark("send")
           await createSendLogEntry({
             registrationId,
             attendanceId: attendance.id,
@@ -333,6 +352,7 @@ Deno.serve(async (req: Request) => {
             category,
             status: "성공",
           })
+          timing.mark("send_log")
         } catch (sendErr) {
           await createSendLogEntry({
             registrationId,
@@ -343,12 +363,14 @@ Deno.serve(async (req: Request) => {
             status: "실패",
             failReason: extractErrorMessage(sendErr),
           })
+          timing.mark("send_fail_log")
         }
       }
     }
 
+    outcome = alreadyDone ? "already" : "done"
     return new Response(JSON.stringify({ matched: true, studentName, alreadyDone, alreadyAt }), {
-      headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      headers: { ...CORS_HEADERS, "Content-Type": "application/json", "Server-Timing": timing.header(), "Timing-Allow-Origin": "*" },
     })
   } catch (err) {
     console.error("kiosk-checkin error:", err)
@@ -356,5 +378,7 @@ Deno.serve(async (req: Request) => {
       status: 500,
       headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
     })
+  } finally {
+    console.log("[kiosk-checkin timing]", JSON.stringify({ outcome, ...timing.summary() }))
   }
 })
