@@ -3,6 +3,10 @@
 버전별 변경 기록입니다. 최신 버전이 맨 위에 옵니다. 상세 실행 지침은 `docs/updates/vX.Y.md`에 있습니다.
 패치를 올릴 때마다 한 줄 이상 추가하고, 해당 버전의 지침 파일을 함께 만듭니다. (템플릿: `docs/updates/_TEMPLATE.md`)
 
+## v2.5.43 — 2026-10-12
+
+- 관리자 설정 알림 줄 색을 학교 검색과 같은 규칙으로: 연결됨·안내는 흰 바탕, 초기 비밀번호 사용 중·자동 복사 막힘은 노랑(주의), 비밀번호 변경·웹훅 키 교체·링크 다시 찾기 완료는 초록, 연결 실패는 빨강. 공용 파일(`hada-ui.css`, `hada-tokens.css`, `hada-shortcuts.js`, `admin_auth.js`, `admin_settings.js`)을 부를 때 내용 해시로 만든 `?v=` 버전 표시를 붙여 패치 직후에도 강력 새로고침 없이 새 파일을 받게 함(`node tests/design-lint.cjs --fix`로 갱신, 빠뜨리면 검사 실패). 화면만 변경. **키오스크 `SUPABASE_URL`·`SUPABASE_ANON_KEY`, 학교 검색 `ENDPOINT`는 운영 값 유지.** 지침: `docs/updates/v2.5.43.md`
+
 ## v2.5.42 — 2026-10-12
 
 - 공용 선택 상자(`select`) 정리: 브라우저 기본 화살표(상자 끝에 붙음) 대신 입력 칸 여백 안에 Feather 아이콘 `chevron-down`(토큰 `--icon-chevron-down`), 화살표는 날짜 칸 달력 아이콘과 세로 한 줄, 글자 시작 위치를 입력 칸과 맞춤, 비활성 상태 옅게. 학교 검색·법정 서류에 적용(`assets/hada-ui.css`, `assets/hada-tokens.css`). 새 아이콘은 Feather Icons 원본을 쓰도록 `DESIGN.md`에 명시. 화면만 변경. 지침: `docs/updates/v2.5.42.md`

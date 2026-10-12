@@ -40,9 +40,30 @@ function check(file){
   }
 }
 for(const file of [TOKENS,SHARED,...PAGES])check(file);
+// Cache busting (docs/DESIGN.md 2-6): GitHub Pages lets browsers keep these files for 10 minutes, so every reference
+// carries ?v=<first 8 hex of the file's SHA-256>. A changed file gets a new address and is fetched at once.
+// `node tests/design-lint.cjs --fix` rewrites the versions; without --fix a stale or missing version is an error.
+// Order matters: hada-ui.css imports hada-tokens.css, so its own version is computed after its import is updated.
+const crypto=require('crypto');
+const FIX=process.argv.includes('--fix');
+const VERSIONED=[['assets/hada-tokens.css',['assets/hada-ui.css']],['assets/hada-ui.css',PAGES],['assets/hada-shortcuts.js',PAGES],['admin_auth.js',PAGES],['admin_settings.js',PAGES]];
+const version=file=>crypto.createHash('sha256').update(fs.readFileSync(file,'utf8').replace(/\r\n/g,'\n')).digest('hex').slice(0,8);
+for(const [asset,users] of VERSIONED){
+  const v=version(asset);
+  for(const user of users){
+    const ref=user===SHARED?asset.replace('assets/',''):asset;
+    const pattern=new RegExp(`((?:href|src)="|url\\(")${ref.replace(/[.]/g,'\\.')}(\\?v=[0-9a-f]*)?"`,'g');
+    let text=fs.readFileSync(user,'utf8');
+    if(!pattern.test(text))continue;
+    const fixed=text.replace(pattern,(_,pre)=>`${pre}${ref}?v=${v}"`);
+    if(fixed===text)continue;
+    if(FIX){fs.writeFileSync(user,fixed);console.log(`버전 갱신: ${user} → ${ref}?v=${v}`);}
+    else errors.push(`${user}: ${ref}의 버전 표시가 파일 내용과 다릅니다(?v=${v}). node tests/design-lint.cjs --fix 로 고칩니다`);
+  }
+}
 for(const page of PAGES){
   const html=fs.readFileSync(page,'utf8');
-  if(!html.includes('href="assets/hada-ui.css"'))errors.push(`${page}: assets/hada-ui.css를 불러오지 않습니다`);
+  if(!/href="assets\/hada-ui\.css(\?v=[0-9a-f]{8})?"/.test(html))errors.push(`${page}: assets/hada-ui.css를 불러오지 않습니다`);
   // Scripts may build document tables with computed widths; only the static markup is checked.
   if(/\sstyle="/.test(html.replace(/<script[\s\S]*?<\/script>/g,'')))errors.push(`${page}: 인라인 style 속성 대신 클래스를 씁니다`);
 }
