@@ -720,25 +720,28 @@ body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
 .home-hero-title { font-size: clamp(20px, 5.4vw, 26px); font-weight: 800; line-height: 1.3; word-break: keep-all; display: flex; align-items: center; gap: 8px; }
 .home-hero-emoji { font-size: 0.8em; line-height: 1; flex-shrink: 0; }
 .home-hero-sub { font-size: 13px; opacity: 0.85; margin-top: 4px; word-break: keep-all; }
-/* 보고서 세션: 제목은 카드 안(.card h2·.donut-title 모두 15px + 아이콘 16px), 항목 아이콘은 교재 표지, 본문은 접지 않음 */
-.card h2 .page-title-icon, .donut-title .inline-icon { width: 16px; height: 16px; }
+/* 보고서 세션(DESIGN.md 1부 4장 보고서 규칙): 흰 세션 박스(.rep-session) 안 위쪽에 2단계 제목, 그 아래 박스 양 끝까지 차는
+   베이지 띠(.rep-band). 학습은 교재마다 띠 하나, 과제·평가는 하위 묶음(.rep-sub)마다 띠 하나. 본문은 접지 않는다. */
+.donut-title .inline-icon { width: 16px; height: 16px; }
 .day-status { margin: 4px 0 6px; min-height: 34px; display: flex; align-items: center; justify-content: center; }
 .day-status .badge { font-size: 15px; font-weight: 700; padding: 6px 16px; }
-.rep-feed .rep-item + .rep-item { margin-top: 24px; }
-.rep-item + .rep-item { margin-top: 16px; }
-.rep-head { display: flex; gap: 12px; align-items: flex-start; }
-.rep-cover { width: 40px; height: 54px; border-radius: 6px; overflow: hidden; flex-shrink: 0; background: linear-gradient(160deg, var(--brand-mid), var(--brand-deep)); color: #fff; display: flex; align-items: flex-end; padding: 4px; font-size: 9px; font-weight: 800; line-height: 1.15; word-break: keep-all; }
-.rep-cover img { width: calc(100% + 8px); height: calc(100% + 8px); margin: -4px; object-fit: cover; display: block; }
-.rep-cover span { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.rep-head-text { flex: 1; min-width: 0; padding-top: 2px; }
-.rep-title { font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.rep-meta { margin-top: 4px; }
+.rep-session { background: #fff; border-radius: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); padding-top: 16px; margin-bottom: 14px; overflow: hidden; }
+.rep-session > .sec-title { margin: 0 16px 12px; }
+.rep-band { background: var(--brand-tint); padding: 16px; }
+.rep-band + .rep-band { border-top: 6px solid #fff; }
+.rep-band .empty { padding: 4px 0; }
+.rep-sub { font-size: 13px; font-weight: 600; color: var(--text-subtle); margin: 4px 16px 8px; }
+.rep-band + .rep-sub { margin-top: 14px; }
+.rep-item + .rep-item { margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(107,93,77,0.12); }
+.rep-title { font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; line-height: 1.4; }
+.rep-meta { margin-top: 6px; }
 .rep-meta .log-context:last-child, .rep-meta .log-note:last-child { margin-bottom: 0; }
-.rep-body { margin-top: 14px; }
-.rep-body .feed-body { margin-top: 6px; }
-.rep-body > .feed-body:first-child { margin-top: 0; }
-.rep-sub { font-size: 13px; font-weight: 600; color: var(--text-subtle); margin: 2px 0 10px; }
-.rep-divider { border-top: 1px solid #f1f0f6; margin: 16px 0; }
+.rep-body { margin-top: 18px; }
+.rep-body > .feed-body { border-top: none; padding-top: 0; margin-top: 0; }
+/* 본문: "라벨 → 내용"을 한 덩어리로, 선은 기록 쪽(수업 자료 등)과 활동 쪽(학습 결과 등) 사이에만 (보고서·학습기록 탭·교재 상세 공통) */
+.feed-section .feed-body { border-top: none; padding-top: 0; margin-top: 0; }
+.feed-combined { gap: 14px; }
+.feed-source-activity-divider { border: none; border-top: 1px solid rgba(107,93,77,0.18); margin: 0; }
 /* 소제목 4단계 (DESIGN.md 1부 4장): 1 탭 제목 h2 17px+안내 / 2 섹션 제목 .sec-title 15px, 카드 밖 바로 위, 아이콘 16px /
    3 날짜 묶음 13px 옅은 글자, 아이콘 없음 / 4 카드 안 작은 라벨 12px 보조 글자 */
 .sec-title { display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 700; color: var(--text-primary); margin: 20px 2px 8px; line-height: 1.3; }
@@ -758,8 +761,9 @@ body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
 .progress-line .track { flex: 1; height: 8px; border-radius: 8px; background: var(--brand-soft); overflow: hidden; }
 .progress-line .fill { height: 100%; border-radius: 8px; background: var(--brand-deep); }
 .progress-line b { font-size: 13px; color: var(--brand-deep); min-width: 36px; text-align: right; }
-.speech { background: var(--brand-tint); border-radius: 12px; padding: 12px 14px; font-size: 14px; line-height: 1.6; color: #2b2b2b; white-space: pre-wrap; word-break: break-word; }
-.speech small { display: block; color: var(--text-subtle); font-size: 11px; margin-top: 6px; }
+.speech { font-size: 14px; line-height: 1.6; color: #2b2b2b; white-space: pre-wrap; word-break: break-word; }
+.speech + .speech { margin-top: 12px; padding-top: 12px; border-top: 1px solid #f1f0f6; }
+.speech small { display: block; color: var(--text-subtle); font-size: 12px; margin-top: 8px; white-space: normal; }
 /* 작은 분류 칸 (학습·과제·평가 아이콘) */
 .kind-tile { width: 44px; height: 44px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; flex-shrink: 0; }
 .kind-tile svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
