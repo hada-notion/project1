@@ -447,7 +447,7 @@ body {
 .log-note { font-size: 12px; color: var(--text-muted); line-height: 1.5; margin-bottom: 6px; white-space: pre-wrap; }
 .log-photo { width: 100%; border-radius: 10px; aspect-ratio: 4 / 3; object-fit: cover; display: block; margin-top: 8px; }
 .log-date-group { margin-bottom: 6px; }
-.log-date-label { font-size: 13px; font-weight: 600; color: #9a9a9a; margin: 0 0 10px; display: flex; align-items: center; gap: 6px; }
+.log-date-label { font-size: 13px; font-weight: 600; color: var(--text-subtle); margin: 0 0 10px; display: flex; align-items: center; gap: 6px; }
 
 .day-detail-item { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; border-bottom: 1px solid #f5f5f7; }
 .day-detail-item:last-child { border-bottom: none; }
@@ -720,8 +720,31 @@ body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
 .home-hero-title { font-size: clamp(20px, 5.4vw, 26px); font-weight: 800; line-height: 1.3; word-break: keep-all; display: flex; align-items: center; gap: 8px; }
 .home-hero-emoji { font-size: 0.8em; line-height: 1; flex-shrink: 0; }
 .home-hero-sub { font-size: 13px; opacity: 0.85; margin-top: 4px; word-break: keep-all; }
-.home-section-label { font-size: 13px; font-weight: 700; color: var(--text-muted); margin: 18px 2px 8px; }
-.home-today-title { font-size: 13px; font-weight: 700; color: var(--text-muted); margin: 0 0 10px; display: flex; align-items: center; gap: 6px; }
+/* 보고서 세션: 제목은 카드 안(.card h2·.donut-title 모두 15px + 아이콘 16px), 항목 아이콘은 교재 표지, 본문은 접지 않음 */
+.card h2 .page-title-icon, .donut-title .inline-icon { width: 16px; height: 16px; }
+.day-status { margin: 4px 0 6px; min-height: 34px; display: flex; align-items: center; justify-content: center; }
+.day-status .badge { font-size: 15px; font-weight: 700; padding: 6px 16px; }
+.rep-feed .rep-item + .rep-item { margin-top: 24px; }
+.rep-item + .rep-item { margin-top: 16px; }
+.rep-head { display: flex; gap: 12px; align-items: flex-start; }
+.rep-cover { width: 40px; height: 54px; border-radius: 6px; overflow: hidden; flex-shrink: 0; background: linear-gradient(160deg, var(--brand-mid), var(--brand-deep)); color: #fff; display: flex; align-items: flex-end; padding: 4px; font-size: 9px; font-weight: 800; line-height: 1.15; word-break: keep-all; }
+.rep-cover img { width: calc(100% + 8px); height: calc(100% + 8px); margin: -4px; object-fit: cover; display: block; }
+.rep-cover span { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.rep-head-text { flex: 1; min-width: 0; padding-top: 2px; }
+.rep-title { font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rep-meta { margin-top: 4px; }
+.rep-meta .log-context:last-child, .rep-meta .log-note:last-child { margin-bottom: 0; }
+.rep-body { margin-top: 14px; }
+.rep-body .feed-body { margin-top: 6px; }
+.rep-body > .feed-body:first-child { margin-top: 0; }
+.rep-sub { font-size: 13px; font-weight: 600; color: var(--text-subtle); margin: 2px 0 10px; }
+.rep-divider { border-top: 1px solid #f1f0f6; margin: 16px 0; }
+/* 소제목 4단계 (DESIGN.md 1부 4장): 1 탭 제목 h2 17px+안내 / 2 섹션 제목 .sec-title 15px, 카드 밖 바로 위, 아이콘 16px /
+   3 날짜 묶음 13px 옅은 글자, 아이콘 없음 / 4 카드 안 작은 라벨 12px 보조 글자 */
+.sec-title { display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 700; color: var(--text-primary); margin: 20px 2px 8px; line-height: 1.3; }
+.sec-title:first-child { margin-top: 4px; }
+.sec-icon { width: 16px; height: 16px; display: inline-flex; flex-shrink: 0; }
+.sec-icon svg { width: 100%; height: 100%; display: block; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .home-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .home-stat { background: var(--brand-tint); border-radius: 10px; padding: 10px 6px; text-align: center; min-width: 0; }
 .home-stat b { display: block; font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -810,7 +833,7 @@ body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
 .cal-collapse-btn { appearance: none; border: none; background: transparent; width: 100%; height: 36px; margin-top: 4px; display: flex; align-items: center; justify-content: center; gap: 4px; font: inherit; font-size: 12px; font-weight: 600; color: var(--text-muted); cursor: pointer; }
 .cal-collapse-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .cal-day-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 16px 2px 10px; }
-.cal-day-head b { font-size: 15px; }
+.cal-day-head b { font-size: 13px; font-weight: 600; color: var(--text-subtle); }
 .cal-day-card { background: #fff; border-radius: 14px; padding: 14px 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); margin-bottom: 10px; }
 .cal-day-link { appearance: none; border: none; width: 100%; height: 44px; border-radius: 10px; background: var(--brand-soft); color: var(--brand-deep); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px; }
 .cal-day-link svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
