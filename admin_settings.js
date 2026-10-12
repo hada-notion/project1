@@ -68,8 +68,8 @@ const CHECKLIST=[
   ['class-report-sync','학생 페이지 동기화',BUTTON,route('sync-class-report-cache')],
   ['class-report','보고서 생성',BUTTON,route('generate-report')]]],
  ['시간표(학원)',[['timetable-classes','수업추가',BUTTON,route('generate-classes')]]],
- ['메뉴(학원)',[['menu-bulk-classes','다음주 수업 일괄 생성',BUTTON,route('generate-classes'),{path:'?mode=bulk',note:'메뉴 페이지 위쪽 속성 줄에 있습니다(? 참고). 주소 끝의 ?mode=bulk까지 넣습니다.'}]],{
-  text:'메뉴 DB의 어떤 페이지(예: 수업 HOME)를 열어도 제목 아래 속성 줄에 "다음주 수업 일괄 생성" 버튼이 있습니다. 속성 이름을 클릭하고 "자동화 편집"을 눌러 웹훅 보내기의 값 칸을 바꿉니다. 메뉴 DB에는 웹훅등록 보기가 없어도 됩니다.',
+ ['메뉴(학원)',[['menu-bulk-classes','다음주 수업 일괄 생성',BUTTON,route('generate-classes'),{path:'?mode=bulk',note:'주소 끝의 ?mode=bulk까지 넣습니다.'}]],{
+  text:'메뉴 DB의 어떤 페이지(예: 수업 HOME)를 열어도 제목 아래 속성 줄에 "다음주 수업 일괄 생성" 버튼이 있습니다. 속성 이름을 클릭하고 "자동화 편집"을 눌러 웹훅 보내기의 값 칸을 바꿉니다. 메뉴 DB에는 "웹훅 등록" 보기가 없어도 됩니다.',
   image:'assets/admin-settings/menu-bulk-button.png',alt:'메뉴 페이지 상단 속성 줄의 다음주 수업 일괄 생성 버튼'}],
  ['수업(학원)',[
   ['session-record','학습기록 생성',BUTTON,route('create-learning-record')],
@@ -139,6 +139,47 @@ function hint(routeName,checkedAt){
  if(v.new)return ['good',`새 키 호출 확인 (${shortDate(v.new.last_at)})`];
  return ['none',''];
 }
+// What each button/automation does, in one or two plain sentences (shown behind the item's ? button).
+const DESC={
+ 'reg-link-regenerate':'학부모 리포트 링크를 새로 만듭니다. 이전 링크는 더 이상 열리지 않습니다.',
+ 'reg-link-disable':'"링크 비활성화"를 체크하면 학부모 리포트 링크를 막습니다.',
+ 'reg-link-enable':'"링크 비활성화" 체크를 풀면 막았던 학부모 리포트 링크를 다시 엽니다.',
+ 'reg-report-sync':'이 학생의 학부모 리포트(출석·학습기록·교재·일정)를 최신 내용으로 다시 만듭니다. 학부모에게 보내지는 않습니다.',
+ 'reg-textbook':'이 학생의 진도교재를 만듭니다. 그룹 교재는 클래스와 함께 쓰고, 개별교재는 이 등록에만 붙습니다.',
+ 'reg-enroll':'시간표가 비어 있으면 클래스의 시간표를 연결하고 등록일이 비어 있으면 오늘로 채웁니다. 종료된 등록은 다시 수강 중으로 돌립니다.',
+ 'reg-session':'연결된 시간표의 수업에 이 학생을 넣고 출석을 만듭니다. 다시 눌러도 안전합니다.',
+ 'reg-end':'종료일 이후의 출석을 지우고 수업·시간표 연결을 풀고, 쓰지 않는 교재를 정리합니다. 되돌리는 기능은 없습니다.',
+ 'class-tuition':'이 클래스 수강생의 월 수강료 항목을 만듭니다.',
+ 'class-textbook-fee':'이 클래스 학생들의 교재비 건마다 진행 중인 진도교재를 담아 교재배부를 만듭니다.',
+ 'class-textbook':'이 클래스의 수강 중인 학생마다 진도교재를 차례로 만들거나 맞춥니다.',
+ 'class-report-sync':'이 클래스 학생들의 학부모 리포트를 최신 내용으로 다시 만듭니다. 학부모에게 보내지는 않습니다.',
+ 'class-report':'이 클래스 학생들의 주간·월간 보고서를 만듭니다.',
+ 'timetable-classes':'이 시간표의 다음 수업과 출석을 만듭니다.',
+ 'menu-bulk-classes':'모든 시간표의 다음 주 수업과 출석을 한 번에 만듭니다.',
+ 'session-record':'이 수업에 출석한 학생들의 학습기록을 만듭니다.',
+ 'session-attendance':'수업의 학생 명단과 출석을 맞춥니다(빠진 출석을 만들고 잘못 붙은 출석을 정리).',
+ 'session-reports':'이 수업에 출석한 학생들에게 일일 보고서를 한 명씩 차례로 보냅니다.',
+ 'attendance-record':'이 출석의 학습기록을 만듭니다.',
+ 'attendance-report':'이 학생의 일일 보고서를 학부모에게 보냅니다. 보내기 전에 리포트를 최신 내용으로 맞춥니다.',
+ 'record-assignment':'이 학습기록의 학습활동(과제)을 만듭니다.',
+ 'report-send':'주간·월간 보고서를 학부모에게 알림톡으로 보냅니다.',
+ 'outbox-send':'발송함에서 고른 대상에게 보고서를 차례로 보냅니다.',
+ 'tuition-notice':'수강료 안내를 학부모에게 알림톡으로 보냅니다.',
+ 'cart-notice':'미납 교재비 안내문을 학부모에게 알림톡으로 보냅니다.',
+ 'cart-progress-book':'이 학생의 진행 중인 진도교재를 모아 교재배부를 한 번에 만듭니다.',
+ 'student-inquiry-auto':'상담 신청 폼으로 학생이 추가되고 개인정보 동의가 체크돼 있으면 접수안내를 자동으로 보냅니다.',
+ 'student-inquiry':'같은 접수안내를 관리자가 직접 보냅니다.',
+ 'exam-scope':'이 시험 범위에 해당하는 학생들을 응시학생으로 연결합니다.',
+ 'school-calendar':'이 학교의 올해 학사일정을 나이스(NEIS)에서 가져와 일정에 넣습니다.',
+ 'dashboard-link':'대시보드 날짜가 바뀌면 그날의 수업·출석·일정을 다시 연결합니다.',
+ 'dashboard-link-new':'새 대시보드가 만들어지면 그날의 수업·출석·일정을 연결합니다.',
+ 'book-report-sync':'교재 정보(북커버 등)가 바뀌면 그 교재를 쓰는 학생들의 학부모 리포트를 다시 만듭니다.',
+ 'book-report-sync-new':'새 교재가 추가되면 관련 학생들의 학부모 리포트를 다시 만듭니다.',
+ 'schedule-report-sync':'일정이 바뀌면 관련 학생(학생·클래스·학교·학년)의 학부모 리포트를 다시 만듭니다.',
+ 'schedule-report-sync-new':'새 일정이 추가되면 관련 학생의 학부모 리포트를 다시 만듭니다.',
+};
+// 삭제 is the same in every DB: the page and its child records are removed; shared records are only unlinked.
+const itemDesc=id=>DESC[id]||(id.endsWith('-delete')?'이 페이지와 하위 기록을 삭제합니다. 여러 곳에서 쓰는 공용 기록은 연결만 풉니다. 하위 페이지는 이어달리기로 차례로 처리됩니다.':'');
 // Notion-like checkbox glyphs for trigger chips (checked / unchecked).
 const BOX_ON='<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="1.5" width="13" height="13" rx="3" fill="currentColor"/><path d="M4.5 8.2l2.3 2.3 4.7-5" fill="none" class="tick" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const BOX_OFF='<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>';
@@ -171,8 +212,6 @@ function renderChecklist(){
   const count=items.filter(([id])=>webhook.checks[id]).length;done+=count;total+=items.length;
   const badge=el('span','dbcount'+(count===items.length?' complete':''),`${count} / ${items.length}`);
   head.append(title,badge);
-  // Help for the card sits at the top right of the title row, apart from the links.
-  if(help){const q=el('button','help-btn corner','?');q.type='button';q.title='찾는 위치 보기';q.setAttribute('aria-label',db.replace('(학원)','')+' 버튼 찾는 위치 보기');q.onclick=()=>showHelp(db,help);head.append(q);}
   const l=links&&links[dbKey(db)];const nav=el('div','dblinks');
   // The 웹훅등록 view is the link people use most, so it is the filled chip; the DB link is the outlined one.
   const hasView=l&&safeView(l.view);
@@ -190,6 +229,10 @@ function renderChecklist(){
    // The kind badge sits right after the name so the type is read with it and the item needs one row less.
    const badge2=el('span','kind '+(kind===AUTO?'auto':'button'));badge2.innerHTML=ICONS[kind];badge2.append(kind);
    const nameEl=el('span','name',name);nameEl.append(badge2);label.append(box2,nameEl);
+   // Every item shows the same first line; what it does, its trigger and any note sit behind the item's ? button.
+   const q=el('button','help-btn item-help','?');q.type='button';q.title='설명 보기';q.setAttribute('aria-label',name+' 설명 보기');
+   q.onclick=e=>{e.preventDefault();e.stopPropagation();showHelp(name+' · '+kind,{nodes:[el('p','help-desc',itemDesc(id)),...describe(extra)],text:help&&help.text,image:help&&help.image,alt:help&&help.alt});};
+   label.append(q);
    const meta=el('div','meta');
    // No call yet is the normal state, so only an actual call record is shown.
    meta.append(el('code','',routeName+(extra.path||'')));if(msg)meta.append(el('span','hint '+tone,msg));
@@ -197,8 +240,7 @@ function renderChecklist(){
    const copies=el('div','copies');const url=base+'/functions/v1/'+routeName+(extra.path||'');
    copies.append(copyButton('웹훅','웹훅 URL 복사: '+url,b=>copyText(url,'웹훅 URL을 복사했습니다',b).catch(e=>error(e.message))));
    if(extra.header){const [hn,hv]=extra.header;copies.append(copyButton('헤더',`추가 헤더 값 복사: ${hn}: ${hv}`,b=>copyText(hv,`추가 헤더 값(${hn}: ${hv})을 복사했습니다`,b).catch(e=>error(e.message))));}
-   const about=describe(extra);
-   li.append(label,...about,meta,copies);list.append(li);
+   li.append(label,meta,copies);list.append(li);
   }
   card.append(list);box.append(card);
  }
@@ -207,9 +249,11 @@ function renderChecklist(){
  $('progress-bar').style.width=total?`${Math.round(done*100/total)}%`:'0%';
  text('links-updated',linksUpdated?`링크 기준: ${date(linksUpdated)}`:'');
 }
-function showHelp(db,help){
- text('help-title',db.replace('(학원)','')+' · 찾는 위치');text('help-text',help.text);
- const img=$('help-image');img.src=help.image;img.alt=help.alt;$('help-dialog').showModal();
+// One help dialog for both a card's "찾는 위치" (text + image) and an item's trigger / note (extra nodes).
+function showHelp(title,help){
+ text('help-title',title);text('help-text',help.text||'');
+ const img=$('help-image');img.hidden=!help.image;if(help.image){img.src=help.image;img.alt=help.alt||'';}else img.removeAttribute('src');
+ $('help-extra').replaceChildren(...(help.nodes||[]));$('help-dialog').showModal();
 }
 function renderKeyBar(){
  const icon=$('key-bar-copy').querySelector('.copy-icon');if(!icon.innerHTML)icon.innerHTML=COPY_ICON;
