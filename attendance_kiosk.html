@@ -50,8 +50,6 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
 .candidate-btn .sub{display:block;font-size:var(--text-caption);font-weight:400;color:var(--text-muted);margin-top:2px}
 /* 학원 이름: 마지막 버튼(등원·하원, 취소) 아래에 일정한 간격으로 작게. 카드 바닥에 붙이지 않는다.
    값은 서버가 Notion 최상위 페이지 제목에서 가져온다 */
-/* 출석 동기화 시각(오늘 출석 준비): 학원 이름 아래 더 작고 연하게(학생 눈에 띄지 않게) */
-.prepared-at{margin:var(--space-1) 0 0;text-align:center;font-size:var(--text-caption);color:var(--text-subtle);opacity:.6}
 .academy-name{margin:var(--space-5) 0 0;text-align:center;font-size:var(--text-caption);color:var(--text-subtle);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pick-cancel{width:100%;height:var(--control-h);margin-top:var(--space-1);font-size:var(--text-body)}
 /* 한 글자 지우기: 숫자와 같은 굵기의 선형 아이콘 */
@@ -66,7 +64,8 @@ dialog.settings-dialog{width:calc(var(--device-w) * .9);max-width:calc(100vw - v
 .settings-section .secondary,.settings-logout,.settings-auth .primary{width:100%;height:var(--control-h)}
 .settings-auth{display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-3) 0;border-top:1px solid var(--divider)}
 .settings-auth label{font-size:var(--text-small);font-weight:700}
-.settings-msg{min-height:var(--space-4);margin:var(--space-2) 0;font-size:var(--text-small);color:var(--text-muted)}
+.settings-msg{margin:var(--space-2) 0;font-size:var(--text-small);color:var(--text-muted)}
+.settings-msg:empty{display:none}
 .settings-msg.error{color:var(--danger-ink)}/* 로그인 */
 .login-card{width:var(--device-w);text-align:center}
 .login-card h1{font-size:var(--text-lead);line-height:1.4;letter-spacing:0;margin:0 0 var(--space-1);display:flex;align-items:center;justify-content:center;gap:var(--space-2)}
@@ -125,7 +124,6 @@ dialog.settings-dialog{width:calc(var(--device-w) * .9);max-width:calc(100vw - v
       <button class="secondary pick-cancel" id="cancelCandidatesBtn">취소</button>
     </div>
     <p class="academy-name" id="academyName" hidden></p>
-    <p class="prepared-at" id="preparedAt" hidden></p>
   </div>
   <!-- 키오스크 설정: 체크 방식·출석 동기화는 관리자 비밀번호 확인 후 바꾼다(학생이 바꾸지 못하게). 로그아웃은 확인창만. -->
   <dialog class="card settings-dialog" id="settings" aria-labelledby="settingsTitle">
@@ -209,22 +207,20 @@ dialog.settings-dialog{width:calc(var(--device-w) * .9);max-width:calc(100vw - v
     el.textContent = typeof name === "string" ? name.slice(0, 60) : "";
     el.hidden = !el.textContent;
   }
-  // 출석 동기화(오늘 출석 준비, v2.5.37): 새벽 준비 시각을 "출석 동기화 HH:mm"으로 연하게 보여 준다. 준비가 없어서 서버가 지금 준비 중이면
+  // 출석 동기화(오늘 출석 준비, v2.5.37): 마지막 준비 시각을 설정 창에 "마지막 동기화 HH:mm"으로 보여 준다(v2.5.40부터 학생 화면에는 표시하지 않음). 준비가 없어서 서버가 지금 준비 중이면
   // 30초 뒤 목록을 한 번 다시 받아 시각을 갱신한다.
   let preparedRetry = null;
   let preparedRetried = false;
   let preparedInfo = null;
   function preparedText(info) {
-    if (info && info.today && info.at) return "출석 동기화 " + new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(info.at));
-    if (info && info.preparing) return "출석 동기화 중";
+    if (info && info.today && info.at) return "마지막 동기화 " + new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(info.at));
+    if (info && info.preparing) return "동기화 중…";
     return "";
   }
   function showPrepared(info) {
-    const el = document.getElementById("preparedAt");
+    // 동기화 시각은 학생 화면에 보이지 않고 설정 창에서만 보여 준다.
     preparedInfo = info || null;
     clearTimeout(preparedRetry);
-    el.textContent = preparedText(info);
-    el.hidden = !el.textContent;
     if (info && info.today) preparedRetried = false;
     // 서버가 지금 준비 중이면 30초 뒤 한 번만 다시 확인한다(그 뒤로는 평소 5분 목록 갱신 때 확인).
     else if (info && info.preparing && !preparedRetried) {
