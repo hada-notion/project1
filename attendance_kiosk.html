@@ -46,8 +46,9 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
 .candidate-btn{width:100%;padding:var(--space-3) var(--space-4);border:1px solid var(--brand-border);border-radius:var(--radius-md);background:var(--brand-tint);color:var(--text-ink);font-size:var(--text-body);font-weight:700;text-align:left}
 .candidate-btn:active{background:var(--brand-soft)}
 .candidate-btn .sub{display:block;font-size:var(--text-caption);font-weight:400;color:var(--text-muted);margin-top:2px}
-/* 학원 이름: 카드 아래에 작게. 값은 서버가 Notion 최상위 페이지 제목에서 가져온다 */
-.academy-name{position:absolute;left:var(--space-5);right:var(--space-5);bottom:var(--space-2);margin:0;text-align:center;font-size:var(--text-caption);color:var(--text-subtle);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 학원 이름: 마지막 버튼(등원·하원, 취소) 아래에 일정한 간격으로 작게. 카드 바닥에 붙이지 않는다.
+   값은 서버가 Notion 최상위 페이지 제목에서 가져온다 */
+.academy-name{margin:var(--space-5) 0 0;text-align:center;font-size:var(--text-caption);color:var(--text-subtle);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pick-cancel{width:100%;height:var(--control-h);margin-top:var(--space-1);font-size:var(--text-body)}
 /* 한 글자 지우기: 숫자와 같은 굵기의 선형 아이콘 */
 .key.back{color:var(--text-ink)}
