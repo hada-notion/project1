@@ -1,12 +1,11 @@
 // _shared/dashboardLinkTarget.ts
 //
 // 수업·출석·일정과 같은 날짜의 대시보드 페이지를 찾아 연결하는 공용 로직이다.
-// [현재 상태, 2026-09-25] 대시보드 생성 자동화와 generate-classes/kiosk-checkin의 직접 적재,
-// nightly-dashboard-link-audit가 모두 제거되어 enqueueDashboardLink를 포함한 운영 호출자는 없다.
-// 수업 생성 중 Notion API 호출량을 줄이기 위해 제거 상태를 유지한다.
-//
-// 아래 구현과 큐 target은 향후 별도 pull/수동 방식 재설계를 검토하기 전까지 휴면 코드로 남긴다.
-// 실제 삭제는 실행 구조 변경이므로 별도 승인 후 진행한다.
+// [현재 상태, 2026-10-13 원본 Notion 확인] 대시보드(학원) DB의 웹훅 자동화 2개("날짜 속성 편집",
+// "페이지 추가")가 sync-dashboard-link를 거쳐 processDashboardLinkQueueItem을 직접 호출한다.
+// 수업·출석·일정 쪽에서 대시보드로 거는 경로(generate-classes/kiosk-checkin의 직접 적재,
+// nightly-dashboard-link-audit, 그 DB들의 자동화)는 Notion API 호출량 때문에 제거했다.
+// enqueueDashboardLink와 큐 target은 그 제거된 경로용이라 지금은 호출자가 없다(삭제는 별도 결정).
 
 import { getPage, updatePageProperties, createPage, queryAllPages, dateStart } from "./notionClient.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "./syncQueue.ts"
