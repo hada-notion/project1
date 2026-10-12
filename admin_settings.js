@@ -303,7 +303,7 @@ async function profile(){
 }
 async function initialize(){
  try{
-  if(!base){const res=await fetch('admin_config.json',{cache:'no-store'});if(!res.ok)throw new Error('학원별 공개 연결 설정 파일이 필요합니다.');const config=await res.json();const url=new URL(config.supabaseUrl);if(url.protocol!=='https:'||!url.hostname.endsWith('.supabase.co')||url.pathname!=='/'||url.search||url.hash||url.username||url.password)throw new Error('Supabase 연결 주소 설정을 확인해 주세요.');base=url.origin;}
+  if(!base)base=HadaAdminAuth.config().url;
   await request('status');
   notice('관리자 인증 서버에 연결되었습니다.');
   // Another page's login in this tab opens the dashboard directly. Only a rejected session is forgotten (that also
