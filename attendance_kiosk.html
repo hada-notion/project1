@@ -8,7 +8,7 @@
 <style>
 /* 출결 키오스크 전용. 값은 assets/hada-ui.css 토큰만 쓴다(docs/DESIGN.md).
    html.device 모드라 카드 폭에 맞춰 모든 크기가 함께 커진다. */
-.kiosk{position:relative;width:var(--device-w);aspect-ratio:.6;display:flex;flex-direction:column;justify-content:center;overflow:hidden;background:var(--surface);border:0;border-radius:var(--radius-lg);box-shadow:var(--shadow-card);padding:var(--space-8) var(--space-5)}
+.kiosk{position:relative;width:var(--device-w);min-height:calc(var(--device-w) * 1.6667);display:flex;flex-direction:column;justify-content:center;overflow:hidden;background:var(--surface);border:0;border-radius:var(--radius-lg);box-shadow:var(--shadow-card);padding:var(--space-8) var(--space-5)}
 .kiosk-head{text-align:center;margin-bottom:var(--space-5)}
 .kiosk-icon{width:var(--icon-lg);height:var(--icon-lg);margin:0 auto var(--space-1);color:var(--brand-deep)}
 .kiosk-head h1{font-size:var(--text-title);line-height:1.3;letter-spacing:0;margin:var(--space-1) 0 var(--space-1)}
@@ -16,6 +16,8 @@
 /* 1부 5장: 44×44 클릭 영역 안 20×20 선형 아이콘, 배경·그림자 없음 */
 .icon-btn{position:absolute;top:var(--space-3);right:var(--space-3);width:var(--hit-area);height:var(--hit-area);padding:var(--space-3);border:0;background:none;color:var(--text-muted);border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center}
 .icon-btn:active{background:var(--brand-soft)}
+/* 화면이 충분히 높으면 실제 44px 이상. 짧은 가로 화면은 카드 맞춤이 우선(2부 2-3) */
+@media(min-height:600px){.icon-btn{min-width:var(--hit-min);min-height:var(--hit-min)}}
 .display{background:var(--brand-tint);border:1px solid var(--brand-border);border-radius:var(--radius-md);height:var(--control-lg);display:flex;align-items:center;justify-content:center;font-size:var(--text-title);font-weight:600;letter-spacing:1px;margin-bottom:var(--space-4)}
 .display.placeholder{color:var(--text-subtle);font-weight:400;font-size:var(--text-body);letter-spacing:0}
 .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-3);margin-bottom:var(--space-4)}
@@ -28,12 +30,12 @@
 dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - var(--space-8));padding:var(--space-6) var(--space-5);text-align:center}
 .result-icon{width:calc(var(--icon-lg) * 1.5);height:calc(var(--icon-lg) * 1.5);margin:0 auto var(--space-3);padding:var(--space-2);border-radius:var(--radius-pill)}
 .result-text{font-size:var(--text-body);font-weight:600;line-height:1.6;margin:0 0 var(--space-5)}
-.result-dialog.success .result-icon{background:var(--success-soft);color:var(--success-ink)}
-.result-dialog.info .result-icon{background:var(--info-soft);color:var(--info-ink)}
-.result-dialog.error .result-icon{background:var(--danger-soft);color:var(--danger-ink)}
-.result-dialog.success .result-text{color:var(--success-ink)}
-.result-dialog.info .result-text{color:var(--info-ink)}
-.result-dialog.error .result-text{color:var(--danger-ink)}
+.result-dialog.result-success .result-icon{background:var(--success-soft);color:var(--success-ink)}
+.result-dialog.result-info .result-icon{background:var(--info-soft);color:var(--info-ink)}
+.result-dialog.result-error .result-icon{background:var(--danger-soft);color:var(--danger-ink)}
+.result-dialog.result-success .result-text{color:var(--success-ink)}
+.result-dialog.result-info .result-text{color:var(--info-ink)}
+.result-dialog.result-error .result-text{color:var(--danger-ink)}
 .pick{text-align:center}
 .pick-icon{width:var(--icon-lg);height:var(--icon-lg);margin:0 auto var(--space-2);color:var(--brand-deep)}
 .pick h2{font-size:var(--text-body);margin:var(--space-1) 0 var(--space-2)}
@@ -44,14 +46,20 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
 .candidate-btn .sub{display:block;font-size:var(--text-caption);font-weight:400;color:var(--text-muted);margin-top:2px}
 /* 학원 이름: 카드 아래에 작게. 값은 서버가 Notion 최상위 페이지 제목에서 가져온다 */
 .academy-name{position:absolute;left:var(--space-5);right:var(--space-5);bottom:var(--space-2);margin:0;text-align:center;font-size:var(--text-caption);color:var(--text-subtle);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.text-btn{width:100%;height:var(--control-h);margin-top:var(--space-1);border:0;background:none;color:var(--text-muted);font-size:var(--text-small)}
+.pick-cancel{width:100%;height:var(--control-h);margin-top:var(--space-1);font-size:var(--text-body)}
+/* 한 글자 지우기: 숫자와 같은 굵기의 선형 아이콘 */
+.key.back{color:var(--text-ink)}
+.key.back svg{width:var(--icon-md);height:var(--icon-md)}
 /* 로그인 */
 .login-card{width:var(--device-w);text-align:center}
 .login-card h1{font-size:var(--text-lead);line-height:1.4;letter-spacing:0;margin:0 0 var(--space-1);display:flex;align-items:center;justify-content:center;gap:var(--space-2)}
 .title-icon{width:var(--text-lead);height:var(--text-lead);display:inline-flex}
 .login-card p{font-size:var(--text-small);color:var(--text-muted);margin:0 0 var(--space-5)}
 .login-card input{margin-bottom:var(--space-3)}
-.login-error{color:var(--danger-ink);font-size:var(--text-small);margin-top:var(--space-3);min-height:var(--space-5)}
+/* 입력칸 포커스: 공용 파란 바깥선과 입력칸 테두리가 두 줄로 겹치지 않게 테두리 한 줄(브랜드 색)로 */
+.login-card input:focus-visible{outline:2px solid var(--brand-deep);outline-offset:-1px;border-color:var(--brand-deep)}
+.login-error{color:var(--danger-ink);font-size:var(--text-small);margin-top:var(--space-2)}
+.login-error:empty{display:none}
 </style>
 </head>
 <body>
@@ -64,7 +72,7 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
   </div>
   <div class="kiosk" id="app-screen" hidden>
     <button class="icon-btn" id="logoutBtn" aria-label="로그아웃" title="로그아웃"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></button>
-    <div class="kiosk-head">
+    <div class="kiosk-head" id="kioskHead">
       <div class="kiosk-icon"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg></div>
       <h1>출결 체크</h1>
       <p>보호자 또는 학생 전화번호를 입력해주세요</p>
@@ -82,9 +90,9 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
         <button class="key" data-val="7">7</button>
         <button class="key" data-val="8">8</button>
         <button class="key" data-val="9">9</button>
-        <button class="key func" data-val="clear">전체지우기</button>
+        <button class="key func" data-val="clear">전체 지우기</button>
         <button class="key" data-val="0">0</button>
-        <button class="key func" data-val="back" aria-label="한 글자 지우기">⌫</button>
+        <button class="key func back" data-val="back" aria-label="한 글자 지우기"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"></path><line x1="18" y1="9" x2="12" y2="15"></line><line x1="12" y1="9" x2="18" y2="15"></line></svg></button>
       </div>
       <div class="confirm-row">
         <button class="primary" id="checkinBtn">등원</button>
@@ -97,7 +105,7 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
       <h2>학생을 선택해주세요</h2>
       <p>같은 번호로 등록된 학생이 여러 명이에요.<br />해당하는 학생을 선택해주세요.</p>
       <div class="candidates-list" id="candidatesList"></div>
-      <button class="text-btn" id="cancelCandidatesBtn">취소</button>
+      <button class="secondary pick-cancel" id="cancelCandidatesBtn">취소</button>
     </div>
     <p class="academy-name" id="academyName" hidden></p>
   </div>
@@ -169,10 +177,12 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
   const candidatesList = document.getElementById("candidatesList");
   const logoutBtn = document.getElementById("logoutBtn");
   const cancelCandidatesBtn = document.getElementById("cancelCandidatesBtn");
+  const kioskHead = document.getElementById("kioskHead");
 
   function showMain() {
     candidatesView.hidden = true;
     mainView.hidden = false;
+    kioskHead.hidden = false;
   }
 
   function showCandidates(candidates, type) {
@@ -191,6 +201,8 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
     });
     mainView.hidden = true;
     candidatesView.hidden = false;
+    // The pick view has its own icon and title, so the phone-number header is hidden while choosing.
+    kioskHead.hidden = true;
   }
 
   cancelCandidatesBtn.addEventListener("click", () => {
@@ -231,7 +243,8 @@ dialog.result-dialog{width:calc(var(--device-w) * .85);max-width:calc(100vw - va
 
   function showResult(type, msg) {
     clearTimeout(resultTimer);
-    resultEl.className = "card result-dialog " + type;
+    // "result-" prefix: the shared .error class (form error text) would add its own margins to the dialog.
+    resultEl.className = "card result-dialog result-" + type;
     document.getElementById("resultIcon").innerHTML = '<svg class="line" viewBox="0 0 24 24" aria-hidden="true">' + RESULT_ICONS[type] + '</svg>';
     document.getElementById("resultText").textContent = msg;
     if (!resultEl.open) resultEl.showModal();

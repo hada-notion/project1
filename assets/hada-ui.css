@@ -89,7 +89,7 @@ input[aria-invalid=true]{border-color:var(--danger-ink)}
 .kind.auto{background:var(--warning-soft);color:var(--warning-ink)}
 
 /* 기기 화면 모드: <html class="device">. rem 토큰 전체가 카드 폭에 맞춰 커진다 */
-html.device{font-size:var(--device-font)}
+html.device{font-size:var(--device-font);overflow-y:auto;scrollbar-gutter:auto}/* 한 화면 카드: 스크롤바 자리를 비워 두지 않는다(모달 배경이 끝까지 덮이게) */
 html.device body{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:var(--space-6)}
 /* 선 아이콘(stroke) */
 svg.line{width:100%;height:100%;display:block;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
