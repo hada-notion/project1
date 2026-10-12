@@ -9,86 +9,144 @@ function text(id,value){$(id).textContent=value;}
 function notice(message){text('connection-status',message);}
 function friendly(e){return e instanceof TypeError||e.name==='TimeoutError'||e.name==='AbortError'?'인증 서버에 연결하지 못했습니다. 연결 설정과 네트워크를 확인해 주세요.':(e.message||'처리하지 못했습니다.');}
 function error(message){text('form-error',message);$('form-error').hidden=!message;}
-function panel(id,title,description){forms.forEach(x=>$(x).hidden=x!==id);text('panel-title',title);text('panel-description',description);error('');$('retry').hidden=true;}
+function panel(id,title,description){forms.forEach(x=>$(x).hidden=x!==id);text('panel-title',title);text('panel-description',description);error('');$('retry').hidden=true;$('main-card').classList.toggle('wide-card',id==='webhook-progress');}
 function clearPasswords(){document.querySelectorAll('input[type=password]').forEach(x=>x.value='');$('new-webhook-key').value='';}
 function forgetSession(){session='';mustChange=false;try{sessionStorage.removeItem(sessionKey);}catch{}clearPasswords();}
 function loggedOutFacts(){text('owner-status','로그인 후 확인');text('last-change','로그인 후 표시');text('next-change','로그인 후 표시');text('webhook-fact','평소 유지 · 사고 시 별도 교체');}
-async function request(action,values={}){
- const res=await fetch(base+'/functions/v1/admin-security',{method:'POST',headers:{'Content-Type':'application/json',...(session?{'x-admin-key':session}:{})},body:JSON.stringify({action,...values}),cache:'no-store',signal:AbortSignal.timeout(20000)});
+async function request(action,values={},timeout=20000){
+ const res=await fetch(base+'/functions/v1/admin-security',{method:'POST',headers:{'Content-Type':'application/json',...(session?{'x-admin-key':session}:{})},body:JSON.stringify({action,...values}),cache:'no-store',signal:AbortSignal.timeout(timeout)});
  const data=await res.json().catch(()=>({}));if(!res.ok){const e=new Error(data.error||'인증 서버 응답을 확인하지 못했습니다.');e.status=res.status;e.needsConfirm=!!data.needs_confirm;throw e;}return data;
 }
 // Webhook key rotation. The new key exists only in the readonly field until the owner leaves that view.
-let webhook={rotating:false,usage:[]},unseen=0;
-// Every webhook route (SECURITY_WEBHOOK_ROUTES, checked by adminSecurity_test.ts) with the Notion buttons
-// that call it (docs/버튼-웹훅-매핑.md): [Notion DBs, buttons, optional]. DB names are matched to this
-// academy's own databases for links. Optional routes may have no button in a given academy.
-const WEBHOOKS={
- 'toggle-report-link':[['등록(학원)'],'링크 재발급, 링크 비활성화/활성화 자동화'],
- 'sync-report-cache':[['등록(학원)','정규교재(학원)','일정(학원)'],'학생 페이지 동기화 / 편집 자동화'],
- 'sync-registration-textbook':[['등록(학원)','클래스(학원)'],'교재 생성'],
- 'sync-registration-end':[['등록(학원)'],'종료 처리'],
- 'sync-registration-enroll':[['등록(학원)'],'시간표 설정'],
- 'sync-registration-class-session':[['등록(학원)'],'수업 생성'],
- 'sync-registration-timetable':[['등록(학원)'],'클래스 연결 자동화'],
- 'sync-textbook-distribution':[['클래스(학원)','교재비(카트)(학원)'],'교재비 생성 / 진도교재 담기'],
- 'generate-tuition':[['클래스(학원)'],'월 수강료 생성'],
- 'sync-class-report-cache':[['클래스(학원)'],'학생 페이지 동기화'],
- 'generate-report':[['클래스(학원)'],'보고서 생성'],
- 'send-textbook-notice':[['교재비(카트)(학원)'],'안내문 전송'],
- 'create-learning-record':[['출석(학원)','수업(학원)'],'학습기록 생성'],
- 'send-daily-report':[['출석(학원)'],'보고서 전송'],
- 'cascade-delete':[['교재비(카트)(학원)','출석(학원)','수업(학원)','학습기록(학원)','학습활동(학원)','교재배부(학원)','교재결제(학원)'],'삭제'],
- 'generate-classes':[['시간표(학원)','메뉴(학원)'],'수업추가 / 다음주 수업 일괄 생성'],
- 'sync-dashboard-link':[['대시보드(학원)'],'생성/편집 자동화'],
- 'fix-attendance':[['수업(학원)'],'출석 조정'],
- 'send-class-daily-reports':[['수업(학원)'],'보고서 일괄 전송'],
- 'send-tuition-notice':[['수강료(학원)'],'수강료 안내 발송'],
- 'create-assignment':[['학습기록(학원)'],'학습활동 생성'],
- 'send-inquiry-receipt':[['학생(학원)'],'상담 폼 자동화, 접수안내 발송'],
- 'sync-exam-scope':[['시험정보(학원)'],'응시학생 등록'],
- 'send-report':[['보고서(학원)'],'보고서 전송'],
- 'send-selected-notifications':[['알림톡 발송함(학원)'],'일괄 전송'],
- 'sync-school-calendar':[['학교(학원)'],'학사일정 가져오기'],
- 'mark-report-source-dirty':[[],'보고서 영향 속성 편집 자동화 (웹훅 방식을 쓰는 운영만)',true],
- 'sync-attendance':[[],'GitHub Actions 출석 수동 동기화 (GitHub Secret ADMIN_SECRET)',true],
- 'sync-student-report':[[],'학생 리포트 동기화 웹훅 (연결한 운영만)',true],
-};
-// Notion DB links (normalized title -> URL), fetched once per page view; missing names stay plain text.
-let dbLinks=null;
-async function loadLinks(){if(dbLinks)return;try{dbLinks=(await request('webhook-links')).links||{};}catch{dbLinks={};}}
-function dbLink(name){
- const a=document.createElement('a'),url=dbLinks&&dbLinks[name.replace(/\s+/g,'')];const label=name.replace('(학원)','');
- if(!url||!/^https:\/\/www\.notion\.so\/[0-9a-f]{32}$/.test(url)){const s=document.createElement('span');s.textContent=label;return s;}
- a.href=url;a.target='_blank';a.rel='noopener noreferrer';a.textContent=label+' ↗';a.title=name+' DB 열기';return a;
+let webhook={rotating:false,usage:[],checks:{}},unchecked=0;
+// Every Notion button/automation that sends the webhook key, grouped by database (docs/버튼-웹훅-매핑.md).
+// Each item: [id, name, kind, route]. adminSecurity_test.ts checks that the routes here are exactly
+// SECURITY_WEBHOOK_ROUTES, so a new webhook function cannot be left out of the checklist.
+const BUTTON='버튼',AUTO='자동화';
+const CHECKLIST=[
+ ['등록(학원)',[
+  ['reg-link-regenerate','링크 재발급',BUTTON,route('toggle-report-link')],
+  ['reg-link-toggle','링크 비활성화 / 활성화 (체크박스 자동화 2개)',AUTO,route('toggle-report-link')],
+  ['reg-report-sync','학생 페이지 동기화',BUTTON,route('sync-report-cache')],
+  ['reg-textbook','교재 생성',BUTTON,route('sync-registration-textbook')],
+  ['reg-enroll','시간표 설정',BUTTON,route('sync-registration-enroll')],
+  ['reg-session','수업 생성',BUTTON,route('sync-registration-class-session')],
+  ['reg-end','종료 처리',BUTTON,route('sync-registration-end')],
+  ['reg-timetable','클래스 연결 (속성 편집 자동화)',AUTO,route('sync-registration-timetable')]]],
+ ['클래스(학원)',[
+  ['class-tuition','월 수강료 생성',BUTTON,route('generate-tuition')],
+  ['class-textbook-fee','교재비 생성',BUTTON,route('sync-textbook-distribution')],
+  ['class-textbook','교재 생성',BUTTON,route('sync-registration-textbook')],
+  ['class-report-sync','학생 페이지 동기화',BUTTON,route('sync-class-report-cache')],
+  ['class-report','보고서 생성',BUTTON,route('generate-report')]]],
+ ['시간표(학원)',[['timetable-classes','수업추가',BUTTON,route('generate-classes')]]],
+ ['메뉴(학원)',[['menu-bulk-classes','다음주 수업 일괄 생성',BUTTON,route('generate-classes')]]],
+ ['수업(학원)',[
+  ['session-record','학습기록 생성',BUTTON,route('create-learning-record')],
+  ['session-attendance','출석 조정',BUTTON,route('fix-attendance')],
+  ['session-reports','보고서 일괄 전송',BUTTON,route('send-class-daily-reports')],
+  ['session-delete','삭제',BUTTON,route('cascade-delete')]]],
+ ['출석(학원)',[
+  ['attendance-record','학습기록 생성',BUTTON,route('create-learning-record')],
+  ['attendance-report','보고서 전송',BUTTON,route('send-daily-report')],
+  ['attendance-delete','삭제',BUTTON,route('cascade-delete')]]],
+ ['학습기록(학원)',[
+  ['record-assignment','학습활동 생성',BUTTON,route('create-assignment')],
+  ['record-delete','삭제',BUTTON,route('cascade-delete')]]],
+ ['학습활동(학원)',[['assignment-delete','삭제',BUTTON,route('cascade-delete')]]],
+ ['보고서(학원)',[['report-send','보고서 전송',BUTTON,route('send-report')]]],
+ ['알림톡 발송함(학원)',[['outbox-send','일괄 전송',BUTTON,route('send-selected-notifications')]]],
+ ['수강료(학원)',[['tuition-notice','수강료 안내 발송',BUTTON,route('send-tuition-notice')]]],
+ ['교재비(카트)(학원)',[
+  ['cart-notice','안내문 전송',BUTTON,route('send-textbook-notice')],
+  ['cart-progress-book','진도교재 담기',BUTTON,route('sync-textbook-distribution')],
+  ['cart-delete','삭제',BUTTON,route('cascade-delete')]]],
+ ['교재배부(학원)',[['distribution-delete','삭제',BUTTON,route('cascade-delete')]]],
+ ['교재결제(학원)',[['payment-delete','삭제',BUTTON,route('cascade-delete')]]],
+ ['학생(학원)',[
+  ['student-inquiry-auto','페이지 추가 (상담 폼, 개인정보 동의 조건)',AUTO,route('send-inquiry-receipt')],
+  ['student-inquiry','접수안내 발송',BUTTON,route('send-inquiry-receipt')]]],
+ ['시험정보(학원)',[['exam-scope','응시학생 등록',BUTTON,route('sync-exam-scope')]]],
+ ['학교(학원)',[['school-calendar','학사일정 가져오기',BUTTON,route('sync-school-calendar')]]],
+ ['대시보드(학원)',[['dashboard-link','레코드 생성/편집 (하위 항목 연결)',AUTO,route('sync-dashboard-link')]]],
+ ['정규교재(학원)',[['book-report-sync','레코드 편집 (북커버 등)',AUTO,route('sync-report-cache')]]],
+ ['일정(학원)',[['schedule-report-sync','레코드 편집',AUTO,route('sync-report-cache')]]],
+ // Not every academy has these; they do not block finishing the rotation.
+ ['',[
+  ['opt-dirty','보고서 영향 속성 편집 자동화 (웹훅 방식을 쓰는 운영만)',AUTO,route('mark-report-source-dirty')],
+  ['opt-attendance','GitHub Actions 출석 수동 동기화 (GitHub Secret ADMIN_SECRET 변경)','GitHub',route('sync-attendance')],
+  ['opt-student-report','학생 리포트 동기화 웹훅 (연결한 운영만)',AUTO,route('sync-student-report')]]],
+];
+function route(name){return name;}
+// Notion database / "웹훅등록" view links (normalized DB title -> {db, view}), cached on the server.
+let links=null,linksUpdated=null;
+const dbKey=name=>name.replace(/\s+/g,'');
+async function loadLinks(refresh=false){
+ if(links&&!refresh)return;
+ if(refresh)notice('Notion에서 DB와 웹훅등록 보기를 찾고 있습니다. 1분 정도 걸릴 수 있어요.');
+ try{const data=await request('webhook-links',{names:CHECKLIST.filter(([db])=>db).map(([db])=>dbKey(db)),refresh},90000);links=data.links||{};linksUpdated=data.updated_at;}
+ catch(e){links=links||{};if(refresh)throw e;}
 }
+const safeDb=url=>/^https:\/\/www\.notion\.so\/[0-9a-f]{32}$/.test(url||'');
+const safeView=url=>/^https:\/\/www\.notion\.so\/[0-9a-f]{32}\?v=[0-9a-f]{32}$/.test(url||'');
+function el(tag,cls,content){const x=document.createElement(tag);if(cls)x.className=cls;if(content!==undefined)x.textContent=content;return x;}
+function link(url,label,title){const a=el('a','',label);a.href=url;a.target='_blank';a.rel='noopener noreferrer';a.title=title;return a;}
 async function loadWebhook(){
- webhook=await request('webhook-status');
+ webhook=await request('webhook-status');webhook.checks=webhook.checks||{};
  text('webhook-fact',webhook.rotating?`교체 진행 중 (${date(webhook.started_at)} 시작)`:webhook.changed_at?`마지막 교체 ${date(webhook.changed_at)}`:'평소 유지 · 사고 시 별도 교체');
- text('webhook-summary',webhook.rotating?'웹훅 키 교체가 진행 중입니다. 옛 키를 쓰는 버튼이 남았는지 확인한 뒤 교체를 완료해 주세요.':webhook.weak?'현재 웹훅 키가 짧습니다(32자 미만). 시간 여유가 있을 때 교체를 권장합니다.':'Notion 웹훅 키는 평소 그대로 둡니다. 유출이 의심될 때만 교체하세요.');
+ text('webhook-summary',webhook.rotating?'웹훅 키 교체가 진행 중입니다. 체크리스트를 마친 뒤 교체를 완료해 주세요.':webhook.weak?'현재 웹훅 키가 짧습니다(32자 미만). 추측하기 쉬우니 웹훅 키 교체를 권장합니다.':'Notion 웹훅 키는 평소 그대로 둡니다. 유출이 의심될 때만 교체하세요.');
+ $('webhook-summary').classList.toggle('warn',!webhook.rotating&&!!webhook.weak);
  text('open-webhook',webhook.rotating?'웹훅 키 교체 현황':'웹훅 키 교체');
+}
+// Automatic hint from the server's per-function call counts. Several buttons can share one function, so
+// this only supports the manual check: it cannot tell which button made the call.
+function hint(routeName,checkedAt){
+ const v={};for(const u of webhook.usage)if(u.route===routeName)v[u.key]=u;
+ if(v.old&&checkedAt&&v.old.last_at>checkedAt)return ['bad',`체크 후에도 이 함수로 옛 키 호출 (${shortDate(v.old.last_at)})`];
+ if(v.old)return ['bad',`이 함수로 옛 키 호출 있음 (${shortDate(v.old.last_at)} · ${v.old.calls}회)`];
+ if(v.new)return ['good',`새 키 호출 확인 (${shortDate(v.new.last_at)})`];
+ return ['none','교체 후 호출 기록 없음'];
+}
+function renderChecklist(){
+ const box=$('db-cards');box.replaceChildren();let done=0,total=0,oldRoutes=new Set();
+ for(const u of webhook.usage)if(u.key==='old')oldRoutes.add(u.route);
+ for(const [db,items] of CHECKLIST){
+  const optional=!db,card=el('section','dbcard'+(optional?' optional':''));
+  const head=el('div','dbhead');const title=el('h4','',optional?'선택 항목 (운영에 있을 때만)':db.replace('(학원)',''));
+  const count=items.filter(([id])=>webhook.checks[id]).length;if(!optional){done+=count;total+=items.length;}
+  const badge=el('span','dbcount'+(count===items.length?' complete':''),`${count} / ${items.length}`);
+  head.append(title,badge);
+  if(!optional){const l=links&&links[dbKey(db)];const nav=el('div','dblinks');
+   if(l&&safeView(l.view))nav.append(link(l.view,'웹훅등록 보기 열기 ↗',db+' DB의 웹훅등록 보기'));
+   if(l&&safeDb(l.db))nav.append(link(l.db,safeView(l&&l.view)?'DB ↗':'DB 열기 ↗ (웹훅등록 보기를 찾지 못함)',db+' DB'));
+   if(!nav.childNodes.length)nav.append(el('span','muted','Notion에서 이 DB를 찾지 못했습니다'));
+   head.append(nav);}
+  card.append(head);
+  const list=el('ul','items');
+  for(const [id,name,kind,routeName] of items){
+   const checkedAt=webhook.checks[id],[tone,msg]=hint(routeName,checkedAt);
+   const li=el('li','item'+(checkedAt?' done':'')+(tone==='bad'?' alert':''));
+   const label=el('label','check');const box2=document.createElement('input');box2.type='checkbox';box2.checked=!!checkedAt;box2.dataset.item=id;
+   box2.onchange=()=>task(async()=>{await request('webhook-check',{item:id,checked:box2.checked});await loadWebhook();renderChecklist();});
+   label.append(box2,el('span','name',name));
+   const meta=el('div','meta');meta.append(el('span','kind '+(kind===AUTO?'auto':kind===BUTTON?'button':'other'),kind),el('code','',routeName),el('span','hint '+tone,msg));
+   li.append(label,meta);list.append(li);
+  }
+  card.append(list);box.append(card);
+ }
+ unchecked=total-done;
+ text('usage-summary',`완료 ${done} / ${total}`+(oldRoutes.size?` · 옛 키 호출이 남은 함수 ${oldRoutes.size}개`:''));
+ $('progress-bar').style.width=total?`${Math.round(done*100/total)}%`:'0%';
+ text('links-updated',linksUpdated?`링크 기준: ${date(linksUpdated)}`:'');
 }
 async function showProgress(){
  await loadLinks();
  text('webhook-started',`${date(webhook.started_at)}부터 옛 키와 새 키가 모두 동작하고 있습니다.`);
- const rows=$('usage-rows');rows.replaceChildren();const byRoute=new Map();
- for(const u of webhook.usage){if(!byRoute.has(u.route))byRoute.set(u.route,{});byRoute.get(u.route)[u.key]=u;}
- // Full checklist: old key still in use first, then not yet seen, then confirmed on the new key; optional last.
- const state=route=>{const v=byRoute.get(route)||{};return v.old?0:v.new?2:1;};
- const routes=Object.keys(WEBHOOKS).sort((a,b)=>(WEBHOOKS[a][2]?1:0)-(WEBHOOKS[b][2]?1:0)||state(a)-state(b));
- const count=[0,0,0];
- for(const route of routes){const v=byRoute.get(route)||{},s=state(route),[dbs,buttons,optional]=WEBHOOKS[route];if(!optional)count[s]++;
-  const tr=document.createElement('tr');tr.className=['old','unseen','done'][s];
-  const status=document.createElement('td');status.textContent=['옛 키 사용 중','확인 필요','새 키 확인'][s]+(optional&&s===1?' (선택)':'');status.className='state';
-  const name=document.createElement('td');const code=document.createElement('code');code.textContent=route;
-  const where=document.createElement('div');where.className='dbs';dbs.forEach((db,i)=>{if(i)where.append(' · ');where.append(dbLink(db));});
-  const desc=document.createElement('div');desc.className='buttons';desc.textContent=buttons;name.append(code,...(dbs.length?[where]:[]),desc);
-  const last=document.createElement('td');last.textContent=v.old?`옛 키 ${shortDate(v.old.last_at)} · ${v.old.calls}회`:v.new?`새 키 ${shortDate(v.new.last_at)} · ${v.new.calls}회`:'—';
-  tr.append(status,name,last);rows.append(tr);}
- text('usage-summary',`옛 키 사용 중 ${count[0]} · 확인 필요 ${count[1]} · 새 키 확인 ${count[2]}`);unseen=count[1];
- panel('webhook-progress','웹훅 키 교체 진행 중','Notion 버튼·자동화를 새 키로 바꾸고, 옛 키 호출이 사라지면 완료합니다.');
+ renderChecklist();
+ panel('webhook-progress','웹훅 키 교체 진행 중','DB별로 버튼·자동화의 키를 새 키로 바꾸고 체크합니다. 모두 끝나면 교체를 완료합니다.');
 }
 async function openWebhook(){await loadWebhook();if(webhook.rotating){await showProgress();return;}clearPasswords();panel('webhook-form','웹훅 키 교체','유출이 의심될 때 Notion 버튼·자동화를 멈추지 않고 새 키로 옮깁니다.');$('webhook-password').focus();}
-async function task(fn){if(busy)return;busy=true;error('');const buttons=[...document.querySelectorAll('button')];buttons.forEach(x=>x.disabled=true);try{await fn();}catch(e){error(friendly(e));}finally{busy=false;buttons.forEach(x=>x.disabled=false);}}
+async function task(fn){if(busy)return;busy=true;error('');const buttons=[...document.querySelectorAll('button,input[type=checkbox]')];buttons.forEach(x=>x.disabled=true);try{await fn();}catch(e){error(friendly(e));}finally{busy=false;buttons.forEach(x=>x.disabled=false);}}
 function shortDate(iso){return new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(iso));}
 function date(iso){return new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(iso));}
 function showChange(initial){clearPasswords();$('cancel-change').hidden=initial;panel('change-form',initial?'초기 비밀번호를 변경해 주세요':'비밀번호 변경',initial?'초기 비밀번호 0000은 이 화면에서만 사용할 수 있어요. 새 비밀번호로 바꾸면 키오스크와 관리자 서류 화면을 사용할 수 있습니다.':'현재 비밀번호를 확인한 뒤 새 비밀번호로 바꿉니다.');$('current-password').focus();}
@@ -117,17 +175,20 @@ $('cancel-change').onclick=()=>task(profile);
 $('change-form').onsubmit=e=>{e.preventDefault();task(async()=>{if($('new-password').value!==$('confirm-password').value)throw new Error('새 비밀번호와 확인 값이 일치하지 않습니다.');await request('change',{current_password:$('current-password').value,new_password:$('new-password').value});forgetSession();loggedOutFacts();panel('login-form','비밀번호를 변경했습니다','내부 인증키도 함께 갱신되었습니다. 새 비밀번호로 다시 로그인해 주세요.');notice('변경 완료. 기존 로그인은 모두 해제되었고 Notion 웹훅 키는 유지됩니다.');});};
 $('logout').onclick=()=>task(async()=>{try{await request('logout');}finally{forgetSession();loggedOutFacts();panel('login-form','로그아웃했습니다','관리자 비밀번호로 다시 로그인할 수 있어요.');}});
 $('retry').onclick=()=>task(initialize);
+$('open-facts').onclick=()=>$('facts-dialog').showModal();
+$('close-facts').onclick=()=>$('facts-dialog').close();
 $('open-webhook').onclick=()=>task(openWebhook);
 $('webhook-back').onclick=()=>task(profile);
 $('progress-back').onclick=()=>task(profile);
 $('webhook-form').onsubmit=e=>{e.preventDefault();task(async()=>{
  const data=await request('webhook-start',{current_password:$('webhook-password').value});clearPasswords();
  $('new-webhook-key').value=data.key;panel('webhook-key','새 웹훅 키가 만들어졌습니다','지금부터 옛 키와 새 키가 모두 동작합니다. 아래 키를 복사해 주세요.');$('new-webhook-key').select();});};
-$('copy-webhook-key').onclick=async()=>{const field=$('new-webhook-key');try{await navigator.clipboard.writeText(field.value);notice('새 웹훅 키를 복사했습니다. 붙여 넣은 뒤 클립보드를 비워 두세요.');}catch{field.select();notice('자동 복사가 막혔습니다. 선택된 키를 Ctrl+C로 복사해 주세요.');}};
+$('copy-webhook-key').onclick=async()=>{const field=$('new-webhook-key');try{await navigator.clipboard.writeText(field.value);notice('새 웹훅 키를 복사했습니다. 모든 버튼·자동화에 같은 키를 붙여 넣습니다.');}catch{field.select();notice('자동 복사가 막혔습니다. 선택된 키를 Ctrl+C로 복사해 주세요.');}};
 $('webhook-key-done').onclick=()=>{if(!confirm('이 화면을 벗어나면 새 웹훅 키를 다시 볼 수 없습니다. 복사했나요?'))return;task(async()=>{$('new-webhook-key').value='';await loadWebhook();await showProgress();});};
 $('webhook-refresh').onclick=()=>task(async()=>{await loadWebhook();await showProgress();});
+$('links-refresh').onclick=()=>task(async()=>{await loadLinks(true);renderChecklist();notice('Notion 링크를 다시 찾았습니다.');});
 $('webhook-finish').onclick=()=>task(async()=>{
- if(!confirm((unseen?`아직 새 키로 확인되지 않은 버튼이 ${unseen}개 있습니다. 그 버튼의 헤더도 바꿨는지 확인해 주세요.\n`:'')+'교체를 완료하면 옛 키로 오는 Notion 호출은 모두 거부됩니다. 완료할까요?'))return;
+ if(!confirm((unchecked?`아직 체크하지 않은 항목이 ${unchecked}개 있습니다. 그 버튼·자동화의 키도 바꿨는지 확인해 주세요.\n`:'')+'교체를 완료하면 옛 키로 오는 Notion 호출은 모두 거부됩니다. 완료할까요?'))return;
  let done;try{done=await request('webhook-finish');}catch(e){if(!e.needsConfirm)throw e;if(!confirm(e.message+' 그래도 완료할까요?'))return;done=await request('webhook-finish',{force:true});}
  await profile();notice(`웹훅 키 교체를 완료했습니다(${date(done.changed_at)}). 옛 키는 더 이상 동작하지 않습니다.`);});
 $('webhook-cancel').onclick=()=>task(async()=>{

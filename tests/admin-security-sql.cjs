@@ -8,7 +8,7 @@ await db.exec(`create role anon; create role authenticated; create role service_
 create table vault.secrets(id uuid primary key default gen_random_uuid(),name text,secret text);
 create function vault.create_secret(value text,label text) returns uuid language plpgsql as $$ declare x uuid; begin insert into vault.secrets(name,secret) values(label,value) returning id into x;return x;end $$;
 create function vault.update_secret(x uuid,value text) returns void language plpgsql as $$ begin update vault.secrets set secret=value where id=x;end $$;`);
-const migrations=['20261011010000_admin_security.sql','20261012010000_admin_password_simplify.sql','20261012020000_admin_security_safeupdate.sql','20261013010000_webhook_key_rotation.sql'];
+const migrations=['20261011010000_admin_security.sql','20261012010000_admin_password_simplify.sql','20261012020000_admin_security_safeupdate.sql','20261013010000_webhook_key_rotation.sql','20261013020000_webhook_checklist.sql'];
 for(const f of migrations)await db.exec(fs.readFileSync('supabase/migrations/'+f,'utf8'));
 // Supabase rejects DELETE/UPDATE without WHERE on API connections (pg-safeupdate); PGlite does not,
 // so check the current function definition statically. INSERT ... ON CONFLICT DO UPDATE is not affected.
@@ -130,16 +130,33 @@ ok((await rpc('authorize',{candidate:web4})).kind,'none');
 ok((await rpc('authorize',{candidate:web3})).kind,'webhook');
 ok((await raw('select count(*)::int as n from public.hada_security_webhook_usage'))[0].n,0);
 ok((await rpc('webhook-cancel',{session_hash:token})).status,409);
+// Manual checklist marks exist only during a rotation and are cleared on cancel.
+ok((await rpc('webhook-check',{session_hash:token,item:'reg-end',checked:true})).status,409);
+ok((await rpc('webhook-start',{session_hash:token,webhook_hash:h('9')})).ok,true);
+ok((await rpc('webhook-check',{session_hash:token,item:'Bad Item!',checked:true})).status,400);
+ok((await rpc('webhook-check',{session_hash:other,item:'reg-end',checked:true})).status,401);
+ok((await rpc('webhook-check',{session_hash:token,item:'reg-end',checked:true})).ok,true);
+ok((await rpc('webhook-check',{session_hash:token,item:'reg-link',checked:true})).ok,true);
+ok((await rpc('webhook-check',{session_hash:token,item:'reg-link',checked:false})).ok,true);
+ok(Object.keys((await rpc('webhook-status',{session_hash:token})).checks),['reg-end']);
+ok((await rpc('webhook-cancel',{session_hash:token})).ok,true);
+ok((await rpc('webhook-status',{session_hash:token})).checks,{});
+// Notion link cache: admin session only, only plain notion.so database/view URLs are stored.
+const nurl=x=>'https://www.notion.so/'+x.repeat(32);
+ok((await rpc('links-get',{session_hash:other})).status,401);
+ok((await rpc('links-set',{session_hash:token,links:'x'})).status,400);
+ok((await rpc('links-set',{session_hash:token,links:[{name:'등록(학원)',db:nurl('a'),view:nurl('a')+'?v='+'b'.repeat(32)},{name:'출석(학원)',db:'javascript:alert(1)'},{name:'수업(학원)',db:nurl('c'),view:'https://evil.example/'},{name:'학생(학원)',db:nurl('d')}]})).ok,true);
+ok((await rpc('links-get',{session_hash:token})).links,{'등록(학원)':{db:nurl('a'),view:nurl('a')+'?v='+'b'.repeat(32)},'학생(학원)':{db:nurl('d'),view:null}});
 // Password change and deploy-manager reset keep the webhook key.
 ok((await rpc('change',{session_hash:token,expected_version:5,password_hash:pw('5'),internal_key:h('3'),internal_hash:h('3')})).ok,true);
 ok((await rpc('authorize',{candidate:web3})).kind,'webhook');
 ok((await rpc('reset')).ok,true);
 ok((await rpc('authorize',{candidate:web3})).kind,'webhook');
-ok((await raw("select string_agg(event,',' order by id) as e from public.hada_security_audit where event like 'webhook%'"))[0].e,'webhook_rotation_started,webhook_rotation_finished,webhook_rotation_started,webhook_rotation_finished,webhook_rotation_started,webhook_rotation_cancelled');
+ok((await raw("select string_agg(event,',' order by id) as e from public.hada_security_audit where event like 'webhook%'"))[0].e,'webhook_rotation_started,webhook_rotation_finished,webhook_rotation_started,webhook_rotation_finished,webhook_rotation_started,webhook_rotation_cancelled,webhook_rotation_started,webhook_rotation_cancelled');
 // Public roles cannot read the credential tables or execute the service RPC.
 for(const role of ['anon','authenticated']){
  await db.exec('set role '+role);
- for(const query of ['select * from public.hada_security_state','select * from public.hada_security_webhook_usage',"select public.hada_security_command('internal')"]){let denied=false;try{await db.query(query);}catch{denied=true;}ok(denied,true);}
+ for(const query of ['select * from public.hada_security_state','select * from public.hada_security_webhook_usage','select * from public.hada_security_webhook_checks','select * from public.hada_security_notion_links',"select public.hada_security_command('internal')"]){let denied=false;try{await db.query(query);}catch{denied=true;}ok(denied,true);}
  await db.exec('reset role');
 }
 await db.close();console.log(`PostgreSQL security checks passed: ${checks}`);

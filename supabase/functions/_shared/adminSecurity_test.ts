@@ -3,7 +3,7 @@ function assert(v:unknown,m='assertion failed'){if(!v)throw new Error(m);}
 function rejects(fn:()=>unknown){try{fn();}catch(e){assert(e instanceof SecurityError);return;}throw new Error('expected rejection');}
 Deno.env.set('SB_URL','https://mock.supabase.co');Deno.env.set('SB_SERVICE_ROLE_KEY','test-only-service');Deno.env.set('ADMIN_ALLOWED_ORIGINS','https://admin.example.test');Deno.env.set('ADMIN_SECRET','test-only-webhook-key-0123456789abcdef');Deno.env.set('NOTION_TOKEN','test-only-notion');
 const originalServe=Deno.serve;(Deno as any).serve=()=>({});
-const {handleAdminSecurity,notionDatabaseLinks}=await import('../admin-security/index.ts');(Deno as any).serve=originalServe;
+const {handleAdminSecurity,notionDatabaseLinks,webhookViewUrl}=await import('../admin-security/index.ts');(Deno as any).serve=originalServe;
 async function withFetch(fn:(action:string,data:any,url:string)=>unknown,run:()=>Promise<void>){const old=fetch;globalThis.fetch=(async(input:any,init:any)=>{const b=init?.body?JSON.parse(init.body):{};return new Response(JSON.stringify(await fn(b.p_action,b.p_data,String(input))),{headers:{'Content-Type':'application/json'}});}) as typeof fetch;try{await run();}finally{globalThis.fetch=old;Deno.env.delete('ADMIN_SECURITY_ENABLED');}}
 const request=(body:any,origin='https://admin.example.test',key='')=>new Request('https://mock.supabase.co/functions/v1/admin-security',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json','x-admin-key':key},body:JSON.stringify(body)});
 const ready={initialized:true,password_set:true};
@@ -58,8 +58,25 @@ Deno.test('Notion DB links: academy databases only, trashed skipped, newest dupl
   try{const links=await notionDatabaseLinks();
     assert(JSON.stringify(links)===JSON.stringify({'등록(학원)':'https://www.notion.so/22222222222222222222222222222222','알림톡발송함(학원)':'https://www.notion.so/44444444444444444444444444444444'}),JSON.stringify(links));
     assert(bodies[0].filter.value==='data_source'&&bodies[1].start_cursor==='c2');}finally{globalThis.fetch=old;}});
+Deno.test('webhook view link: finds the view named 웹훅등록 with the views API version',async()=>{const old=fetch;const seen:any[]=[];const db='2'.repeat(32),v1='3'.repeat(32),v2='4'.repeat(32);
+  globalThis.fetch=(async(u:any,init:any)=>{const url=String(u);seen.push([url,init.headers['Notion-Version']]);
+    if(url.includes('/views?'))return new Response(JSON.stringify({results:[{object:'view',id:v1},{object:'view',id:v2}],has_more:false}));
+    if(url.endsWith('/views/'+v1))return new Response(JSON.stringify({id:v1,name:'수강정보'}));
+    return new Response(JSON.stringify({id:v2,name:'웹훅 등록'}));}) as typeof fetch;
+  try{assert(await webhookViewUrl(db)===`https://www.notion.so/${db}?v=${v2}`);assert(seen.every(([,v])=>v==='2026-03-11')&&seen[0][0].includes('database_id='+db));
+    globalThis.fetch=(async()=>new Response('{}',{status:404})) as typeof fetch;assert(await webhookViewUrl(db)==='');}finally{globalThis.fetch=old;}});
 Deno.test('webhook links need a valid admin session',()=>withFetch((action)=>action==='webhook-status'?{error:'다시 로그인해 주세요.',status:401}:{ok:true},async()=>{Deno.env.set('ADMIN_SECURITY_ENABLED','true');assert((await handleAdminSecurity(request({action:'webhook-links'},undefined,'bad'))).status===401);}));
-Deno.test('admin settings webhook checklist lists exactly the webhook routes',async()=>{const js=await Deno.readTextFile(new URL('../../../admin_settings.js',import.meta.url));const block=js.slice(js.indexOf('const WEBHOOKS={'),js.indexOf('};',js.indexOf('const WEBHOOKS={')));const listed=[...block.matchAll(/^ '([a-z-]+)':\[/gm)].map(m=>m[1]).sort();assert(JSON.stringify(listed)===JSON.stringify([...SECURITY_WEBHOOK_ROUTES].sort()),'admin_settings.js WEBHOOKS must match SECURITY_WEBHOOK_ROUTES');});
+Deno.test('admin settings webhook checklist covers exactly the webhook routes with unique item ids',async()=>{const js=await Deno.readTextFile(new URL('../../../admin_settings.js',import.meta.url));const block=js.slice(js.indexOf('const CHECKLIST=['),js.indexOf('function route('));
+  const routes=[...new Set([...block.matchAll(/route\('([a-z-]+)'\)/g)].map(m=>m[1]))].sort();
+  assert(JSON.stringify(routes)===JSON.stringify([...SECURITY_WEBHOOK_ROUTES].sort()),'admin_settings.js CHECKLIST routes must match SECURITY_WEBHOOK_ROUTES');
+  const ids=[...block.matchAll(/\['([a-z0-9-]+)','/g)].map(m=>m[1]);assert(ids.length>=30&&new Set(ids).size===ids.length&&ids.every(id=>/^[a-z0-9-]{1,64}$/.test(id)),'checklist item ids must be unique');});
+Deno.test('webhook checks pass only boolean true and links refresh is rate limited',async()=>{const calls:any[]=[];await withFetch((action,data)=>{calls.push([action,data]);if(action==='links-get')return {links:{'등록(학원)':{db:'https://www.notion.so/'+'a'.repeat(32),view:null}},updated_at:'2026-10-13T00:00:00Z'};return {ok:true,checked_at:'2026-10-13T00:00:00Z'};},async()=>{Deno.env.set('ADMIN_SECURITY_ENABLED','true');
+  assert((await handleAdminSecurity(request({action:'webhook-check',item:'reg-end',checked:'yes'},undefined,'s'))).status===200);
+  assert(calls.find(([a])=>a==='webhook-check')[1].checked===false);
+  assert((await handleAdminSecurity(request({action:'webhook-check',item:5},undefined,'s'))).status===400);
+  const cached=await (await handleAdminSecurity(request({action:'webhook-links',names:['등록(학원)']},undefined,'s'))).json();
+  assert(cached.links['등록(학원)']&&!calls.some(([a])=>a==='links-set'),'cached links must not search Notion again');
+  assert(!calls.some(([a,d])=>a==='limit'&&d.bucket==='security-webhook-links'));});});
 Deno.test('profile returns the reminder and must_change, never the password hash',()=>withFetch(()=>({password_hash:'private-hash',changed_at:'2026-01-31T12:00:00Z',version:1,must_change:true}),async()=>{Deno.env.set('ADMIN_SECURITY_ENABLED','true');const r=await handleAdminSecurity(request({action:'profile'},undefined,'session'));const data=await r.json();assert(!JSON.stringify(data).includes('private-hash'));assert(data.must_change===true);assert(data.recommended_at==='2026-04-30T12:00:00.000Z');}));
 Deno.test('disabled server returns explicit setup message',async()=>{Deno.env.delete('ADMIN_SECURITY_ENABLED');assert((await handleAdminSecurity(request({action:'status'}))).status===503);});
 Deno.test('disabled server stays readable by legacy login even before allowed origins are configured',async()=>{

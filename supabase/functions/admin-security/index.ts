@@ -30,6 +30,39 @@ export async function notionDatabaseLinks():Promise<Record<string,string>> {
   }
   return Object.fromEntries([...found].map(([k,v])=>[k,v.url]));
 }
+// The Views API needs a newer Notion-Version than the rest of the code base.
+const VIEWS_VERSION='2026-03-11';
+async function notionGet(path:string):Promise<any>{
+  for(let attempt=0;attempt<3;attempt++){
+    const res=await fetch(`${NOTION_API}${path}`,{headers:{Authorization:`Bearer ${NOTION_TOKEN}`,'Notion-Version':VIEWS_VERSION},signal:AbortSignal.timeout(10000)});
+    if(res.status===429){await new Promise(r=>setTimeout(r,Math.min(5,Number(res.headers.get('Retry-After'))||1)*1000));continue;}
+    if(!res.ok){console.error('notion views failed',res.status);return null;}
+    return await res.json();
+  }
+  return null;
+}
+// URL of the database view named "웹훅등록" (the view that gathers the webhook buttons), or ''.
+export async function webhookViewUrl(dbId:string):Promise<string>{
+  let cursor='';
+  for(let page=0;page<3;page++){
+    const list=await notionGet(`/views?database_id=${dbId}&page_size=100${cursor?`&start_cursor=${encodeURIComponent(cursor)}`:''}`);
+    if(!list)return '';
+    for(const ref of list.results??[]){
+      const id=String(ref.id??'').replace(/-/g,'');if(!/^[0-9a-f]{32}$/.test(id))continue;
+      const view=await notionGet(`/views/${id}`);
+      if(view&&String(view.name??'').replace(/\s+/g,'')==='웹훅등록')return `https://www.notion.so/${dbId}?v=${id}`;
+    }
+    if(!list.has_more||!list.next_cursor)break;cursor=list.next_cursor;
+  }
+  return '';
+}
+// Database and "웹훅등록" view links for the requested checklist DB names, three DBs at a time.
+export async function buildNotionLinks(names:string[]):Promise<{name:string,db:string,view:string}[]>{
+  const dbs=await notionDatabaseLinks();const wanted=names.filter(n=>dbs[n]);const out:{name:string,db:string,view:string}[]=[];let next=0;
+  const worker=async()=>{while(next<wanted.length){const name=wanted[next++];const db=dbs[name];out.push({name,db,view:await webhookViewUrl(db.slice(-32))});}};
+  await Promise.all([worker(),worker(),worker()]);
+  return out;
+}
 export async function handleAdminSecurity(req:Request):Promise<Response> {
   let headers:Record<string,string>={'Content-Type':'application/json','Cache-Control':'no-store'};
   try {
@@ -44,6 +77,7 @@ export async function handleAdminSecurity(req:Request):Promise<Response> {
     if(b.action==='status'){await ensureInitialized();return result({ready:true,webhook_key_weak:fixedWebhookKey().length<32});}
     // Persistent global buckets; independent of spoofable browser IP headers.
     if(['login','change','webhook-start','webhook-cancel'].includes(b.action))await securityRpc('limit',{bucket:'security-'+b.action,max:60,seconds:3600});
+    if(b.action==='webhook-links'&&b.refresh===true)await securityRpc('limit',{bucket:'security-webhook-links',max:10,seconds:3600});
     const session=req.headers.get('x-admin-key')??'';
     if(b.action==='login'){
       await ensureInitialized();
@@ -75,12 +109,24 @@ export async function handleAdminSecurity(req:Request):Promise<Response> {
     if(b.action==='webhook-status'){
       const st=await securityRpc('webhook-status',{session_hash:await sha256(session)});
       const usage=(Array.isArray(st.usage)?st.usage:[]).filter((u:any)=>SECURITY_WEBHOOK_ROUTES.has(u.route));
-      return result({rotating:!!st.rotating,started_at:st.started_at,changed_at:st.changed_at,weak:!st.changed_at&&fixedWebhookKey().length<32,usage});
+      return result({rotating:!!st.rotating,started_at:st.started_at,changed_at:st.changed_at,weak:!st.changed_at&&fixedWebhookKey().length<32,usage,checks:st.checks??{}});
     }
     if(b.action==='webhook-links'){
-      // Same session check (and must_change block) as the rotation status.
-      await securityRpc('webhook-status',{session_hash:await sha256(session)});
-      return result({links:await notionDatabaseLinks()});
+      // Cached per academy; searching Notion (databases and their views) only on first use or refresh.
+      const sessionHash=await sha256(session);
+      await securityRpc('webhook-status',{session_hash:sessionHash}); // session check and must_change block
+      let cached=await securityRpc('links-get',{session_hash:sessionHash});
+      if(b.refresh===true||!Object.keys(cached.links??{}).length){
+        const names=(Array.isArray(b.names)?b.names:[]).filter((n:unknown)=>typeof n==='string'&&n.length<=64).slice(0,60);
+        await securityRpc('links-set',{session_hash:sessionHash,links:await buildNotionLinks(names)});
+        cached=await securityRpc('links-get',{session_hash:sessionHash});
+      }
+      return result({links:cached.links??{},updated_at:cached.updated_at});
+    }
+    if(b.action==='webhook-check'){
+      if(typeof b.item!=='string')throw new SecurityError(400,'항목 형식 오류');
+      const response=await securityRpc('webhook-check',{session_hash:await sha256(session),item:b.item,checked:b.checked===true});
+      return result({ok:true,checked_at:response.checked_at});
     }
     if(b.action==='webhook-start'||b.action==='webhook-cancel'){
       const sessionHash=await sha256(session);
