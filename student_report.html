@@ -10,6 +10,9 @@
 :root {
   --content-w: clamp(300px, 96vw, 620px);
   --content-w-wide: clamp(320px, 96vw, 820px);
+  /* 등록 상세 탭 본문 폭: 제목·안내·전환 탭·카드·캘린더가 모두 이 폭과 같은 왼쪽 기준선을 쓴다 (DESIGN.md 1부 6장) */
+  --feed-w: 640px;
+  --feed-pad: clamp(4px, 3vw, 16px);
   --hint-gap: clamp(10px, 3.5vh, 28px);
   --hint-font: clamp(0px, 2vh, 12px);
   --hint-chevron: clamp(0px, 3.2vh, 20px);
@@ -278,7 +281,7 @@ body {
 /* ===== 등록 상세 - 덱스2 하단 탭 방식 ===== */
 .reg-detail-page { min-height: 100vh; background: var(--canvas); padding-bottom: 78px; -webkit-overflow-scrolling: touch; }
 .reg-header-bar { position: sticky; top: 0; z-index: 55; background: var(--brand-primary); color: var(--brand-on-primary); text-align: center; padding: 14px 14px 14px; will-change: padding; }
-.reg-tab-content { max-width: var(--content-w-wide); margin: 0 auto; padding: 18px clamp(4px, 3vw, 16px) 24px; }
+.reg-tab-content { max-width: calc(var(--feed-w) + 2 * var(--feed-pad)); margin: 0 auto; padding: 18px var(--feed-pad) 24px; }
 .reg-tab-content h2 { font-size: 17px; margin: 0 0 4px; color: #333; display: flex; align-items: center; gap: 6px; }
 .reg-tab-content .section-hint { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
 .status-box-row { display: flex; gap: 10px; margin-bottom: 14px; }
@@ -601,10 +604,11 @@ body.has-tabbar .reg-tab-content { padding-bottom: calc(96px + env(safe-area-ins
 .global-sync-toast.show { opacity: 1; transform: translateY(0); }
 .schedule-cal-wrap { width: 100%; margin: 0 auto; max-width: min(var(--content-w), 68vh); overflow: hidden; }
 .schedule-source { font-size: 11px; color: var(--text-muted); text-align: right; margin-top: 4px; }
-.attendance-cal-wrap { width: 100%; margin: 0 auto; max-width: min(var(--content-w), 62vh); overflow: hidden; transition: max-width 0.24s ease; }
-/* 학습기록·보고서 탭의 본문(피드/카드들)만 좁고 가운데 정렬되게 보여준다. 제목/안내문은
-   다른 탭들과 동일하게 원래 폭(reg-tab-content)을 그대로 쓴다. */
-.feed-narrow-wrap { width: 100%; max-width: 640px; margin: 0 auto; }
+.attendance-cal-wrap { width: 100%; margin: 0 auto; max-width: var(--feed-w); overflow: hidden; }
+/* 캘린더는 폭을 다른 탭과 같게 두고, 화면 높이에 맞춰 칸 높이만 줄인다 */
+.attendance-cal-wrap .attendance-calendar .cal-day { aspect-ratio: auto; height: clamp(34px, 7vh, 64px); }
+/* 탭 본문 묶음. reg-tab-content도 같은 --feed-w라 제목·안내문과 카드의 왼쪽 선이 같다 (2026-10-13). */
+.feed-narrow-wrap { width: 100%; max-width: var(--feed-w); margin: 0 auto; }
 
 body.reg-expanded .attendance-cal-wrap { max-width: min(var(--content-w), 43vh); }
 body.reg-expanded .attendance-calendar { padding: clamp(6px, min(3vw, 2.2vh), 18px); }
@@ -710,9 +714,9 @@ body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
 .feed-lightbox img { max-width: 100%; max-height: 100%; border-radius: 8px; }
 
 /* ===== 홈 탭 (등록 상세 첫 탭) ===== */
-.home-hero { background: var(--brand-primary); color: var(--brand-on-primary); padding: 6px clamp(16px, 4vw, 24px) 20px; }
+.home-hero { background: var(--brand-primary); color: var(--brand-on-primary); padding: 6px var(--feed-pad) 20px; }
 /* 반 이름 줄은 아래 카드들과 같은 왼쪽 기준선(640px 본문 폭 + 카드 안쪽 여백)에 맞춘다 */
-.home-hero-row { max-width: 640px; margin: 0 auto; padding: 0 2px; }
+.home-hero-row { max-width: var(--feed-w); margin: 0 auto; }
 .home-hero-title { font-size: clamp(20px, 5.4vw, 26px); font-weight: 800; line-height: 1.3; word-break: keep-all; display: flex; align-items: center; gap: 8px; }
 .home-hero-emoji { font-size: 0.8em; line-height: 1; flex-shrink: 0; }
 .home-hero-sub { font-size: 13px; opacity: 0.85; margin-top: 4px; word-break: keep-all; }
