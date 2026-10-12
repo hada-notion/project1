@@ -1,8 +1,9 @@
 /* Shared by the existing administrator pages. Public configuration comes from each page. */
-// The browser-scope session (legal documents and school search) is shared between those pages in the same tab, so
-// moving between them from the top menu does not ask for the password again. It lives in sessionStorage: closing the
-// tab or logging out on either page ends it. The kiosk (its own 30-day kiosk-scope session under "admin_key") and
-// admin settings (its own settings-scope session) keep separate storage on purpose.
+// The administrator session is shared by admin settings, legal documents and school search in the same tab (the
+// server issues the same kind of session to all three), so moving between them from the top menu does not ask for
+// the password again. It lives in sessionStorage: closing the tab or logging out on any of them ends it. Admin
+// settings keeps an initial-password (0000) session in memory only. The kiosk keeps its own 30-day kiosk-scope
+// session under localStorage "admin_key" on purpose.
 const HADA_BROWSER_SESSION_KEY = 'hada_admin_browser_session_v1';
 window.HadaAdminAuth = Object.freeze({
   // scope 'kiosk' asks for a 30-day session limited to check-in routes.
