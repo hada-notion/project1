@@ -4,7 +4,7 @@
 const fs=require('fs');
 // Pages converted to the shared tokens. Add a page here when it moves to assets/hada-ui.css.
 const PAGES=['admin_settings.html','attendance_kiosk.html','school_search.html','legal_documents.html'];
-const SHARED='assets/hada-ui.css';
+const SHARED='assets/hada-ui.css',TOKENS='assets/hada-tokens.css';
 const errors=[];
 function cssOf(file){
   const text=fs.readFileSync(file,'utf8');
@@ -17,7 +17,7 @@ const allowedLength=v=>/^(0|auto|-?[0-3]px|-?\d*\.?\d+(%|em)|var\(--[a-z0-9-]+\)
 function check(file){
   for(const {css,offset,text} of cssOf(file)){
     // Token definitions live only in the shared :root blocks.
-    const body=file===SHARED?css.replace(/:root\{[^}]*\}/g,m=>' '.repeat(m.length)):css;
+    const body=file===TOKENS?css.replace(/:root\{[^}]*\}/g,m=>' '.repeat(m.length)):css;
     // Official print documents (attendance book, register, receipts) follow print rules, not screen tokens.
     const printFree=body.replace(/\/\* design-lint: print-document \*\/[\s\S]*?\/\* design-lint: end \*\//g,m=>m.replace(/[^\n]/g,' '));
     const clean=printFree.replace(/\/\*[\s\S]*?\*\//g,m=>' '.repeat(m.length));
@@ -27,7 +27,7 @@ function check(file){
         const m=decl.match(/^\s*([a-z-]+)\s*:\s*([\s\S]+?)\s*$/);const where=`${file}:${lineOf(text,offset+at)}`;at+=decl.length+1;
         if(!m)continue;
         // Pages may define their own layout variables, but never colors (colors are shared tokens only).
-        if(m[1].startsWith('--')){if(file!==SHARED&&/#[0-9a-f]{3,8}\b|\b(rgba?|hsla?)\(/i.test(m[2]))errors.push(`${where} ${m[1]}: 화면에서 색 변수를 새로 만들지 않습니다`);continue;}
+        if(m[1].startsWith('--')){if(file!==TOKENS&&/#[0-9a-f]{3,8}\b|\b(rgba?|hsla?)\(/i.test(m[2]))errors.push(`${where} ${m[1]}: 화면에서 색 변수를 새로 만들지 않습니다`);continue;}
         const [,prop,value]=m;const v=value.replace(/!important$/,'').trim();
         if(/#[0-9a-f]{3,8}\b|\b(rgba?|hsla?)\(|\b(white|black)\b/i.test(v))errors.push(`${where} ${prop}: 색은 토큰(var(--...))만 씁니다 → ${v}`);
         if(prop==='font-size'&&!/^(var\(--(text-[a-z]+|device-font)\)|inherit|\d*\.?\d+em)$/.test(v))errors.push(`${where} font-size: --text-* 토큰을 씁니다 → ${v}`);
@@ -39,7 +39,7 @@ function check(file){
     }
   }
 }
-for(const file of [SHARED,...PAGES])check(file);
+for(const file of [TOKENS,SHARED,...PAGES])check(file);
 for(const page of PAGES){
   const html=fs.readFileSync(page,'utf8');
   if(!html.includes('href="assets/hada-ui.css"'))errors.push(`${page}: assets/hada-ui.css를 불러오지 않습니다`);

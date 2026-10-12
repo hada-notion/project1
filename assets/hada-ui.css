@@ -1,39 +1,13 @@
 /* 하다 학원관리 공용 UI 스타일 (docs/DESIGN.md)
- * 색·글자·간격·모서리 값은 여기 :root 토큰에서만 정한다. 각 화면 CSS는 var(--토큰)만 쓴다.
- * 색 토큰은 Notion "콘텐츠 디자인 기준"(student_report.html 팔레트)과 같은 값이다.
- * 이 파일을 쓰는 화면: admin_settings.html (다른 화면은 UI 통일 작업 때 차례로 옮긴다). */
-:root{
- color-scheme:light;
- /* 브랜드 (Notion 콘텐츠 디자인 기준) */
- --brand-primary:#E6D8C4;--brand-deep:#6B5D4D;--brand-mid:#D1BEA5;--brand-light:#F1E8DC;
- --brand-soft:#F5EFE7;--brand-tint:#FBF8F3;--brand-border:#DED1C0;--brand-on-primary:#3F372F;
- --text-ink:#191F28;--text-muted:#4E5968;--text-subtle:#8B95A1;
- --success:#16A064;--success-soft:#E8F7F0;--danger:#E5484D;--danger-soft:#FDEBEC;
- --warning:#F59F00;--warning-soft:#FFF5D9;--info:#3478F6;--info-soft:#EAF2FF;
- /* 웹 화면 추가 토큰: 작은 글자에 쓰는 상태색(흰 바탕 대비 4.5:1 이상), 카드·입력칸 바탕, 입력칸 테두리 */
- --success-ink:#0F7B4E;--danger-ink:#B42318;--warning-ink:#7A5200;--info-ink:#1D5BBF;
- --surface:#FFFFFF;--control-border:#A39787;--warning-border:#D3B67E;--divider:#EEE7DD;
- --overlay:rgba(25,31,40,.35);--shadow-sm:0 1px 2px rgba(63,55,47,.06);--shadow-md:0 4px 16px rgba(63,55,47,.08);
- /* 글자 */
- --font-sans:Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR","Segoe UI",sans-serif;
- --font-mono:ui-monospace,Consolas,"D2Coding",monospace;
- --text-caption:.75rem;--text-label:.8125rem;--text-small:.875rem;--text-body:1rem;--text-lead:1.125rem;
- --text-title:1.375rem;--text-display:2rem;
- /* 간격 (4px 단위). 글자·간격·모서리·높이는 rem이라 기기 화면 모드(html.device)에서 함께 커진다 */
- --space-1:.25rem;--space-2:.5rem;--space-3:.75rem;--space-4:1rem;--space-5:1.25rem;--space-6:1.5rem;--space-8:2rem;--space-12:3rem;
- /* 모서리 */
- --radius-sm:.25rem;--radius-md:.5rem;--radius-lg:.75rem;--radius-pill:999px;
- /* 크기 */
- --page-max:1180px;--form-max:560px;--dialog-sm:440px;--dialog-md:600px;
- --control-h:3rem;--control-lg:3.5rem;--logo-h:2.25rem;--icon-sm:.875rem;--icon-md:1.25rem;--icon-lg:1.75rem;
- /* 기기 화면 모드(출결 키오스크): 세로 카드 폭과, 그 폭에 맞춘 기준 글자 크기(360px 폭일 때 16px) */
- --device-w:min(90vw,calc(90vh * .68),640px);--device-font:calc(16px * var(--device-w) / 360px);
-}
-@media(max-width:700px){:root{--text-display:1.75rem;--logo-h:1.75rem}}
+ * 값(토큰)은 assets/hada-tokens.css에만 있다. 각 화면 CSS는 var(--토큰)만 쓴다.
+ * 이 파일을 쓰는 화면은 docs/DESIGN.md "적용 현황" 표를 본다. */
+@import url("hada-tokens.css");
 
 /* 기본 */
 *{box-sizing:border-box}
-body{margin:0;background:var(--brand-tint);color:var(--text-ink);font:var(--text-body)/1.6 var(--font-sans);word-break:keep-all}
+/* 1부 14장: 스크롤바 유무로 가운데 정렬이 밀리지 않게 */
+html{overflow-y:scroll;scrollbar-gutter:stable}
+body{margin:0;background:var(--canvas);color:var(--text-ink);font:var(--text-body)/1.6 var(--font-sans);word-break:keep-all}
 button,input,select{font:inherit}button{cursor:pointer}button:disabled{cursor:not-allowed}
 a{color:var(--brand-deep)}
 [hidden]{display:none!important}
@@ -65,7 +39,8 @@ h2{font-size:var(--text-title);line-height:1.4;margin:0 0 var(--space-3)}
 .divider{border:0;border-top:1px solid var(--brand-border);margin:var(--space-6) 0}
 
 /* 카드와 상자 */
-.card{background:var(--surface);border:1px solid var(--brand-border);border-radius:var(--radius-lg);padding:var(--space-8)}
+/* 1부 8장: 카드 모서리·그림자 통일. 리포트처럼 테두리 없이 흰 표면 + 옅은 그림자 */
+.card{background:var(--surface);border:0;border-radius:var(--radius-lg);box-shadow:var(--shadow-card);padding:var(--space-8)}
 .status{padding:var(--space-4);border-radius:var(--radius-md);background:var(--brand-soft);margin:var(--space-5) 0;font-size:var(--text-small)}
 .status strong{display:block;margin-bottom:var(--space-1)}
 .status.warn{display:block;background:var(--warning-soft);color:var(--warning-ink);border:1px solid var(--warning-border)}
@@ -82,8 +57,9 @@ input[aria-invalid=true]{border-color:var(--danger-ink)}
 /* 버튼: 주 버튼(한 화면에 하나), 보조 버튼, 작은 버튼, 도움말 버튼 */
 .primary,.secondary{min-height:var(--control-h);padding:var(--space-2) var(--space-5);border-radius:var(--radius-md);font-weight:600;border:1px solid var(--brand-deep)}
 .primary{background:var(--brand-deep);color:var(--surface);width:100%}
-.secondary{background:var(--surface);color:var(--brand-deep)}
-.primary:disabled{background:var(--brand-soft);color:var(--text-muted);border-color:var(--brand-border)}
+/* 1부 3장: 보조 버튼은 #F5EFE7 바탕 + 베이지 위 글자색 */
+.secondary{background:var(--brand-soft);border-color:var(--brand-soft);color:var(--brand-on-primary)}
+.primary:disabled,.secondary:disabled{background:var(--brand-soft);color:var(--text-subtle);border-color:var(--brand-soft)}
 .secondary:hover,.primary:not(:disabled):hover{filter:brightness(.95)}
 .ghost{white-space:nowrap;background:none;border:1px solid var(--brand-border);border-radius:var(--radius-md);padding:var(--space-1) var(--space-3);color:var(--brand-deep);font-size:var(--text-small);font-weight:600}
 .ghost:hover{border-color:var(--brand-deep)}
@@ -109,6 +85,11 @@ html.device{font-size:var(--device-font)}
 html.device body{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:var(--space-6)}
 /* 선 아이콘(stroke) */
 svg.line{width:100%;height:100%;display:block;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* 전환 탭: 리포트 seg-toggle과 같은 모양(베이지 트랙 안에서 선택한 칸만 흰 표면) */
+.tabs{display:flex;flex-wrap:wrap;gap:2px;width:fit-content;max-width:100%;padding:2px;background:var(--brand-soft);border-radius:var(--radius-pill)}
+.tabs button{border:0;background:none;padding:var(--space-2) var(--space-4);border-radius:var(--radius-pill);font-size:var(--text-small);font-weight:700;color:var(--text-muted)}
+.tabs button.active{background:var(--surface);color:var(--text-ink);box-shadow:var(--shadow-card)}
 
 /* 대화상자 */
 dialog.card{width:calc(100% - var(--space-8));padding:var(--space-6)}
