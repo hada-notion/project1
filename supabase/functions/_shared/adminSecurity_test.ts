@@ -69,7 +69,7 @@ Deno.test('webhook links need a valid admin session',()=>withFetch((action)=>act
 Deno.test('admin settings webhook checklist covers exactly the webhook routes with unique item ids',async()=>{const js=await Deno.readTextFile(new URL('../../../admin_settings.js',import.meta.url));const block=js.slice(js.indexOf('const CHECKLIST=['),js.indexOf('function route('));
   const routes=[...new Set([...block.matchAll(/route\('([a-z-]+)'\)/g)].map(m=>m[1]))].sort();
   assert(JSON.stringify(routes)===JSON.stringify([...SECURITY_WEBHOOK_ROUTES].sort()),'admin_settings.js CHECKLIST routes must match SECURITY_WEBHOOK_ROUTES');
-  const ids=[...block.matchAll(/\['([a-z0-9-]+)','/g)].map(m=>m[1]);assert(ids.length>=30&&new Set(ids).size===ids.length&&ids.every(id=>/^[a-z0-9-]{1,64}$/.test(id)),'checklist item ids must be unique');});
+  const ids=[...block.matchAll(/\['([a-z0-9-]+)','[^']*',(BUTTON|AUTO),/g)].map(m=>m[1]);assert(ids.length>=30&&new Set(ids).size===ids.length&&ids.every(id=>/^[a-z0-9-]{1,64}$/.test(id)),'checklist item ids must be unique');});
 Deno.test('webhook checks pass only boolean true and links refresh is rate limited',async()=>{const calls:any[]=[];await withFetch((action,data)=>{calls.push([action,data]);if(action==='links-get')return {links:{'등록(학원)':{db:'https://www.notion.so/'+'a'.repeat(32),view:null}},updated_at:'2026-10-13T00:00:00Z'};return {ok:true,checked_at:'2026-10-13T00:00:00Z'};},async()=>{Deno.env.set('ADMIN_SECURITY_ENABLED','true');
   assert((await handleAdminSecurity(request({action:'webhook-check',item:'reg-end',checked:'yes'},undefined,'s'))).status===200);
   assert(calls.find(([a])=>a==='webhook-check')[1].checked===false);

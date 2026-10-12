@@ -62,6 +62,7 @@
 .items{list-style:none;margin:0;padding:0}
 .item{padding:var(--space-2) 0;border-top:1px solid var(--divider)}
 .item .check{display:flex;gap:var(--space-3);align-items:flex-start;margin:0;font-weight:600;cursor:pointer}
+.item .check .kind{font-size:var(--text-caption);margin-left:var(--space-2);vertical-align:2px}
 .item input[type=checkbox]{width:var(--icon-md);height:var(--icon-md);margin:2px 0 0;flex-shrink:0;accent-color:var(--success-ink)}
 .item.done .name{color:var(--text-muted);text-decoration:line-through}
 .item.alert{background:var(--danger-soft)}
@@ -112,7 +113,7 @@
 <section class="dash-col"><h3 class="subhead">Notion 웹훅 키</h3><p class="help">Notion 버튼·자동화가 서버를 부를 때 씁니다.</p><div class="status" id="webhook-summary"></div><button class="secondary wide" id="open-webhook" type="button">웹훅 키 교체</button></section>
 </div><div class="dash-foot"><button class="secondary" id="logout" type="button">로그아웃</button></div></div>
 <form id="webhook-form" class="narrow" hidden>
-<ol class="flow"><li>새 웹훅 키를 만들면 <strong>한 번만</strong> 화면에 표시됩니다.</li><li>교체 기간에는 옛 키와 새 키가 모두 동작합니다. Notion 버튼·자동화의 키를 하나씩 바꿉니다.</li><li>옛 키로 들어오는 호출이 없어지면 교체를 완료합니다. 그때부터 옛 키는 거부됩니다.</li></ol>
+<ol class="flow"><li>새 웹훅 키를 만들면 화면에 표시되고, 교체를 마칠 때까지 이 탭에서 언제든 다시 복사할 수 있습니다.</li><li>교체 기간에는 이전 키와 새 키가 모두 동작합니다. Notion 버튼·자동화의 키를 하나씩 바꿉니다.</li><li>이전 키로 들어오는 호출이 없어지면 교체를 완료합니다. 이때 이전 키가 삭제되어 더 이상 동작하지 않습니다.</li></ol>
 <label for="webhook-password">현재 관리자 비밀번호</label><input type="password" id="webhook-password" autocomplete="current-password" maxlength="128" required>
 <p class="help">유출이 의심될 때만 교체하세요. 관리자 비밀번호와 키오스크 로그인은 바뀌지 않습니다.</p>
 <button class="primary" type="submit">새 웹훅 키 만들기</button>
@@ -144,14 +145,14 @@
 <figcaption>값 칸의 기존 내용을 모두 지우고(Ctrl+A → Delete) 새 키를 붙여 넣은 뒤 저장합니다. 모든 버튼·자동화에 <strong>같은 키</strong>를 넣습니다.</figcaption>
 </figure>
 </div>
-<div class="status warn"><strong>버튼을 눌러서 확인하지 않아도 됩니다.</strong>Notion은 버튼·자동화 설정을 외부에서 읽을 수 없어서, 바꿨는지는 직접 체크해야 합니다. 버튼을 누르면 실제 작업(보고서·알림톡 발송, 삭제, 종료 처리 등)이 실행되니 확인용으로 누르지 마세요. 평소 업무로 호출되면 각 항목 옆에 <em>새 키 호출 확인</em> 또는 <em>옛 키 호출 있음</em>이 자동으로 표시됩니다.</div>
+<div class="status warn"><strong>버튼을 눌러서 확인하지 않아도 됩니다.</strong>Notion은 버튼·자동화 설정을 외부에서 읽을 수 없어서, 바꿨는지는 직접 체크해야 합니다. 버튼을 누르면 실제 작업(보고서·알림톡 발송, 삭제, 종료 처리 등)이 실행되니 확인용으로 누르지 마세요. 평소 업무로 호출되면 각 항목 옆에 <em>새 키 호출 확인</em> 또는 <em>이전 키 호출 있음</em>이 자동으로 표시됩니다.</div>
 </details>
 <div class="progress-head"><p class="usage-summary" id="usage-summary"></p><div class="bar"><span id="progress-bar"></span></div></div>
 <div class="cards" id="db-cards"></div>
 <div class="links-row"><span class="muted" id="links-updated"></span><button class="ghost" id="links-refresh" type="button">Notion 링크 다시 찾기</button></div>
 <p class="help">출석 수동 동기화를 쓰면 GitHub Secret <code>ADMIN_SECRET</code>도 새 키로 바꿔야 합니다.</p>
-<div class="actions"><button class="secondary" id="webhook-refresh" type="button">새로고침</button><button class="primary" id="webhook-finish" type="button">교체 완료 (옛 키 거부)</button></div>
-<details class="cancel-box"><summary>교체 취소</summary><p class="help">새 키를 버리고 옛 키만 다시 사용합니다. 이미 새 키로 바꾼 버튼은 다시 옛 키로 돌려야 합니다.</p><label for="cancel-password">현재 관리자 비밀번호</label><input type="password" id="cancel-password" autocomplete="current-password" maxlength="128"><button class="secondary wide" id="webhook-cancel" type="button">교체 취소</button></details>
+<div class="actions"><button class="secondary" id="webhook-refresh" type="button">새로고침</button><button class="primary" id="webhook-finish" type="button">교체 완료 (이전 키 삭제)</button></div>
+<details class="cancel-box"><summary>교체 취소</summary><p class="help">새 키를 버리고 이전 키만 다시 사용합니다. 이미 새 키로 바꾼 버튼은 다시 이전 키로 돌려야 합니다.</p><label for="cancel-password">현재 관리자 비밀번호</label><input type="password" id="cancel-password" autocomplete="current-password" maxlength="128"><button class="secondary wide" id="webhook-cancel" type="button">교체 취소</button></details>
 <button class="secondary wide" id="progress-back" type="button">돌아가기</button>
 </div>
 <p id="form-error" class="error" role="alert" hidden></p>
