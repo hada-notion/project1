@@ -1,0 +1,38 @@
+name: Web and docs checks
+
+# 화면·문서만 바꾼 PR에서도 도는 가벼운 검사(v2.5.51). 함수 배포 워크플로는 supabase/** 변경에만 돌기 때문에,
+# 관리자 설정 체크리스트와 서버 허용 목록 대조, 디자인 규칙(공용 파일 ?v= 버전 표시 포함), 회귀 가드를
+# 화면 변경에도 확인한다. 배포는 하지 않는다.
+on:
+  pull_request: {}
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'supabase/**'
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Design rules and shared-file versions
+        run: node tests/design-lint.cjs
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v1.x
+
+      - name: Admin settings checklist matches the server's webhook routes
+        run: deno test --allow-env --allow-read=admin_settings.js supabase/functions/_shared/adminSecurity_test.ts
+
+      - name: Run regression guard checks
+        run: bash scripts/check-known-regressions.sh

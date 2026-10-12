@@ -230,7 +230,7 @@ fi
 # 18) 폐기한 웹훅 함수가 코드·현재 기준 문서에 다시 들어오면 안 된다(v2.5.21).
 #     옛 문서를 근거로 체크리스트·매핑표에 되살아나는 일이 반복됐다. 과거 패치노트
 #     (docs/updates)와 CHANGELOG는 이력이므로 검사하지 않는다.
-RETIRED_WEBHOOKS='sync-registration-timetable|sync-student-report|mark-report-source-dirty'
+RETIRED_WEBHOOKS='sync-registration-timetable|sync-student-report|mark-report-source-dirty|sync-school-schedules'
 retired_hits=$(grep -rnE "$RETIRED_WEBHOOKS" \
   --include='*.ts' --include='*.js' --include='*.html' --include='*.md' --include='*.sql' \
   --include='*.yml' --include='*.py' --include='*.cjs' \
