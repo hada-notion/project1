@@ -161,9 +161,11 @@ function renderChecklist(){
    const li=el('li','item'+(checkedAt?' done':'')+(tone==='bad'?' alert':''));
    const label=el('label','check');const box2=document.createElement('input');box2.type='checkbox';box2.checked=!!checkedAt;box2.dataset.item=id;
    box2.onchange=()=>task(async()=>{await request('webhook-check',{item:id,checked:box2.checked});await loadWebhook();renderChecklist();});
-   label.append(box2,el('span','name',name));
-   const meta=el('div','meta'),badge2=el('span','kind '+(kind===AUTO?'auto':'button'));badge2.innerHTML=ICONS[kind];badge2.append(kind);
-   meta.append(badge2,el('code','',routeName+(extra.path||'')),el('span','hint '+tone,msg));
+   // The kind badge sits right after the name so the type is read with it and the item needs one row less.
+   const badge2=el('span','kind '+(kind===AUTO?'auto':'button'));badge2.innerHTML=ICONS[kind];badge2.append(kind);
+   const nameEl=el('span','name',name);nameEl.append(badge2);label.append(box2,nameEl);
+   const meta=el('div','meta');
+   meta.append(el('code','',routeName+(extra.path||'')),el('span','hint '+tone,msg));
    // Webhook URL (and extra header) for this button, built from this academy's Supabase address.
    const copies=el('div','copies');const url=base+'/functions/v1/'+routeName+(extra.path||'');
    copies.append(copyButton('웹훅','웹훅 URL 복사: '+url,b=>copyText(url,'웹훅 URL을 복사했습니다',b).catch(e=>error(e.message))));
