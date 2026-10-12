@@ -55,7 +55,7 @@ export function buildAttendanceRow(page: any): AttendanceRow | null {
     status: normalizeStatus(text(page.properties?.["출석 상태"])),
     check_in: formatTimeFromIso(classIso),
     check_out: formatTimeFromIso(classEndIso),
-    teacher_comment: text(page.properties?.["선생님 한마때"]),
+    teacher_comment: text(page.properties?.["선생님 한마디"]),
     study_log_ids: relationIds(page.properties?.["학습기록"]),
     notion_last_edited_time: page.last_edited_time,
   }
