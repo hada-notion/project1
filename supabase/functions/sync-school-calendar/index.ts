@@ -27,6 +27,11 @@ async function markSchool(pageId: string, status: string, progress: string, erro
   if (done) properties["학사일정 마지막 동기화"] = { date:{start:new Date().toISOString()} }
   await updatePageProperties(pageId, properties)
 }
+// 같은 동기화키 일정이 이미 둘 이상이면 어느 쪽을 고칠지 알 수 없어 멈춘다. 사용자가 찾을 수 있게 이름·날짜를 알려 준다.
+function duplicateMessage(page: any): string {
+  const date=page.properties?.["날짜"]?.date?.start ?? ""
+  return `NEIS 동기화키 중복: 일정 DB에 "${textOf(page,"이름")}"${date?`(${date})`:""}이 2개 있습니다. 나중에 만든 것 하나를 지운 뒤 다시 누르세요.`
+}
 async function kick(runId: string) {
   const response = await fetch(`${Deno.env.get("SB_URL")}/functions/v1/sync-school-calendar`, {
     method:"POST", headers:{"Content-Type":"application/json","x-admin-key":await getCurrentAdminKey()},
@@ -70,7 +75,11 @@ async function processRun(runId: string) {
     }
     const existing = await queryAllPages(sources.events,{and:[{property:"학교",relation:{contains:page.id}},{property:"NEIS 동기화키",rich_text:{is_not_empty:true}}]})
     const byKey = new Map<string,any>()
-    for(const p of existing){const key=textOf(p,"NEIS 동기화키");if(byKey.has(key))throw new Error("NEIS 동기화키 중복: 수동 확인 필요");byKey.set(key,p)}
+    for(const p of existing){const key=textOf(p,"NEIS 동기화키"),twin=byKey.get(key);if(twin)throw new Error(duplicateMessage(twin));byKey.set(key,p)}
+    // 이번 실행에서 이미 만든 일정. Notion 조회는 방금 만든 페이지를 몇 초 늦게 돌려줄 수 있어(429 재시도 때
+    // 같은 일정이 두 번 만들어진 적이 있음) 실행 기록(created_keys)을 먼저 믿는다(v2.5.52).
+    const created: Record<string,string> = {...(run.created_keys ?? {})}
+    for(const [key,id] of Object.entries(created))if(!byKey.has(key))byKey.set(key,{id,notIndexedYet:true})
     const grades = await queryAllPages(sources.grades)
     let cursor=run.row_cursor
     const end=Math.min(cursor+4,rows.length)
@@ -81,10 +90,17 @@ async function processRun(runId: string) {
         if(matches.length>1)throw new Error("학년 중복: "+n)
         return matches.map(p=>p.id)
       })
-      const properties=ownedProperties(row,page.id,key,gradeIds), previous=byKey.get(key)
+      const properties=ownedProperties(row,page.id,key,gradeIds)
+      let previous=byKey.get(key)
+      if(previous?.notIndexedYet){
+        // 기록에는 있지만 조회에 안 보인 일정: 직접 읽어 확인한다. 사용자가 지웠으면 새로 만든다.
+        const fresh=await getPage(previous.id).catch(()=>null)
+        previous=fresh && !fresh.archived && !fresh.in_trash ? fresh : undefined
+        if(previous)byKey.set(key,previous);else{byKey.delete(key);delete created[key]}
+      }
       if(previous){if(!sameOwnedEvent(previous,row,page.id,key,gradeIds))await updatePageProperties(previous.id,properties)}
-      else{const p=await schoolNotion("/pages","POST",{parent:{data_source_id:sources.events},properties:newEventProperties(row,page.id,key,gradeIds)});byKey.set(key,p)}
-      await db(path,"PATCH",{row_cursor:cursor+1,updated_at:new Date().toISOString()})
+      else{const p=await schoolNotion("/pages","POST",{parent:{data_source_id:sources.events},properties:newEventProperties(row,page.id,key,gradeIds)});byKey.set(key,p);created[key]=p.id}
+      await db(path,"PATCH",{row_cursor:cursor+1,created_keys:created,updated_at:new Date().toISOString()})
       await new Promise(resolve=>setTimeout(resolve,400))
     }
     const done=cursor>=rows.length
