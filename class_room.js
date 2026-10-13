@@ -44,12 +44,12 @@ function toast(msg){const t=$('toast');t.textContent=msg;t.hidden=false;clearTim
 async function run(fn,btn){if(run.busy)return;run.busy=true;if(btn){btn.classList.add('loading');btn.setAttribute('aria-busy','true');}
  try{await fn();}catch(e){if(e.message!=='silent')toast(e.message);}finally{run.busy=false;if(btn){btn.classList.remove('loading');btn.removeAttribute('aria-busy');}}}
 function bar(crumbs,{back,notion,right=''}={}){
- $('bar').innerHTML=(back?`<button class="icon-btn" id="bar-back" type="button" aria-label="뒤로">${icon('back')}</button>`:'')+
-  (crumbs.length===1&&!back?`<h1>${esc(crumbs[0])}</h1>`:`<div class="crumbs">${crumbs.map(esc).map(c=>`<span>${c}</span>`).join('<span class="sep">›</span>')}</div>`)+right+(notion?nlink(notion,crumbs.at(-1)):'');
+ $('bar').innerHTML='<div class="bar-in">'+(back?`<button class="icon-btn" id="bar-back" type="button" aria-label="뒤로">${icon('back')}</button>`:'')+
+  (crumbs.length===1&&!back?`<h1>${esc(crumbs[0])}</h1>`:`<div class="crumbs">${crumbs.map(esc).map(c=>`<span>${c}</span>`).join('<span class="sep">›</span>')}</div>`)+right+(notion?nlink(notion,crumbs.at(-1)):'')+'</div>';
  if(back)$('bar-back').onclick=back;
 }
 function setTabs(on){const tb=$('tabbar');tb.hidden=!on;$('app').classList.toggle('with-tabs',!!on);if(!on)return;
- tb.innerHTML=`<button type="button" data-tab="students" class="${state.tab==='students'?'on':''}">${icon('users')}<span>학생 목록</span></button><button type="button" data-tab="records" class="${state.tab==='records'?'on':''}">${icon('학습')}<span>학습기록</span></button>`;
+ tb.innerHTML=`<div class="tab-in"><button type="button" data-tab="students" class="${state.tab==='students'?'on':''}">${icon('users')}<span>학생 목록</span></button><button type="button" data-tab="records" class="${state.tab==='records'?'on':''}">${icon('학습')}<span>학습기록</span></button></div>`;
  tb.querySelectorAll('button').forEach(b=>b.onclick=()=>{if(!leaveEdit())return;state.tab=b.dataset.tab;state.view='session';render();});}
 function leaveEdit(){if(state.edit&&Object.keys(state.draft).length&&!confirm('저장하지 않은 변경이 있어요. 버리고 나갈까요?'))return false;state.edit=false;state.draft={};updateSavebar();return true;}
 function updateSavebar(){const n=Object.keys(state.draft).length;$('savebar').hidden=!state.edit||!n;$('savebar').classList.toggle('no-tabs',$('tabbar').hidden);$('save-count').textContent=`변경 ${n}건`;}
@@ -59,9 +59,9 @@ window.addEventListener('beforeunload',e=>{if(state.edit&&Object.keys(state.draf
 function showLogin(message=''){
  setTabs(false);state.view='login';bar(['수업']);
  $('app').innerHTML=`<p class="page-title">${icon('lock')}수업용 로그인</p><p class="page-hint">원장님께 받은 수업용 비밀번호를 입력하세요. 이 기기에서 30일 동안 다시 묻지 않아요.</p>
- <form id="login" class="card narrow"><label for="pw">수업용 비밀번호</label><input type="password" id="pw" autocomplete="current-password" maxlength="128" required>
- <p class="error" id="login-err" ${message?'':'hidden'}>${esc(message)}</p><button class="primary" type="submit">로그인</button></form>
- <p class="help">수업용 로그인으로는 수업방만 쓸 수 있어요. 관리자 설정·법정 서류·키오스크 설정은 열리지 않아요.</p>`;
+ <form id="login" class="card"><label for="pw">수업용 비밀번호</label><input type="password" id="pw" autocomplete="current-password" maxlength="128" required>
+ <p class="help">수업용 로그인으로는 수업방만 쓸 수 있어요. 관리자 설정·법정 서류·키오스크 설정은 열리지 않아요.</p>
+ <p class="error" id="login-err" ${message?'':'hidden'}>${esc(message)}</p><div class="actions"><button class="primary" type="submit">로그인</button></div></form>`;
  if(CFG.error){$('login-err').hidden=false;$('login-err').textContent=CFG.error;}
  $('login').onsubmit=async e=>{e.preventDefault();const btn=e.submitter,err=$('login-err');if(run.busy)return;run.busy=true;btn.classList.add('loading');err.hidden=true;
   try{const s=await HadaAdminAuth.login(CFG.url,$('pw').value,'class');state.session=s;store.set(SESSION_KEY,s);run.busy=false;await run(start);}
