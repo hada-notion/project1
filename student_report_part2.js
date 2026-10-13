@@ -395,7 +395,37 @@ function moveCalDayWeek(days) {
   regCalMonthIndex = monthIndex
   renderApp()
 }
-// 고른 날짜의 기록: 출석 상태 + 그날 학습·그날 낸 과제·그날 평가
+// 학습기록 카드 한 장(v2.5.101: 학습기록 탭과 캘린더 날짜 목록 공용, 내용은 학습기록 탭 그대로).
+// 날짜로 묶인 목록이라 과제는 출제일 대신 "마감:"만, 본문·사진이 있을 때만 펼치기(⌄).
+function logCardHtml(l) {
+  return `
+              <div class="log-card ${l.type}">
+                <div class="log-top">
+                  <div class="log-icon"><span class="log-icon-emoji">${l.icon}</span><span class="log-icon-label">${l.type}</span></div>
+                  <div class="log-body">
+                    <div class="log-title-row"><div class="log-title">${esc(l.title)}</div>${l.pill ? `<span class="log-pill ${l.pillTone || ""}">${esc(l.pill)}</span>` : ""}</div>
+                  </div>
+                </div>
+                ${(() => {
+                  // (v2.5.98) 날짜로 묶인 목록이라 출제일은 묶음 날짜와 같아 빼고 마감만 보인다.
+                  const meta = renderLogMetaRows(l.unit, l.note, l.type === "과제" && l.due ? [`마감: ${withDow(l.due)}`] : [])
+                  const bodyHtml = buildLogBodyHtml(l)
+                  const hasExtra = l.photo || !!bodyHtml
+                  const chevronBtn = hasExtra ? `<button type="button" class="log-extra-chevron" onclick="toggleLogExtra(this)" aria-label="펼치기"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>` : ""
+                  const metaHtml = (meta || chevronBtn) ? `<div class="log-meta">${meta}${chevronBtn}</div>` : ""
+                  const extraHtml = hasExtra ? `<div class="log-extra">${l.photo ? `<img class="log-photo" src="${esc(l.photo)}" />` : ""}${bodyHtml}</div>` : ""
+                  return metaHtml + extraHtml
+                })()}
+              </div>
+`
+}
+// 학습·과제·평가를 카드 항목으로(학습기록 탭과 캘린더 날짜 목록이 같은 값으로 그린다)
+const logItemOfStudy = (l) => ({ type: "학습", icon: KIND_ICONS["학습"], date: l.date, title: [l.book, l.range].filter(Boolean).join(" · ") || "학습 기록", unit: l.unit, note: l.note, photo: l.photo, body: l.body, book: l.book, sourceBody: l.sourceBody, activityBody: l.activityBody })
+const logItemOfHomework = (h) => ({ type: "과제", icon: KIND_ICONS["과제"], date: h.classDate || h.due, due: h.due, classDate: h.classDate, title: [h.book, h.range].filter(Boolean).join(" · "), unit: h.unit, note: h.note, pill: h.status, pillTone: homeworkPillTone(h.status), book: h.book, sourceBody: h.sourceBody, activityBody: h.activityBody })
+// 평가 아이콘은 학습기록 탭이 써 온 Feather file-text 그대로(KIND_ICONS 평가와 줄 하나 다름)
+const LOG_TEST_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`
+const logItemOfTest = (t) => ({ type: "평가", icon: LOG_TEST_ICON, date: t.date, title: [t.book, t.range].filter(Boolean).join(" · "), unit: t.unit, note: t.note, pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), book: t.book, sourceBody: t.sourceBody, activityBody: t.activityBody })
+// 고른 날짜의 기록: 출석 상태 + 그날 학습·그날 낸 과제·그날 평가. v2.5.101부터 한 카드에 구분선으로 잇지 않고 학습기록 탭과 같은 독립 카드.
 function buildCalDayPanelHtml(r, date) {
   const att = (r.attendance_rows || []).find((a) => a.date === date)
   const logs = (r.study_logs || []).filter((l) => l.date === date)
@@ -403,14 +433,10 @@ function buildCalDayPanelHtml(r, date) {
   const tests = (r.tests || []).filter((t) => String(t.date || "").slice(0, 10) === date)
   const planned = !att && date >= MOCK_TODAY && isPlannedClassDate(r, date, closedDateSet())
   const badge = att ? `<span class="badge ${esc(att.status)}">${esc(att.status || "상태 미입력")}</span>` : `<span class="badge">${planned ? "수업 예정" : "수업 없음"}</span>`
-  const blocks = [
-    ...logs.map((l) => kindBlockHtml("학습", { title: [l.book, l.range].filter(Boolean).join(" · ") || "학습 기록", item: l })),
-    ...homework.map((h) => kindBlockHtml("과제", { title: [h.book, h.range].filter(Boolean).join(" · ") || "과제", pill: h.status, pillTone: homeworkPillTone(h.status), sub: h.due ? `마감 ${shortDateDow(h.due)}` : "", item: h })),
-    ...tests.map((t) => kindBlockHtml("평가", { title: [t.book, t.range].filter(Boolean).join(" · ") || "평가", pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), item: t })),
-  ]
+  const blocks = [...logs.map(logItemOfStudy), ...homework.map(logItemOfHomework), ...tests.map(logItemOfTest)].map(logCardHtml)
   return `
     <div class="cal-day-head"><b>${esc(formatDateLabel(date))}</b>${badge}</div>
-    <div class="cal-day-card">${blocks.length ? blocks.join("") : `<div class="empty">이날 기록된 학습·과제·평가가 없어요.</div>`}</div>
+    ${blocks.length ? `<div class="cal-day-logs">${blocks.join("")}</div>` : `<div class="cal-day-card"><div class="empty">이날 기록된 학습·과제·평가가 없어요.</div></div>`}
     ${att ? `<button type="button" class="cal-day-link" onclick="openDayReport('${date}')">이날 보고서 보기${CHEVRON_RIGHT_SVG}</button>` : ""}
   `
 }
@@ -1041,9 +1067,9 @@ function renderDetail() {
       <div class="feed-narrow-wrap">
       ${(() => {
         const items = []
-        studyLogs.forEach((l) => items.push({ type: "학습", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`, date: l.date, title: [l.book, l.range].filter(Boolean).join(" · ") || "학습 기록", unit: l.unit, note: l.note, photo: l.photo, body: l.body, book: l.book, sourceBody: l.sourceBody, activityBody: l.activityBody }))
-        homework.forEach((h) => items.push({ type: "과제", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>`, date: h.classDate || h.due, due: h.due, classDate: h.classDate, title: [h.book, h.range].filter(Boolean).join(" · "), unit: h.unit, note: h.note, pill: h.status, pillTone: homeworkPillTone(h.status), book: h.book, sourceBody: h.sourceBody, activityBody: h.activityBody }))
-        tests.forEach((t) => items.push({ type: "평가", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`, date: t.date, title: [t.book, t.range].filter(Boolean).join(" · "), unit: t.unit, note: t.note, pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), book: t.book, sourceBody: t.sourceBody, activityBody: t.activityBody }))
+        studyLogs.forEach((l) => items.push(logItemOfStudy(l)))
+        homework.forEach((h) => items.push(logItemOfHomework(h)))
+        tests.forEach((t) => items.push(logItemOfTest(t)))
         const filtered = studyLogFilter === "전체" ? items : items.filter((it) => it.type === studyLogFilter)
         const sorted = filtered.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
         const groups = []
@@ -1054,26 +1080,7 @@ function renderDetail() {
         return groups.length ? groups.map((g) => `
           <div class="log-date-group">
             <div class="log-date-label">${esc(withDow(g.date))}</div>
-            ${g.items.map((l) => `
-              <div class="log-card ${l.type}">
-                <div class="log-top">
-                  <div class="log-icon"><span class="log-icon-emoji">${l.icon}</span><span class="log-icon-label">${l.type}</span></div>
-                  <div class="log-body">
-                    <div class="log-title-row"><div class="log-title">${esc(l.title)}</div>${l.pill ? `<span class="log-pill ${l.pillTone || ""}">${esc(l.pill)}</span>` : ""}</div>
-                  </div>
-                </div>
-                ${(() => {
-                  // (v2.5.98) 날짜로 묶인 목록이라 출제일은 묶음 날짜와 같아 빼고 마감만 보인다.
-                  const meta = renderLogMetaRows(l.unit, l.note, l.type === "과제" && l.due ? [`마감: ${withDow(l.due)}`] : [])
-                  const bodyHtml = buildLogBodyHtml(l)
-                  const hasExtra = l.photo || !!bodyHtml
-                  const chevronBtn = hasExtra ? `<button type="button" class="log-extra-chevron" onclick="toggleLogExtra(this)" aria-label="펼치기"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>` : ""
-                  const metaHtml = (meta || chevronBtn) ? `<div class="log-meta">${meta}${chevronBtn}</div>` : ""
-                  const extraHtml = hasExtra ? `<div class="log-extra">${l.photo ? `<img class="log-photo" src="${esc(l.photo)}" />` : ""}${bodyHtml}</div>` : ""
-                  return metaHtml + extraHtml
-                })()}
-              </div>
-            `).join("")}
+            ${g.items.map((l) => logCardHtml(l)).join("")}
           </div>
         `).join("") : `<div class="empty">기록이 없습니다.</div>`
       })()}
