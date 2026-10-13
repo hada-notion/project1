@@ -150,10 +150,6 @@ dialog.sheet{width:min(100%,var(--form-max));max-width:100%;margin:auto auto 0;b
 .empty.tall{padding:var(--space-8) var(--space-4);line-height:1.7}
 svg.line.check,.row svg.line,.choose svg.line,.pill svg.line{width:var(--icon-md);height:var(--icon-md);flex:none}
 .nl{flex:none}
-.bars{display:flex;gap:var(--space-6);align-items:flex-end;justify-content:center;height:calc(3*var(--hit-area));padding-top:var(--space-4)}
-.bars div{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:var(--space-1);font-size:var(--text-caption);color:var(--text-subtle)}
-.bars i{display:block;width:var(--space-6);border-radius:var(--radius-sm);border-bottom-left-radius:0;border-bottom-right-radius:0;background:var(--brand-mid)}
-.bars b{color:var(--text-ink)}
 /* 칸 머리(v2.5.69): 제목 / 안내(집계 숫자 포함) / 가운데 탭 + 오른쪽 버튼. 리포트처럼 본문이 상단 바 가까이에서 시작한다. */
 .ph{min-width:0}
 .ph .page-title{margin:0 0 var(--space-1)}
@@ -172,7 +168,6 @@ svg.line.check,.row svg.line,.choose svg.line,.pill svg.line{width:var(--icon-md
 .pick{flex:none;width:var(--hit-area);display:inline-flex;justify-content:center}
 /* 설명 줄이 빈 학생도 줄 높이가 같게 */
 .row .d:empty::before{content:"\a0"}
-.note-row{margin-top:var(--space-1)}
 .note-hint{color:var(--text-subtle);font-size:var(--text-caption);margin:var(--space-2) 0 0}
 .pbody>.sec-title:first-child{margin-top:var(--space-3)}
 /* 모든 화면의 첫 제목은 상단 바 아래 같은 높이(본문 위 여백 16 + 4) */
@@ -224,7 +219,7 @@ dialog.drawer.right{inset:0 0 0 auto;border-radius:0;border-top-left-radius:var(
 .stu .s1+.s1{border-top:1px solid var(--divider)}
 .stu .c{justify-self:center;text-align:center}
 .stu .tm{font-size:var(--text-label);color:var(--text-muted);font-variant-numeric:tabular-nums}
-.stu .nm{min-width:0;min-height:var(--hit-min);padding:0;border:0;background:transparent;font:inherit;font-weight:700;color:inherit;text-align:left;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center}
+.stu .nm{min-width:0;min-height:var(--hit-min);padding:0;border:0;background:transparent;font:inherit;font-weight:700;color:inherit;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center}
 .stu .seg{justify-self:end}
 .memo-btn{width:var(--hit-min);height:var(--hit-min);padding:0;border:0;border-radius:var(--radius-md);background:transparent;color:var(--text-subtle);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
 .memo-btn svg.line{width:var(--icon-md);height:var(--icon-md)}
@@ -357,6 +352,21 @@ body.snap-on .cr-main{max-width:none;padding:0}
 /* 요약 숫자 칸(리포트 .home-stats): 3칸, 연한 베이지 바탕 */
 .home-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-2)}
 .home-stat{min-width:0;background:var(--brand-tint);border-radius:var(--radius-md);padding:var(--space-3) var(--space-1);text-align:center}
+/* 누르는 요약 칸(v2.5.93): 홈 등원·과제 제출 → 캘린더 출석 체크·과제 점검. 모양은 같고 라벨 끝에 ›, 누르는 영역 44px 이상 */
+.home-stat.go{border:0;font:inherit;color:inherit;cursor:pointer;min-height:var(--hit-min);width:100%}
+/* 캘린더 접힌 날 아래 탭(v2.5.93): [출석 체크 | 과제 점검 | 학습 기록]은 가운데 전환 탭, 아래 한 줄에 집계와 [편집]·↗ */
+.check-tabs{margin:var(--space-2) 0 var(--space-1)}
+.check-row{margin:0 0 var(--space-2);min-height:var(--hit-min)}
+.check-row .sum{margin:0}
+.check-row .sum b{color:var(--text-ink)}
+.note-tabs{margin:0 0 var(--space-2)}
+/* 학생 명부(v2.5.93): [이름 학교 · 학년] / 연락처(누르면 전화, 44px) / ↗ 학생 보고서 */
+.roster .t small{font-weight:400;font-size:var(--text-label);color:var(--text-subtle);margin-left:var(--space-1)}
+.roster .meta>.phones{display:flex;flex-wrap:wrap;column-gap:var(--space-4)}
+.roster .tel{display:inline-flex;align-items:center;min-height:var(--hit-min);color:var(--brand-deep);font-size:var(--text-label);font-weight:600;text-decoration:none;font-variant-numeric:tabular-nums}
+.roster .no-tel{display:inline-flex;align-items:center;min-height:var(--hit-min);font-size:var(--text-label);color:var(--text-subtle)}
+.roster .no-rep{flex:none;font-size:var(--text-caption);color:var(--text-subtle)}
+.icon-btn.rep{flex:none;color:var(--brand-deep)}
 .home-stat b{display:block;font-size:var(--text-body);font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .home-stat small{display:block;margin-top:var(--space-1);font-size:var(--text-caption);color:var(--text-muted)}
 .home-stat.good b{color:var(--success-ink)}
@@ -416,6 +426,6 @@ body.snap-on .cr-main{max-width:none;padding:0}
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <script src="hada_config.js"></script>
 <script src="admin_auth.js?v=4ffde89c"></script>
-<script src="class_room.js?v=237f6976"></script>
+<script src="class_room.js?v=2943f77e"></script>
 </body>
 </html>
