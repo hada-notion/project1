@@ -469,7 +469,8 @@ function paneBook(el){
 // 오늘 빨간 테두리, 보는 수업 진하게, 범례). 날짜를 누르면 그 수업으로 가며 그 주 한 줄로 접히고(방문 기록 한 칸) 아래에 [⌄ 월 전체 보기] ·
 // 그날 머리 · [출석 체크 | 과제 점검 | 학습 기록]. 접힌 주에서 다른 날을 누르면 수업만 바꾼다(칸을 쌓지 않음, 고른 탭 유지).
 // 뒤로가기·[월 전체 보기]는 월 보기로. 반이 없는 보강 수업은 달력 없이 바로 그날 체크를 보인다.
-function calState(x){if(x.date>seoulDate())return 'plan';if(!x.total)return 'has';if(x.missing)return 'miss';if(x.absent)return 'bad';return 'ok';}
+// 칸 상태: 앞으로 = plan(테두리), 오늘 아직 다 찍지 않음 = open(테두리, 진행 중이라 빗금 아님), 지난 수업 미입력 = miss(빗금), 결석·보강 있음 = bad, 모두 출석 = ok
+function calState(x){const t=seoulDate();if(x.date>t)return 'plan';if(!x.total)return 'has';if(x.missing)return x.date===t?'open':'miss';if(x.absent)return 'bad';return 'ok';}
 const CAL_TABS=[['att','출석 체크'],['hw','과제 점검'],['rec','학습 기록']];
 function paneCalendar(el){
  const d=state.detail,list=state.classWeek||[],byDate=new Map(list.map(x=>[x.date,x])),open=state.calOpen||!list.length;
@@ -483,7 +484,7 @@ function paneCalendar(el){
  const arrived=d.students.filter(x=>x.arrivedAt||x.status==='🟢 출석').length;
  el.innerHTML=paneHead(`<p class="page-title">${icon('cal')}캘린더</p>`,!list.length?'반이 없는 보강 수업이라 달력 없이 이 수업만 봐요':open?'같은 주의 다른 날을 누르면 그 수업으로 바뀌어요':'날짜를 누르면 그 주로 접히고 출석 체크·과제 점검·학습 기록을 해요')+
  `<div class="pbody">${list.length?`<div class="attendance-calendar">${navRow}<div class="cal-grid">${CAL_DOW}${days}</div>
- ${open?`<button class="cal-collapse-btn" type="button" id="cal-month">${CHEVRON_DOWN}<span>월 전체 보기</span></button>`:'<div class="cal-legend"><span><i class="ok"></i>모두 출석</span><span><i class="bad"></i>결석 있음</span><span><i class="miss"></i>미입력</span><span><i class="plan"></i>예정</span></div>'}</div>`:''}
+ ${open?`<button class="cal-collapse-btn" type="button" id="cal-month">${CHEVRON_DOWN}<span>월 전체 보기</span></button>`:'<div class="cal-legend"><span><i class="ok"></i>모두 출석</span><span><i class="bad"></i>결석 있음</span></div>'}</div>`:''}
  ${open?`<div class="cal-day-head"><b>${esc(longDate(state.date))} ${esc(d.session.time||'')}</b><b>등원 ${arrived}/${d.students.length}</b></div><div id="cal-sub"></div>`:''}</div>`;
  el.querySelectorAll('[data-cs]').forEach(b=>b.onclick=()=>{const id=b.dataset.cs;if(open)return switchSession(id,b);
   if(!leaveEdit())return;state.calOpen=true;if(id===state.sessionId)return render();run(()=>openSessionNow(id,true),b);});
