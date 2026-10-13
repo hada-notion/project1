@@ -233,7 +233,10 @@ export async function loadClasses(date: string, teacherId?: string) {
 	const byClass = new Map<string, Page[]>()
 	for (const p of sessions) { const c = rel(p, "클래스")[0]; byClass.set(c, [...(byClass.get(c) ?? []), p]) }
 	const info = await classInfo([...byClass.keys()])
-	const brief = (p?: Page) => p ? { id: p.id as string, date: seoulDate(p.properties?.["수업일시"]?.date?.start ?? null) } : null
+	const brief = (p?: Page) => p ? { id: p.id as string, date: seoulDate(p.properties?.["수업일시"]?.date?.start ?? null), time: sessionSummary(p).time } : null
+	// 주간 시간표(v2.5.87): 기준일이 있는 주(월~일)의 수업. 학생 수는 기준일에 가장 가까운 수업(오늘 → 다음 → 지난)의 출석 수.
+	const dow = (Date.parse(start) / 86_400_000 + 3.375) % 7 // 1970-01-01(목) 기준, 서울 자정 = UTC 15시
+	const monday = t - Math.floor(dow) * 86_400_000, sunday = monday + 7 * 86_400_000
 	return {
 		classes: [...byClass].map(([classId, list]) => {
 			const when = (p: Page) => String(p.properties?.["수업일시"]?.date?.start ?? "")
@@ -245,6 +248,8 @@ export async function loadClasses(date: string, teacherId?: string) {
 				today: today.map((p) => { const s = sessionSummary(p); return { id: s.id, start: s.start, end: s.end, time: s.time } }),
 				next: brief(list.find((p) => when(p) >= end)),
 				last: brief(list.filter((p) => when(p) < start).at(-1)),
+				week: list.filter((p) => Date.parse(when(p)) >= monday && Date.parse(when(p)) < sunday).map((p) => { const s = sessionSummary(p); return { id: s.id, date: seoulDate(s.start), time: s.time } }),
+				students: (today[0] ?? list.find((p) => when(p) >= end) ?? list.filter((p) => when(p) < start).at(-1))?.properties?.["출석"]?.relation?.length ?? 0,
 			}
 		}),
 	}
