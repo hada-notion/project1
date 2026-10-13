@@ -294,20 +294,23 @@ async function reloadSession(){state.detail=await api('session',{sessionId:state
 function paneHead(title,hint,tabs='',acts=''){
  return `<div class="ph title-row">${title}</div><p class="page-hint ph">${hint}</p>`+(tabs||acts?`<div class="ph tab-row"><span></span>${tabs?`<div class="center-tabs"><div class="tabs" role="tablist">${tabs}</div></div>`:'<span></span>'}<span class="acts">${acts}</span></div>`:'');
 }
-// 내용 칸 글머리(v2.5.81): 줄 맨 앞에서 "- " 또는 "* "를 치면 Notion처럼 "• "로 바뀐다. 글머리 줄에서 Enter는 다음 줄에도 "• "를 잇고,
-// 빈 글머리 줄에서 Enter, 글머리 바로 뒤에서 Backspace는 글머리만 지운다. 저장은 글자 그대로("• ")라 리포트에도 점으로 보인다. 한글 조합 중에는 건드리지 않는다.
-const BULLET='• ';
+// 내용 칸 글머리(v2.5.81): 줄 맨 앞에서 "- " 또는 "* "를 치면 Notion처럼 "  • "(앞 두 칸 띄움)로 바뀐다.
+// 글머리 줄에서 Tab은 한 단계 들여쓰기("      ◦ " → "          ▪ ", 4칸씩), Shift+Tab은 내어쓰기. Enter는 다음 줄에 같은 단계 글머리를 잇고,
+// 빈 글머리 줄에서 Enter와 글머리 바로 뒤 Backspace는 한 단계 내어쓰고 첫 단계면 글머리를 지운다.
+// 저장은 글자 그대로라 리포트·Notion에도 점으로 보인다. 한글 조합 중에는 건드리지 않는다. 글머리가 아닌 줄의 Tab은 원래대로(다음 칸으로 이동).
+const BULLETS=['  • ','      ◦ ','          ▪ '];
 function bulletize(ta,onChange){
  const lineStart=()=>ta.value.lastIndexOf('\n',ta.selectionStart-1)+1;
  const set=(v,pos)=>{ta.value=v;ta.setSelectionRange(pos,pos);if(onChange)onChange();};
  ta.addEventListener('input',e=>{if(e.isComposing||ta.selectionStart!==ta.selectionEnd)return;const p=ta.selectionStart,s=lineStart(),head=ta.value.slice(s,p);
-  if(head==='- '||head==='* ')set(ta.value.slice(0,s)+BULLET+ta.value.slice(p),s+BULLET.length);});
- ta.addEventListener('keydown',e=>{if(e.isComposing||e.keyCode===229||ta.selectionStart!==ta.selectionEnd)return;const p=ta.selectionStart,s=lineStart();
-  if(!ta.value.startsWith(BULLET,s)||p<s+BULLET.length)return;
-  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();const end=ta.value.indexOf('\n',p),lineEnd=end<0?ta.value.length:end;
-   if(ta.value.slice(s,lineEnd)===BULLET)set(ta.value.slice(0,s)+ta.value.slice(lineEnd),s);
-   else set(ta.value.slice(0,p)+'\n'+BULLET+ta.value.slice(p),p+1+BULLET.length);}
-  else if(e.key==='Backspace'&&p===s+BULLET.length){e.preventDefault();set(ta.value.slice(0,s)+ta.value.slice(p),s);}});
+  if(head==='- '||head==='* ')set(ta.value.slice(0,s)+BULLETS[0]+ta.value.slice(p),s+BULLETS[0].length);});
+ ta.addEventListener('keydown',e=>{if(e.isComposing||e.keyCode===229||ta.selectionStart!==ta.selectionEnd)return;
+  const v=ta.value,p=ta.selectionStart,s=lineStart(),lvl=BULLETS.findIndex(b=>v.startsWith(b,s));if(lvl<0)return;const b=BULLETS[lvl];if(p<s+b.length)return;
+  const to=n=>{const nb=n<0?'':BULLETS[n];set(v.slice(0,s)+nb+v.slice(s+b.length),p-b.length+nb.length);};
+  if(e.key==='Tab'){e.preventDefault();if(e.shiftKey)to(lvl-1);else if(lvl<BULLETS.length-1)to(lvl+1);}
+  else if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();const end=v.indexOf('\n',p),lineEnd=end<0?v.length:end;
+   if(v.slice(s,lineEnd)===b)to(lvl-1);else set(v.slice(0,p)+'\n'+b+v.slice(p),p+1+b.length);}
+  else if(e.key==='Backspace'&&p===s+b.length){e.preventDefault();to(lvl-1);}});
 }
 const tabBtn=(on,attr,label)=>`<button type="button" role="tab" aria-selected="${on}" class="${on?'active':''}" ${attr}><span>${esc(label)}</span></button>`;
 const editing=owner=>state.edit&&state.editOwner===owner;
