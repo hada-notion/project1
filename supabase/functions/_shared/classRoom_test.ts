@@ -107,6 +107,19 @@ Deno.test("days: Seoul dates that have the teacher's sessions in a range", () =>
  await rejects(() => room.loadDays("2026-09-01", "2026-10-31"), 400)
  await rejects(() => room.loadDays("2026-10-12", "2026-10-18", "../x"), 400)
 }))
+Deno.test("roster: school, grade and phones from the student page, priority phone and report token from the registration", () => withMock(async (f) => {
+ const rollup = (s: string) => ({ type: "rollup", rollup: { type: "array", array: [{ type: "phone_number", phone_number: s }] } })
+ f.pages.stA = { id: "stA", db: "students", properties: { "학생이름": title("김하늘"), "학교(설문)": text("하다중"), "학년(설문)": { type: "select", select: { name: "중1" } }, "학생 연락처": { type: "phone_number", phone_number: "010-0000-0001" } } }
+ Object.assign(f.pages.ra.properties, { "학생정보": rel("stA"), "학부모 연락처": rollup("010-0000-0002"), "토큰": text("tok-a") })
+ Object.assign(f.pages.rb.properties, { "토큰": text("disabled:tok-b") })
+ const r = await room.loadRoster("s1")
+ assert(r.students.map((s: any) => s.name).join() === "김하늘,박서준")
+ const [a, b] = r.students
+ assert(a.school === "하다중" && a.grade === "중1" && a.studentPhone === "010-0000-0001" && a.parentPhone === "010-0000-0002" && a.reportToken === "tok-a" && !a.reportOff, JSON.stringify(a))
+ assert(b.reportToken === null && b.reportOff && b.school === "" && b.parentPhone === "", "disabled report link gives no token: " + JSON.stringify(b))
+ await rejects(() => room.loadRoster("../x"), 400)
+}))
+
 Deno.test("class-records: records of the class sessions, newest first, with the session date", () => withMock(async (f) => {
  f.pages.recA = { id: "recA", db: "records", properties: { "학습": title("[학습] 개념원리 1-2(중1 B) 10.13(화)"), "구분": { select: { name: "학습" } }, "수업": rel("s1"), "진도교재": rel("group"), "교재": rel("regular"), "범위": text("p.80-85") } }
  f.pages.recB = { id: "recB", db: "records", properties: { "학습": title("[과제] 개념원리 1-2(중1 B) 10.08(목)"), "구분": { select: { name: "과제" } }, "수업": rel("sPrev"), "진도교재": rel("indA"), "범위": text("p.70-76") } }

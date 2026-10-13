@@ -398,6 +398,34 @@ export async function loadSession(sessionId: string) {
 	}
 }
 
+// 학생 명부(v2.5.93): 이 수업 학생의 학교·학년·연락처와 학생 보고서 주소용 토큰. 학생 탭을 열 때만 읽는다(읽기만).
+// 학교·학년·학생 연락처는 등록의 "학생정보"(원생) 페이지에서 리포트와 같은 속성으로, 우선 연락처는 등록의 "학부모 연락처"
+// (알림톡 "우선 연락 대상"과 같은 값). 보고서 토큰이 꺼져 있으면("disabled:", adminShared.parseTokenValue와 같은 규칙) 주소를 주지 않는다.
+export async function loadRoster(sessionId: string) {
+	if (!isId(sessionId)) throw new ClassRoomError(400, "수업 형식이 올바르지 않습니다.")
+	const session = await getPage(sessionId) as Page
+	const attendances = await getPages(rel(session, "출석"))
+	const regs = new Map((await getPages(dedupe(attendances.map((a) => rel(a, "등록")[0]).filter(Boolean) as string[]))).map((r) => [r.id as string, r]))
+	const people = new Map((await getPages(dedupe([...regs.values()].map((r) => rel(r, "학생정보")[0]).filter(Boolean) as string[]))).map((p) => [p.id as string, p]))
+	const students = attendances.map((a) => {
+		const reg = regs.get(rel(a, "등록")[0] ?? ""), person = reg ? people.get(rel(reg, "학생정보")[0] ?? "") : undefined
+		const raw = reg ? propText(reg.properties?.["토큰"]).trim() : "", off = raw.startsWith("disabled:")
+		const of = (p: Page | undefined, name: string) => p ? propText(p.properties?.[name]).trim() : ""
+		return {
+			attendanceId: a.id as string,
+			registrationId: reg?.id as string ?? null,
+			name: studentName(a),
+			school: of(person, "학교(설문)"),
+			grade: of(person, "학년(설문)"),
+			studentPhone: of(person, "학생 연락처"),
+			parentPhone: of(reg, "학부모 연락처"),
+			reportToken: raw && !off ? raw : null,
+			reportOff: off,
+		}
+	}).sort((x, y) => x.name.localeCompare(y.name, "ko"))
+	return { students }
+}
+
 async function className(session: Page): Promise<string> {
 	const classId = rel(session, "클래스")[0]
 	if (!classId) return ""
@@ -743,6 +771,7 @@ export async function handleClassRoom(body: any): Promise<unknown> {
 		case "classes": return await loadClasses(String(body.date ?? ""), body.teacherId)
 		case "class-sessions": return await loadClassSessions(body.sessionId, body.around)
 		case "class-records": return await loadClassRecords(body.sessionId)
+		case "roster": return await loadRoster(body.sessionId)
 		case "books": return await loadBooks(body.sessionId)
 		case "activities": return await loadActivities(body.recordId)
 		case "student": return await loadStudent(body.registrationId)
