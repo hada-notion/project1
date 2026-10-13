@@ -38,7 +38,7 @@ function timeOf(iso){if(!iso)return '';const d=new Date(new Date(iso).getTime()+
 function shortDate(iso){if(!iso)return '';const d=new Date(new Date(iso).getTime()+(String(iso).includes('T')?9*3600e3:0));return `${d.getUTCMonth()+1}/${d.getUTCDate()}`;}
 
 const state={session:store.get(SESSION_KEY),teacherId:store.get(TEACHER_KEY),teachers:[],date:seoulDate(),view:'main',day:null,
- sessionId:'',detail:null,tab:'home',bookSeg:'진행 중',bookItem:null,classRecs:null,calOpen:false,rosterCache:{},seg:'att',recKind:'전체',hwRecord:'',edit:false,editOwner:'',saver:null,draft:{},recordId:'',acts:null,books:null,picked:new Set(),
+ sessionId:'',detail:null,tab:'home',bookSeg:'진행 중',bookItem:null,classRecs:null,calOpen:false,rosterCache:{},statsCache:{},seg:'att',recKind:'전체',hwRecord:'',edit:false,editOwner:'',saver:null,draft:{},recordId:'',acts:null,books:null,picked:new Set(),
  classWeek:[],cwMonth:'',cwFrom:'',cwTo:'',classes:null,form:null,bookCache:{}};
 
 async function api(action,data={}){
@@ -380,7 +380,7 @@ function heroHtml(){const s=state.detail.session,tname=teacherName(s.teacherIds?
 function classBar(){const s=state.detail.session;
  bar([whoName(),className(s),TAB_NAME[state.tab]||''],{back:()=>{if(nav.stack.length)return navBack();if(!leaveEdit())return;if(state.tab!=='home'){state.tab='home';nav.replace=true;render();}else run(()=>showMain());},
   right:`<button class="icon-btn" id="bar-refresh" type="button" aria-label="새로고침">${icon('refresh')}</button>`});
- $('bar-refresh').onclick=e=>{if(!leaveEdit())return;state.classRecs=null;if(state.bookCache)delete state.bookCache[state.sessionId];delete state.rosterCache[state.sessionId];run(()=>openSessionNow(state.sessionId,true),e.currentTarget);};}
+ $('bar-refresh').onclick=e=>{if(!leaveEdit())return;state.classRecs=null;if(state.bookCache)delete state.bookCache[state.sessionId];delete state.rosterCache[state.sessionId];delete state.statsCache[state.sessionId];run(()=>openSessionNow(state.sessionId,true),e.currentTarget);};}
 function sessionBar(){const s=state.detail.session,v=state.view;
  if(v==='session')return classBar();
  const extra=v==='book'?['교재',state.bookItem.title]:[state.acts.record.kind||'기록'];
@@ -552,36 +552,68 @@ function openMemo(id,key='memo'){
  draw();showLayer(sh);
 }
 
-// ---------- 학생 탭(v2.5.93) ----------
-// 반 학생 명부: [이름 학교 · 학년] / 학생·우선 연락처(누르면 전화) / ↗ 학생 보고서(새 탭, 알림톡 링크와 같은 주소, 읽기만 하는 화면).
-// 학생 탭을 열 때만 읽는다(roster). 보고서 링크가 꺼져 있거나 토큰이 없으면 ↗ 대신 안내 글자.
+// ---------- 학생 탭(v2.5.93, 반 요약 v2.5.94) ----------
+// 위: 반 요약 카드(보고 있는 수업 달·지난달 출석률, 최근 평가 평균, 최근 평가 5개 반 평균 막대). 아래: 반 학생 명부
+// [이름 학교 · 학년] / [출석 n% · 평가 n점](낮으면 빨강: 출석 80% 미만, 점수 60점 미만) / 학생·우선 연락처(누르면 전화) / ↗ 학생 보고서(새 탭).
+// 학생 탭을 열 때만 읽는다(roster, class-stats). 보고서 링크가 꺼져 있거나 토큰이 없으면 ↗ 대신 안내 글자.
+function ensureStats(){const id=state.sessionId;if(state.statsCache[id])return state.statsCache[id];
+ if(ensureStats.busy!==id){ensureStats.busy=id;whenLoaded(api('class-stats',{sessionId:id}).then(r=>{state.statsCache[id]=r;}).finally(()=>{ensureStats.busy=null;}));}return null;}
+const monthName=ym=>Number(ym.slice(5))+'월';
+function classSummary(st){
+ if(!st)return '<div class="card cls-sum"><p class="empty">반 요약을 불러오는 중…</p></div>';
+ const pct=r=>r===null||r===undefined?'–':r+'%',t=st.tests,avg=t.length?Math.round(t.reduce((n,x)=>n+x.avg,0)/t.length):null;
+ const tone=(v,lo)=>v===null||v===undefined?'':v>=90?'good':v<lo?'bad':'';
+ return `<div class="card cls-sum"><div class="home-stats">${stat(pct(st.month.rate),`${monthName(st.month.ym)} 출석률`,tone(st.month.rate,80))}${stat(pct(st.prev.rate),`${monthName(st.prev.ym)} 출석률`)}${stat(avg===null?'–':avg+'점','최근 평가 평균',tone(avg,60))}</div>
+ ${t.length?`<p class="group-label">최근 평가 ${t.length}개 · 반 평균</p><div class="tbars" role="img" aria-label="최근 평가 반 평균 ${t.map(x=>`${md(x.date)} ${x.avg}점`).join(', ')}">${t.map(x=>`<div class="tb"><span class="tb-bar"><b>${x.avg}</b><i style="height:${Math.max(6,x.avg)*0.8}%"></i></span><span>${esc(md(x.date))}</span><small>${esc((x.range||x.subject||'평가').slice(0,8))}</small></div>`).join('')}</div>`:'<p class="empty">점수가 있는 평가가 아직 없어요.</p>'}</div>`;}
 function ensureRoster(){const id=state.sessionId;if(state.rosterCache[id])return state.rosterCache[id];
  if(ensureRoster.busy!==id){ensureRoster.busy=id;whenLoaded(api('roster',{sessionId:id}).then(r=>{state.rosterCache[id]=r.students;}).finally(()=>{ensureRoster.busy=null;}));}return null;}
 const telHref=p=>'tel:'+String(p).replace(/[^0-9+]/g,'');
 function paneRoster(el){
- const list=ensureRoster(),head=h=>paneHead(`<p class="page-title">${icon('users')}학생</p>${nlink(state.detail.session.id,'수업')}`,h);
- if(!list){el.innerHTML=head('학생 정보를 불러오는 중…');return;}
+ const list=ensureRoster(),st=ensureStats(),head=h=>paneHead(`<p class="page-title">${icon('users')}학생</p>${nlink(state.detail.session.id,'수업')}`,h);
+ if(!list){el.innerHTML=head('학생 정보를 불러오는 중…')+`<div class="pbody">${classSummary(st)}</div>`;return;}
+ const per=s=>st?.students?.[s.registrationId],pill=(txt,low)=>`<span class="pill ${low?'miss':''}">${txt}</span>`;
  const tel=(label,p)=>p?`<a class="tel" href="${esc(telHref(p))}" aria-label="${label} ${esc(p)} 전화 걸기">${label} ${esc(p)}</a>`:'';
- el.innerHTML=head(`학생 <b>${list.length}</b>명 · 번호를 누르면 전화, ↗는 학생 보고서(새 탭)`)+`<div class="pbody">${list.length?`<div class="list roster">${list.map(s=>`<div class="row r1"><span class="meta"><span class="t">${esc(s.name)}${s.school||s.grade?`<small>${esc([s.school,s.grade].filter(Boolean).join(' · '))}</small>`:''}</span>
+ el.innerHTML=head(`학생 <b>${list.length}</b>명 · 출석률은 ${st?monthName(st.month.ym):'이번 달'}, 점수는 최근 평가 · 번호를 누르면 전화, ↗는 학생 보고서(새 탭)`)+`<div class="pbody">${classSummary(st)}${list.length?`<div class="list roster">${list.map(s=>`<div class="row r1"><span class="meta"><span class="t">${esc(s.name)}${s.school||s.grade?`<small>${esc([s.school,s.grade].filter(Boolean).join(' · '))}</small>`:''}</span>
+  ${(()=>{const x=per(s);if(!x)return '';const a=x.rate!==null&&x.rate!==undefined?pill(`출석 ${x.rate}%`,x.rate<80):'',b=x.score!==null&&x.score!==undefined?pill(`평가 ${x.score}점`,x.score<60):'';return a||b?`<span class="r-stats">${a}${b}</span>`:'';})()}
   <span class="phones">${tel('학생',s.studentPhone)}${tel('우선',s.parentPhone)}${s.studentPhone||s.parentPhone?'':'<span class="no-tel">연락처 없음</span>'}</span></span>
   ${s.reportToken?`<a class="icon-btn rep" href="student_report.html?token=${encodeURIComponent(s.reportToken)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(s.name)} 학생 보고서 새 탭에서 열기" title="학생 보고서">${icon('ext')}</a>`:`<span class="no-rep">${s.reportOff?'보고서 꺼짐':'보고서 없음'}</span>`}</div>`).join('')}</div>`:'<div class="list"><p class="empty">이 수업에 연결된 학생이 없어요.</p></div>'}</div>`;
 }
 
 // ---------- 학습기록 ----------
-// 기록 카드 한 장(학습기록 탭·홈·캘린더·교재 상세 공용). v2.5.89부터 학부모 리포트 학습기록 카드(.log-card)와 같은 규칙:
-// [분류 아이콘 칸(아이콘 + 구분 글자)] [교재 · 범위](교재 없으면 주제) [보강], 아래 "• 주제"(제목에 없을 때)·과제/평가는 "• 출제: 날짜",
-// 내용은 접어 두고 오른쪽 아래 ⌄로 펼친다(연한 베이지 칸). 카드를 누르면 기록 화면.
+// 기록 카드 한 장(학습기록 탭·홈·캘린더·교재 상세 공용). v2.5.95부터 학부모 리포트 학습기록 카드(student_report_part2.js 학습기록 탭, renderLogMetaRows)와 같은 규칙:
+// [분류 아이콘 칸(아이콘 + 구분 글자)] [교재 · 범위](교재 없으면 주제) [알약: 과제 "제출 n/전체", 평가 "평균 n점", 보강],
+// 아래 줄은 펼치지 않아도 보인다: 단원("• 1-1. …", 단원 번호마다 한 줄) → 내용(선생님이 적은 글, 줄마다 앞뒤 공백 정리) → 과제는 "• 출제: 날짜"·"• 마감: 날짜".
+// 펼치기(⌄)는 Notion 페이지 본문(글·목록·사진·파일·표)이 있을 때만이고, 펼치면 본문만 연한 베이지 칸에 보인다. 카드를 누르면 기록 화면.
 const withDow=ymd=>ymd?`${ymd} (${'일월화수목금토'[new Date(ymd+'T00:00:00Z').getUTCDay()]})`:'';
 function recCard(r){
  const subject=r.subject||'',title=[subject,r.range].filter(Boolean).join(' · ')||r.topic||r.title,day=r.date||state.date;
- const rows=[r.topic&&r.topic!==subject&&r.topic!==title?r.topic:'',r.kind==='과제'||r.kind==='평가'?`출제: ${withDow(day)}`:''].filter(Boolean);
- const extra=(r.content||'').split('\n').map(l=>l.trim()).filter(Boolean).join('\n'); // 리포트처럼 줄마다 앞뒤 공백을 정리해 같은 들여쓰기로
- return `<div class="rec log-card ${extra?'has-extra':''}"><div class="log-head"><button class="log-main" type="button" data-rec="${esc(r.id)}"><span class="log-top"><span class="log-icon k-${esc(r.kind||'학습')}">${icon(r.kind||'학습')}<small>${esc(r.kind||'학습')}</small></span><span class="log-title">${esc(title)}</span>${r.makeup?'<span class="pill s-보강">보강</span>':''}</span>
- ${rows.length?`<span class="log-meta">${rows.map(x=>`<span class="log-context">• ${esc(x)}</span>`).join('')}</span>`:''}</button>
- ${extra?`<button class="log-chev" type="button" data-chev aria-expanded="false" aria-label="내용 펼치기"><span>${CHEVRON_DOWN}</span></button>`:''}</div>
- ${extra?`<div class="log-extra" hidden>${esc(extra)}</div>`:''}</div>`;}
+ const units=(r.unit||'').split(/(?=\d+-\d+\.)/).map(x=>x.trim()).filter(Boolean);
+ const note=(r.content||'').split('\n').map(l=>l.trim()).join('\n').trim();
+ const extras=r.kind==='과제'?[`출제: ${withDow(day)}`,r.homework?.due?`마감: ${withDow(r.homework.due)}`:''].filter(Boolean):[];
+ const hw=r.homework,sc=r.score;
+ const pill=hw?`<span class="pill ${hw.submitted===hw.total?'done':'miss'}">제출 ${hw.submitted}/${hw.total}</span>`:sc?`<span class="pill k-평가">평균 ${sc.avg}점</span>`:'';
+ const body=bodyHtml(r.body),meta=units.map(u=>`<span class="log-context">• ${esc(u)}</span>`).join('')+(note?`<span class="log-note">${esc(note)}</span>`:'')+extras.map(x=>`<span class="log-context">• ${esc(x)}</span>`).join('');
+ return `<div class="rec log-card ${body?'has-extra':''}"><div class="log-head"><button class="log-main" type="button" data-rec="${esc(r.id)}"><span class="log-top"><span class="log-icon k-${esc(r.kind||'학습')}">${icon(r.kind||'학습')}<small>${esc(r.kind||'학습')}</small></span><span class="log-title">${esc(title)}</span>${pill}${r.makeup?'<span class="pill s-보강">보강</span>':''}</span>
+ ${meta?`<span class="log-meta">${meta}</span>`:''}</button>
+ ${body?`<button class="log-chev" type="button" data-chev aria-expanded="false" aria-label="본문 펼치기"><span>${CHEVRON_DOWN}</span></button>`:''}</div>
+ ${body?`<div class="log-extra" hidden>${body}</div>`:''}</div>`;}
+// Notion 페이지 본문(feedBody.ts가 내려주는 블록 목록) → HTML. 글은 굵게·기울임·코드·링크만 살리고, 사진·동영상·파일은 새 탭으로 연다.
+function spansHtml(b){const sp=Array.isArray(b.spans)&&b.spans.length?b.spans:[{text:b.text||''}];
+ return sp.map(s=>{let h=esc(s.text??'');if(s.code)h=`<code>${h}</code>`;if(s.bold)h=`<b>${h}</b>`;if(s.italic)h=`<i>${h}</i>`;if(s.strikethrough)h=`<s>${h}</s>`;
+  if(s.href&&/^https?:\/\//.test(s.href))h=`<a href="${esc(s.href)}" target="_blank" rel="noopener noreferrer">${h}</a>`;return h;}).join('');}
+function bodyHtml(body){if(!Array.isArray(body)||!body.length)return '';const out=[];let list='';const close=()=>{if(list){out.push(`</${list}>`);list='';}};
+ for(const b of body){if(!b)continue;
+  if(b.type==='text'){const st=String(b.style||'paragraph'),t=spansHtml(b);
+   if(st==='bulleted_list_item'||st==='numbered_list_item'||st==='to_do'){const tag=st==='numbered_list_item'?'ol':'ul';if(list!==tag){close();out.push(`<${tag} class="lb-list">`);list=tag;}out.push(`<li>${st==='to_do'?(b.checked?'☑ ':'☐ '):''}${t}</li>`);continue;}
+   close();out.push(st.startsWith('heading')?`<p class="lb-h">${t}</p>`:st==='quote'||st==='callout'?`<p class="lb-q">${b.icon?esc(b.icon)+' ':''}${t}</p>`:st==='code'?`<pre class="lb-code">${esc(b.text||'')}</pre>`:`<p>${t}</p>`);continue;}
+  close();const url=/^https?:\/\//.test(String(b.url||''))?String(b.url):'';
+  if(b.type==='image'&&url)out.push(`<a class="lb-img" href="${esc(url)}" target="_blank" rel="noopener noreferrer"><img src="${esc(url)}" alt="${esc(b.caption||'')}" loading="lazy"></a>${b.caption?`<p class="lb-cap">${esc(b.caption)}</p>`:''}`);
+  else if((b.type==='video'||b.type==='pdf'||b.type==='file')&&url)out.push(`<p><a class="lb-file" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(b.name||b.caption||(b.type==='video'?'동영상':'첨부 파일'))}</a></p>`);
+  else if(b.type==='divider')out.push('<hr class="lb-hr">');
+  else if(b.type==='table'&&Array.isArray(b.rows))out.push(`<table class="lb-table">${b.rows.map(row=>`<tr>${(row||[]).map(c=>`<td>${spansHtml({spans:c})}</td>`).join('')}</tr>`).join('')}</table>`);}
+ close();return out.join('');}
 // 내용 펼치기·접기(모든 화면 공용, 화면을 다시 그리지 않는다)
-$('app').addEventListener('click',e=>{const b=e.target.closest('[data-chev]');if(!b)return;const x=b.closest('.log-card').querySelector('.log-extra'),open=x.hidden;x.hidden=!open;b.setAttribute('aria-expanded',open);b.setAttribute('aria-label',open?'내용 접기':'내용 펼치기');});
+$('app').addEventListener('click',e=>{const b=e.target.closest('[data-chev]');if(!b)return;const x=b.closest('.log-card').querySelector('.log-extra'),open=x.hidden;x.hidden=!open;b.setAttribute('aria-expanded',open);b.setAttribute('aria-label',open?'본문 접기':'본문 펼치기');});
 // 기록을 날짜별로(최근 날짜부터). 보고 있는 수업 날짜에는 표시를 붙인다.
 function recTimeline(recs,empty){const dates=[...new Set(recs.map(r=>r.date||''))];
  return dates.map(d=>{const day=recs.filter(r=>(r.date||'')===d),cur=day.some(r=>r.sessionId===state.sessionId);

@@ -114,14 +114,30 @@ button.row{cursor:pointer}
 .log-icon.k-학습{background:var(--info-soft);color:var(--info-ink)}
 .log-icon.k-과제{background:var(--warning-soft);color:var(--warning-ink)}
 .log-icon.k-평가{background:var(--success-soft);color:var(--success-ink)}
-.log-title{flex:1;min-width:0;font-weight:700;font-size:var(--text-small);line-height:1.4}
+.log-title{flex:0 1 auto;min-width:0;font-weight:700;font-size:var(--text-small);line-height:1.4}
 .log-meta{display:block;margin-top:var(--space-2)}
 .log-context{display:block;font-size:var(--text-caption);color:var(--text-muted);white-space:pre-wrap;margin-bottom:var(--space-1)}
 .log-chev{position:absolute;right:var(--space-1);bottom:0;width:var(--hit-min);height:var(--hit-min);padding:0;border:0;background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer}
 .log-chev span{width:var(--space-6);height:var(--space-6);border-radius:50%;border:1px solid var(--brand-border);background:var(--surface);color:var(--brand-deep);display:flex;align-items:center;justify-content:center}
 .log-chev svg.line{width:var(--icon-sm);height:var(--icon-sm)}
 .log-chev[aria-expanded="true"] span{transform:rotate(180deg)}
-.log-extra{background:var(--brand-tint);padding:var(--space-3) var(--space-4);font-size:var(--text-small);color:var(--text-muted);white-space:pre-wrap}
+/* v2.5.95: 아래 줄은 리포트처럼 단원 "• " 줄 → 내용(.log-note, 줄바꿈 그대로) → 출제·마감. 펼침 칸에는 페이지 본문만 */
+.log-note{display:block;font-size:var(--text-caption);color:var(--text-muted);white-space:pre-wrap;margin-bottom:var(--space-1)}
+.log-top .pill{flex:none}
+.log-extra{background:var(--brand-tint);padding:var(--space-3) var(--space-4);font-size:var(--text-small);color:var(--text-ink);line-height:1.6}
+.log-extra p{margin:0 0 var(--space-2)}
+.log-extra .lb-h{font-weight:700}
+.log-extra .lb-q{padding-left:var(--space-3);box-shadow:inset 3px 0 0 var(--brand-mid);color:var(--text-muted)}
+.log-extra .lb-list{margin:0 0 var(--space-2);padding-left:var(--space-5)}
+.log-extra .lb-code{margin:0 0 var(--space-2);padding:var(--space-2) var(--space-3);border-radius:var(--radius-sm);background:var(--surface);font-family:var(--font-mono);font-size:var(--text-caption);white-space:pre-wrap}
+.log-extra .lb-img{display:block;margin:0 0 var(--space-2)}
+.log-extra .lb-img img{display:block;max-width:100%;border-radius:var(--radius-md)}
+.log-extra .lb-cap{font-size:var(--text-caption);color:var(--text-subtle)}
+.log-extra .lb-file{color:var(--brand-deep);font-weight:600}
+.log-extra .lb-hr{border:0;border-top:1px solid var(--divider);margin:var(--space-2) 0}
+.log-extra .lb-table{border-collapse:collapse;margin:0 0 var(--space-2);font-size:var(--text-caption)}
+.log-extra .lb-table td{border:1px solid var(--divider);padding:var(--space-1) var(--space-2)}
+.log-extra>:last-child{margin-bottom:0}
 .form label{margin-top:var(--space-4)}
 .form textarea{width:100%;min-height:calc(var(--control-h) * 2);font:inherit;padding:var(--space-3);border:1px solid var(--control-border);border-radius:var(--radius-md);background:var(--surface);color:var(--text-ink);resize:vertical}
 .box{display:flex;align-items:center;gap:var(--space-3);min-height:var(--control-h);border:1px solid var(--control-border);border-radius:var(--radius-md);background:var(--surface);padding:var(--space-2) var(--space-3);width:100%;font:inherit;color:inherit;text-align:left;cursor:pointer}
@@ -367,6 +383,16 @@ body.snap-on .cr-main{max-width:none;padding:0}
 .roster .no-tel{display:inline-flex;align-items:center;min-height:var(--hit-min);font-size:var(--text-label);color:var(--text-subtle)}
 .roster .no-rep{flex:none;font-size:var(--text-caption);color:var(--text-subtle)}
 .icon-btn.rep{flex:none;color:var(--brand-deep)}
+/* 반 요약(v2.5.94): 요약 3칸(리포트 .home-stats) + 최근 평가 반 평균 막대(최대 5개, 막대 높이 = 점수 %) */
+.cls-sum{margin-bottom:var(--space-4)}
+.cls-sum .group-label{margin-top:var(--space-4)}
+.tbars{display:flex;gap:var(--space-4);align-items:flex-end;justify-content:center}
+.tb{flex:0 1 var(--hit-area);min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:var(--space-1);font-size:var(--text-caption);color:var(--text-subtle)}
+.tb-bar{height:calc(2.5*var(--hit-area));display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:var(--space-1)} /* 점수 숫자는 막대 바로 위, 막대는 칸 높이의 80%까지 */
+.tb i{display:block;width:var(--space-6);border-radius:var(--radius-sm);border-bottom-left-radius:0;border-bottom-right-radius:0;background:var(--brand-mid)}
+.tb b{color:var(--text-ink)}
+.tb small{max-width:100%;font-size:var(--text-caption);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.roster .meta>.r-stats{display:flex;flex-wrap:wrap;gap:var(--space-1);margin-top:var(--space-1)}
 .home-stat b{display:block;font-size:var(--text-body);font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .home-stat small{display:block;margin-top:var(--space-1);font-size:var(--text-caption);color:var(--text-muted)}
 .home-stat.good b{color:var(--success-ink)}
@@ -426,6 +452,6 @@ body.snap-on .cr-main{max-width:none;padding:0}
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <script src="hada_config.js"></script>
 <script src="admin_auth.js?v=4ffde89c"></script>
-<script src="class_room.js?v=2943f77e"></script>
+<script src="class_room.js?v=ecbbc67c"></script>
 </body>
 </html>

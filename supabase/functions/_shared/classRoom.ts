@@ -41,7 +41,8 @@ import {
 	setAssignmentGenError,
 } from "./createAssignmentTarget.ts"
 import { isRunning } from "./statusTracking.ts"
-import { text as propText, numberOf as propNumber, fileUrlOf } from "./reportCacheShared.ts"
+import { text as propText, numberOf as propNumber, fileUrlOf, dateStartOf } from "./reportCacheShared.ts"
+import { readPageBodyBlocks } from "./feedBody.ts"
 import { runInBackground } from "./backgroundTask.ts"
 
 type Page = Record<string, any>
@@ -272,6 +273,82 @@ async function classSessionPages(session: Page, around?: string) {
 	return { sessions, range }
 }
 
+// 수업들의 출석(같은 기간 안, 수업 90개씩 나눠 조회)
+async function sessionAttendances(sessions: Page[], range: unknown[]) {
+	const attendances: Page[] = []
+	for (let i = 0; i < sessions.length; i += 90) {
+		const part = sessions.slice(i, i + 90)
+		if (!part.length) continue
+		attendances.push(...await queryAllPages(DS_ATTENDANCE, { and: [...range, { or: part.map((p: Page) => ({ property: "수업", relation: { contains: p.id } })) }] }))
+	}
+	return attendances
+}
+// 수업들의 학습기록(수업 90개씩 나눠 조회, 중복 제거)
+async function sessionRecords(sessions: Page[]) {
+	const found = new Map<string, Page>()
+	for (let i = 0; i < sessions.length; i += 90) {
+		const part = sessions.slice(i, i + 90)
+		for (const r of await queryAllPages(DS_LEARNING_RECORD, { or: part.map((p: Page) => ({ property: "수업", relation: { contains: p.id } })) })) found.set(r.id as string, r)
+	}
+	return [...found.values()]
+}
+
+// 반 요약(v2.5.94): 학생 탭 위 반 요약과 학생별 출석률·최근 평가 점수. 범위는 캘린더·반 학습기록과 같은 같은 반 앞뒤 수업(9주 전 ~ 5주 뒤, 보강 제외).
+// 출석률 = 출석(🟢 출석, 또는 상태 없이 등원) ÷ 확인된 출석(출석·결석·보강). 아직 아무것도 입력되지 않은 출석과 앞으로의 수업은 빼고, 보강은 결석처럼 센다.
+// 월은 보고 있는 수업 날짜의 달과 그 전 달(학생별 출석률은 보고 있는 달). 반이 없는 보강 수업은 그 수업만 센다.
+// 평가 = 같은 범위 "평가" 학습기록의 학습활동 점수(정답 문항 ÷ 전체 문항 × 100, 전체 문항이 있는 것만). 반 평균은 최근 5개, 학생별은 가장 최근 점수.
+export async function loadClassStats(sessionId: string, now = Date.now()) {
+	if (!isId(sessionId)) throw new ClassRoomError(400, "수업 형식이 올바르지 않습니다.")
+	const session = await getPage(sessionId) as Page
+	let { sessions, range } = await classSessionPages(session)
+	const attendances = sessions.length ? await sessionAttendances(sessions, range) : await getPages(rel(session, "출석"))
+	if (!sessions.length) sessions = [session]
+	const startOf = (p?: Page) => p?.properties?.["수업일시"]?.date?.start ?? null
+	const byId = new Map(sessions.map((p) => [p.id as string, p]))
+	const ym = seoulDate(startOf(session)).slice(0, 7)
+	const [yy, mm] = ym.split("-").map(Number)
+	const prevYm = mm === 1 ? `${yy - 1}-12` : `${yy}-${String(mm - 1).padStart(2, "0")}`
+	const months: Record<string, { present: number; counted: number }> = { [ym]: { present: 0, counted: 0 }, [prevYm]: { present: 0, counted: 0 } }
+	const students: Record<string, { present: number; counted: number; score: number | null; scoreDate: string | null }> = {}
+	const student = (id: string) => (students[id] ??= { present: 0, counted: 0, score: null, scoreDate: null })
+	for (const a of attendances) {
+		const start = startOf(byId.get(rel(a, "수업").find((id) => byId.has(id)) ?? ""))
+		if (!start || Date.parse(start) > now) continue
+		const status = selectName(a, "출석 상태") ?? ""
+		const present = status === "🟢 출석" || (!status && !!dateStart(a, "등원스템프"))
+		if (!present && status !== "🔴 결석" && status !== "🔵 보강") continue
+		const month = months[seoulDate(start).slice(0, 7)]
+		if (!month) continue
+		month.counted++
+		if (present) month.present++
+		const reg = rel(a, "등록")[0]
+		if (reg && seoulDate(start).slice(0, 7) === ym) { const s = student(reg); s.counted++; if (present) s.present++ }
+	}
+	// 평가 점수
+	const records = (await sessionRecords(sessions)).filter((r) => selectName(r, "구분") === "평가")
+	const acts: Page[] = []
+	for (let i = 0; i < records.length; i += 90) {
+		const part = records.slice(i, i + 90)
+		acts.push(...await queryAllPages(DS_STUDY_ACTIVITY, { or: part.map((r) => ({ property: "학습기록", relation: { contains: r.id } })) }))
+	}
+	const summaries = new Map((await withSubjects(records)).map((r) => [r.id, r]))
+	const tests = records.map((r) => {
+		const start = startOf(byId.get(rel(r, "수업").find((id) => byId.has(id)) ?? ""))
+		const scored = acts.filter((a) => rel(a, "학습기록").includes(r.id as string)).map((a) => ({ reg: rel(a, "등록")[0] ?? "", correct: numberOf(a, "정답 문항"), total: numberOf(a, "전체 문항") }))
+			.filter((x) => x.total && x.total > 0 && typeof x.correct === "number").map((x) => ({ reg: x.reg, score: Math.round((x.correct as number) / (x.total as number) * 100) }))
+		const s = summaries.get(r.id as string)
+		return { id: r.id as string, subject: s?.subject ?? "", range: s?.range ?? "", date: seoulDate(start), start: start ?? "", scored }
+	}).filter((t) => t.scored.length && t.start && Date.parse(t.start) <= now).sort((a, b) => a.start.localeCompare(b.start))
+	for (const t of tests) for (const x of t.scored) if (x.reg) { const s = student(x.reg); s.score = x.score; s.scoreDate = t.date }
+	const rate = (m: { present: number; counted: number }) => ({ ...m, rate: m.counted ? Math.round(m.present / m.counted * 100) : null })
+	return {
+		month: { ym, ...rate(months[ym]) },
+		prev: { ym: prevYm, ...rate(months[prevYm]) },
+		tests: tests.slice(-5).map((t) => ({ id: t.id, subject: t.subject, range: t.range, date: t.date, avg: Math.round(t.scored.reduce((n, x) => n + x.score, 0) / t.scored.length), count: t.scored.length })),
+		students: Object.fromEntries(Object.entries(students).map(([id, s]) => [id, { ...s, rate: s.counted ? Math.round(s.present / s.counted * 100) : null }])),
+	}
+}
+
 // 반 학습기록(v2.5.89): 같은 반 앞뒤 수업(위 범위)의 학습기록을 수업 날짜·시각과 함께, 최근 수업부터.
 // 반이 없는 보강 수업은 그 수업의 기록만. 학습기록 탭 날짜별 목록·교재 상세의 그 교재 기록에 쓴다.
 export async function loadClassRecords(sessionId: string) {
@@ -280,16 +357,14 @@ export async function loadClassRecords(sessionId: string) {
 	let { sessions } = await classSessionPages(session)
 	if (!sessions.length) sessions = [session]
 	const byId = new Map(sessions.map((p) => [p.id as string, p]))
-	const found = new Map<string, Page>()
-	for (let i = 0; i < sessions.length; i += 90) {
-		const part = sessions.slice(i, i + 90)
-		for (const r of await queryAllPages(DS_LEARNING_RECORD, { or: part.map((p: Page) => ({ property: "수업", relation: { contains: p.id } })) })) found.set(r.id as string, r)
-	}
-	const pages = [...found.values()], summaries = await withSubjects(pages)
+	const pages = await sessionRecords(sessions), summaries = await withSubjects(pages)
+	const startOfRecord = (r: Page) => { const sid = rel(r, "수업").find((id) => byId.has(id)); return sid ? byId.get(sid)?.properties?.["수업일시"]?.date?.start ?? "" : "" }
+	const recent = pages.slice().sort((a, b) => String(startOfRecord(b)).localeCompare(String(startOfRecord(a)))).slice(0, CARD_BODY_LIMIT).map((r) => r.id as string)
+	const extra = await cardExtras(pages, recent)
 	const records = pages.map((r, i) => {
 		const sid = rel(r, "수업").find((id) => byId.has(id)) ?? null
 		const start = sid ? byId.get(sid)?.properties?.["수업일시"]?.date?.start ?? null : null
-		return { ...summaries[i], sessionId: sid, date: seoulDate(start), start }
+		return { ...summaries[i], ...extra(r), sessionId: sid, date: seoulDate(start), start }
 	})
 	records.sort((a, b) => String(b.start ?? "").localeCompare(String(a.start ?? "")) || a.title.localeCompare(b.title, "ko"))
 	return { records: records.map(({ start, ...r }) => ({ ...r, time: seoulTime(start) })) }
@@ -303,12 +378,7 @@ export async function loadClassSessions(sessionId: string, around?: string) {
 	const session = await getPage(sessionId) as Page
 	const { sessions, range } = await classSessionPages(session, around)
 	if (!sessions.length) return { sessions: [] }
-	const attendances: Page[] = []
-	for (let i = 0; i < sessions.length; i += 90) {
-		const part = sessions.slice(i, i + 90)
-		if (!part.length) continue
-		attendances.push(...await queryAllPages(DS_ATTENDANCE, { and: [...range, { or: part.map((p: Page) => ({ property: "수업", relation: { contains: p.id } })) }] }))
-	}
+	const attendances = await sessionAttendances(sessions, range)
 	return {
 		sessions: sessions.map((p: Page) => {
 			const mine = attendances.filter((a) => rel(a, "수업").includes(p.id as string))
@@ -335,11 +405,38 @@ function recordSummary(r: Page) {
 		bookId: rel(r, "진도교재")[0] ?? null,
 		topic: plain(r, "주제"),
 		range: plain(r, "범위"),
+		unit: propText(r.properties?.["단원"]).trim(),
 		content: plain(r, "내용"),
 		makeup: checkboxValue(r, "보강"),
 		registrationIds: rel(r, "등록"),
 		activities: rel(r, "학습활동").length,
 		activityStatus: selectName(r, "활동 생성 상태") ?? "",
+	}
+}
+
+// 기록 카드(v2.5.95, 학부모 리포트 학습기록 카드와 같은 규칙): 과제는 제출 수·마감일, 평가는 평균 점수, 그리고 페이지 본문(블록).
+// 본문은 bodyIds(화면에 먼저 보이는 최근 기록)만 읽는다(리포트처럼 최근 것만, 동시 6개). 읽기 실패는 빈 본문.
+const CARD_BODY_LIMIT = 20
+async function cardExtras(records: Page[], bodyIds: string[]) {
+	const graded = records.filter((r) => ["과제", "평가"].includes(selectName(r, "구분") ?? ""))
+	const acts: Page[] = []
+	for (let i = 0; i < graded.length; i += 90) {
+		const part = graded.slice(i, i + 90)
+		acts.push(...await queryAllPages(DS_STUDY_ACTIVITY, { or: part.map((r) => ({ property: "학습기록", relation: { contains: r.id } })) }))
+	}
+	const bodies = new Map(await mapWithConcurrency(dedupe(bodyIds), 6, async (id: string) => [id, await readPageBodyBlocks(id)] as const) as [string, unknown[]][])
+	return (r: Page) => {
+		const kind = selectName(r, "구분") ?? "", mine = acts.filter((a) => rel(a, "학습기록").includes(r.id as string))
+		const scored = mine.map((a) => ({ c: numberOf(a, "정답 문항"), t: numberOf(a, "전체 문항") })).filter((x) => x.t && x.t > 0 && typeof x.c === "number")
+		return {
+			homework: kind === "과제" && mine.length ? {
+				submitted: mine.filter((a) => selectName(a, "과제상태") === HOMEWORK_SUBMITTED).length,
+				total: mine.length,
+				due: seoulDate(mine.map((a) => dateStartOf(a.properties?.["과제 마감일"])).find(Boolean) ?? null) || null,
+			} : null,
+			score: kind === "평가" && scored.length ? { avg: Math.round(scored.reduce((n, x) => n + (x.c as number) / (x.t as number) * 100, 0) / scored.length), count: scored.length } : null,
+			body: bodies.get(r.id as string) ?? [],
+		}
 	}
 }
 
@@ -389,7 +486,9 @@ export async function loadSession(sessionId: string) {
 			}))
 		return { recordId: r.id as string, title: anyTitleText(r), range: plain(r, "범위"), items }
 	})
-	const records = await withSubjects(await getPages(rel(session, "학습기록")))
+	const recordPages = await getPages(rel(session, "학습기록"))
+	const extra = await cardExtras(recordPages, recordPages.map((r) => r.id as string))
+	const records = (await withSubjects(recordPages)).map((r, i) => ({ ...r, ...extra(recordPages[i]) }))
 	return {
 		session: await (async () => { const c = (await classInfo(rel(session, "클래스").slice(0, 1))).get(rel(session, "클래스")[0]); return { ...sessionSummary(session), className: c?.name ?? "", classEmoji: c?.emoji ?? "" } })(),
 		students: students.map(({ dueActivityIds: _drop, ...s }) => s),
@@ -772,6 +871,7 @@ export async function handleClassRoom(body: any): Promise<unknown> {
 		case "class-sessions": return await loadClassSessions(body.sessionId, body.around)
 		case "class-records": return await loadClassRecords(body.sessionId)
 		case "roster": return await loadRoster(body.sessionId)
+		case "class-stats": return await loadClassStats(body.sessionId)
 		case "books": return await loadBooks(body.sessionId)
 		case "activities": return await loadActivities(body.recordId)
 		case "student": return await loadStudent(body.registrationId)
