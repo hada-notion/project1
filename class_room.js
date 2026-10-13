@@ -260,8 +260,10 @@ function bookChoices(data,{single=false,include=''}={}){
 }
 const BOOK_ICON='<svg class="line" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>';
 // 교재 카드 한 장(리포트 .book-row 모양). 표지 주소는 Notion 파일이라 만료될 수 있어, 그림이 안 열리면 책 아이콘으로 바뀐다.
-function bookRow(it,{attr='',on=false,chev=false}={}){
- return `<button class="book-row ${on?'on':''}" type="button" ${attr}><span class="br-cover">${BOOK_ICON}${it.cover?`<img src="${esc(it.cover)}" alt="" loading="lazy">`:''}</span><span class="br-body"><span class="br-title">${esc(it.title)}</span><span class="br-sub">${esc(it.sub)}</span>
+// feed=true(v2.5.102): 교재 탭·교재 상세는 학부모 리포트 교재 카드와 같은 결(테두리 없는 그림자 카드, 표지가 없거나 안 열리면 갈색 바탕에 교재명, 화살표 없음).
+// 기록 만들기·기록 카드의 교재 고르기는 고른 표시가 필요해 테두리 카드 그대로.
+function bookRow(it,{attr='',on=false,chev=false,feed=false}={}){
+ return `<button class="book-row ${on?'on':''} ${feed?'feed':''}" type="button" ${attr}><span class="br-cover">${feed?`<span class="br-fallback">${esc(it.title)}</span>`:BOOK_ICON}${it.cover?`<img src="${esc(it.cover)}" alt="" loading="lazy">`:''}</span><span class="br-body"><span class="br-title">${esc(it.title)}</span><span class="br-sub">${esc(it.sub)}</span>
  ${it.progress!==null&&it.progress!==undefined?`<span class="progress-line"><span class="track"><span class="fill" style="width:${Math.max(0,Math.min(100,it.progress))}%"></span></span><b>${it.progress}%</b></span>`:''}${it.recent?`<span class="br-recent">${icon('학습')}<span>최근 ${esc(it.recent)}</span></span>`:''}</span>${on?`<span class="br-check">${icon('check')}</span>`:''}${chev?'<span class="br-chev" aria-hidden="true">›</span>':''}</button>`;}
 const emptyBookRow=(attr,title,sub,ic=BOOK_ICON)=>`<button class="book-row empty" type="button" ${attr}><span class="br-cover">${ic}</span><span class="br-body"><span class="br-title">${title}</span><span class="br-sub">${sub}</span></span><span class="br-chev" aria-hidden="true">›</span></button>`;
 const bindCovers=root=>root.querySelectorAll('.br-cover img').forEach(i=>{i.onerror=()=>i.remove();});
@@ -435,8 +437,8 @@ function paneBooks(el){
  if(!BOOK_SEGS.includes(state.bookSeg))state.bookSeg='진행 중';
  const seg=state.bookSeg,cnt=x=>data.books.filter(b=>bookSegOf(b)===x).length,src=booksIn(data,seg),groups=src.books.length?bookChoices(src):[];
  const shown=groups.flatMap(g=>g.items);
- el.innerHTML=paneHead(`<p class="page-title">${icon('book')}교재</p>`,'진행 상황별 교재예요 · 누르면 교재 상세',BOOK_SEGS.map(x=>tabBtn(seg===x,`data-bs="${x}"`,`${x} ${cnt(x)}`)).join(''))+
- `<div class="pbody">${groups.map(g=>`<p class="group-label">${esc(g.label)}</p><div class="br-list">${g.items.map(it=>bookRow(it,{attr:`data-bkv="${esc(it.value)}"`,chev:true})).join('')}</div>`).join('')||`<div class="list"><p class="empty">${seg==='진행 중'?'진행 중인 교재가 없어요.':seg==='완료'?'완료한 교재가 없어요.':'다음 교재가 없어요.'}</p></div>`}</div>`;
+ el.innerHTML=paneHead(`<p class="page-title">${icon('book')}교재</p>`,'진행상황별로 교재를 볼 수 있어요',BOOK_SEGS.map(x=>tabBtn(seg===x,`data-bs="${x}"`,`${x==='진행 중'?'진행중':x} ${cnt(x)}`)).join(''))+
+ `<div class="pbody">${groups.map(g=>`${groups.length>1?`<p class="group-label">${esc(g.label)}</p>`:''}<div class="br-list feed">${g.items.map(it=>bookRow(it,{attr:`data-bkv="${esc(it.value)}"`,feed:true})).join('')}</div>`).join('')||`<div class="list"><p class="empty">${seg==='진행 중'?'진행 중인 교재가 없어요.':seg==='완료'?'완료한 교재가 없어요.':'다음 교재가 없어요.'}</p></div>`}</div>`;
  bindCovers(el);
  el.querySelectorAll('[data-bs]').forEach(b=>b.onclick=()=>{state.bookSeg=b.dataset.bs;render();});
  bindBookOpen(el,shown);
@@ -455,7 +457,7 @@ function paneBook(el){
  const live=books.length&&books.every(b=>bookSegOf(b)==='진행 중'),each=ids.length>1||books[0]?.mode!=='그룹 진도';
  const owners=books.flatMap(b=>b.ownerIds.map(o=>({o,b})));
  const list=ensureClassRecords(),recs=list?list.filter(r=>ids.includes(r.bookId)):null;
- el.innerHTML=`<div class="br-list">${bookRow(it).replace('<button class="book-row ','<div class="book-row static ').replace(/<\/button>$/,'</div>')}</div>
+ el.innerHTML=`<div class="br-list feed">${bookRow(it,{feed:true}).replace('<button class="book-row ','<div class="book-row static ').replace(/<\/button>$/,'</div>')}</div>
  ${live?`<div class="actions"><button class="primary wide" type="button" id="bk-new">${icon('plus','inline-icon')} 이 교재로 기록 만들기</button></div>`:`<p class="page-hint bk-note">${books.length?'진행 중인 교재만 기록을 만들 수 있어요.':''}</p>`}
  <h2 class="sec-title">${icon('users')}학생 <span class="cnt">${owners.length}명</span></h2>
  <div class="list">${owners.map(({o,b})=>`<div class="row"><span class="meta"><span class="t">${esc(regName(o))}</span><span class="d">${esc(b.recent?'최근 '+b.recent:'최근 기록 없음')}</span></span>${each&&b.progress!==null&&b.progress!==undefined?`<span class="pct">${b.progress}%</span>`:''}</div>`).join('')||'<p class="empty">교재 정보를 불러오는 중…</p>'}</div>
