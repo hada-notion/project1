@@ -273,13 +273,14 @@ font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto San
 ### 글자
 
 - 글꼴: `--font-sans` = 1부 4장 글꼴(`-apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif`). 코드·키 값은 `--font-mono`. `word-break: keep-all` 필수.
-- 크기는 7단계만 쓴다.
+- 크기는 아래 8단계만 쓴다(`--text-section`은 2026-10-14 수업방에서 추가).
 
 | 토큰 | 크기 | 쓰임 |
 | --- | --- | --- |
 | `--text-display` | 32px (모바일 28px) | 페이지 제목(h1) 하나 |
 | `--text-title` | 22px | 카드 제목(h2), 로고 |
 | `--text-lead` | 17px | 소제목, DB 카드 이름(리포트 섹션 제목 크기) |
+| `--text-section` | 15px | 리포트식 섹션 제목(1부 4장 2단계). 수업방 |
 | `--text-body` | 16px | 본문, 입력칸, 버튼 |
 | `--text-small` | 14px | 도움말, 상태 상자, 표 |
 | `--text-label` | 13px | 배지, 보조 정보 |
@@ -298,10 +299,10 @@ font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto San
 
 - 모서리(리포트 기준): `--radius-sm` 6(배지·코드) · `--radius-md` 10(버튼·입력칸·상태 상자·칸) · `--radius-lg` 14(카드·대화상자) · `--radius-pill`(전환 탭·숫자 배지·둥근 버튼)
 - 카드: 1부 8장대로 모서리·그림자·테두리를 통일한다. 바깥 카드는 **테두리 없이** 흰 표면 + `--shadow-card`. 카드 안의 칸(대시보드 두 칸, DB 카드)은 그림자 없이 `--brand-border` 1px 선으로 나눈다.
-- 폭: `--page-max` 1180(모든 화면의 바깥 폭 동일) · `--form-max` 560(입력 폼은 이 폭으로 가운데) · `--dialog-sm` 440 · `--dialog-md` 600
+- 폭: `--page-max` 1180(모든 화면의 바깥 폭 동일) · `--form-max` 560(입력 폼은 이 폭으로 가운데) · `--feed-w` 640(리포트·수업방 본문 폭, 1부 6장) · `--dialog-sm` 440 · `--dialog-md` 600
 - 높이: `--control-h` 48(버튼·입력칸), `--control-lg` 56(키오스크 숫자판·등하원 버튼), `--header-h` 56(1부 5장 상세 헤더). 누르는 요소는 최소 44px.
 - 아이콘 버튼: `--hit-area` 44×44 클릭 영역 안에 `--icon-md` 20×20 선형 아이콘, 배경·그림자 없음(1부 5장).
-- 아이콘: `--icon-sm` 14 · `--icon-md` 20 · `--icon-lg` 28. 선 아이콘은 `svg.line`(stroke 2, currentColor).
+- 아이콘: `--icon-sm` 14 · `--icon-section` 16(섹션 제목) · `--icon-title` 18(탭 제목) · `--icon-md` 20 · `--icon-lg` 28. 선 아이콘은 `svg.line`(stroke 2, currentColor).
 
 ### 로고
 
@@ -384,12 +385,14 @@ font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto San
 
 ### 수업방 규칙 (class_room.html, 2026-10-14)
 
-- **분류 색**: 학습 `--info`, 과제 `--warning`, 평가 `--success`(글자는 각 `-ink`, 바탕은 `-soft`). 리포트 학습기록 아이콘 색과 같다. 아이콘은 학습 edit-2, 과제 clipboard, 평가 file-text.
+- **분류 색**: 학습 `--info`, 과제 `--warning`, 평가 `--success`(글자·선은 각 `-ink`, 바탕은 `-soft`). 리포트는 밝은 색(`--info` 등)을 글자에 쓰지만 `-soft` 바탕 대비가 1.96~3.61:1로 4.5:1에 못 미쳐(2026-10-14 계산) 수업방은 `-ink`(4.79~6.37:1)를 쓴다. 아이콘은 학습 edit-2, 과제 clipboard, 평가 file-text. 기록 박스는 분류 알약 대신 왼쪽 아이콘 칸(`.kind-icon`, 리포트 학습기록 `.log-icon`)으로 분류를 보인다.
+- **소제목**: 1부 4장 4단계를 그대로 쓴다. 탭 제목 `--text-lead`(17px)·아이콘 `--icon-title`(18px)·안내 `--text-caption`(12px), 섹션 제목 `--text-section`(15px)·아이콘 `--icon-section`(16px)·위 20px 아래 8px, 묶음 라벨 `.group-label`(13px 중간 굵기 옅은색, 리포트 `.rep-sub`).
+- **전환 탭**: 리포트 `seg-toggle` 모양(12px 알약, 3px 트랙)으로 보이고, 버튼 위아래 투명 여백으로 클릭 영역만 44px.
 - **출석 상태 색**: 출석 `--success`, 결석 `--danger`, 보강 `--info`. 과제 제출 `--info`, 미제출 `--danger`.
 - **편집 모드와 저장**: 체크·입력(출석, 과제 검사, 점수, 메모·선생님 한마디)은 [편집]을 켜고 고친 뒤 아래 막대의 [저장]으로 한 번에 보낸다. 바뀐 줄은 왼쪽 진한 선, 막대에 "변경 n건". 저장하지 않고 나가면 묻는다. 만들기·출제·보강 배정처럼 한 번에 끝나는 동작은 누르면 바로 실행한다.
 - **Notion 링크 자리**: 모든 Notion 페이지 링크는 같은 ↗ 아이콘(Feather arrow-up-right, 44px 칸) 하나만 쓰고, 상단 바 오른쪽 = 지금 화면의 중심 페이지, 카드·목록 줄 오른쪽 끝 = 그 줄의 페이지. 주소는 `https://www.notion.so/<페이지 ID>`(학원 설정 불필요), 새 탭.
 - 상단 바·탭·버튼·칩의 클릭 영역은 모두 44px 이상.
-- 상단 바와 하단 탭의 내용은 본문과 같은 폭(`--form-max`) 안에 두어 넓은 화면에서도 왼쪽 선이 맞는다. 카드 안쪽 여백은 목록 줄과 같은 `--space-4`.
+- 본문 폭은 리포트와 같은 `--feed-w`(640px): 상단 바·본문·하단 탭·저장 막대 모두 `calc(var(--feed-w) + 2*var(--space-4))` 안에 두어 넓은 화면에서도 왼쪽 선이 같다. 카드 안쪽 여백은 목록 줄과 같은 `--space-4`(리포트 18px에 가장 가까운 4px 단위). 로그아웃은 상단 바가 아니라 강사 선택 화면 아래.
 
 ### 기타 화면 공통
 

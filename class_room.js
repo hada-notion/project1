@@ -73,7 +73,9 @@ function showTeachers(){
  setTabs(false);state.view='teachers';bar(['강사 선택'],{back:state.teacherId!==''?()=>{state.view='home';render();}:null});
  $('app').innerHTML=`<p class="page-hint">고른 강사의 수업만 보여 줘요. 이 기기에 기억하고, 위에서 언제든 바꿀 수 있어요.</p><div class="list">
  ${state.teachers.map(t=>`<button class="row" type="button" data-id="${esc(t.id)}"><span class="av">${esc(t.name.slice(0,1))}</span><span class="meta"><span class="t">${esc(t.name)}</span><span class="d">${esc(t.role)}</span></span>${state.teacherId===t.id?icon('check','check'):''}</button>`).join('')}
- <button class="row" type="button" data-id="all"><span class="av sq">전</span><span class="meta"><span class="t">전체 수업</span><span class="d">모든 강사의 수업</span></span>${state.teacherId==='all'?icon('check','check'):''}</button></div>`;
+ <button class="row" type="button" data-id="all"><span class="av sq">전</span><span class="meta"><span class="t">전체 수업</span><span class="d">모든 강사의 수업</span></span>${state.teacherId==='all'?icon('check','check'):''}</button></div>
+ <div class="actions"><button class="secondary wide" id="logout" type="button">${icon('out','inline-icon')} 이 기기에서 로그아웃</button></div>`;
+ $('logout').onclick=()=>{if(!confirm('이 기기에서 로그아웃할까요? 다시 들어오려면 수업용 비밀번호가 필요해요.'))return;store.set(SESSION_KEY,'');store.set(TEACHER_KEY,'');state.session='';state.teacherId='';showLogin();};
  $('app').querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>run(async()=>{state.teacherId=b.dataset.id;store.set(TEACHER_KEY,state.teacherId);await loadDay();state.view='home';render();},b));
 }
 
@@ -81,8 +83,8 @@ function showTeachers(){
 async function loadDay(){state.day=await api('day',{date:state.date,...(state.teacherId&&state.teacherId!=='all'?{teacherId:state.teacherId}:{})});}
 function renderHome(){
  setTabs(false);const who=state.teacherId==='all'?'전체 수업':teacherName(state.teacherId);
- bar(['수업'],{right:`<button class="ghost" id="who" type="button">${esc(who)} ▾</button><button class="icon-btn" id="refresh" type="button" aria-label="새로고침">${icon('refresh')}</button><button class="icon-btn" id="logout" type="button" aria-label="로그아웃">${icon('out')}</button>`,notion:state.teacherId&&state.teacherId!=='all'?state.teacherId:''});
- $('who').onclick=showTeachers;$('logout').onclick=()=>{if(!confirm('이 기기에서 로그아웃할까요?'))return;store.set(SESSION_KEY,'');state.session='';showLogin();};
+ bar(['수업'],{right:`<button class="ghost" id="who" type="button">${esc(who)} ▾</button><button class="icon-btn" id="refresh" type="button" aria-label="새로고침">${icon('refresh')}</button>`,notion:state.teacherId&&state.teacherId!=='all'?state.teacherId:''});
+ $('who').onclick=showTeachers;
  $('refresh').onclick=e=>run(async()=>{await loadDay();renderHome();},e.currentTarget);
  const d=state.day,chips=[-1,0,1].map(o=>seoulDate(o));
  const sessions=d?d.sessions:[];
@@ -132,7 +134,7 @@ function sessionBar(extra=[]){const s=state.detail.session;bar(['수업',s.name,
 function renderSession(){if(state.tab==='records')return renderRecords();
  setTabs(true);sessionBar();const d=state.detail,att=state.seg==='att';
  const head=`<p class="page-title">${icon('users')}학생 목록</p><p class="page-hint">${att?'키오스크로 등원한 학생은 시각이 함께 보여요. 웹 출석은 상태만 바꾸고 알림톡은 보내지 않아요.':'오늘이 마감인 과제예요. 과제마다 제출·미제출만 체크해요.'}</p>
-  <div class="center-tabs"><div class="tabs" role="tablist"><button type="button" class="${att?'active':''}" data-seg="att">출석</button><button type="button" class="${att?'':'active'}" data-seg="hw">과제 검사</button></div></div>`;
+  <div class="center-tabs"><div class="tabs" role="tablist"><button type="button" class="${att?'active':''}" data-seg="att"><span>출석</span></button><button type="button" class="${att?'':'active'}" data-seg="hw"><span>과제 검사</span></button></div></div>`;
  let body='';
  if(att){
   const n=s=>d.students.filter(x=>(state.draft[x.attendanceId]?.status??x.status)===s).length;
@@ -190,7 +192,7 @@ function renderStudent(){
 function renderRecords(){
  setTabs(true);sessionBar();const recs=state.detail.records;
  $('app').innerHTML=`<p class="page-title">${icon('학습')}학습기록</p><p class="page-hint">기록을 누르면 교재·주제·범위·내용을 적고 학습활동을 만들어요.</p>
- ${recs.map(r=>`<div class="rec"><button class="rec-head" type="button" data-rec="${esc(r.id)}"><span class="pill k-${esc(r.kind)}">${esc(r.kind||'기록')}</span><span class="t">${esc(r.title)}</span>${r.makeup?'<span class="pill s-보강">보강</span>':''}</button>
+ ${recs.map(r=>`<div class="rec"><button class="rec-head" type="button" data-rec="${esc(r.id)}"><span class="kind-icon k-${esc(r.kind)}" title="${esc(r.kind)}">${icon(r.kind||'학습')}</span><span class="t">${esc(r.title)}</span>${r.makeup?'<span class="pill s-보강">보강</span>':''}</button>
   <div class="rec-body">${esc([r.range,r.topic&&!r.title.includes(r.topic)?r.topic:''].filter(Boolean).join(' · ')||'내용을 적어 주세요')} · 학생 ${r.registrationIds.length}명${r.activities?` · 학습활동 ${r.activities}건`:''}</div></div>`).join('')||'<p class="empty">아직 기록이 없어요.</p>'}
  <div class="actions"><button class="primary" type="button" id="new-rec">${icon('plus','inline-icon')}기록 만들기</button></div>`;
  $('app').querySelectorAll('[data-rec]').forEach(b=>b.onclick=()=>openRecord(b.dataset.rec,b));
@@ -212,12 +214,12 @@ function openBookSheet(kind,filter='진행 중'){
  const nameOfTpl=list=>list[0].name.replace(/\(.*\)$/,'');
  $('sheet').innerHTML=`<div class="dialog-head"><h2><span class="pill k-${kind}">${kind}</span> 교재 고르기</h2><button class="ghost" type="button" id="sh-x">닫기</button></div>
  <div class="chips">${['진행 중','다음 교재','완료','미사용','전체'].map(f=>`<button class="chip ${f===filter?'on':''}" type="button" data-f="${f}">${f}</button>`).join('')}</div>
- ${group.length?`<h3 class="sec-title">${icon('users')}반 교재</h3><div class="list">${group.map(b=>`<button class="row" type="button" data-books="${esc(b.id)}"><span class="meta"><span class="t">${esc(b.name)}</span><span class="d">반 학생 ${b.ownerIds.length}명 함께</span></span>${icon('plus','check')}</button>`).join('')}</div>`:''}
- ${Object.values(tpl).filter(l=>l.length>1).map(list=>`<h3 class="sec-title">${icon(kind)}${esc(nameOfTpl(list))} <span class="cnt">개별 ${list.length}명</span></h3><div class="list"><button class="row" type="button" data-books="${esc(list.map(b=>b.id).join(','))}"><span class="meta"><span class="t">${list.length}명 모두 만들기</span><span class="d">학생마다 자기 교재로 기록이 하나씩 생겨요</span></span>${icon('plus','check')}</button>
+ ${group.length?`<p class="group-label">반 교재</p><div class="list">${group.map(b=>`<button class="row" type="button" data-books="${esc(b.id)}"><span class="meta"><span class="t">${esc(b.name)}</span><span class="d">반 학생 ${b.ownerIds.length}명 함께</span></span>${icon('plus','check')}</button>`).join('')}</div>`:''}
+ ${Object.values(tpl).filter(l=>l.length>1).map(list=>`<p class="group-label">${esc(nameOfTpl(list))} · 개별 ${list.length}명</p><div class="list"><button class="row" type="button" data-books="${esc(list.map(b=>b.id).join(','))}"><span class="meta"><span class="t">${list.length}명 모두 만들기</span><span class="d">학생마다 자기 교재로 기록이 하나씩 생겨요</span></span>${icon('plus','check')}</button>
   ${list.map(b=>`<button class="row" type="button" data-books="${esc(b.id)}"><span class="meta"><span class="t">${esc(b.ownerIds.map(regName).join(', '))}</span><span class="d">${esc(b.name)}</span></span>${icon('plus','check')}</button>`).join('')}</div>`).join('')}
- ${loose.length?`<h3 class="sec-title">${icon('과제')}학생별 교재</h3><div class="list">${loose.map(b=>`<button class="row" type="button" data-books="${esc(b.id)}"><span class="meta"><span class="t">${esc(b.name)}</span><span class="d">${esc(b.ownerIds.map(regName).join(', '))}</span></span>${icon('plus','check')}</button>`).join('')}</div>`:''}
+ ${loose.length?`<p class="group-label">학생별 교재</p><div class="list">${loose.map(b=>`<button class="row" type="button" data-books="${esc(b.id)}"><span class="meta"><span class="t">${esc(b.name)}</span><span class="d">${esc(b.ownerIds.map(regName).join(', '))}</span></span>${icon('plus','check')}</button>`).join('')}</div>`:''}
  ${!shown.length?'<p class="empty">이 상태의 교재가 없어요.</p>':''}
- <h3 class="sec-title">${icon('lock')}교재 없이</h3><form id="nobook" class="form"><label for="topic">주제</label><input id="topic" maxlength="200" placeholder="예: 실험 정리, 단원 정리 특강"><div class="actions"><button class="secondary wide" type="submit">교재 없이 반 전체 기록 만들기</button></div></form>`;
+ <p class="group-label">교재 없이</p><form id="nobook" class="form"><label for="topic">주제</label><input id="topic" maxlength="200" placeholder="예: 실험 정리, 단원 정리 특강"><div class="actions"><button class="secondary wide" type="submit">교재 없이 반 전체 기록 만들기</button></div></form>`;
  if(!$('sheet').open)$('sheet').showModal();$('sh-x').onclick=()=>$('sheet').close();
  $('sheet').querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>openBookSheet(kind,b.dataset.f));
  const create=(data,btn)=>run(async()=>{const r=await api('create-records',{sessionId:state.sessionId,kind,...data});$('sheet').close();await reloadSession();const made=r.records.filter(x=>x.created).length;toast(made?`기록 ${made}개를 만들었어요.`:'이미 있는 기록이에요.');if(r.records.length===1)await openRecordNow(r.records[0].id);else{state.view='session';state.tab='records';render();}},btn);
@@ -231,7 +233,7 @@ function renderRecord(){
  setTabs(true);const {record:r,activities:acts}=state.acts;bar(['수업',state.detail.session.name,r.kind||'기록'],{back:()=>{if(!leaveEdit())return;state.view='session';state.tab='records';render();},notion:r.id});
  const book=state.books.books.find(b=>b.id===r.bookId),v=k=>state.draft[k]??r[k]??'';
  const scoring=r.kind==='평가',checking=r.kind==='과제';
- $('app').innerHTML=`<p class="page-title"><span class="pill k-${esc(r.kind)}">${icon(r.kind||'학습')}${esc(r.kind)}</span>${esc(r.title)}</p>
+ $('app').innerHTML=`<p class="page-title"><span class="kind-icon k-${esc(r.kind)}" title="${esc(r.kind)}">${icon(r.kind||'학습')}</span>${esc(r.title)}</p>
  <form class="form" id="rec-form"><label>교재 <span class="muted">이 수업 학생들의 교재만 보여요</span></label>
  <select id="rec-book"><option value="">교재 없음</option>${state.books.books.map(b=>`<option value="${esc(b.id)}" ${b.id===r.bookId?'selected':''}>${esc(b.name)}</option>`).join('')}</select>
  <p class="target">학생 ${r.registrationIds.length}명에게 연결된 기록이에요${r.makeup?' · 보강 기록이라 진도율에서 빠져요':''}.</p>

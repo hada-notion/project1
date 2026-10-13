@@ -20,6 +20,8 @@
  --font-mono:ui-monospace,Consolas,"D2Coding",monospace;
  --text-caption:.75rem;--text-label:.8125rem;--text-small:.875rem;--text-body:1rem;--text-lead:1.0625rem;
  --text-title:1.375rem;--text-display:2rem;
+ /* 섹션 제목(1부 4장 소제목 2단계, 리포트 .sec-title 15px). 수업방부터 쓴다 */
+ --text-section:.9375rem;
  /* 간격 (4px 단위). 글자·간격·모서리·높이는 rem이라 기기 화면 모드(html.device)에서 함께 커진다 */
  --space-1:.25rem;--space-2:.5rem;--space-3:.75rem;--space-4:1rem;--space-5:1.25rem;--space-6:1.5rem;--space-8:2rem;--space-12:3rem;
  /* 모서리: 리포트 기준(배지 6, 버튼·칸 10, 카드 14, 알약) */
@@ -27,8 +29,10 @@
  /* 헤더·아이콘 버튼: 1부 5장(헤더 56px, 44×44 클릭 영역 안 20×20 아이콘) */
  --header-h:3.5rem;--hit-area:2.75rem;--hit-min:44px;
  /* 크기 */
- --page-max:1180px;--form-max:560px;--dialog-sm:440px;--dialog-md:600px;
- --control-h:3rem;--control-lg:3.5rem;--logo-h:2.25rem;--icon-sm:.875rem;--icon-md:1.25rem;--icon-lg:1.75rem;
+ --page-max:1180px;--form-max:560px;
+ /* 리포트와 수업방의 본문 폭(1부 6장, 리포트 --feed-w와 같은 값) */
+ --feed-w:640px;--dialog-sm:440px;--dialog-md:600px;
+ --control-h:3rem;--control-lg:3.5rem;--logo-h:2.25rem;--icon-sm:.875rem;--icon-section:1rem;--icon-title:1.125rem;--icon-md:1.25rem;--icon-lg:1.75rem;
  /* 기기 화면 모드(출결 키오스크): 세로 카드 폭과, 그 폭에 맞춘 기준 글자 크기(카드 360px일 때 16px).
     길이÷길이 계산은 브라우저가 무시하므로 같은 비율을 화면 단위로 적는다: 90vw·16/360=4vw, 90vh·.68·16/360≈2.72vh,
     640px·16/360≈28.4px. 너무 작아지지 않게 최소 10px(1부 4장). */
