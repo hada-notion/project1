@@ -207,9 +207,9 @@ svg.line.check,.row svg.line,.choose svg.line,.pill svg.line{width:var(--icon-md
 .cal-day{height:min(calc((100cqw - 6*var(--space-1))/7*5/4),4.5rem);min-width:0;padding:0;border:0;border-radius:var(--radius-md);background:transparent;color:var(--text-subtle);font:inherit;font-size:var(--text-body);cursor:pointer;display:flex;align-items:center;justify-content:center}
 .cal-day.empty{cursor:default}
 /* 날짜 이동 캘린더(v2.5.79): 수업 있는 날은 칸을 칠하고(has) 보고 있는 날은 진하게(picked), 오늘은 빨간 테두리. 수업 없는 날은 흐리게·누를 수 없음. 출석 숫자·색은 넣지 않는다. */
-.cal-day.off{opacity:.35;cursor:default}
+/* 수업 없는 날(v2.5.100): 리포트처럼 흐리게 하지 않고 옅은 글자색만(누를 수 없음) — 한 달 달력으로 보인다 */
+.cal-day.off{color:var(--text-subtle);cursor:default}
 .cal-day.has{background:var(--brand-light);color:var(--brand-on-primary);font-weight:700}
-.cal-day.has.picked{background:var(--brand-deep);color:var(--surface);box-shadow:none}
 .cal-day.has.today{box-shadow:inset 0 0 0 2px var(--danger)}
 .cal-nav-btn:disabled{opacity:.3;cursor:default}
 .row.cur{box-shadow:inset 3px 0 0 var(--brand-deep);background:var(--brand-tint)}
@@ -423,17 +423,19 @@ body.snap-on .cr-main{max-width:none;padding:0}
 .now-card b{display:block;font-size:var(--text-body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .now-nav{flex:none;display:flex}
 /* 캘린더 출석 색 */
+/* 캘린더 칸(v2.5.100, 학부모 리포트 .attendance-calendar와 같은 결): 모두 출석 초록·결석 있음 빨강(-soft 바탕, 글자는 대비 위해 -ink),
+   출석 미입력인 지난 수업은 리포트와 같은 빗금, 앞으로의 수업·오늘 진행 중은 테두리만, 보고 있는 수업은 채우지 않고 갈색 테두리, 오늘은 빨간 테두리 */
 .cal-day.has.ok{background:var(--success-soft);color:var(--success-ink)}
 .cal-day.has.bad{background:var(--danger-soft);color:var(--danger-ink)}
-.cal-day.has.miss{background:var(--warning-soft);color:var(--warning-ink)}
-.cal-day.has.plan{background:transparent;color:var(--text-muted);box-shadow:inset 0 0 0 1.5px var(--brand-border)}
-.cal-day.has.picked{background:var(--brand-deep);color:var(--surface);box-shadow:none}
+.cal-day.has.miss{background:repeating-linear-gradient(135deg,transparent 0 4px,var(--brand-soft) 4px 8px);color:var(--text-subtle)}
+.cal-day.has.plan,.cal-day.has.open{background:transparent;color:var(--text-muted);box-shadow:inset 0 0 0 1.5px var(--brand-border)}
+.cal-day.has.picked{box-shadow:inset 0 0 0 2px var(--brand-deep)}
 .cal-day.has.today,.cal-day.has.today.picked{box-shadow:inset 0 0 0 2px var(--danger)}
+/* 범례(v2.5.100): 리포트처럼 진한 점 두 개만(모두 출석·결석 있음). 빗금·테두리는 범례 없이도 알아볼 수 있다 */
 .cal-legend{display:flex;flex-wrap:wrap;justify-content:center;gap:var(--space-2) var(--space-4);margin-top:var(--space-3);font-size:var(--text-caption);color:var(--text-muted)}
 .cal-legend span{display:inline-flex;align-items:center;gap:var(--space-1)}
-.cal-legend i{width:var(--space-3);height:var(--space-3);border-radius:var(--radius-sm);background:var(--brand-light)}
-.cal-legend i.ok{background:var(--success-soft)}.cal-legend i.bad{background:var(--danger-soft)}.cal-legend i.miss{background:var(--warning-soft)}
-.cal-legend i.plan{background:transparent;box-shadow:inset 0 0 0 1.5px var(--brand-border)}
+.cal-legend i{width:var(--space-2);height:var(--space-2);border-radius:50%}
+.cal-legend i.ok{background:var(--success)}.cal-legend i.bad{background:var(--danger)}
 /* 학습기록 탭 + 기록 만들기(떠 있는 버튼): 본문 오른쪽 끝, 하단 탭 위 */
 .fab{position:fixed;z-index:19;right:max(var(--space-4),calc((100vw - var(--feed-w))/2));bottom:calc(var(--hit-min) + var(--space-8) + var(--space-2));min-height:calc(var(--hit-min) + var(--space-1));padding:0 var(--space-5) 0 var(--space-4);border:0;border-radius:var(--radius-pill);background:var(--brand-deep);color:var(--surface);font:inherit;font-weight:700;box-shadow:var(--shadow-float);display:inline-flex;align-items:center;gap:var(--space-2);cursor:pointer}
 .fab svg.line{width:var(--icon-md);height:var(--icon-md)}
@@ -463,6 +465,6 @@ body.snap-on .cr-main{max-width:none;padding:0}
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <script src="hada_config.js"></script>
 <script src="admin_auth.js?v=4ffde89c"></script>
-<script src="class_room.js?v=74fddc3d"></script>
+<script src="class_room.js?v=b594cd28"></script>
 </body>
 </html>
