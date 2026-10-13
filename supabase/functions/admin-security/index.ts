@@ -76,9 +76,18 @@ export async function handleAdminSecurity(req:Request):Promise<Response> {
     // Public status: never says whether the initial password is still active.
     if(b.action==='status'){await ensureInitialized();return result({ready:true,webhook_key_weak:fixedWebhookKey().length<32});}
     // Persistent global buckets; independent of spoofable browser IP headers.
-    if(['login','change','webhook-start','webhook-cancel'].includes(b.action))await securityRpc('limit',{bucket:'security-'+b.action,max:60,seconds:3600});
+    if(['login','change','class-set','webhook-start','webhook-cancel'].includes(b.action))await securityRpc('limit',{bucket:'security-'+b.action,max:60,seconds:3600});
     if(b.action==='webhook-links'&&b.refresh===true)await securityRpc('limit',{bucket:'security-webhook-links',max:10,seconds:3600});
     const session=req.headers.get('x-admin-key')??'';
+    if(b.action==='login'&&b.scope==='class'){
+      // Shared class (teacher) password: a 30-day session that may only call class-room (v2.5.65).
+      await ensureInitialized();
+      const info=await securityRpc('class-owner');
+      const ok=await verifyPassword(b.password,info.password_hash??'');
+      const token=randomToken();
+      await securityRpc('class-login',{verified:ok,class_version:info.class_version,token_hash:await sha256(token)});
+      return result({session:token});
+    }
     if(b.action==='login'){
       await ensureInitialized();
       const info=await securityRpc('owner');
@@ -93,7 +102,8 @@ export async function handleAdminSecurity(req:Request):Promise<Response> {
     if(b.action==='profile'){
       const state=await securityRpc('profile',{session_hash:await sha256(session)});
       const next=nextRecommended(state.changed_at);
-      return result({changed_at:state.changed_at,recommended_at:next,change_due:Date.now()>=Date.parse(next),must_change:!!state.must_change});
+      return result({changed_at:state.changed_at,recommended_at:next,change_due:Date.now()>=Date.parse(next),must_change:!!state.must_change,
+        class_password_set:!!state.class_password_set,class_changed_at:state.class_changed_at??null});
     }
     if(b.action==='change'){
       const ctx=await securityRpc('profile',{session_hash:await sha256(session)});
@@ -103,6 +113,16 @@ export async function handleAdminSecurity(req:Request):Promise<Response> {
       const internalKey=randomToken();
       const response=await securityRpc('change',{session_hash:await sha256(session),expected_version:ctx.version,password_hash:await hashPassword(password),internal_key:internalKey,internal_hash:await sha256(internalKey)});
       return result({ok:true,changed_at:response.changed_at,message:'변경 완료. 모든 기존 로그인 세션이 해제되었습니다.'});
+    }
+    if(b.action==='class-set'){
+      // The owner confirms with the admin password; the class password must differ from it.
+      const sessionHash=await sha256(session);
+      const ctx=await securityRpc('profile',{session_hash:sessionHash});
+      if(!await verifyPassword(b.current_password,ctx.password_hash))throw new SecurityError(401,'현재 비밀번호가 올바르지 않습니다.');
+      const password=validatePassword(b.class_password);
+      if(password===b.current_password)throw new SecurityError(400,'관리자 비밀번호와 다른 수업용 비밀번호를 정해 주세요.');
+      const response=await securityRpc('class-set',{session_hash:sessionHash,password_hash:await hashPassword(password)});
+      return result({ok:true,changed_at:response.changed_at,message:'수업용 비밀번호를 저장했어요. 선생님들은 새 비밀번호로 다시 로그인해야 해요.'});
     }
     // Webhook key rotation. The new key is returned once, on start, because the owner must paste it into
     // Notion; it is never stored in readable form and cannot be fetched again.

@@ -13,7 +13,7 @@ export const SECURITY_WEBHOOK_ROUTES = new Set([
 // functions such as toggle-report-link and sync-school-calendar take the webhook key, never a browser session,
 // so a leaked browser session cannot reach them (v2.5.51).
 export const SECURITY_BROWSER_ROUTES = new Set([
-  'list-students','kiosk-checkin','get-legal-document-data','school-api',
+  'list-students','kiosk-checkin','get-legal-document-data','school-api','class-room',
 ]);
 export function securityEnabled(): boolean { return Deno.env.get('ADMIN_SECURITY_ENABLED') === 'true'; }
 export class SecurityError extends Error {
@@ -105,6 +105,8 @@ export async function authorizeKey(req:Request,provided:unknown,legacy:string):P
   if(result.kind==='webhook')return SECURITY_WEBHOOK_ROUTES.has(route);
   // Long-lived kiosk sessions: check-in and the minimal directory only (the full list exposes report tokens).
   if(result.kind==='kiosk')return route==='kiosk-checkin'||(route==='list-students'&&new URL(req.url).searchParams.get('kiosk')==='1');
+  // Shared class (teacher) sessions: the class room only (v2.5.65).
+  if(result.kind==='class')return route==='class-room';
   return false;
 }
 export async function currentInternalKey():Promise<string> {
