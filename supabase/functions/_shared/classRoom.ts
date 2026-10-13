@@ -25,11 +25,13 @@ import {
 	anyTitleText,
 	fetchWithRetry,
 	notionHeaders,
+	queryDataSource,
 } from "./notionClient.ts"
 import {
 	DS_CLASS_SESSION,
 	DS_ATTENDANCE,
 	DS_LEARNING_RECORD,
+	DS_STUDY_ACTIVITY,
 } from "./constants.ts"
 import {
 	ASSIGNMENT_GEN_STATUS_SPEC,
@@ -296,6 +298,37 @@ export async function loadActivities(recordId: string) {
 	}
 }
 
+// 학생 공간: 이 등록(반)의 최근 과제·평가와 지난 메모. 학습활동의 "구분"은 학습기록에서 가져온 롤업이다.
+function rollupSelect(page: Page, prop: string): string {
+	const arr = page?.properties?.[prop]?.rollup?.array ?? []
+	return arr.map((x: any) => x?.select?.name).find(Boolean) ?? ""
+}
+function formulaDate(page: Page, prop: string): string | null {
+	const f = page?.properties?.[prop]?.formula
+	return f?.date?.start ?? (typeof f?.string === "string" && /^d{4}-d{2}-d{2}/.test(f.string) ? f.string : null)
+}
+export async function loadStudent(registrationId: string) {
+	if (!isId(registrationId)) throw new ClassRoomError(400, "학생 형식이 올바르지 않습니다.")
+	const [acts, memos] = await Promise.all([
+		queryDataSource(DS_STUDY_ACTIVITY, { filter: { property: "등록", relation: { contains: registrationId } }, sorts: [{ timestamp: "created_time", direction: "descending" }], page_size: 40 }),
+		queryDataSource(DS_ATTENDANCE, {
+			filter: { and: [{ property: "등록", relation: { contains: registrationId } }, { property: "메모", rich_text: { is_not_empty: true } }] },
+			sorts: [{ property: "수업일시", direction: "descending" }],
+			page_size: 10,
+		}),
+	])
+	const activities = ((acts as any).results ?? []) as Page[]
+	const recordIds = dedupe(activities.flatMap((a) => rel(a, "학습기록")))
+	const records = new Map((await getPages(recordIds)).map((r) => [r.id as string, r]))
+	const named = (a: Page) => { const r = records.get(rel(a, "학습기록")[0]); return r ? { title: anyTitleText(r), range: plain(r, "범위") } : { title: anyTitleText(a), range: "" } }
+	const kindOf = (a: Page) => rollupSelect(a, "구분") || (records.get(rel(a, "학습기록")[0]) ? selectName(records.get(rel(a, "학습기록")[0])!, "구분") ?? "" : "")
+	return {
+		homework: activities.filter((a) => kindOf(a) === "과제").slice(0, 8).map((a) => ({ id: a.id as string, ...named(a), due: formulaDate(a, "과제 마감일"), submitted: selectName(a, "과제상태") === HOMEWORK_SUBMITTED })),
+		tests: activities.filter((a) => kindOf(a) === "평가" && numberOf(a, "전체 문항")).slice(0, 5).map((a) => ({ id: a.id as string, ...named(a), correct: numberOf(a, "정답 문항"), total: numberOf(a, "전체 문항") })),
+		memos: (((memos as any).results ?? []) as Page[]).map((m) => ({ attendanceId: m.id as string, date: dateStart(m, "수업일시"), memo: plain(m, "메모") })),
+	}
+}
+
 // ---------- 저장 (편집 모드의 [저장]) ----------
 export async function saveAttendance(items: unknown) {
 	if (!Array.isArray(items) || items.length === 0 || items.length > MAX_ITEMS) throw new ClassRoomError(400, "저장할 내용이 없습니다.")
@@ -535,6 +568,7 @@ export async function handleClassRoom(body: any): Promise<unknown> {
 		case "session": return await loadSession(body.sessionId)
 		case "books": return await loadBooks(body.sessionId)
 		case "activities": return await loadActivities(body.recordId)
+		case "student": return await loadStudent(body.registrationId)
 		case "save-attendance": return await saveAttendance(body.items)
 		case "save-activities": return await saveActivities(body.items)
 		case "create-records": return await createRecords(body)
