@@ -15,6 +15,11 @@ function fixture() {
   t1: { id: "t1", db: "teachers", properties: { "이름": title("안규빈"), "직책": { select: { name: "강사" } } } },
   s1: { id: "s1", db: "sessions", properties: { "이름": title("중1 B 10.13(화)"), "수업일시": { date: { start: D, end: "2026-10-13T09:00:00.000Z" } }, "담당강사": rel("t1"), "클래스": rel("cls"), "등록": rel("ra", "rb"), "출석": rel("aa", "ab"), "학습기록": rel(), "보강": { checkbox: false }, "출석현황": formula("✅ 정상(2)") } },
   sOther: { id: "sOther", db: "sessions", properties: { "이름": title("다른 날"), "수업일시": { date: { start: "2026-10-14T08:00:00.000Z" } }, "담당강사": rel("t1"), "출석": rel(), "학습기록": rel(), "보강": { checkbox: false } } },
+  sPrev: { id: "sPrev", db: "sessions", properties: { "이름": title("중1 B 10.08(목)"), "수업일시": { date: { start: "2026-10-08T08:00:00.000Z" } }, "클래스": rel("cls"), "출석": rel("pa", "pb", "pc"), "학습기록": rel(), "보강": { checkbox: false } } },
+  sMk: { id: "sMk", db: "sessions", properties: { "이름": title("보강"), "수업일시": { date: { start: "2026-10-09T08:00:00.000Z" } }, "클래스": rel("cls"), "출석": rel(), "학습기록": rel(), "보강": { checkbox: true } } },
+  pa: { id: "pa", db: "attendance", properties: { "출석": title("pa"), "수업": rel("sPrev"), "수업일시": { date: { start: "2026-10-08T08:00:00.000Z" } }, "출석 상태": { select: { name: "🟢 출석" } } } },
+  pb: { id: "pb", db: "attendance", properties: { "출석": title("pb"), "수업": rel("sPrev"), "수업일시": { date: { start: "2026-10-08T08:00:00.000Z" } }, "출석 상태": { select: { name: "🔴 결석" } } } },
+  pc: { id: "pc", db: "attendance", properties: { "출석": title("pc"), "수업": rel("sPrev"), "수업일시": { date: { start: "2026-10-08T08:00:00.000Z" } }, "출석 상태": { select: null } } },
   ra: { id: "ra", db: "registrations", properties: { "이름": title("김하늘 중1 B"), "진도교재": rel("group", "indA") } },
   rb: { id: "rb", db: "registrations", properties: { "이름": title("박서준 중1 B"), "진도교재": rel("group", "indB") } },
   rc: { id: "rc", db: "registrations", properties: { "이름": title("이도윤 중2 A"), "진도교재": rel("other") } },
@@ -33,6 +38,7 @@ function fixture() {
  function cond(p: any, f: any): boolean {
   if (!f) return true
   if (f.and) return f.and.every((x: any) => cond(p, x))
+  if (f.or) return f.or.some((x: any) => cond(p, x))
   const v = p.properties[f.property]
   if (f.relation?.contains) return (v?.relation ?? []).some((r: any) => r.id === f.relation.contains)
   if (f.relation?.is_empty) return !(v?.relation ?? []).length
@@ -89,6 +95,14 @@ Deno.test("days: Seoul dates that have the teacher's sessions in a range", () =>
  await rejects(() => room.loadDays("2026-10-18", "2026-10-12"), 400)
  await rejects(() => room.loadDays("2026-09-01", "2026-10-31"), 400)
  await rejects(() => room.loadDays("2026-10-12", "2026-10-18", "../x"), 400)
+}))
+Deno.test("class-sessions: same class around the session with attendance counts, makeups skipped", () => withMock(async () => {
+ const r = await room.loadClassSessions("s1")
+ assert(r.sessions.map((s) => s.id).join() === "sPrev,s1", r.sessions.map((s) => s.id).join())
+ const p = r.sessions[0]; assert(p.date === "2026-10-08" && p.total === 3 && p.present === 1 && p.absent === 1 && p.missing === 1, JSON.stringify(p))
+ const now = r.sessions[1]; assert(now.date === "2026-10-13" && now.time === "17:00–18:00" && now.present === 1 && now.missing === 1, JSON.stringify(now))
+ assert((await room.loadClassSessions("sOther")).sessions.length === 0)
+ await rejects(() => room.loadClassSessions("../x"), 400)
 }))
 Deno.test("session: students, today's homework due grouped by record, records", () => withMock(async () => {
  const s = await room.loadSession("s1")

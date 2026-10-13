@@ -32,7 +32,7 @@ function shortDate(iso){if(!iso)return '';const d=new Date(new Date(iso).getTime
 
 const state={session:store.get(SESSION_KEY),teacherId:store.get(TEACHER_KEY),teachers:[],date:seoulDate(),view:'home',day:null,
  sessionId:'',detail:null,tab:'students',seg:'att',recKind:'전체',hwRecord:'',edit:false,editOwner:'',saver:null,draft:{},recordId:'',acts:null,student:null,noteTab:'memo',books:null,picked:new Set(),
- calOpen:false,calMonth:'',calDays:new Set(),calKey:''};
+ calOpen:false,calMonth:'',calDays:new Set(),calKey:'',classWeek:[]};
 
 async function api(action,data={}){
  if(CFG.error)throw new Error(CFG.error);
@@ -176,7 +176,26 @@ function openMakeupSheet(){
 // 리포트처럼 모든 폭에서 640 한 줄. 하단 탭으로 학생 목록 / 학습기록을 오가고, 학생 공간·기록 카드는 새 화면.
 // 칸 머리는 제목 / 안내 / 가운데 탭 3줄.
 async function openSession(id,btn){await run(()=>openSessionNow(id),btn);}
-async function openSessionNow(id){{state.sessionId=id;state.detail=await api('session',{sessionId:id});state.view='session';state.tab='students';state.seg='att';state.recKind='전체';state.edit=false;state.draft={};state.hwRecord=state.detail.homeworkDue[0]?.recordId||'';render();}}
+// keep=true: 반 주간 캘린더로 같은 반의 다른 수업으로 옮길 때 보던 탭·출석/과제 검사 전환을 그대로 둔다.
+async function openSessionNow(id,keep=false){
+ const [detail,week]=await Promise.all([api('session',{sessionId:id}),api('class-sessions',{sessionId:id}).catch(()=>({sessions:[]}))]);
+ state.sessionId=id;state.detail=detail;state.classWeek=week.sessions||[];state.view='session';
+ if(!keep){state.tab='students';state.seg='att';state.recKind='전체';}
+ state.edit=false;state.draft={};state.hwRecord=state.detail.homeworkDue[0]?.recordId||'';render();}
+// 반 주간 캘린더(v2.5.79): 지금 수업이 있는 주 한 줄. 이 반 수업이 있는 날만 누를 수 있고, ‹ ›는 직전·다음 수업으로 바로 간다.
+// 지난 수업은 출석 상태로 칠하고(모두 출석 초록, 결석·보강 있음 빨강, 출결 미입력 남음 빗금) 날짜 아래 "출석/전체"를 쓴다. 보강 수업(반 없음)에는 없다.
+function classWeekHtml(){
+ const list=state.classWeek||[],i=list.findIndex(x=>x.id===state.sessionId);if(i<0)return '';
+ const cur=list[i],prev=list[i-1],next=list[i+1],w=weekStart(cur.date),today=seoulDate(),md=x=>`${+x.slice(5,7)}/${+x.slice(8)}`;
+ const cells=Array.from({length:7},(_,k)=>{const d=addDays(w,k),x=list.find(y=>y.date===d);
+  if(!x)return `<button type="button" class="cal-day off" disabled tabindex="-1"><span>${+d.slice(8)}</span></button>`;
+  const c=['cal-day',d>=today?'plan':x.absent?'bad':x.missing?'missing':'ok'];if(d===today)c.push('today');if(x.id===state.sessionId)c.push('picked');
+  const cnt=d<=today&&x.total?`${x.present}/${x.total}`:'';
+  return `<button type="button" class="${c.join(' ')}" data-cs="${esc(x.id)}" aria-pressed="${x.id===state.sessionId}" aria-label="${esc(dateLabel(d))} 수업${cnt?`, ${x.total}명 중 ${x.present}명 출석`:''}"><span>${+d.slice(8)}</span>${cnt?`<small>${cnt}</small>`:''}</button>`;}).join('');
+ const nav=(x,label,ch)=>`<button class="cal-nav-btn" type="button" ${x?`data-cs="${esc(x.id)}"`:'disabled'} aria-label="${label}"><span>${ch}</span></button>`;
+ return `<div class="attendance-calendar day-mode class-week"><div class="cal-month-nav">${nav(prev,'직전 수업','‹')}<div class="cal-month-title">${md(w)} ~ ${md(addDays(w,6))}</div><div class="cal-nav-right">${nav(next,'다음 수업','›')}</div></div><div class="cal-grid">${CAL_DOW}${cells}</div></div>`;
+}
+function bindClassWeek(el){el.querySelectorAll('[data-cs]').forEach(b=>b.onclick=()=>{const id=b.dataset.cs;if(id===state.sessionId||!leaveEdit())return;run(()=>openSessionNow(id,true),b);});}
 async function reloadSession(){state.detail=await api('session',{sessionId:state.sessionId});}
 function paneHead(title,hint,tabs='',acts=''){
  return `<div class="ph">${title}</div><p class="page-hint ph">${hint}</p>`+(tabs||acts?`<div class="ph tab-row"><span></span>${tabs?`<div class="center-tabs"><div class="tabs" role="tablist">${tabs}</div></div>`:'<span></span>'}<span class="acts">${acts}</span></div>`:'');
@@ -218,7 +237,8 @@ function paneStudents(el){
   <div class="list">${cur.items.map(i=>{const v=sub(i),ch=state.draft[i.activityId];return `<div class="row ${ch?'changed':''}"><span class="av">${esc(nameOf(i).slice(0,1))}</span><span class="meta"><span class="t">${esc(nameOf(i))}</span></span>
   ${ed?`<span class="seg"><button type="button" class="v-제출 ${v?'on':''}" data-hwact="${esc(i.activityId)}" data-v="1">제출</button><button type="button" class="v-미제출 ${v?'':'on'}" data-hwact="${esc(i.activityId)}" data-v="0">미제출</button></span>`:`<span class="pill ${v?'done':'miss'}">${v?'제출':'미제출'}</span>`}${nlink(i.activityId,nameOf(i)+' 학습활동')}</div>`;}).join('')}</div>`;
  }
- el.innerHTML=paneHead(`<p class="page-title">${icon('users')}학생 목록</p>`,hint,tabBtn(att,'data-seg="att"','출석')+tabBtn(!att,'data-seg="hw"','과제 검사'),acts)+`<div class="pbody">${body}</div>`;
+ el.innerHTML=classWeekHtml()+paneHead(`<p class="page-title">${icon('users')}학생 목록</p>`,hint,tabBtn(att,'data-seg="att"','출석')+tabBtn(!att,'data-seg="hw"','과제 검사'),acts)+`<div class="pbody">${body}</div>`;
+ bindClassWeek(el);
  el.querySelectorAll('[data-seg]').forEach(b=>b.onclick=()=>{if(!leaveEdit())return;state.seg=b.dataset.seg;render();});
  el.querySelectorAll('[data-hw]').forEach(b=>b.onclick=()=>{if(!leaveEdit())return;state.hwRecord=b.dataset.hw;render();});
  const hp=el.querySelector('#hw-pick');if(hp)hp.onchange=e=>{if(!leaveEdit()){e.target.value=state.hwRecord;return;}state.hwRecord=e.target.value;render();};
@@ -259,10 +279,11 @@ function paneStudent(el){
 function paneRecords(el){
  const all=state.detail.records,k=state.recKind||'전체',recs=k==='전체'?all:all.filter(r=>r.kind===k);
  const hint=KINDS.map(x=>`${x} <b>${all.filter(r=>r.kind===x).length}</b>`).join(' · ');
- el.innerHTML=paneHead(`<p class="page-title">${icon('학습')}학습기록</p>`,hint,['전체',...KINDS].map(x=>tabBtn(x===k,`data-rk="${x}"`,x)).join(''))+
+ el.innerHTML=classWeekHtml()+paneHead(`<p class="page-title">${icon('학습')}학습기록</p>`,hint,['전체',...KINDS].map(x=>tabBtn(x===k,`data-rk="${x}"`,x)).join(''))+
  `<div class="pbody">${recs.map(r=>`<div class="rec"><button class="rec-head" type="button" data-rec="${esc(r.id)}"><span class="kind-icon k-${esc(r.kind)}" title="${esc(r.kind)}">${icon(r.kind||'학습')}</span><span class="t">${esc(r.title)}</span>${r.makeup?'<span class="pill s-보강">보강</span>':''}</button>
   <div class="rec-body">${esc([r.range,r.topic&&!r.title.includes(r.topic)?r.topic:''].filter(Boolean).join(' · ')||'내용을 적어 주세요')} · 학생 ${r.registrationIds.length}명${r.activities?` · 학습활동 ${r.activities}건`:''}</div></div>`).join('')||`<div class="list"><p class="empty">${k==='전체'?'아직 기록이 없어요.':`${k} 기록이 없어요.`}</p></div>`}
  <div class="actions"><button class="primary" type="button" id="new-rec">${icon('plus','inline-icon')}기록 만들기</button></div></div>`;
+ bindClassWeek(el);
  el.querySelectorAll('[data-rk]').forEach(b=>b.onclick=()=>{state.recKind=b.dataset.rk;render();});
  el.querySelectorAll('[data-rec]').forEach(b=>b.onclick=()=>openRecord(b.dataset.rec,b));
  el.querySelector('#new-rec').onclick=openKindSheet;
