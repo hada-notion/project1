@@ -255,15 +255,11 @@ export async function loadClasses(date: string, teacherId?: string) {
 	}
 }
 
-// 반 주간 캘린더: 같은 반의 앞뒤 수업(9주 전 ~ 5주 뒤, 보강 수업 제외)과 수업별 출석 요약.
-// present = 출석 처리됐거나 등원한 학생, absent = 결석·보강, missing = 상태도 등원도 없는 학생. 반이 없는 보강 수업은 빈 목록.
-export async function loadClassSessions(sessionId: string, around?: string) {
-	if (!isId(sessionId)) throw new ClassRoomError(400, "수업 형식이 올바르지 않습니다.")
-	if (around !== undefined && around !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(around)) throw new ClassRoomError(400, "날짜 형식이 올바르지 않습니다.")
-	const session = await getPage(sessionId) as Page
+// 같은 반의 앞뒤 수업(기준 9주 전 ~ 5주 뒤, 보강 수업 제외, 날짜순 최대 90개). 반이 없는 보강 수업은 빈 목록.
+async function classSessionPages(session: Page, around?: string) {
 	const classId = rel(session, "클래스")[0]
 	const anchor = around ? seoulDayRange(around).start : session.properties?.["수업일시"]?.date?.start
-	if (!classId || !anchor) return { sessions: [] }
+	if (!classId || !anchor) return { sessions: [] as Page[], range: [] }
 	const t = Date.parse(anchor)
 	const range = [
 		{ property: "수업일시", date: { on_or_after: new Date(t - 63 * 86_400_000).toISOString() } },
@@ -273,6 +269,39 @@ export async function loadClassSessions(sessionId: string, around?: string) {
 		.filter((p: Page) => !checkboxValue(p, "보강"))
 		.sort((a: Page, b: Page) => String(a.properties?.["수업일시"]?.date?.start).localeCompare(String(b.properties?.["수업일시"]?.date?.start)))
 		.slice(0, 90)
+	return { sessions, range }
+}
+
+// 반 학습기록(v2.5.89): 같은 반 앞뒤 수업(위 범위)의 학습기록을 수업 날짜·시각과 함께, 최근 수업부터.
+// 반이 없는 보강 수업은 그 수업의 기록만. 학습기록 탭 날짜별 목록·교재 상세의 그 교재 기록에 쓴다.
+export async function loadClassRecords(sessionId: string) {
+	if (!isId(sessionId)) throw new ClassRoomError(400, "수업 형식이 올바르지 않습니다.")
+	const session = await getPage(sessionId) as Page
+	let { sessions } = await classSessionPages(session)
+	if (!sessions.length) sessions = [session]
+	const byId = new Map(sessions.map((p) => [p.id as string, p]))
+	const found = new Map<string, Page>()
+	for (let i = 0; i < sessions.length; i += 90) {
+		const part = sessions.slice(i, i + 90)
+		for (const r of await queryAllPages(DS_LEARNING_RECORD, { or: part.map((p: Page) => ({ property: "수업", relation: { contains: p.id } })) })) found.set(r.id as string, r)
+	}
+	const records = [...found.values()].map((r) => {
+		const sid = rel(r, "수업").find((id) => byId.has(id)) ?? null
+		const start = sid ? byId.get(sid)?.properties?.["수업일시"]?.date?.start ?? null : null
+		return { ...recordSummary(r), sessionId: sid, date: seoulDate(start), start }
+	})
+	records.sort((a, b) => String(b.start ?? "").localeCompare(String(a.start ?? "")) || a.title.localeCompare(b.title, "ko"))
+	return { records: records.map(({ start, ...r }) => ({ ...r, time: seoulTime(start) })) }
+}
+
+// 반 주간 캘린더: 같은 반의 앞뒤 수업(9주 전 ~ 5주 뒤, 보강 수업 제외)과 수업별 출석 요약.
+// present = 출석 처리됐거나 등원한 학생, absent = 결석·보강, missing = 상태도 등원도 없는 학생. 반이 없는 보강 수업은 빈 목록.
+export async function loadClassSessions(sessionId: string, around?: string) {
+	if (!isId(sessionId)) throw new ClassRoomError(400, "수업 형식이 올바르지 않습니다.")
+	if (around !== undefined && around !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(around)) throw new ClassRoomError(400, "날짜 형식이 올바르지 않습니다.")
+	const session = await getPage(sessionId) as Page
+	const { sessions, range } = await classSessionPages(session, around)
+	if (!sessions.length) return { sessions: [] }
 	const attendances: Page[] = []
 	for (let i = 0; i < sessions.length; i += 90) {
 		const part = sessions.slice(i, i + 90)
@@ -702,6 +731,7 @@ export async function handleClassRoom(body: any): Promise<unknown> {
 		case "session": return await loadSession(body.sessionId)
 		case "classes": return await loadClasses(String(body.date ?? ""), body.teacherId)
 		case "class-sessions": return await loadClassSessions(body.sessionId, body.around)
+		case "class-records": return await loadClassRecords(body.sessionId)
 		case "books": return await loadBooks(body.sessionId)
 		case "activities": return await loadActivities(body.recordId)
 		case "student": return await loadStudent(body.registrationId)

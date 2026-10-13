@@ -107,6 +107,18 @@ Deno.test("days: Seoul dates that have the teacher's sessions in a range", () =>
  await rejects(() => room.loadDays("2026-09-01", "2026-10-31"), 400)
  await rejects(() => room.loadDays("2026-10-12", "2026-10-18", "../x"), 400)
 }))
+Deno.test("class-records: records of the class sessions, newest first, with the session date", () => withMock(async (f) => {
+ f.pages.recA = { id: "recA", db: "records", properties: { "학습": title("[학습] 개념원리 1-2(중1 B) 10.13(화)"), "구분": { select: { name: "학습" } }, "수업": rel("s1"), "진도교재": rel("group"), "범위": text("p.80-85") } }
+ f.pages.recB = { id: "recB", db: "records", properties: { "학습": title("[과제] 개념원리 1-2(중1 B) 10.08(목)"), "구분": { select: { name: "과제" } }, "수업": rel("sPrev"), "범위": text("p.70-76") } }
+ f.pages.recMk = { id: "recMk", db: "records", properties: { "학습": title("[학습] 보강"), "구분": { select: { name: "학습" } }, "수업": rel("sMk") } }
+ const r = await room.loadClassRecords("s1")
+ assert(r.records.map((x: any) => x.id + "@" + x.date + " " + x.time).join() === "recA@2026-10-13 17:00,recB@2026-10-08 17:00", "class records newest first, makeup sessions skipped: " + r.records.map((x: any) => x.id).join())
+ assert(r.records[0].sessionId === "s1" && r.records[0].bookId === "group" && r.records[0].kind === "학습" && r.records[0].range === "p.80-85")
+ f.pages.recO = { id: "recO", db: "records", properties: { "학습": title("다른 날 기록"), "구분": { select: { name: "학습" } }, "수업": rel("sOther") } }
+ assert((await room.loadClassRecords("sOther")).records.map((x: any) => x.id).join() === "recO", "no class: only that session")
+ await rejects(() => room.loadClassRecords("../x"), 400)
+}))
+
 Deno.test("class-sessions: same class around the session with attendance counts, makeups skipped", () => withMock(async () => {
  const r = await room.loadClassSessions("s1")
  assert(r.sessions.map((s) => s.id).join() === "sPrev,s1", r.sessions.map((s) => s.id).join())

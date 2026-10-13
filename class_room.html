@@ -339,6 +339,15 @@ dialog.drawer.right{inset:0 0 0 auto;border-radius:0;border-top-left-radius:var(
 /* 학습기록 탭 + 기록 만들기(떠 있는 버튼): 본문 오른쪽 끝, 하단 탭 위 */
 .fab{position:fixed;z-index:19;right:max(var(--space-4),calc((100vw - var(--feed-w))/2));bottom:calc(var(--hit-min) + var(--space-8) + var(--space-2));min-height:calc(var(--hit-min) + var(--space-1));padding:0 var(--space-5) 0 var(--space-4);border:0;border-radius:var(--radius-pill);background:var(--brand-deep);color:var(--surface);font:inherit;font-weight:700;box-shadow:var(--shadow-float);display:inline-flex;align-items:center;gap:var(--space-2);cursor:pointer}
 .fab svg.line{width:var(--icon-md);height:var(--icon-md)}
+/* v2.5.89 홈 "교재 진도"(리포트 홈 교재 진도처럼 한 카드에 [교재명 / 진도 막대]), 교재 상세, 학습기록 날짜 묶음 */
+.bp-row{display:block;width:100%;padding:var(--space-3) var(--space-4);border:0;background:transparent;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.bp-row+.bp-row{border-top:1px solid var(--divider)}
+.bp-t{display:block;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bp-t small{margin-left:var(--space-2);font-weight:400;font-size:var(--text-caption);color:var(--text-subtle)}
+.row .pct{flex:none;font-weight:700;font-size:var(--text-label);color:var(--brand-deep);font-variant-numeric:tabular-nums}
+.book-row.static{cursor:default}
+.bk-note{margin:var(--space-3) 0 0}
+.rec-date.cur{color:var(--brand-deep)}
 /* 넓은 화면은 아래에서 올라오는 창 대신 가운데 대화상자 */
 @media(min-width:1081px){
  dialog.sheet{width:min(100%,var(--dialog-md));margin:auto;border-bottom-left-radius:var(--radius-lg);border-bottom-right-radius:var(--radius-lg)}
@@ -356,6 +365,6 @@ dialog.drawer.right{inset:0 0 0 auto;border-radius:0;border-top-left-radius:var(
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <script src="hada_config.js"></script>
 <script src="admin_auth.js?v=4ffde89c"></script>
-<script src="class_room.js?v=5158c9b7"></script>
+<script src="class_room.js?v=da3799ad"></script>
 </body>
 </html>

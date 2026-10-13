@@ -1,6 +1,6 @@
 // 수업 관리(v2.5.67, v2.5.82에 이름 변경): 관리자 비밀번호로 로그인(12시간, 이 기기에 기억) → 강사 선택(이 기기에 기억).
 // v2.5.87부터 학부모 리포트와 같은 구조: 첫 화면(강사 이름·담당 클래스 카드·보강 대기실, 아래로 주간 시간표) · ☰ 사이드바(강사 정보·강사 바꾸기·로그아웃)
-// → 반 상세(하단 탭 홈·교재·캘린더·학습기록·학생) → 학생 공간 / 기록 카드 → 학생별 학습활동.
+// → 반 상세(하단 탭 홈·교재·캘린더·학습기록·학생) → 학생 공간 / 기록 카드 → 학생별 학습활동, 교재 상세(v2.5.89).
 // 업무 데이터는 class-room 함수가 Notion에 읽고 쓴다. 체크·입력은 편집 모드에서 모아 [저장], 만들기·출제는 바로 실행.
 'use strict';
 const $=id=>document.getElementById(id);
@@ -37,7 +37,7 @@ function timeOf(iso){if(!iso)return '';const d=new Date(new Date(iso).getTime()+
 function shortDate(iso){if(!iso)return '';const d=new Date(new Date(iso).getTime()+(String(iso).includes('T')?9*3600e3:0));return `${d.getUTCMonth()+1}/${d.getUTCDate()}`;}
 
 const state={session:store.get(SESSION_KEY),teacherId:store.get(TEACHER_KEY),teachers:[],date:seoulDate(),view:'main',day:null,
- sessionId:'',detail:null,tab:'home',bookSeg:'진행 중',seg:'att',recKind:'전체',hwRecord:'',edit:false,editOwner:'',saver:null,draft:{},recordId:'',acts:null,student:null,noteTab:'memo',books:null,picked:new Set(),
+ sessionId:'',detail:null,tab:'home',bookSeg:'진행 중',bookItem:null,classRecs:null,seg:'att',recKind:'전체',hwRecord:'',edit:false,editOwner:'',saver:null,draft:{},recordId:'',acts:null,student:null,noteTab:'memo',books:null,picked:new Set(),
  classWeek:[],cwMonth:'',cwFrom:'',cwTo:'',classes:null,form:null,bookCache:{}};
 
 async function api(action,data={}){
@@ -61,11 +61,11 @@ function bar(crumbs,{back,notion,right='',who=false}={}){
 const TABS=[['home','home','홈'],['books','book','교재'],['calendar','cal','캘린더'],['records','학습','학습기록'],['students','users','학생']];
 const TAB_NAME=Object.fromEntries(TABS.map(([k,,l])=>[k,l]));
 function setTabs(on){const tb=$('tabbar');tb.hidden=!on;$('app').classList.toggle('with-tabs',!!on);document.body.classList.toggle('tabs-on',!!on);if(!on)return;
- const cur=state.view==='session'?state.tab:'';
+ const cur=state.view==='session'?state.tab:state.view==='book'?'books':'';
  tb.innerHTML=`<div class="tab-in">${TABS.map(([k,ic,l])=>`<button type="button" data-tab="${k}" class="${cur===k?'on':''}" ${cur===k?'aria-current="page"':''}>${icon(ic)}<span>${l}</span></button>`).join('')}</div>`;
  tb.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>goTab(b.dataset.tab));}
 // 탭 옮기기: 홈 → 다른 탭은 한 칸 쌓고, 다른 탭끼리는 바꿔 쓰고, 홈으로는 뒤로가기와 같게(쌓인 홈이 없으면 바꿔 쓰기).
-// 학생 공간·기록 카드에서 누르면 쌓인 같은 반 화면이 그 탭이면 뒤로가기, 아니면 한 칸 쌓는다.
+// 학생 공간·기록 카드·교재 상세에서 누르면 쌓인 같은 반 화면이 그 탭이면 뒤로가기, 아니면 한 칸 쌓는다.
 function goTab(tab){
  if(state.view==='session'&&tab===state.tab)return;
  const top=nav.stack.at(-1),back=top&&top.view==='session'&&top.tab===tab&&sameClass(top);
@@ -318,7 +318,7 @@ async function openSessionNow(id,keep=false,tab='home'){
  if(!keep||state.tab!=='calendar')state.cwMonth=date.slice(0,7);
  state.edit=false;state.draft={};state.hwRecord=state.detail.homeworkDue[0]?.recordId||'';render();}
 function switchSession(id,btn){if(id===state.sessionId||!leaveEdit())return;run(async()=>{nav.replace=true;try{await openSessionNow(id,true);}finally{nav.replace=false;}},btn);}
-async function reloadSession(){state.detail=await api('session',{sessionId:state.sessionId});}
+async function reloadSession(){state.detail=await api('session',{sessionId:state.sessionId});state.classRecs=null;}
 function paneHead(title,hint,tabs='',acts=''){
  return `<div class="ph title-row">${title}</div><p class="page-hint ph">${hint}</p>`+(tabs||acts?`<div class="ph tab-row"><span></span>${tabs?`<div class="center-tabs"><div class="tabs" role="tablist">${tabs}</div></div>`:'<span></span>'}<span class="acts">${acts}</span></div>`:'');
 }
@@ -359,15 +359,15 @@ function heroHtml(){const s=state.detail.session,tname=teacherName(s.teacherIds?
 function classBar(){const s=state.detail.session;
  bar([whoName(),className(s),TAB_NAME[state.tab]||''],{back:()=>{if(nav.stack.length)return navBack();if(!leaveEdit())return;if(state.tab!=='home'){state.tab='home';nav.replace=true;render();}else run(()=>showMain());},
   right:`<button class="icon-btn" id="bar-refresh" type="button" aria-label="새로고침">${icon('refresh')}</button>`});
- $('bar-refresh').onclick=e=>{if(leaveEdit())run(()=>openSessionNow(state.sessionId,true),e.currentTarget);};}
+ $('bar-refresh').onclick=e=>{if(!leaveEdit())return;state.classRecs=null;if(state.bookCache)delete state.bookCache[state.sessionId];run(()=>openSessionNow(state.sessionId,true),e.currentTarget);};}
 function sessionBar(){const s=state.detail.session,v=state.view;
  if(v==='session')return classBar();
- const extra=v==='student'?[state.student.name]:[state.acts.record.kind||'기록'];
- bar([className(s),...extra],{back:()=>{if(nav.stack.length)return navBack();if(!leaveEdit())return;if(v==='record')state.tab='records';state.view='session';render();},
-  notion:v==='student'?state.student.attendanceId:state.acts.record.id});}
+ const extra=v==='student'?[state.student.name]:v==='book'?['교재',state.bookItem.title]:[state.acts.record.kind||'기록'];
+ bar([className(s),...extra],{back:()=>{if(nav.stack.length)return navBack();if(!leaveEdit())return;if(v==='record')state.tab='records';if(v==='book')state.tab='books';state.view='session';render();},
+  notion:v==='student'?state.student.attendanceId:v==='book'?state.bookItem.value.split(',')[0]:state.acts.record.id});}
 function renderSession(){
  sessionBar();const v=state.view,el=$('app');state.saver=null;setTabs(true);setHero(v==='session'&&state.tab==='home'?heroHtml():'');
- (v==='student'?paneStudent:v==='record'?paneRecord:{home:paneHome,books:paneBooks,calendar:paneCalendar,records:paneRecords,students:paneStudents}[state.tab]||paneHome)(el);
+ (v==='student'?paneStudent:v==='record'?paneRecord:v==='book'?paneBook:{home:paneHome,books:paneBooks,calendar:paneCalendar,records:paneRecords,students:paneStudents}[state.tab]||paneHome)(el);
 }
 // 홈 탭(v2.5.87): 보고 있는 수업(‹ › 같은 반 이전·다음 수업) / 그날 요약(등원·과제 제출·다음 수업) / 그날 마감 과제 / 이 수업 학습기록.
 function paneHome(el){
@@ -380,25 +380,61 @@ function paneHome(el){
  <div class="card"><div class="home-stats">${stat(`${arrived}/${d.students.length}`,'등원',d.students.length&&arrived===d.students.length?'good':'')}${stat(items.length?`${sub}/${items.length}`:'–','과제 제출',items.length?(sub===items.length?'good':'bad'):'')}${stat(next?whenLabel(next.date,next.time):'–','다음 수업')}</div></div>
  <h2 class="sec-title">${icon('과제')}${today?'오늘':'이날'} 마감 과제 <span class="cnt">${d.homeworkDue.length}</span></h2>
  ${d.homeworkDue.length?`<div class="list">${d.homeworkDue.map(h=>{const n=h.items.filter(x=>x.submitted).length;return `<button class="row" type="button" data-hwgo="${esc(h.recordId)}"><span class="kind-icon k-과제">${icon('과제')}</span><span class="meta"><span class="t">${esc(h.range||h.title)}</span><span class="d">${esc(h.title)}</span></span><span class="pill ${n===h.items.length?'done':'miss'}">제출 ${n}/${h.items.length}</span></button>`;}).join('')}</div>`:`<div class="list"><p class="empty">${today?'오늘':'이날'}이 마감인 과제가 없어요.</p></div>`}
+ <h2 class="sec-title">${icon('book')}교재 진도</h2>${homeBooks()}
  <h2 class="sec-title">${icon('학습')}이 수업 학습기록 <span class="cnt">${d.records.length}</span></h2>
  ${d.records.map(recCard).join('')||'<div class="list"><p class="empty">아직 기록이 없어요. 학습기록 탭의 + 로 만들어요.</p></div>'}`;
  el.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>switchSession(b.dataset.go,b));
+ bindBookOpen(el);
  el.querySelectorAll('[data-hwgo]').forEach(b=>b.onclick=()=>{state.seg='hw';state.hwRecord=b.dataset.hwgo;goTab('students');});
  el.querySelectorAll('[data-rec]').forEach(b=>b.onclick=()=>openRecord(b.dataset.rec,b));
 }
-// 교재 탭(v2.5.87): 이 수업 학생들의 교재를 리포트 교재 카드로. [진행 중 | 전체], 카드를 누르면 그 교재로 기록 만들기.
+// 교재·반 기록은 화면을 먼저 그리고 없으면 읽어 와서, 같은 화면이 그대로면 다시 그린다(편집 중이면 그대로 둔다).
+function whenLoaded(p){const key=screenKey();p.then(()=>{if(screenKey()===key&&!state.edit)render();}).catch(e=>{if(e.message!=='silent')toast(e.message);});}
+function ensureBooks(){const id=state.sessionId;if(state.bookCache?.[id])return state.bookCache[id];if(ensureBooks.busy!==id){ensureBooks.busy=id;whenLoaded(booksFor(id).finally(()=>{ensureBooks.busy=null;}));}return null;}
+// 반 학습기록(v2.5.89): 같은 반 앞뒤 수업의 기록(class-records). 반이 바뀌거나 기록을 만들고 고치면 다시 읽는다.
+const recKey=()=>state.detail?.session?.classIds?.[0]||state.sessionId;
+function ensureClassRecords(){const k=recKey();if(state.classRecs?.key===k)return state.classRecs.list;
+ if(ensureClassRecords.busy!==k){ensureClassRecords.busy=k;const id=state.sessionId;whenLoaded(api('class-records',{sessionId:id}).then(r=>{if(recKey()===k)state.classRecs={key:k,list:r.records};}).finally(()=>{ensureClassRecords.busy=null;}));}return null;}
+// 교재 진행상태 구분(v2.5.89): 진행 중(비어 있음 포함) · 완료 · 다음(다음 교재). 미사용은 보이지 않는다.
+const BOOK_SEGS=['진행 중','완료','다음'];
+const bookSegOf=b=>!b.status||b.status==='진행 중'?'진행 중':b.status==='완료'?'완료':b.status==='다음 교재'?'다음':'';
+const booksIn=(data,seg)=>({...data,books:data.books.filter(b=>bookSegOf(b)===seg).map(b=>({...b,status:''}))});
+// 교재 탭(v2.5.87, 구분·상세 v2.5.89): 이 수업 학생들의 교재를 리포트 교재 카드로. [진행 중 | 완료 | 다음], 카드를 누르면 교재 상세.
 function paneBooks(el){
- const data=state.bookCache?.[state.sessionId];
- if(!data){el.innerHTML='<div class="list"><p class="empty">교재를 불러오는 중…</p></div>';const id=state.sessionId;
-  booksFor(id).then(()=>{if(state.view==='session'&&state.tab==='books'&&state.sessionId===id)render();}).catch(e=>{if(e.message!=='silent')toast(e.message);});return;}
- const seg=state.bookSeg,on=b=>!b.status||b.status==='진행 중',n=data.books.filter(on).length;
- const src=seg==='전체'?{...data,books:data.books.map(b=>({...b,status:''}))}:{...data,books:data.books.filter(on)};
- const groups=src.books.length?bookChoices(src):[];
- el.innerHTML=paneHead(`<p class="page-title">${icon('book')}교재</p>`,`진행 중 <b>${n}</b> · 전체 <b>${data.books.length}</b> · 교재를 누르면 그 교재로 기록을 만들어요`,tabBtn(seg==='진행 중','data-bs="진행 중"','진행 중')+tabBtn(seg==='전체','data-bs="전체"','전체'))+
- `<div class="pbody">${groups.map(g=>`<p class="group-label">${esc(g.label)}</p><div class="br-list">${g.items.map(it=>bookRow(it,{attr:`data-book="${esc(it.value)}"`,chev:true})).join('')}</div>`).join('')||`<div class="list"><p class="empty">${seg==='전체'?'이 수업 학생들에게 연결된 교재가 없어요.':'진행 중인 교재가 없어요.'}</p></div>`}</div>`;
+ const data=ensureBooks();
+ if(!data){el.innerHTML=paneHead(`<p class="page-title">${icon('book')}교재</p>`,'교재를 불러오는 중…');return;}
+ if(!BOOK_SEGS.includes(state.bookSeg))state.bookSeg='진행 중';
+ const seg=state.bookSeg,cnt=x=>data.books.filter(b=>bookSegOf(b)===x).length,src=booksIn(data,seg),groups=src.books.length?bookChoices(src):[];
+ const shown=groups.flatMap(g=>g.items);
+ el.innerHTML=paneHead(`<p class="page-title">${icon('book')}교재</p>`,'진행 상황별 교재예요 · 누르면 교재 상세',BOOK_SEGS.map(x=>tabBtn(seg===x,`data-bs="${x}"`,`${x} ${cnt(x)}`)).join(''))+
+ `<div class="pbody">${groups.map(g=>`<p class="group-label">${esc(g.label)}</p><div class="br-list">${g.items.map(it=>bookRow(it,{attr:`data-bkv="${esc(it.value)}"`,chev:true})).join('')}</div>`).join('')||`<div class="list"><p class="empty">${seg==='진행 중'?'진행 중인 교재가 없어요.':seg==='완료'?'완료한 교재가 없어요.':'다음 교재가 없어요.'}</p></div>`}</div>`;
  bindCovers(el);
  el.querySelectorAll('[data-bs]').forEach(b=>b.onclick=()=>{state.bookSeg=b.dataset.bs;render();});
- el.querySelectorAll('[data-book]').forEach(b=>b.onclick=()=>openCreateSheet(b.dataset.book));
+ bindBookOpen(el,shown);
+}
+// 홈 "교재 진도": 진행 중 교재를 한 카드에 [교재명 / 진도 막대]. 개별 교재 묶음은 "n명 모두" 한 줄(진도 평균).
+function homeBooks(){const data=ensureBooks();if(!data)return '<div class="list"><p class="empty">교재를 불러오는 중…</p></div>';
+ const items=bookChoices(booksIn(data,'진행 중')).flatMap(g=>g.items[0].value.includes(',')?[g.items[0]]:g.items);
+ if(!items.length)return '<div class="list"><p class="empty">진행 중인 교재가 없어요.</p></div>';
+ homeBooks.items=items;
+ return `<div class="list bp-list">${items.map(it=>`<button class="bp-row" type="button" data-bkv="${esc(it.value)}"><span class="bp-t">${esc(it.title)}<small>${esc(it.sub)}</small></span>${it.progress!==null&&it.progress!==undefined?`<span class="progress-line"><span class="track"><span class="fill" style="width:${Math.max(0,Math.min(100,it.progress))}%"></span></span><b>${it.progress}%</b></span>`:''}</button>`).join('')}</div>`;}
+function bindBookOpen(el,items=homeBooks.items||[]){el.querySelectorAll('[data-bkv]').forEach(b=>b.onclick=()=>{const it=items.find(x=>x.value===b.dataset.bkv);if(!it||!leaveEdit())return;state.bookItem=it;state.view='book';render();});}
+// 교재 상세(v2.5.89, 리포트 교재 상세처럼): 교재 카드 / [이 교재로 기록 만들기](진행 중 교재만) / 학생별 진도 / 이 교재 학습기록(반 기록 중 이 교재, 날짜별).
+function paneBook(el){
+ const it=state.bookItem,ids=it.value.split(','),data=ensureBooks(),books=data?data.books.filter(b=>ids.includes(b.id)):[];
+ const regName=id=>(data?.registrations.find(r=>r.id===id)?.name||'').split(' ')[0]||'학생';
+ const live=books.length&&books.every(b=>bookSegOf(b)==='진행 중'),each=ids.length>1||books[0]?.mode!=='그룹 진도';
+ const owners=books.flatMap(b=>b.ownerIds.map(o=>({o,b})));
+ const list=ensureClassRecords(),recs=list?list.filter(r=>ids.includes(r.bookId)):null;
+ el.innerHTML=`<div class="br-list">${bookRow(it).replace('<button class="book-row ','<div class="book-row static ').replace(/<\/button>$/,'</div>')}</div>
+ ${live?`<div class="actions"><button class="primary wide" type="button" id="bk-new">${icon('plus','inline-icon')} 이 교재로 기록 만들기</button></div>`:`<p class="page-hint bk-note">${books.length?'진행 중인 교재만 기록을 만들 수 있어요.':''}</p>`}
+ <h2 class="sec-title">${icon('users')}학생 <span class="cnt">${owners.length}명</span></h2>
+ <div class="list">${owners.map(({o,b})=>`<div class="row"><span class="meta"><span class="t">${esc(regName(o))}</span><span class="d">${esc(b.recent?'최근 '+b.recent:'최근 기록 없음')}</span></span>${each&&b.progress!==null&&b.progress!==undefined?`<span class="pct">${b.progress}%</span>`:''}</div>`).join('')||'<p class="empty">교재 정보를 불러오는 중…</p>'}</div>
+ <h2 class="sec-title">${icon('학습')}이 교재 학습기록 <span class="cnt">${recs?recs.length:''}</span></h2>
+ ${recs?recTimeline(recs,'이 반 앞뒤 수업에 이 교재 기록이 없어요.'):'<div class="list"><p class="empty">기록을 불러오는 중…</p></div>'}`;
+ bindCovers(el);
+ const nb=el.querySelector('#bk-new');if(nb)nb.onclick=()=>openCreateSheet(it.value);
+ el.querySelectorAll('[data-rec]').forEach(b=>b.onclick=()=>openRecord(b.dataset.rec,b));
 }
 // 캘린더 탭(v2.5.87, 📅 서랍을 옮김): 이 반 수업을 한 달로, 출석 색(모두 출석 초록·결석 있음 빨강·미입력 노랑·예정 테두리), 오늘 빨간 테두리, 보는 수업 진하게.
 // 날짜를 누르면 그 수업으로 바꾸고(방문 기록은 쌓지 않음) 아래에 그날 요약과 학습기록을 보인다.
@@ -506,12 +542,17 @@ function paneStudent(el){
 // 기록 카드 한 장(학습기록 탭·홈·캘린더 공용)
 const recCard=r=>`<div class="rec"><button class="rec-head" type="button" data-rec="${esc(r.id)}"><span class="kind-icon k-${esc(r.kind)}" title="${esc(r.kind)}">${icon(r.kind||'학습')}</span><span class="t">${esc(r.title)}</span>${r.makeup?'<span class="pill s-보강">보강</span>':''}</button>
   <div class="rec-body">${esc([r.range,r.topic&&!r.title.includes(r.topic)?r.topic:''].filter(Boolean).join(' · ')||'내용을 적어 주세요')} · 학생 ${r.registrationIds.length}명${r.activities?` · 학습활동 ${r.activities}건`:''}</div></div>`;
+// 기록을 날짜별로(최근 날짜부터). 보고 있는 수업 날짜에는 표시를 붙인다.
+function recTimeline(recs,empty){const dates=[...new Set(recs.map(r=>r.date||''))];
+ return dates.map(d=>{const day=recs.filter(r=>(r.date||'')===d),cur=day.some(r=>r.sessionId===state.sessionId);
+  return `<p class="group-label rec-date ${cur?'cur':''}">${esc(d?longDate(d):'날짜 없음')}${cur?' · 보고 있는 수업':''}</p>${day.map(recCard).join('')}`;}).join('')||`<div class="list"><p class="empty">${esc(empty)}</p></div>`;}
+// 학습기록 탭(v2.5.89): 이 반 앞뒤 수업(9주 전 ~ 5주 뒤)의 기록을 날짜별로. [전체 · 학습 · 과제 · 평가], + 기록 만들기는 보고 있는 수업에.
 function paneRecords(el){
- const all=state.detail.records,k=state.recKind||'전체',recs=k==='전체'?all:all.filter(r=>r.kind===k);
- const hint=KINDS.map(x=>`${x} <b>${all.filter(r=>r.kind===x).length}</b>`).join(' · ');
- el.innerHTML=paneHead(`<p class="page-title">${icon('학습')}학습기록</p>${nlink(state.detail.session.id,'수업')}`,hint,['전체',...KINDS].map(x=>tabBtn(x===k,`data-rk="${x}"`,x)).join(''))+
- `<div class="pbody">${recs.map(recCard).join('')||`<div class="list"><p class="empty">${k==='전체'?'아직 기록이 없어요.':`${k} 기록이 없어요.`}</p></div>`}</div>
- <button class="fab" type="button" id="new-rec">${icon('plus')}<span>기록 만들기</span></button>`;
+ const all=ensureClassRecords(),k=state.recKind||'전체',fab=`<button class="fab" type="button" id="new-rec">${icon('plus')}<span>기록 만들기</span></button>`;
+ const head=(hint)=>paneHead(`<p class="page-title">${icon('학습')}학습기록</p>${nlink(state.detail.session.id,'수업')}`,hint,['전체',...KINDS].map(x=>tabBtn(x===k,`data-rk="${x}"`,x)).join(''));
+ if(!all)el.innerHTML=head('이 반 기록을 불러오는 중…')+fab;
+ else{const recs=k==='전체'?all:all.filter(r=>r.kind===k);
+  el.innerHTML=head('이 반 최근 기록 · '+KINDS.map(x=>`${x} <b>${all.filter(r=>r.kind===x).length}</b>`).join(' · '))+`<div class="pbody">${recTimeline(recs,k==='전체'?'아직 기록이 없어요.':`${k} 기록이 없어요.`)}</div>`+fab;}
  el.querySelectorAll('[data-rk]').forEach(b=>b.onclick=()=>{state.recKind=b.dataset.rk;render();});
  el.querySelectorAll('[data-rec]').forEach(b=>b.onclick=()=>openRecord(b.dataset.rec,b));
  el.querySelector('#new-rec').onclick=()=>openCreateSheet();
@@ -568,8 +609,8 @@ function paneRecord(el){
 const nav={stack:[],layers:[],after:null,count:0,last:null,restoring:false,idx:0,skip:false,replace:false};
 history.replaceState({cr:'base',idx:0},'');
 const navPush=kind=>history.pushState({cr:kind,idx:++nav.idx},'');
-const NAV_FIELDS=['view','tab','sessionId','recordId','seg','recKind','detail','classWeek','cwFrom','cwTo','date','day','acts','recEdit','student','noteTab','books','hwRecord','picked'];
-const screenKey=()=>!['session','student','record'].includes(state.view)?state.view:[state.view,state.tab,state.sessionId,state.view==='record'?state.recordId:'',state.view==='student'?state.student?.attendanceId:''].join('|');
+const NAV_FIELDS=['bookItem','view','tab','sessionId','recordId','seg','recKind','detail','classWeek','cwFrom','cwTo','date','day','acts','recEdit','student','noteTab','books','hwRecord','picked'];
+const screenKey=()=>!['session','student','record','book'].includes(state.view)?state.view:[state.view,state.tab,state.sessionId,state.view==='record'?state.recordId:'',state.view==='student'?state.student?.attendanceId:'',state.view==='book'?state.bookItem?.value:''].join('|');
 function takeSnap(){const o={key:screenKey()};for(const k of NAV_FIELDS)o[k]=state[k];return o;}
 function navTrack(){
  if(state.view==='login'){nav.last=null;return;}
@@ -614,7 +655,7 @@ window.addEventListener('popstate',e=>{
 function render(){
  if(!state.session)return showLogin();
  if(!state.teacherId)return showTeachers();
- ({main:renderMain,waiting:renderWaiting,session:renderSession,student:renderSession,record:renderSession,teachers:showTeachers}[state.view]||renderMain)();
+ ({main:renderMain,waiting:renderWaiting,session:renderSession,student:renderSession,record:renderSession,book:renderSession,teachers:showTeachers}[state.view]||renderMain)();
  updateSavebar();navTrack();
 }
 async function start(){
