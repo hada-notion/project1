@@ -37,6 +37,7 @@ function fixture() {
   if (f.relation?.contains) return (v?.relation ?? []).some((r: any) => r.id === f.relation.contains)
   if (f.relation?.is_empty) return !(v?.relation ?? []).length
   if (f.select?.equals) return v?.select?.name === f.select.equals
+  if (f.rich_text?.is_not_empty) return !!(v?.rich_text ?? []).length
   if (f.date?.on_or_after) return Date.parse(v?.date?.start) >= Date.parse(f.date.on_or_after)
   if (f.date?.before) return Date.parse(v?.date?.start) < Date.parse(f.date.before)
   throw new Error("unexpected filter " + JSON.stringify(f))
@@ -155,4 +156,14 @@ Deno.test("unknown actions and malformed ids are rejected", () => withMock(async
  await rejects(() => room.handleClassRoom({ action: "drop-all" }), 400)
  await rejects(() => room.handleClassRoom({ action: "session", sessionId: "../x" }), 400)
  await rejects(() => room.handleClassRoom({ action: "save-attendance", items: [{ attendanceId: "1".repeat(32), memo: "x" }].concat(Array(60).fill({ attendanceId: "1".repeat(32) })) }), 400)
+}))
+Deno.test("student space: recent homework, scored tests and past memos for the registration", () => withMock(async (f) => {
+ f.pages.hw1.properties["구분"] = { type: "rollup", rollup: { array: [{ select: { name: "과제" } }] } }
+ f.pages.hw1.properties["과제 마감일"] = { type: "formula", formula: { type: "date", date: { start: "2026-10-13" } } }
+ f.pages.t9 = { id: "t9", db: "activities", properties: { "학습활동": title("t9"), "학습기록": rel("rec0"), "등록": rel("ra"), "구분": { rollup: { array: [{ select: { name: "평가" } }] } }, "정답 문항": { number: 18 }, "전체 문항": { number: 20 } } }
+ f.pages.aOld = { id: "aOld", db: "attendance", properties: { "등록": rel("ra"), "수업일시": { date: { start: "2026-10-10T08:00:00.000Z" } }, "메모": text("지각 15분") } }
+ const s = await room.loadStudent("ra")
+ assert(s.homework.length === 1 && s.homework[0].submitted && s.homework[0].due === "2026-10-13" && s.homework[0].range === "p.31-35")
+ assert(s.tests.length === 1 && s.tests[0].correct === 18 && s.tests[0].total === 20)
+ assert(s.memos.map((m) => m.memo).sort().join() === "지각 15분,집중 좋음")
 }))

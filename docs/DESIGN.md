@@ -233,6 +233,7 @@ font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto San
 | `admin_settings.html` | 공용 토큰·부품 | |
 | `school_search.html` | 공용 토큰·부품 | |
 | `legal_documents.html` | 공용 토큰·부품 | 조회 화면만. 출력 문서는 인쇄 문서 구역 |
+| `class_room.html` | 공용 토큰·부품 | 수업방(v2.5.67). 휴대폰 우선, 리포트와 같은 베이지 상단 바·하단 탭·카드 모양. 아래 "수업방 규칙" |
 
 새 화면을 공용 스타일로 옮기면 `tests/design-lint.cjs`의 `PAGES`에 추가하고 이 표를 고친다. 옮기는 작업은 화면 하나씩, 기능 변경 없이 한다.
 
@@ -380,6 +381,14 @@ font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto San
 - 아이콘은 1부 12장(Feather 스타일 선형 SVG, 고정 정사각 박스)을 따른다. 새 아이콘은 Feather Icons(feathericons.com, MIT)의 원본 SVG 경로를 그대로 가져와 쓴다(2026-10-12 사용자 지정). 다른 외부 서비스의 아이콘 파일은 가져와 쓰지 않는다.
 - CSS 배경으로만 그릴 수 있는 아이콘(선택 상자 화살표 등)은 `assets/hada-tokens.css`에 `--icon-*` 토큰(데이터 URL)으로 두고, 선 색은 그 토큰에만 적는다.
 - 이미지 안내는 카드 안에 바로 넣지 않고 `?` 도움말 대화상자로 연다(카드 높이가 흔들리지 않게).
+
+### 수업방 규칙 (class_room.html, 2026-10-14)
+
+- **분류 색**: 학습 `--info`, 과제 `--warning`, 평가 `--success`(글자는 각 `-ink`, 바탕은 `-soft`). 리포트 학습기록 아이콘 색과 같다. 아이콘은 학습 edit-2, 과제 clipboard, 평가 file-text.
+- **출석 상태 색**: 출석 `--success`, 결석 `--danger`, 보강 `--info`. 과제 제출 `--info`, 미제출 `--danger`.
+- **편집 모드와 저장**: 체크·입력(출석, 과제 검사, 점수, 메모·선생님 한마디)은 [편집]을 켜고 고친 뒤 아래 막대의 [저장]으로 한 번에 보낸다. 바뀐 줄은 왼쪽 진한 선, 막대에 "변경 n건". 저장하지 않고 나가면 묻는다. 만들기·출제·보강 배정처럼 한 번에 끝나는 동작은 누르면 바로 실행한다.
+- **Notion 링크 자리**: 모든 Notion 페이지 링크는 같은 ↗ 아이콘(Feather arrow-up-right, 44px 칸) 하나만 쓰고, 상단 바 오른쪽 = 지금 화면의 중심 페이지, 카드·목록 줄 오른쪽 끝 = 그 줄의 페이지. 주소는 `https://www.notion.so/<페이지 ID>`(학원 설정 불필요), 새 탭.
+- 상단 바·탭·버튼·칩의 클릭 영역은 모두 44px 이상.
 
 ### 기타 화면 공통
 
