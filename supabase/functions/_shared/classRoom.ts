@@ -216,6 +216,48 @@ export async function loadDays(from: string, to: string, teacherId?: string) {
 	return { dates: dedupe(sessions.map((p: Page) => seoulDate(p.properties?.["수업일시"]?.date?.start ?? null)).filter(Boolean)).sort() }
 }
 
+// 반 주간 캘린더: 같은 반의 앞뒤 수업(9주 전 ~ 5주 뒤, 보강 수업 제외)과 수업별 출석 요약.
+// present = 출석 처리됐거나 등원한 학생, absent = 결석·보강, missing = 상태도 등원도 없는 학생. 반이 없는 보강 수업은 빈 목록.
+export async function loadClassSessions(sessionId: string, around?: string) {
+	if (!isId(sessionId)) throw new ClassRoomError(400, "수업 형식이 올바르지 않습니다.")
+	if (around !== undefined && around !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(around)) throw new ClassRoomError(400, "날짜 형식이 올바르지 않습니다.")
+	const session = await getPage(sessionId) as Page
+	const classId = rel(session, "클래스")[0]
+	const anchor = around ? seoulDayRange(around).start : session.properties?.["수업일시"]?.date?.start
+	if (!classId || !anchor) return { sessions: [] }
+	const t = Date.parse(anchor)
+	const range = [
+		{ property: "수업일시", date: { on_or_after: new Date(t - 63 * 86_400_000).toISOString() } },
+		{ property: "수업일시", date: { before: new Date(t + 36 * 86_400_000).toISOString() } },
+	]
+	const sessions = (await queryAllPages(DS_CLASS_SESSION, { and: [{ property: "클래스", relation: { contains: classId } }, ...range] }))
+		.filter((p: Page) => !checkboxValue(p, "보강"))
+		.sort((a: Page, b: Page) => String(a.properties?.["수업일시"]?.date?.start).localeCompare(String(b.properties?.["수업일시"]?.date?.start)))
+		.slice(0, 90)
+	const attendances: Page[] = []
+	for (let i = 0; i < sessions.length; i += 90) {
+		const part = sessions.slice(i, i + 90)
+		if (!part.length) continue
+		attendances.push(...await queryAllPages(DS_ATTENDANCE, { and: [...range, { or: part.map((p: Page) => ({ property: "수업", relation: { contains: p.id } })) }] }))
+	}
+	return {
+		sessions: sessions.map((p: Page) => {
+			const mine = attendances.filter((a) => rel(a, "수업").includes(p.id as string))
+			const status = (a: Page) => selectName(a, "출석 상태") ?? ""
+			const start = p.properties?.["수업일시"]?.date?.start ?? null
+			return {
+				id: p.id as string,
+				date: seoulDate(start),
+				time: [seoulTime(start), seoulTime(p.properties?.["수업일시"]?.date?.end ?? null)].filter(Boolean).join("–"),
+				total: rel(p, "출석").length,
+				present: mine.filter((a) => status(a) === "🟢 출석" || (!status(a) && dateStart(a, "등원스템프"))).length,
+				absent: mine.filter((a) => status(a) === "🔴 결석" || status(a) === "🔵 보강").length,
+				missing: mine.filter((a) => !status(a) && !dateStart(a, "등원스템프")).length,
+			}
+		}),
+	}
+}
+
 function recordSummary(r: Page) {
 	return {
 		id: r.id as string,
@@ -270,7 +312,7 @@ export async function loadSession(sessionId: string) {
 	})
 	const records = (await getPages(rel(session, "학습기록"))).map(recordSummary)
 	return {
-		session: { ...sessionSummary(session), className: await className(session) },
+		session: await (async () => { const c = (await classInfo(rel(session, "클래스").slice(0, 1))).get(rel(session, "클래스")[0]); return { ...sessionSummary(session), className: c?.name ?? "", classEmoji: c?.emoji ?? "" } })(),
 		students: students.map(({ dueActivityIds: _drop, ...s }) => s),
 		homeworkDue,
 		records,
@@ -435,6 +477,10 @@ export async function createRecords(body: any) {
 	const bookIds = body?.bookIds === undefined ? [] : ids(body.bookIds, 30)
 	const chosen = body?.registrationIds === undefined ? null : ids(body.registrationIds)
 	const topic = typeof body?.topic === "string" ? body.topic.trim().slice(0, 200) : ""
+	// 기록 만들기 창(v2.5.79)은 범위·내용을 처음부터 함께 보낸다. 새로 만드는 기록에만 넣는다.
+	for (const key of ["range", "content"]) if (body?.[key] !== undefined && typeof body[key] !== "string") throw new ClassRoomError(400, "입력 형식이 올바르지 않습니다.")
+	const range = typeof body?.range === "string" ? body.range.trim().slice(0, 200) : ""
+	const content = typeof body?.content === "string" ? body.content.trim().slice(0, 2000) : ""
 	const ctx = await sessionContext(body?.sessionId)
 	const registrations = await getPages(rel(ctx.session, "등록"))
 	const existing = await getPages(rel(ctx.session, "학습기록"))
@@ -464,6 +510,8 @@ export async function createRecords(body: any) {
 		if (regularBookId) props["교재"] = relation([regularBookId])
 		if (subjectIds.length) props["과목"] = relation(subjectIds)
 		if (topic) props["주제"] = richText(topic)
+		if (range) props["범위"] = richText(range)
+		if (content) props["내용"] = richText(content)
 		if (ctx.makeup) props["보강"] = { checkbox: true }
 		const page = await createPage(DS_LEARNING_RECORD, props) as Page
 		existing.push(page)
@@ -601,6 +649,7 @@ export async function handleClassRoom(body: any): Promise<unknown> {
 		case "day": return await loadDay(String(body.date ?? ""), body.teacherId)
 		case "days": return await loadDays(String(body.from ?? ""), String(body.to ?? ""), body.teacherId)
 		case "session": return await loadSession(body.sessionId)
+		case "class-sessions": return await loadClassSessions(body.sessionId, body.around)
 		case "books": return await loadBooks(body.sessionId)
 		case "activities": return await loadActivities(body.recordId)
 		case "student": return await loadStudent(body.registrationId)

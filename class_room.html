@@ -116,6 +116,8 @@ button.row{cursor:pointer}
 .savebar{position:fixed;left:var(--space-4);right:var(--space-4);bottom:calc(var(--hit-min) + var(--space-8));z-index:21;max-width:var(--feed-w);margin:0 auto;background:var(--surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-2) var(--space-2) var(--space-4)}
 .savebar span{flex:1;font-weight:700}
 .savebar.no-tabs{bottom:var(--space-4)}
+/* 알림은 글자 폭만큼 넓게(가운데 정렬 때문에 화면 반 폭으로 줄지 않게), 두 줄이면 둥근 모서리 */
+.toast{width:max-content;text-align:center;border-radius:var(--radius-lg)}
 body.tabs-on .toast{bottom:calc(var(--hit-min) + var(--space-8))}
 body.save-on .toast{bottom:calc(3*var(--hit-min) + var(--space-3))}
 dialog.sheet{width:min(100%,var(--form-max));max-width:100%;margin:auto auto 0;border-radius:var(--radius-lg);border-bottom-left-radius:0;border-bottom-right-radius:0;max-height:85vh;overflow:auto}
@@ -123,6 +125,7 @@ dialog.sheet{width:min(100%,var(--form-max));max-width:100%;margin:auto auto 0;b
 .choose button{display:flex;align-items:center;gap:var(--space-3);text-align:left;min-height:calc(var(--hit-min) + var(--space-4));padding:var(--space-3) var(--space-4);border:1px solid var(--brand-border);border-radius:var(--radius-md);background:var(--surface);font:inherit;color:inherit;cursor:pointer}
 .choose small{display:block;color:var(--text-muted);font-size:var(--text-label);font-weight:400}
 .empty{color:var(--text-subtle);font-size:var(--text-label);text-align:center;padding:var(--space-3) var(--space-4)}
+.empty.tall{padding:var(--space-8) var(--space-4);line-height:1.7}
 svg.line.check,.row svg.line,.choose svg.line,.pill svg.line{width:var(--icon-md);height:var(--icon-md);flex:none}
 .nl{flex:none}
 .bars{display:flex;gap:var(--space-6);align-items:flex-end;justify-content:center;height:calc(3*var(--hit-area));padding-top:var(--space-4)}
@@ -153,7 +156,7 @@ svg.line.check,.row svg.line,.choose svg.line,.pill svg.line{width:var(--icon-md
 /* 모든 화면의 첫 제목은 상단 바 아래 같은 높이(본문 위 여백 16 + 4) */
 .cr-main>.ph:first-child .page-title,.cr-main>.page-title:first-child{margin-top:var(--space-1)}
 /* 캘린더(v2.5.70): 학부모 리포트 캘린더(student_report.html .attendance-calendar·.cal-month-nav·.cal-day·.cal-collapse-btn·.cal-day-head)와
-   같은 구조·모양이고 크기 값도 리포트 끝의 "캘린더 공통 모양"과 같다. 날짜 칸은 월 전체 가로 4 : 세로 5(칸 높이 최대 72px, 달력 폭 기준), 주 한 줄 6:5로 고정, 이동·오늘 버튼은 44px 클릭 영역 안에 리포트 크기로 그린다. */
+   같은 구조·모양이고 크기 값도 리포트 끝의 "캘린더 공통 모양"과 같다. 날짜 칸은 월 전체·주 한 줄 모두 가로 4 : 세로 5(칸 높이 최대 72px, 달력 폭 기준)로 고정(v2.5.79), 이동·오늘 버튼은 44px 클릭 영역 안에 리포트 크기로 그린다. */
 .attendance-calendar{background:var(--surface);border-radius:var(--radius-lg);padding:var(--space-3);box-shadow:var(--shadow-card)}
 .cal-month-nav{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;margin-bottom:var(--space-1)}
 .cal-month-nav>.cal-nav-btn:first-child{justify-self:start}
@@ -166,8 +169,32 @@ svg.line.check,.row svg.line,.choose svg.line,.pill svg.line{width:var(--icon-md
 .cal-dow{font-size:var(--text-caption);font-weight:600;color:var(--text-subtle);text-align:center;padding-bottom:var(--space-1)}
 .cal-dow.sat{color:var(--info)}.cal-dow.sun{color:var(--danger)}
 .cal-day{height:min(calc((100cqw - 6*var(--space-1))/7*5/4),4.5rem);min-width:0;padding:0;border:0;border-radius:var(--radius-md);background:transparent;color:var(--text-subtle);font:inherit;font-size:var(--text-body);cursor:pointer;display:flex;align-items:center;justify-content:center}
-.day-mode .cal-day{aspect-ratio:6/5;height:auto}
 .cal-day.empty{cursor:default}
+/* 날짜 이동 캘린더(v2.5.79): 수업 있는 날은 칸을 칠하고(has) 보고 있는 날은 진하게(picked), 오늘은 빨간 테두리. 수업 없는 날은 흐리게·누를 수 없음. 출석 숫자·색은 넣지 않는다. */
+.cal-panel{margin-bottom:var(--space-4)}
+.cal-day.off{opacity:.35;cursor:default}
+.cal-day.has{background:var(--brand-light);color:var(--brand-on-primary);font-weight:700}
+.cal-day.has.picked{background:var(--brand-deep);color:var(--surface);box-shadow:none}
+.cal-day.has.today{box-shadow:inset 0 0 0 2px var(--danger)}
+.cal-nav-btn:disabled{opacity:.3;cursor:default}
+.picker-cal{box-shadow:none;padding:0}
+.row.cur{box-shadow:inset 3px 0 0 var(--brand-deep);background:var(--brand-tint)}
+/* 상단 바(v2.5.79): [≡ 수업 선택 | 클래스 이모지·이름 / 날짜·시간 | 📅 날짜 이동] */
+.tb-in{display:grid;grid-template-columns:var(--hit-min) minmax(0,1fr) var(--hit-min);align-items:center}
+.tb-title{min-width:0;text-align:center;line-height:1.2}
+.tb-title b{display:block;font-size:var(--text-lead);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tb-title small{display:block;margin-top:var(--space-1);font-size:var(--text-caption);opacity:.75}
+.tb-emo{margin-right:var(--space-2)}
+.cr-bar .icon-btn.on{background:var(--brand-tint)}
+.cr-bar .icon-btn:disabled{opacity:.3;cursor:default}
+/* 하단 가운데 + 기록 만들기 */
+.tab-in.three{align-items:center}
+.tabbar button.plus{color:var(--brand-deep)}
+.plus-dot{width:var(--hit-area);height:var(--hit-area);border-radius:var(--radius-pill);background:var(--brand-deep);color:var(--surface);display:inline-flex;align-items:center;justify-content:center;margin-top:calc(-1*var(--space-4));box-shadow:var(--shadow-float)}
+.tabbar .plus-dot svg{width:var(--icon-lg);height:var(--icon-lg)}
+.tabbar button:disabled{opacity:.35;cursor:default}
+.ph.title-row{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2)}
+.center-tabs.left{justify-content:flex-start;margin:0}
 .cal-day.plan{box-shadow:inset 0 0 0 1.5px var(--brand-border);color:var(--text-muted)}
 .cal-day.picked{box-shadow:inset 0 0 0 2px var(--brand-deep)}
 .cal-day.today,.cal-day.today.picked{box-shadow:inset 0 0 0 2px var(--danger)}
@@ -205,6 +232,6 @@ svg.line.check,.row svg.line,.choose svg.line,.pill svg.line{width:var(--icon-md
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <script src="hada_config.js"></script>
 <script src="admin_auth.js?v=ec2cac35"></script>
-<script src="class_room.js?v=612c8655"></script>
+<script src="class_room.js?v=efcf7c2f"></script>
 </body>
 </html>

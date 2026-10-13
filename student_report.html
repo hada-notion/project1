@@ -850,8 +850,8 @@ body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
   .cal-month { margin-bottom: 2px !important; }
 }
 /* ===== 캘린더 공통 모양 (2026-10-14): 일정 탭·캘린더 탭·수업방(class_room.html)이 같은 값을 쓴다.
-   날짜 칸 비율은 화면 높이와 상관없이 고정: 월 전체·일정은 가로 4 : 세로 5(세로로 김)이되 칸 높이는 최대 72px,
-   주 한 줄(접었을 때)은 가로 6 : 세로 5(조금 납작). 높이 상한은 달력 폭(cqw) 기준이라 창 높이를 바꿔도 모양이 같다.
+   날짜 칸 비율은 화면 높이와 상관없이 고정: 월 전체·일정·주 한 줄 모두 가로 4 : 세로 5(세로로 김)이되 칸 높이는 최대 72px(v2.5.79).
+   높이 상한은 달력 폭(cqw) 기준이라 창 높이를 바꿔도 모양이 같다.
    글자·간격·버튼 크기도 고정한다(화면 폭·높이 비례 값 없음). ===== */
 .cal-month, .attendance-calendar { padding: 12px; border-radius: 14px; }
 .cal-month-nav { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); margin-bottom: 4px; }
@@ -862,7 +862,6 @@ body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
 .cal-weekdays { margin-bottom: 4px; }
 .cal-grid, .attendance-calendar .cal-grid { gap: 4px; container-type: inline-size; }
 .cal-cell, .attendance-calendar .cal-day { aspect-ratio: auto; height: min(calc((100cqw - 24px) / 7 * 5 / 4), 72px); font-size: 16px; border-radius: 10px; }
-.attendance-cal-wrap.day-mode .cal-day { aspect-ratio: 6 / 5; height: auto; }
 .cal-cell.today { box-shadow: inset 0 0 0 2px var(--danger); }
 .cal-cell.today { font-weight: 800; }
 </style>
