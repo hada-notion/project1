@@ -1134,4 +1134,106 @@ async function initApp() {
   }
   renderApp()
 }
+
+// ---------- 뒤로가기 (v2.5.86) ----------
+// 학부모님이 알림톡 링크로 들어와 뒤로가기를 누르면 리포트에서 나가 버리던 것을, 앱처럼 직전 동작으로 돌아가게 한다(History API).
+// 기존 함수는 고치지 않고 열고 닫는 함수만 감싼다. 주소는 바꾸지 않는다(링크 토큰·새로고침 동작 그대로).
+//  - 창(메뉴·일정·시험·과제·기간 고르기·사진 크게 보기)이 열려 있으면 그것부터 닫는다. ✕·바깥 누르기로 닫아도 방문 기록을 맞춘다.
+//  - 화면은 깊이로 센다: 첫 화면 0 → 등록 상세 홈 1 → 다른 탭 2(탭은 쌓지 않음) → 캘린더 날짜를 골라 접힘 +1, 교재 상세 +1.
+//    뒤로가기는 한 단계 위로(교재 상세 → 등록 상세, 날짜 접힘 → 월 보기, 다른 탭 → 홈, 홈 → 첫 화면). 첫 화면에서는 원래대로 나간다.
+//  - 앞으로 가기는 무시한다.
+const reportNav = { idx: 0, depth: 0, layers: [], pending: 0, skip: false, popping: false, fromPop: false }
+function reportDepth() {
+  if (view === "book") return (regTab === "home" ? 1 : 2) + 1
+  if (view !== "detail") return 0
+  return (regTab === "home" ? 1 : 2) + (regTab === "calendar" && selectedCalDate ? 1 : 0)
+}
+function reportPush() { history.pushState({ rb: ++reportNav.idx }, "") }
+// 창을 닫은 만큼 방문 기록을 되돌린다. 같은 동작 안에서 화면이 바뀌면(메뉴에서 다른 등록을 고름) 그쪽에서 기록 칸을 바꿔 쓴다.
+function reportFlushBack() {
+  const n = reportNav.pending
+  if (!n) return
+  reportNav.pending = 0
+  reportNav.skip = true
+  reportNav.idx -= n
+  history.go(-n)
+}
+function reportWrapLayer(name, openName, closeName, isOpen) {
+  const open = window[openName], close = window[closeName]
+  window[openName] = function (...args) {
+    const was = isOpen()
+    const r = open.apply(this, args)
+    if (!was && isOpen() && !reportNav.popping) { reportNav.layers.push({ name, close }); reportPush() }
+    return r
+  }
+  window[closeName] = function (...args) {
+    if (reportNav.popping) return close.apply(this, args)
+    const i = reportNav.layers.findIndex((l) => l.name === name)
+    const r = close.apply(this, args)
+    if (i >= 0) { reportNav.pending += reportNav.layers.length - i; reportNav.layers.splice(i); setTimeout(reportFlushBack, 0) }
+    return r
+  }
+}
+const reportActive = (id) => () => !!document.getElementById(id)?.classList.contains("active")
+reportWrapLayer("menu", "openMenu", "closeMenu", reportActive("menu"))
+reportWrapLayer("schedule", "openScheduleDay", "closeScheduleDayModal", reportActive("schedule-day-modal"))
+reportWrapLayer("test", "showTestDetailModal", "closeTestDetailModal", reportActive("test-detail-modal"))
+reportWrapLayer("homework", "showHomeworkDayModal", "closeHomeworkDayModal", reportActive("homework-detail-modal"))
+reportWrapLayer("homework", "showHomeworkPeriodModal", "closeHomeworkDayModal", reportActive("homework-detail-modal"))
+reportWrapLayer("period", "openReportPeriodPicker", "closeReportPeriodPicker", reportActive("report-period-modal"))
+// 사진 크게 보기: 누르면 닫히는 겹 화면(.feed-lightbox)
+window.closeFeedImage = function () { document.querySelectorAll(".feed-lightbox").forEach((el) => el.remove()) }
+reportWrapLayer("image", "openFeedImage", "closeFeedImage", () => !!document.querySelector(".feed-lightbox"))
+{
+  const openImage = window.openFeedImage
+  window.openFeedImage = function (...args) {
+    const r = openImage.apply(this, args)
+    document.querySelectorAll(".feed-lightbox").forEach((el) => { el.onclick = () => window.closeFeedImage() })
+    return r
+  }
+}
+// 화면이 바뀔 때마다 깊이를 비교해 방문 기록을 맞춘다.
+{
+  const render = renderApp
+  window.renderApp = renderApp = function (...args) {
+    const r = render.apply(this, args)
+    const d = reportDepth()
+    if (reportNav.fromPop) { reportNav.depth = d; return r }
+    let diff = d - reportNav.depth
+    if (diff > 0) {
+      // 방금 닫은 창의 기록 칸이 있으면 그 칸을 새 화면 칸으로 바꿔 쓴다.
+      if (reportNav.pending > 0) { history.replaceState({ rb: reportNav.idx }, ""); reportNav.pending--; diff-- }
+      while (diff-- > 0) reportPush()
+    } else if (diff < 0) {
+      reportNav.pending += -diff
+    }
+    if (reportNav.pending) setTimeout(reportFlushBack, 0)
+    reportNav.depth = d
+    return r
+  }
+}
+function reportGoUp() {
+  if (view === "book") return closeBookDetail()
+  if (view !== "detail") return
+  if (regTab === "calendar" && selectedCalDate) return clearCalDay()
+  if (regTab !== "home") return setRegTab("home")
+  return goIntro()
+}
+history.replaceState({ rb: 0 }, "")
+window.addEventListener("popstate", (e) => {
+  const i = e.state?.rb ?? 0
+  if (reportNav.skip) { reportNav.skip = false; reportNav.idx = i; return }
+  if (i > reportNav.idx) { reportNav.skip = true; history.back(); return }
+  reportNav.idx = i
+  if (reportNav.layers.length) {
+    const layer = reportNav.layers.pop()
+    reportNav.popping = true
+    try { layer.close() } finally { reportNav.popping = false }
+    return
+  }
+  reportNav.fromPop = true
+  try { reportGoUp() } finally { reportNav.fromPop = false }
+  reportNav.depth = reportDepth()
+})
+
 initApp()
