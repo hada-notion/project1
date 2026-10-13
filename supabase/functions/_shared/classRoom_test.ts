@@ -10,7 +10,7 @@ const ids = (p: any, key: string) => (p.properties[key]?.relation ?? []).map((x:
 const D = "2026-10-13T08:00:00.000Z" // 17:00 KST
 function fixture() {
  const pages: Record<string, any> = {
-  cls: { id: "cls", db: "classes", properties: { "클래스명": title("중1 B") } },
+  cls: { id: "cls", db: "classes", properties: { "클래스명": title("중1 B"), "이모지": text("🟡") } },
   regular: { id: "regular", db: "regulars", properties: { "교재명": title("개념원리 1-2"), "과목": rel("math") } },
   t1: { id: "t1", db: "teachers", properties: { "이름": title("안규빈"), "직책": { select: { name: "강사" } } } },
   s1: { id: "s1", db: "sessions", properties: { "이름": title("중1 B 10.13(화)"), "수업일시": { date: { start: D, end: "2026-10-13T09:00:00.000Z" } }, "담당강사": rel("t1"), "클래스": rel("cls"), "등록": rel("ra", "rb"), "출석": rel("aa", "ab"), "학습기록": rel(), "보강": { checkbox: false }, "출석현황": formula("✅ 정상(2)") } },
@@ -21,7 +21,7 @@ function fixture() {
   group: { id: "group", db: "books", properties: { "진도교재": title("개념원리(중1 B)"), "진도방식": { select: { name: "그룹 진도" } }, "진행상태": { status: { name: "진행 중" } }, "정규교재": rel("regular"), "반별교재": rel() } },
   indA: { id: "indA", db: "books", properties: { "진도교재": title("RPM(김하늘)"), "진도방식": { select: { name: "개별 진도" } }, "진행상태": { status: { name: "진행 중" } }, "정규교재": rel(), "반별교재": rel("tpl") } },
   indB: { id: "indB", db: "books", properties: { "진도교재": title("RPM(박서준)"), "진도방식": { select: { name: "개별 진도" } }, "진행상태": { status: { name: "진행 중" } }, "정규교재": rel(), "반별교재": rel("tpl") } },
-  aa: { id: "aa", db: "attendance", properties: { "출석": title("aa"), "학생이름(보고서)": formula("김하늘"), "등록": rel("ra"), "수업": rel("s1"), "수업일시": { date: { start: D } }, "출석 상태": { select: { name: "🟢 출석" } }, "메모": text("집중 좋음"), "선생님 한마디": text(""), "과제": rel("hw1") } },
+  aa: { id: "aa", db: "attendance", properties: { "출석": title("aa"), "학생이름(보고서)": formula("김하늘"), "등록": rel("ra"), "수업": rel("s1"), "수업일시": { date: { start: D } }, "출석 상태": { select: { name: "🟢 출석" } }, "등원스템프": { date: { start: "2026-10-13T07:52:00.000Z" } }, "메모": text("집중 좋음"), "선생님 한마디": text(""), "과제": rel("hw1") } },
   ab: { id: "ab", db: "attendance", properties: { "출석": title("ab"), "학생이름(보고서)": formula("박서준"), "등록": rel("rb"), "수업": rel("s1"), "수업일시": { date: { start: D } }, "출석 상태": { select: null }, "메모": text(""), "선생님 한마디": text(""), "과제": rel("hw2") } },
   wait1: { id: "wait1", db: "attendance", properties: { "출석": title("w1"), "학생이름(보고서)": formula("이도윤"), "클래스(보고서)": formula("중2 A"), "등록": rel("rc"), "수업": rel(), "수업일시": { date: { start: "2026-10-13T06:00:00.000Z" } }, "출석 상태": { select: { name: "🔵 보강" } } } },
   waitOld: { id: "waitOld", db: "attendance", properties: { "출석": title("old"), "등록": rel("rc"), "수업": rel(), "수업일시": { date: { start: "2026-10-12T06:00:00.000Z" } }, "출석 상태": { select: { name: "🔵 보강" } } } },
@@ -80,7 +80,15 @@ Deno.test("day: that day's sessions for the teacher and only unassigned makeup a
  assert(day.sessions.map((s) => s.id).join() === "s1" && day.sessions[0].time === "17:00–18:00" && day.sessions[0].attendanceSummary === "✅ 정상(2)")
  assert(day.makeupWaiting.map((w) => w.attendanceId).join() === "wait1" && day.makeupWaiting[0].className === "중2 A")
  assert(f.queries.some((q) => JSON.stringify(q.filter).includes('"contains":"t1"')))
+ const s1 = day.sessions[0]; assert(s1.className === "중1 B" && s1.classEmoji === "🟡" && s1.arrived === 1 && s1.students === 2, "class emoji, name and arrived count")
  await rejects(() => room.loadDay("10/13"), 400)
+}))
+Deno.test("days: Seoul dates that have the teacher's sessions in a range", () => withMock(async () => {
+ const r = await room.loadDays("2026-10-12", "2026-10-18", "t1")
+ assert(r.dates.join() === "2026-10-13,2026-10-14", r.dates.join())
+ await rejects(() => room.loadDays("2026-10-18", "2026-10-12"), 400)
+ await rejects(() => room.loadDays("2026-09-01", "2026-10-31"), 400)
+ await rejects(() => room.loadDays("2026-10-12", "2026-10-18", "../x"), 400)
 }))
 Deno.test("session: students, today's homework due grouped by record, records", () => withMock(async () => {
  const s = await room.loadSession("s1")

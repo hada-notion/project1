@@ -154,24 +154,47 @@ function sessionSummary(p: Page) {
 	}
 }
 
-// 하루의 수업 카드와 보강 대기실(수업에 연결되지 않은 그날의 🔵 보강 출석). 강사를 고르면 그 강사의 수업만.
+// 서울 날짜(YYYY-MM-DD). 날짜만 있는 값은 그대로.
+function seoulDate(iso: string | null): string {
+	if (!iso) return ""
+	if (!iso.includes("T")) return iso.slice(0, 10)
+	return new Date(new Date(iso).getTime() + 9 * 3_600_000).toISOString().slice(0, 10)
+}
+function teacherFilter(teacherId?: string) {
+	if (teacherId !== undefined && teacherId !== "" && !isId(teacherId)) throw new ClassRoomError(400, "강사 형식이 올바르지 않습니다.")
+	return teacherId ? [{ property: "담당강사", relation: { contains: teacherId } }] : []
+}
+// 클래스 이모지·이름. 리포트처럼 클래스 DB "이모지"를 쓰고(글·선택·수식 어느 형식이든), 없으면 페이지 아이콘. 비면 화면이 색 이모지를 정한다.
+function textOf(page: Page, prop: string): string {
+	const p = page?.properties?.[prop]
+	return (plain(page, prop) || p?.select?.name || p?.formula?.string || "").trim()
+}
+async function classInfo(classIds: string[]): Promise<Map<string, { name: string; emoji: string }>> {
+	const pages = await getPages(classIds)
+	return new Map(pages.map((c: Page) => [c.id as string, { name: anyTitleText(c), emoji: textOf(c, "이모지") || (c.icon?.type === "emoji" ? c.icon.emoji : "") }]))
+}
+
+// 하루의 수업(클래스 이모지·이름, 등원한 학생 수)과 보강 대기실(수업에 연결되지 않은 그날의 🔵 보강 출석). 강사를 고르면 그 강사의 수업만.
 export async function loadDay(date: string, teacherId?: string) {
 	const { start, end } = seoulDayRange(date)
 	const range = [
 		{ property: "수업일시", date: { on_or_after: start } },
 		{ property: "수업일시", date: { before: end } },
 	]
-	if (teacherId !== undefined && teacherId !== "" && !isId(teacherId)) throw new ClassRoomError(400, "강사 형식이 올바르지 않습니다.")
-	const sessionFilter = teacherId ? { and: [...range, { property: "담당강사", relation: { contains: teacherId } }] } : { and: range }
-	const [sessions, waiting] = await Promise.all([
-		queryAllPages(DS_CLASS_SESSION, sessionFilter),
-		queryAllPages(DS_ATTENDANCE, {
-			and: [...range, { property: "수업", relation: { is_empty: true } }, { property: "출석 상태", select: { equals: "🔵 보강" } }],
-		}),
+	const [sessions, attendances] = await Promise.all([
+		queryAllPages(DS_CLASS_SESSION, { and: [...range, ...teacherFilter(teacherId)] }),
+		queryAllPages(DS_ATTENDANCE, { and: range }),
 	])
+	const classes = await classInfo(sessions.map((p: Page) => rel(p, "클래스")[0]).filter(Boolean))
+	const arrived = new Map<string, number>()
+	for (const a of attendances) if (dateStart(a, "등원스템프")) for (const sid of rel(a, "수업")) arrived.set(sid, (arrived.get(sid) ?? 0) + 1)
+	const waiting = attendances.filter((a: Page) => !rel(a, "수업").length && selectName(a, "출석 상태") === "🔵 보강")
 	return {
 		date,
-		sessions: sessions.map(sessionSummary).sort((a, b) => String(a.start).localeCompare(String(b.start))),
+		sessions: sessions.map((p: Page) => {
+			const c = classes.get(rel(p, "클래스")[0])
+			return { ...sessionSummary(p), className: c?.name ?? "", classEmoji: c?.emoji ?? "", arrived: arrived.get(p.id as string) ?? 0 }
+		}).sort((a, b) => String(a.start).localeCompare(String(b.start))),
 		makeupWaiting: waiting.map((a: Page) => ({
 			attendanceId: a.id as string,
 			registrationId: rel(a, "등록")[0] ?? null,
@@ -180,6 +203,17 @@ export async function loadDay(date: string, teacherId?: string) {
 			start: a.properties?.["수업일시"]?.date?.start ?? null,
 		})),
 	}
+}
+
+// 달력 표시용: 기간(최대 6주) 안에서 수업이 있는 서울 날짜.
+export async function loadDays(from: string, to: string, teacherId?: string) {
+	const start = seoulDayRange(from).start, end = seoulDayRange(to).end
+	const span = Date.parse(end) - Date.parse(start)
+	if (span <= 0 || span > 42 * 86_400_000) throw new ClassRoomError(400, "기간이 올바르지 않습니다.")
+	const sessions = await queryAllPages(DS_CLASS_SESSION, {
+		and: [{ property: "수업일시", date: { on_or_after: start } }, { property: "수업일시", date: { before: end } }, ...teacherFilter(teacherId)],
+	})
+	return { dates: dedupe(sessions.map((p: Page) => seoulDate(p.properties?.["수업일시"]?.date?.start ?? null)).filter(Boolean)).sort() }
 }
 
 function recordSummary(r: Page) {
@@ -565,6 +599,7 @@ export async function handleClassRoom(body: any): Promise<unknown> {
 	switch (body?.action) {
 		case "teachers": return { teachers: await listTeachers() }
 		case "day": return await loadDay(String(body.date ?? ""), body.teacherId)
+		case "days": return await loadDays(String(body.from ?? ""), String(body.to ?? ""), body.teacherId)
 		case "session": return await loadSession(body.sessionId)
 		case "books": return await loadBooks(body.sessionId)
 		case "activities": return await loadActivities(body.recordId)
