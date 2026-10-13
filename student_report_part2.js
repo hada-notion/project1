@@ -800,6 +800,9 @@ function buildReportTabHtml(r) {
   const attRate = countedAttendanceRows.length ? Math.round((presentCount / countedAttendanceRows.length) * 100) : 0
   const doneHomework = homeworkItems.filter((h) => h.status === "완료").length
   const hwRate = homeworkItems.length ? Math.round((doneHomework / homeworkItems.length) * 100) : 0
+  // (v2.5.97) 평가 평균: 기간 안 평가 점수(정답 ÷ 전체 문항)의 평균, 소수 한 자리(최근 평가 추이와 같음). 도넛은 점수만큼 채운다.
+  const scoredTests = testItems.filter((t) => t.total)
+  const testAvg = scoredTests.length ? Math.round(scoredTests.reduce((n, t) => n + (t.correct ?? 0) / t.total * 100, 0) / scoredTests.length * 10) / 10 : null
   const periodLabel = reportPeriodButtonLabel()
   const segToggleHtml = `
     <div class="seg-toggle">
@@ -840,7 +843,7 @@ function buildReportTabHtml(r) {
         <button class="cal-nav-btn" ${reportOffset === 0 ? "disabled" : ""} onclick="navigateReportPeriod(-1)">›</button>
       </div>
     </div>
-    <div class="report-donut-row">
+    <div class="report-donut-row three">
       <div class="donut-card">
         <div class="donut-title"><span class="inline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg></span>출석률</div>
         <div class="donut" style="background: conic-gradient(#1e9e5c 0% ${attRate}%, #eee ${attRate}% 100%)"><div class="donut-hole">${attRate}%</div></div>
@@ -850,6 +853,11 @@ function buildReportTabHtml(r) {
         <div class="donut-title"><span class="inline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg></span>과제이행률</div>
         <div class="donut" style="background: conic-gradient(#3478f6 0% ${hwRate}%, #eee ${hwRate}% 100%)"><div class="donut-hole">${hwRate}%</div></div>
         <div class="donut-count-below">(${doneHomework}/${homeworkItems.length})</div>
+      </div>
+      <div class="donut-card">
+        <div class="donut-title"><span class="inline-icon">${KIND_ICONS["평가"]}</span>평가 평균</div>
+        <div class="donut" style="background: conic-gradient(#6b5d4d 0% ${testAvg ?? 0}%, #eee ${testAvg ?? 0}% 100%)"><div class="donut-hole">${testAvg !== null ? testAvg.toFixed(1) + "점" : "–"}</div></div>
+        <div class="donut-count-below">${scoredTests.length ? `(평가 ${scoredTests.length}개)` : "(평가 없음)"}</div>
       </div>
     </div>
     <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span>최근 평가 추이</h3>
@@ -962,8 +970,11 @@ function buildDailyBodyHtml(r, date) {
     ? band(`<div class="speech">${esc(comment.text)}${comment.by ? `<small>${esc(comment.by)}</small>` : ""}</div>`)
     : empty("아직 등록된 한마디가 없어요.")
 
+  // (v2.5.97) 평가 현황: 그날 평가 점수(여러 개면 평균). 없으면 "해당 없음". 점수 색은 평가 기록 알약과 같은 단계(scorePillTone).
+  const scoredToday = todaysTests.filter((t) => t.total)
+  const testPctToday = scoredToday.length ? Math.round(scoredToday.reduce((n, t) => n + (t.correct ?? 0) / t.total * 100, 0) / scoredToday.length) : null
   return `
-    <div class="report-donut-row">
+    <div class="report-donut-row three">
       <div class="donut-card">
         <div class="donut-title"><span class="inline-icon">${checkIcon}</span>출석 현황</div>
         <div class="day-status"><span class="badge ${esc(attStatus)}">${esc(attStatus)}</span></div>
@@ -972,6 +983,11 @@ function buildDailyBodyHtml(r, date) {
         <div class="donut-title"><span class="inline-icon">${KIND_ICONS["과제"]}</span>과제 현황</div>
         <div class="day-status">${homeworkStatusToday ? `<span class="badge ${homeworkStatusToday.cls}">${homeworkStatusToday.text}</span>` : `<span class="badge">해당 없음</span>`}</div>
         ${homeworkStatusToday ? `<div class="donut-count-below">${dueTodayHomework.length}건</div>` : ""}
+      </div>
+      <div class="donut-card">
+        <div class="donut-title"><span class="inline-icon">${KIND_ICONS["평가"]}</span>평가 현황</div>
+        <div class="day-status">${testPctToday !== null ? `<span class="log-pill ${scorePillTone(testPctToday, 100)}">${testPctToday}점</span>` : `<span class="badge">해당 없음</span>`}</div>
+        ${scoredToday.length ? `<div class="donut-count-below">${scoredToday.length}건</div>` : ""}
       </div>
     </div>
     ${session(KIND_ICONS["학습"], "학습", studyHtml)}
