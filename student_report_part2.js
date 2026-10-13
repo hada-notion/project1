@@ -854,7 +854,7 @@ function buildReportTabHtml(r) {
         <div class="donut" style="background: conic-gradient(#3478f6 0% ${hwRate}%, #eee ${hwRate}% 100%)"><div class="donut-hole">${hwRate}%</div></div>
         <div class="donut-count-below">(${doneHomework}/${homeworkItems.length})</div>
       </div>
-      <div class="donut-card">
+      <div class="donut-card${testItems.length ? " clickable" : ""}"${testItems.length ? ` onclick="showTestPeriodModal('${rangeStart}','${rangeEnd}','${esc(periodLabel)} 평가')"` : ""}>
         <div class="donut-title"><span class="inline-icon">${KIND_ICONS["평가"]}</span>평가 평균</div>
         <div class="donut" style="background: conic-gradient(#6b5d4d 0% ${testAvg ?? 0}%, #eee ${testAvg ?? 0}% 100%)"><div class="donut-hole">${testAvg !== null ? testAvg.toFixed(1) + "점" : "–"}</div></div>
         <div class="donut-count-below">${scoredTests.length ? `(평가 ${scoredTests.length}개)` : "(평가 없음)"}</div>
@@ -984,7 +984,7 @@ function buildDailyBodyHtml(r, date) {
         <div class="day-status">${homeworkStatusToday ? `<span class="badge ${homeworkStatusToday.cls}">${homeworkStatusToday.text}</span>` : `<span class="badge">해당 없음</span>`}</div>
         ${homeworkStatusToday ? `<div class="donut-count-below">${dueTodayHomework.length}건</div>` : ""}
       </div>
-      <div class="donut-card">
+      <div class="donut-card${scoredToday.length ? " clickable" : ""}"${scoredToday.length ? ` onclick="showTestPeriodModal('${date}','${date}','${esc(formatDateLabel(date))} 평가')"` : ""}>
         <div class="donut-title"><span class="inline-icon">${KIND_ICONS["평가"]}</span>평가 현황</div>
         <div class="day-status">${testPctToday !== null ? `<span class="log-pill ${scorePillTone(testPctToday, 100)}">${testPctToday}점</span>` : `<span class="badge">해당 없음</span>`}</div>
         ${scoredToday.length ? `<div class="donut-count-below">${scoredToday.length}건</div>` : ""}
@@ -1062,7 +1062,8 @@ function renderDetail() {
                   </div>
                 </div>
                 ${(() => {
-                  const meta = renderLogMetaRows(l.unit, l.note, l.type === "과제" ? [l.classDate ? `출제: ${withDow(l.classDate)}` : null, l.due ? `마감: ${withDow(l.due)}` : null].filter(Boolean) : [])
+                  // (v2.5.98) 날짜로 묶인 목록이라 출제일은 묶음 날짜와 같아 빼고 마감만 보인다.
+                  const meta = renderLogMetaRows(l.unit, l.note, l.type === "과제" && l.due ? [`마감: ${withDow(l.due)}`] : [])
                   const bodyHtml = buildLogBodyHtml(l)
                   const hasExtra = l.photo || !!bodyHtml
                   const chevronBtn = hasExtra ? `<button type="button" class="log-extra-chevron" onclick="toggleLogExtra(this)" aria-label="펼치기"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>` : ""
@@ -1194,6 +1195,7 @@ const reportActive = (id) => () => !!document.getElementById(id)?.classList.cont
 reportWrapLayer("menu", "openMenu", "closeMenu", reportActive("menu"))
 reportWrapLayer("schedule", "openScheduleDay", "closeScheduleDayModal", reportActive("schedule-day-modal"))
 reportWrapLayer("test", "showTestDetailModal", "closeTestDetailModal", reportActive("test-detail-modal"))
+reportWrapLayer("test", "showTestPeriodModal", "closeTestDetailModal", reportActive("test-detail-modal"))
 reportWrapLayer("homework", "showHomeworkDayModal", "closeHomeworkDayModal", reportActive("homework-detail-modal"))
 reportWrapLayer("homework", "showHomeworkPeriodModal", "closeHomeworkDayModal", reportActive("homework-detail-modal"))
 reportWrapLayer("period", "openReportPeriodPicker", "closeReportPeriodPicker", reportActive("report-period-modal"))

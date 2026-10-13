@@ -1026,6 +1026,23 @@ function showTestDetailModal(i) {
     : `<div class="log-row 평가"><div class="log-note">해당 기간 평가 기록이 없습니다.</div></div>`
   document.getElementById("test-detail-modal").classList.add("active")
 }
+// (v2.5.98) 보고서 위 "평가 현황"(일간)·"평가 평균"(주간·월간) 칸을 누르면 그 날짜·기간의 평가 목록을 과제 모달과 같은 카드로 보여준다.
+function showTestPeriodModal(rangeStart, rangeEnd, label) {
+  const r = STUDENT.registrations.find((x) => x.token === selectedToken)
+  if (!r) return
+  const items = (r.tests || []).filter((t) => { const d = String(t.date || "").slice(0, 10); return d && d >= rangeStart && d <= rangeEnd })
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
+  document.getElementById("test-detail-modal-title").textContent = label
+  document.getElementById("test-detail-modal-body").innerHTML = items.length
+    ? items.map((t) => `
+      <div class="log-row 평가">
+        <div class="log-title-row"><div class="log-title">${esc([t.book, t.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${scorePillTone(t.correct ?? 0, t.total ?? 0)}">${scorePillText(t.correct ?? 0, t.total ?? 0)}</span></div>
+        ${renderLogMetaRows(t.unit, t.note, rangeStart === rangeEnd ? [] : [`날짜: ${withDow(String(t.date).slice(0, 10))}`])}
+      </div>
+    `).join("")
+    : `<div class="log-row 평가"><div class="log-note">해당 기간 평가 기록이 없습니다.</div></div>`
+  document.getElementById("test-detail-modal").classList.add("active")
+}
 function closeTestDetailModal() {
   document.getElementById("test-detail-modal").classList.remove("active")
 }
