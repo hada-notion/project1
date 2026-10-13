@@ -153,8 +153,10 @@ function classBadge(c){
  if(c.today.length)return `<span class="cb-badge on">오늘 ${esc(startOf(c.today[0].time))}</span>`;
  if(c.next)return `<span class="cb-badge">${esc(whenLabel(c.next.date,c.next.time))}</span>`;
  return '<span class="cb-badge none">수업 없음</span>';}
+// 정렬 기준은 서울 날짜·시각 글자("2026-10-14 17:00", v2.5.88). Notion 수업일시 원문은 수업마다 시간대 표기(+09:00·Z)가 달라 그대로 비교하면 순서가 섞인다.
+const classKey=c=>c.today.length?`${seoulDate()} ${startOf(c.today[0].time)}`:c.next?`${c.next.date} ${startOf(c.next.time)}`:'';
 function sortedClasses(){return (state.classes?.list||[]).slice().sort((a,b)=>(!a.today.length-!b.today.length)||(!a.next-!b.next)
- ||String(a.today[0]?.start||a.next?.date||'').localeCompare(String(b.today[0]?.start||b.next?.date||''))||a.name.localeCompare(b.name,'ko'));}
+ ||classKey(a).localeCompare(classKey(b))||a.name.localeCompare(b.name,'ko'));}
 const whoName=()=>state.teacherId==='all'?'전체 수업':teacherName(state.teacherId);
 const whoRole=()=>state.teacherId==='all'?'모든 강사':(state.teachers.find(t=>t.id===state.teacherId)?.role||'강사');
 // 주간 시간표(리포트 통합 시간표 모양): 월~일 7칸, 칸마다 수업 시작 시각·반. 오늘 칸은 진하게. 수업을 누르면 그 수업으로.
