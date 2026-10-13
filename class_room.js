@@ -52,7 +52,7 @@ function toast(msg){const t=$('toast');t.textContent=msg;t.hidden=false;clearTim
 async function run(fn,btn){if(run.busy)return;run.busy=true;if(btn){btn.classList.add('loading');btn.setAttribute('aria-busy','true');}
  try{await fn();}catch(e){if(e.message!=='silent')toast(e.message);}finally{run.busy=false;if(btn){btn.classList.remove('loading');btn.removeAttribute('aria-busy');}}}
 function bar(crumbs,{back,notion,right='',who=false}={}){
- $('bar').hidden=false;
+ $('bar').hidden=false;document.body.classList.remove('snap-on');
  $('bar').innerHTML='<div class="bar-in">'+(back?`<button class="icon-btn" id="bar-back" type="button" aria-label="뒤로">${icon('back')}</button>`:'')+
   (crumbs.length===1&&!back?`<h1>${esc(crumbs[0])}</h1>`:`<div class="crumbs">${crumbs.map((c,i)=>i===0&&who?`<button class="crumb-btn" id="who" type="button" aria-label="강사 바꾸기">${esc(c)} ▾</button>`:`<span>${esc(c)}</span>`).join('<span class="sep">›</span>')}</div>`)+right+(notion?nlink(notion,crumbs.at(-1)):'')+'</div>';
  if(back)$('bar-back').onclick=back;
@@ -160,22 +160,30 @@ function sortedClasses(){return (state.classes?.list||[]).slice().sort((a,b)=>(!
 const whoName=()=>state.teacherId==='all'?'전체 수업':teacherName(state.teacherId);
 const whoRole=()=>state.teacherId==='all'?'모든 강사':(state.teachers.find(t=>t.id===state.teacherId)?.role||'강사');
 // 주간 시간표(리포트 통합 시간표 모양): 월~일 7칸, 칸마다 수업 시작 시각·반. 오늘 칸은 진하게. 수업을 누르면 그 수업으로.
+// 통합 시간표(v2.5.90, 리포트 student_report_part2.js buildWeekGridHtml와 같은 모양): 월~일 7칸, 칸마다 [시작 시각 / 반 이름].
+// 반 색은 리포트 8색(🟣🔵🟢🟠🔴🟡🟤⚪ 순서). 반 카드의 이모지가 이 8색 동그라미면 그 색, 아니면 리포트와 같은 규칙(반 이름 해시)으로 고른다.
+// 그래서 첫 화면 카드의 동그라미와 시간표 칸 색이 같고, 같은 반은 늘 같은 색이다. 오늘 요일은 빨간 글자. 수업을 누르면 그 수업으로.
+const classColor=c=>{const i=CLASS_COLOR_EMOJIS.indexOf(c.emoji||pickClassColorEmoji(c.name));return (i<0?CLASS_COLOR_EMOJIS.indexOf(pickClassColorEmoji(c.name)):i)+1;};
 function weekGrid(list){const mon=weekStart(seoulDate());
  return `<div class="wk-card"><div class="wk-grid">${Array.from({length:7},(_,i)=>{const d=addDays(mon,i),slots=list.flatMap(c=>(c.week||[]).filter(x=>x.date===d).map(x=>({c,x}))).sort((a,b)=>a.x.time.localeCompare(b.x.time));
-  return `<div class="wk-col ${d===seoulDate()?'today':''}"><div class="wk-day">${'월화수목금토일'[i]}<small>${Number(d.slice(8))}</small></div>${slots.map(({c,x})=>`<button class="wk-slot" type="button" data-open="${esc(x.id)}" aria-label="${esc(dateLabel(d))} ${esc(x.time)} ${esc(c.name)}"><b>${esc(startOf(x.time))}</b><span>${esc(c.name)}</span></button>`).join('')}</div>`;}).join('')}</div></div>`;}
+  return `<div class="wk-col ${d===seoulDate()?'today':''}"><div class="wk-day">${'월화수목금토일'[i]}</div>${slots.map(({c,x})=>`<button class="wk-slot c${classColor(c)}" type="button" data-open="${esc(x.id)}" aria-label="${esc(dateLabel(d))} ${esc(x.time)} ${esc(c.name)}"><b>${esc(startOf(x.time))}</b><span>${esc(c.name)}</span></button>`).join('')}</div>`;}).join('')}</div></div>`;}
 function renderMain(){
  setTabs(false);setHero('');$('bar').hidden=true;
  if(!state.classes){$('app').innerHTML='<p class="empty">불러오는 중…</p>';run(()=>showMain(true));return;}
  const list=sortedClasses(),w=state.day?.makeupWaiting||[],mon=weekStart(seoulDate());
- $('app').innerHTML=`<section class="intro"><div class="intro-tools"><button class="icon-btn" id="m-refresh" type="button" aria-label="새로고침">${icon('refresh')}</button><button class="icon-btn" id="m-menu" type="button" aria-label="메뉴">${icon('menu')}</button></div>
+ // 리포트 첫 화면처럼 화면 높이 두 칸을 위아래로 넘긴다(scroll-snap): ① 강사·클래스 ② 통합 시간표.
+ document.body.classList.add('snap-on');
+ $('app').innerHTML=`<div class="scroll-container" id="snap"><section class="snap-section intro"><div class="intro-tools"><button class="icon-btn" id="m-refresh" type="button" aria-label="새로고침">${icon('refresh')}</button><button class="icon-btn" id="m-menu" type="button" aria-label="메뉴">${icon('menu')}</button></div>
  <div class="intro-in"><p class="intro-greeting">수업 관리</p><h1 class="intro-name">${esc(whoName())}</h1><p class="intro-sub">${esc(whoRole())} · 담당 클래스 ${list.length}개</p>
  <div class="class-group">${list.map(c=>`<button class="class-card" type="button" data-class="${esc(c.classId)}"><span class="emo">${esc(c.emoji||pickClassColorEmoji(c.name))}</span><span class="cc-name">${esc(c.name)}</span>${classBadge(c)}</button>`).join('')||'<p class="empty">앞뒤 4주 안에 수업이 있는 클래스가 없어요.</p>'}</div>
  <button class="wait-card" type="button" id="open-wait">${icon('users')}<span>보강 대기실</span><span class="cnt-pill">${w.length}명</span></button></div>
- <button class="scroll-hint" type="button" id="to-week">주간 시간표 보기${CHEVRON_DOWN}</button></section>
- <section class="week-sec" id="week"><h2 class="sec-title">${icon('cal')}주간 시간표</h2><p class="page-hint">${esc(md(mon))} ~ ${esc(md(addDays(mon,6)))} · 수업을 누르면 그 수업으로 가요</p>${weekGrid(list)}</section>`;
+ <button class="swipe-hint" type="button" id="to-week">통합 시간표 보기<span class="chevron"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg></span></button></section>
+ <section class="snap-section timetable-section" id="week"><button class="up-hint" type="button" id="to-intro"><span class="chevron"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg></span>이전으로</button>
+ <h2 class="tt-title"><span class="tt-icon"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg></span>통합 시간표</h2><p class="tt-hint">담당 반들의 이번 주(${esc(md(mon))} ~ ${esc(md(addDays(mon,6)))}) 수업을 요일별로 합쳐서 보여줘요</p>${weekGrid(list)}</section></div>`;
  $('m-refresh').onclick=e=>run(()=>showMain(true),e.currentTarget);
  $('m-menu').onclick=openMenu;
  $('to-week').onclick=()=>$('week').scrollIntoView({behavior:'smooth'});
+ $('to-intro').onclick=()=>$('snap').scrollTo({top:0,behavior:'smooth'});
  $('open-wait').onclick=()=>{state.view='waiting';state.picked=new Set();render();};
  $('app').querySelectorAll('[data-class]').forEach(b=>b.onclick=()=>{const c=list.find(x=>x.classId===b.dataset.class),id=nowSessionId(c.today)||c.next?.id||c.last?.id;if(id)openSession(id,b);});
  $('app').querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openSession(b.dataset.open,b));
