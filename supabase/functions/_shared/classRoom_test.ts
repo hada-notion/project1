@@ -107,6 +107,31 @@ Deno.test("days: Seoul dates that have the teacher's sessions in a range", () =>
  await rejects(() => room.loadDays("2026-09-01", "2026-10-31"), 400)
  await rejects(() => room.loadDays("2026-10-12", "2026-10-18", "../x"), 400)
 }))
+Deno.test("class-stats: month attendance rate, previous month, test averages and per-student numbers", () => withMock(async (f) => {
+ const num = (n: number) => ({ type: "number", number: n })
+ Object.assign(f.pages.pa.properties, { "등록": rel("ra") }); Object.assign(f.pages.pb.properties, { "등록": rel("rb") })
+ f.pages.rT1 = { id: "rT1", db: "records", properties: { "학습": title("[평가] 개념원리"), "구분": { select: { name: "평가" } }, "수업": rel("sPrev"), "교재": rel("regular"), "범위": text("Ⅲ-1") } }
+ f.pages.rT2 = { id: "rT2", db: "records", properties: { "학습": title("[평가] 개념원리 2"), "구분": { select: { name: "평가" } }, "수업": rel("s1"), "교재": rel("regular"), "범위": text("Ⅲ-2") } }
+ f.pages.rL = { id: "rL", db: "records", properties: { "학습": title("[학습]"), "구분": { select: { name: "학습" } }, "수업": rel("s1") } }
+ f.pages.t1 = { id: "t1", db: "activities", properties: { "학습활동": title("t1"), "학습기록": rel("rT1"), "등록": rel("ra"), "정답 문항": num(8), "전체 문항": num(10) } }
+ f.pages.t2 = { id: "t2", db: "activities", properties: { "학습활동": title("t2"), "학습기록": rel("rT1"), "등록": rel("rb"), "정답 문항": num(6), "전체 문항": num(10) } }
+ f.pages.t3 = { id: "t3", db: "activities", properties: { "학습활동": title("t3"), "학습기록": rel("rT2"), "등록": rel("ra"), "정답 문항": num(10), "전체 문항": num(10) } }
+ f.pages.t4 = { id: "t4", db: "activities", properties: { "학습활동": title("t4"), "학습기록": rel("rT2"), "등록": rel("rb"), "정답 문항": { type: "number", number: null }, "전체 문항": num(10) } }
+ const now = Date.parse("2026-10-14T00:00:00.000Z")
+ const r = await room.loadClassStats("s1", now)
+ // 10월: sPrev 출석(pa)·결석(pb)·미입력(pc 제외), s1 출석(aa)·미입력(ab 제외) → 2/3
+ assert(r.month.ym === "2026-10" && r.month.present === 2 && r.month.counted === 3 && r.month.rate === 67, JSON.stringify(r.month))
+ assert(r.prev.ym === "2026-09" && r.prev.counted === 0 && r.prev.rate === null)
+ assert(r.tests.map((t: any) => t.id + ":" + t.avg + "/" + t.count).join() === "rT1:70/2,rT2:100/1", "tests oldest first, unscored skipped: " + JSON.stringify(r.tests))
+ assert(r.tests[0].subject === "개념원리 1-2" && r.tests[0].date === "2026-10-08")
+ assert(r.students.ra.rate === 100 && r.students.ra.counted === 2 && r.students.ra.score === 100 && r.students.ra.scoreDate === "2026-10-13", JSON.stringify(r.students.ra))
+ assert(r.students.rb.rate === 0 && r.students.rb.counted === 1 && r.students.rb.score === 60, JSON.stringify(r.students.rb))
+ // 아직 오지 않은 수업은 세지 않는다
+ const early = await room.loadClassStats("s1", Date.parse("2026-10-10T00:00:00.000Z"))
+ assert(early.month.counted === 2 && early.tests.length === 1, "future session skipped: " + JSON.stringify(early.month))
+ await rejects(() => room.loadClassStats("../x"), 400)
+}))
+
 Deno.test("roster: school, grade and phones from the student page, priority phone and report token from the registration", () => withMock(async (f) => {
  const rollup = (s: string) => ({ type: "rollup", rollup: { type: "array", array: [{ type: "phone_number", phone_number: s }] } })
  f.pages.stA = { id: "stA", db: "students", properties: { "학생이름": title("김하늘"), "학교(설문)": text("하다중"), "학년(설문)": { type: "select", select: { name: "중1" } }, "학생 연락처": { type: "phone_number", phone_number: "010-0000-0001" } } }

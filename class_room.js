@@ -38,7 +38,7 @@ function timeOf(iso){if(!iso)return '';const d=new Date(new Date(iso).getTime()+
 function shortDate(iso){if(!iso)return '';const d=new Date(new Date(iso).getTime()+(String(iso).includes('T')?9*3600e3:0));return `${d.getUTCMonth()+1}/${d.getUTCDate()}`;}
 
 const state={session:store.get(SESSION_KEY),teacherId:store.get(TEACHER_KEY),teachers:[],date:seoulDate(),view:'main',day:null,
- sessionId:'',detail:null,tab:'home',bookSeg:'진행 중',bookItem:null,classRecs:null,calOpen:false,rosterCache:{},seg:'att',recKind:'전체',hwRecord:'',edit:false,editOwner:'',saver:null,draft:{},recordId:'',acts:null,books:null,picked:new Set(),
+ sessionId:'',detail:null,tab:'home',bookSeg:'진행 중',bookItem:null,classRecs:null,calOpen:false,rosterCache:{},statsCache:{},seg:'att',recKind:'전체',hwRecord:'',edit:false,editOwner:'',saver:null,draft:{},recordId:'',acts:null,books:null,picked:new Set(),
  classWeek:[],cwMonth:'',cwFrom:'',cwTo:'',classes:null,form:null,bookCache:{}};
 
 async function api(action,data={}){
@@ -380,7 +380,7 @@ function heroHtml(){const s=state.detail.session,tname=teacherName(s.teacherIds?
 function classBar(){const s=state.detail.session;
  bar([whoName(),className(s),TAB_NAME[state.tab]||''],{back:()=>{if(nav.stack.length)return navBack();if(!leaveEdit())return;if(state.tab!=='home'){state.tab='home';nav.replace=true;render();}else run(()=>showMain());},
   right:`<button class="icon-btn" id="bar-refresh" type="button" aria-label="새로고침">${icon('refresh')}</button>`});
- $('bar-refresh').onclick=e=>{if(!leaveEdit())return;state.classRecs=null;if(state.bookCache)delete state.bookCache[state.sessionId];delete state.rosterCache[state.sessionId];run(()=>openSessionNow(state.sessionId,true),e.currentTarget);};}
+ $('bar-refresh').onclick=e=>{if(!leaveEdit())return;state.classRecs=null;if(state.bookCache)delete state.bookCache[state.sessionId];delete state.rosterCache[state.sessionId];delete state.statsCache[state.sessionId];run(()=>openSessionNow(state.sessionId,true),e.currentTarget);};}
 function sessionBar(){const s=state.detail.session,v=state.view;
  if(v==='session')return classBar();
  const extra=v==='book'?['교재',state.bookItem.title]:[state.acts.record.kind||'기록'];
@@ -552,17 +552,29 @@ function openMemo(id,key='memo'){
  draw();showLayer(sh);
 }
 
-// ---------- 학생 탭(v2.5.93) ----------
-// 반 학생 명부: [이름 학교 · 학년] / 학생·우선 연락처(누르면 전화) / ↗ 학생 보고서(새 탭, 알림톡 링크와 같은 주소, 읽기만 하는 화면).
-// 학생 탭을 열 때만 읽는다(roster). 보고서 링크가 꺼져 있거나 토큰이 없으면 ↗ 대신 안내 글자.
+// ---------- 학생 탭(v2.5.93, 반 요약 v2.5.94) ----------
+// 위: 반 요약 카드(보고 있는 수업 달·지난달 출석률, 최근 평가 평균, 최근 평가 5개 반 평균 막대). 아래: 반 학생 명부
+// [이름 학교 · 학년] / [출석 n% · 평가 n점](낮으면 빨강: 출석 80% 미만, 점수 60점 미만) / 학생·우선 연락처(누르면 전화) / ↗ 학생 보고서(새 탭).
+// 학생 탭을 열 때만 읽는다(roster, class-stats). 보고서 링크가 꺼져 있거나 토큰이 없으면 ↗ 대신 안내 글자.
+function ensureStats(){const id=state.sessionId;if(state.statsCache[id])return state.statsCache[id];
+ if(ensureStats.busy!==id){ensureStats.busy=id;whenLoaded(api('class-stats',{sessionId:id}).then(r=>{state.statsCache[id]=r;}).finally(()=>{ensureStats.busy=null;}));}return null;}
+const monthName=ym=>Number(ym.slice(5))+'월';
+function classSummary(st){
+ if(!st)return '<div class="card cls-sum"><p class="empty">반 요약을 불러오는 중…</p></div>';
+ const pct=r=>r===null||r===undefined?'–':r+'%',t=st.tests,avg=t.length?Math.round(t.reduce((n,x)=>n+x.avg,0)/t.length):null;
+ const tone=(v,lo)=>v===null||v===undefined?'':v>=90?'good':v<lo?'bad':'';
+ return `<div class="card cls-sum"><div class="home-stats">${stat(pct(st.month.rate),`${monthName(st.month.ym)} 출석률`,tone(st.month.rate,80))}${stat(pct(st.prev.rate),`${monthName(st.prev.ym)} 출석률`)}${stat(avg===null?'–':avg+'점','최근 평가 평균',tone(avg,60))}</div>
+ ${t.length?`<p class="group-label">최근 평가 ${t.length}개 · 반 평균</p><div class="tbars" role="img" aria-label="최근 평가 반 평균 ${t.map(x=>`${md(x.date)} ${x.avg}점`).join(', ')}">${t.map(x=>`<div class="tb"><span class="tb-bar"><b>${x.avg}</b><i style="height:${Math.max(6,x.avg)*0.8}%"></i></span><span>${esc(md(x.date))}</span><small>${esc((x.range||x.subject||'평가').slice(0,8))}</small></div>`).join('')}</div>`:'<p class="empty">점수가 있는 평가가 아직 없어요.</p>'}</div>`;}
 function ensureRoster(){const id=state.sessionId;if(state.rosterCache[id])return state.rosterCache[id];
  if(ensureRoster.busy!==id){ensureRoster.busy=id;whenLoaded(api('roster',{sessionId:id}).then(r=>{state.rosterCache[id]=r.students;}).finally(()=>{ensureRoster.busy=null;}));}return null;}
 const telHref=p=>'tel:'+String(p).replace(/[^0-9+]/g,'');
 function paneRoster(el){
- const list=ensureRoster(),head=h=>paneHead(`<p class="page-title">${icon('users')}학생</p>${nlink(state.detail.session.id,'수업')}`,h);
- if(!list){el.innerHTML=head('학생 정보를 불러오는 중…');return;}
+ const list=ensureRoster(),st=ensureStats(),head=h=>paneHead(`<p class="page-title">${icon('users')}학생</p>${nlink(state.detail.session.id,'수업')}`,h);
+ if(!list){el.innerHTML=head('학생 정보를 불러오는 중…')+`<div class="pbody">${classSummary(st)}</div>`;return;}
+ const per=s=>st?.students?.[s.registrationId],pill=(txt,low)=>`<span class="pill ${low?'miss':''}">${txt}</span>`;
  const tel=(label,p)=>p?`<a class="tel" href="${esc(telHref(p))}" aria-label="${label} ${esc(p)} 전화 걸기">${label} ${esc(p)}</a>`:'';
- el.innerHTML=head(`학생 <b>${list.length}</b>명 · 번호를 누르면 전화, ↗는 학생 보고서(새 탭)`)+`<div class="pbody">${list.length?`<div class="list roster">${list.map(s=>`<div class="row r1"><span class="meta"><span class="t">${esc(s.name)}${s.school||s.grade?`<small>${esc([s.school,s.grade].filter(Boolean).join(' · '))}</small>`:''}</span>
+ el.innerHTML=head(`학생 <b>${list.length}</b>명 · 출석률은 ${st?monthName(st.month.ym):'이번 달'}, 점수는 최근 평가 · 번호를 누르면 전화, ↗는 학생 보고서(새 탭)`)+`<div class="pbody">${classSummary(st)}${list.length?`<div class="list roster">${list.map(s=>`<div class="row r1"><span class="meta"><span class="t">${esc(s.name)}${s.school||s.grade?`<small>${esc([s.school,s.grade].filter(Boolean).join(' · '))}</small>`:''}</span>
+  ${(()=>{const x=per(s);if(!x)return '';const a=x.rate!==null&&x.rate!==undefined?pill(`출석 ${x.rate}%`,x.rate<80):'',b=x.score!==null&&x.score!==undefined?pill(`평가 ${x.score}점`,x.score<60):'';return a||b?`<span class="r-stats">${a}${b}</span>`:'';})()}
   <span class="phones">${tel('학생',s.studentPhone)}${tel('우선',s.parentPhone)}${s.studentPhone||s.parentPhone?'':'<span class="no-tel">연락처 없음</span>'}</span></span>
   ${s.reportToken?`<a class="icon-btn rep" href="student_report.html?token=${encodeURIComponent(s.reportToken)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(s.name)} 학생 보고서 새 탭에서 열기" title="학생 보고서">${icon('ext')}</a>`:`<span class="no-rep">${s.reportOff?'보고서 꺼짐':'보고서 없음'}</span>`}</div>`).join('')}</div>`:'<div class="list"><p class="empty">이 수업에 연결된 학생이 없어요.</p></div>'}</div>`;
 }
