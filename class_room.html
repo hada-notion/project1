@@ -230,10 +230,10 @@ dialog.drawer.right{inset:0 0 0 auto;border-radius:0;border-top-left-radius:var(
 .cal-day-head b{font-size:var(--text-label);font-weight:600;color:var(--text-subtle)}
 /* 수업 한 줄(v2.5.70): [클래스 이모지] [클래스명] [등원 n/전체] [수업 시간]. 등원은 0명 회색, 일부 노랑, 모두 초록 */
 .srow{min-height:calc(var(--hit-min) + var(--space-4))}
-/* 클래스 이모지는 바탕 도형 없이 이모지만(v2.5.80). 이름 시작선을 맞추려고 칸 폭은 그대로 둔다. */
-.emo{flex:none;width:var(--hit-area);height:var(--hit-area);border-radius:var(--radius-md);background:transparent;display:inline-flex;align-items:center;justify-content:center;font-size:var(--text-title)}
-.emo .pill{font-size:var(--text-caption);padding:var(--space-1)}
-.emo.ico{background:var(--brand-soft);color:var(--brand-deep)}
+/* 클래스 이모지·보강 대기실 아이콘은 바탕 도형 없이 24px 칸에(v2.5.80). 카드 왼쪽 여백에 붙고 이름과 8px — 상단 바 "🟡 중1 B"와 같은 간격. */
+.srow{column-gap:var(--space-2)}
+.emo{flex:none;width:var(--space-6);display:inline-flex;align-items:center;justify-content:center;font-size:var(--text-title);line-height:1}
+.emo.ico{color:var(--brand-deep)}
 .emo.ico svg.line{width:var(--icon-md);height:var(--icon-md)}
 .cnt-pill{flex:none;font-size:var(--text-caption);font-weight:700;padding:var(--space-1) var(--space-2);border-radius:var(--radius-pill);background:var(--brand-soft);color:var(--text-muted);font-variant-numeric:tabular-nums}
 .cnt-pill.part{background:var(--warning-soft);color:var(--warning-ink)}
