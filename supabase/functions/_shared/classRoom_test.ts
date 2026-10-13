@@ -52,6 +52,8 @@ function fixture() {
  const fetch = async (input: any, init: any = {}) => {
   const url = String(input), body = init.body ? JSON.parse(init.body) : {}
   if (url.endsWith("/data_sources/sessions")) return reply({ properties: { "담당강사": { relation: { data_source_id: "teachers" } } } })
+  const blk = url.match(/\/blocks\/([^/]+)\/children/)?.[1]
+  if (blk) return reply({ results: pages[blk]?.blocks ?? [], has_more: false })
   const db = url.match(/\/data_sources\/([^/]+)\/query/)?.[1]
   if (db) { queries.push({ db, filter: body.filter }); return reply({ results: Object.values(pages).filter((p) => p.db === db && !p.archived && cond(p, body.filter)), has_more: false }) }
   const id = url.match(/\/pages\/([^/?]+)/)?.[1]
@@ -153,6 +155,24 @@ Deno.test("class-records: records of the class sessions, newest first, with the 
  assert(r.records.map((x: any) => x.id + "@" + x.date + " " + x.time).join() === "recA@2026-10-13 17:00,recB@2026-10-08 17:00", "class records newest first, makeup sessions skipped: " + r.records.map((x: any) => x.id).join())
  assert(r.records[0].sessionId === "s1" && r.records[0].bookId === "group" && r.records[0].kind === "학습" && r.records[0].range === "p.80-85")
  assert(r.records[0].subject === "개념원리 1-2" && r.records[1].subject === "RPM", "subject: regular book name, else progress book name before the brackets: " + r.records.map((x: any) => x.subject).join())
+}))
+
+Deno.test("record cards: unit, homework count and due, test average, page body (v2.5.95)", () => withMock(async (f) => {
+ const num = (n: number) => ({ type: "number", number: n })
+ f.pages.recA = { id: "recA", db: "records", properties: { "학습": title("[학습] 개념원리"), "구분": { select: { name: "학습" } }, "수업": rel("s1"), "교재": rel("regular"), "범위": text("p.80-85"), "단원": text("1-1. 평면좌표"), "내용": text("선과제 테스트") }, blocks: [{ id: "b1", type: "paragraph", paragraph: { rich_text: [{ plain_text: "본문 한 줄", annotations: {} }] } }] }
+ f.pages.recH = { id: "recH", db: "records", properties: { "학습": title("[과제] 개념원리"), "구분": { select: { name: "과제" } }, "수업": rel("s1"), "범위": text("10-20") } }
+ f.pages.recT = { id: "recT", db: "records", properties: { "학습": title("[평가] 개념원리"), "구분": { select: { name: "평가" } }, "수업": rel("sPrev") } }
+ f.pages.h9 = { id: "h9", db: "activities", properties: { "학습활동": title("h9"), "학습기록": rel("recH"), "과제상태": { select: { name: "🔵 제출" } }, "과제 마감일": { type: "formula", formula: { type: "date", date: { start: "2026-10-15T15:00:00.000Z" } } } } }
+ f.pages.h8 = { id: "h8", db: "activities", properties: { "학습활동": title("h8"), "학습기록": rel("recH"), "과제상태": { select: { name: "🔴 미제출" } } } }
+ f.pages.e1 = { id: "e1", db: "activities", properties: { "학습활동": title("e1"), "학습기록": rel("recT"), "정답 문항": num(9), "전체 문항": num(10) } }
+ f.pages.e2 = { id: "e2", db: "activities", properties: { "학습활동": title("e2"), "학습기록": rel("recT"), "정답 문항": num(7), "전체 문항": num(10) } }
+ const r = await room.loadClassRecords("s1"), by = (id: string): any => r.records.find((x: any) => x.id === id)
+ assert(by("recA").unit === "1-1. 평면좌표" && by("recA").content === "선과제 테스트" && JSON.stringify(by("recA").body).includes("본문 한 줄") && by("recA").homework === null, JSON.stringify(by("recA")))
+ assert(JSON.stringify(by("recH").homework) === JSON.stringify({ submitted: 1, total: 2, due: "2026-10-16" }) && by("recH").body.length === 0, JSON.stringify(by("recH").homework))
+ assert(JSON.stringify(by("recT").score) === JSON.stringify({ avg: 80, count: 2 }), JSON.stringify(by("recT").score))
+ f.pages.s1.properties["학습기록"] = rel("recA", "recH")
+ const ses: any = await room.loadSession("s1")
+ assert(ses.records.length === 2 && ses.records.find((x: any) => x.id === "recH").homework.total === 2 && ses.records.find((x: any) => x.id === "recA").body.length === 1, "session records carry the same card fields")
  f.pages.recO = { id: "recO", db: "records", properties: { "학습": title("다른 날 기록"), "구분": { select: { name: "학습" } }, "수업": rel("sOther") } }
  assert((await room.loadClassRecords("sOther")).records.map((x: any) => x.id).join() === "recO", "no class: only that session")
  await rejects(() => room.loadClassRecords("../x"), 400)

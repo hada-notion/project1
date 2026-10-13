@@ -210,12 +210,17 @@ fi
 
 # 17) Notion 업로드 PDF/파일은 만료 URL을 캐시에만 의존하면 안 된다. blockId를 저장하고,
 #     학생 보고서 토큰으로 접근 권한을 검증한 뒤 최신 URL을 발급하는 함수를 유지한다.
-if ! grep -q 'type === "pdf" || type === "file"' supabase/functions/_shared/reportCacheBuilder.ts; then
-  echo "❌ reportCacheBuilder.ts: PDF/파일 블록 수집이 빠졌습니다."
+#     (v2.5.95) 본문 블록 변환은 feedBody.ts로 옮겼다. 리포트 캐시는 그 파일의 readPageBodyBlocks를 쓴다.
+if ! grep -q 'import { readPageBodyBlocks } from "./feedBody.ts"' supabase/functions/_shared/reportCacheBuilder.ts; then
+  echo "❌ reportCacheBuilder.ts: 학습기록 본문 변환(feedBody.ts)을 쓰지 않습니다."
   fail=1
 fi
-if ! grep -q 'blockId: String(b.id' supabase/functions/_shared/reportCacheBuilder.ts; then
-  echo "❌ reportCacheBuilder.ts: 만료 URL 갱신에 필요한 파일 blockId가 없습니다."
+if ! grep -q 'type === "pdf" || type === "file"' supabase/functions/_shared/feedBody.ts; then
+  echo "❌ feedBody.ts: PDF/파일 블록 수집이 빠졌습니다."
+  fail=1
+fi
+if ! grep -q 'blockId: String(b.id' supabase/functions/_shared/feedBody.ts; then
+  echo "❌ feedBody.ts: 만료 URL 갱신에 필요한 파일 blockId가 없습니다."
   fail=1
 fi
 if ! grep -q 'containsBlockId(row.registration_detail' supabase/functions/get-report-file/index.ts; then

@@ -41,7 +41,8 @@ import {
 	setAssignmentGenError,
 } from "./createAssignmentTarget.ts"
 import { isRunning } from "./statusTracking.ts"
-import { text as propText, numberOf as propNumber, fileUrlOf } from "./reportCacheShared.ts"
+import { text as propText, numberOf as propNumber, fileUrlOf, dateStartOf } from "./reportCacheShared.ts"
+import { readPageBodyBlocks } from "./feedBody.ts"
 import { runInBackground } from "./backgroundTask.ts"
 
 type Page = Record<string, any>
@@ -357,10 +358,13 @@ export async function loadClassRecords(sessionId: string) {
 	if (!sessions.length) sessions = [session]
 	const byId = new Map(sessions.map((p) => [p.id as string, p]))
 	const pages = await sessionRecords(sessions), summaries = await withSubjects(pages)
+	const startOfRecord = (r: Page) => { const sid = rel(r, "수업").find((id) => byId.has(id)); return sid ? byId.get(sid)?.properties?.["수업일시"]?.date?.start ?? "" : "" }
+	const recent = pages.slice().sort((a, b) => String(startOfRecord(b)).localeCompare(String(startOfRecord(a)))).slice(0, CARD_BODY_LIMIT).map((r) => r.id as string)
+	const extra = await cardExtras(pages, recent)
 	const records = pages.map((r, i) => {
 		const sid = rel(r, "수업").find((id) => byId.has(id)) ?? null
 		const start = sid ? byId.get(sid)?.properties?.["수업일시"]?.date?.start ?? null : null
-		return { ...summaries[i], sessionId: sid, date: seoulDate(start), start }
+		return { ...summaries[i], ...extra(r), sessionId: sid, date: seoulDate(start), start }
 	})
 	records.sort((a, b) => String(b.start ?? "").localeCompare(String(a.start ?? "")) || a.title.localeCompare(b.title, "ko"))
 	return { records: records.map(({ start, ...r }) => ({ ...r, time: seoulTime(start) })) }
@@ -401,11 +405,38 @@ function recordSummary(r: Page) {
 		bookId: rel(r, "진도교재")[0] ?? null,
 		topic: plain(r, "주제"),
 		range: plain(r, "범위"),
+		unit: propText(r.properties?.["단원"]).trim(),
 		content: plain(r, "내용"),
 		makeup: checkboxValue(r, "보강"),
 		registrationIds: rel(r, "등록"),
 		activities: rel(r, "학습활동").length,
 		activityStatus: selectName(r, "활동 생성 상태") ?? "",
+	}
+}
+
+// 기록 카드(v2.5.95, 학부모 리포트 학습기록 카드와 같은 규칙): 과제는 제출 수·마감일, 평가는 평균 점수, 그리고 페이지 본문(블록).
+// 본문은 bodyIds(화면에 먼저 보이는 최근 기록)만 읽는다(리포트처럼 최근 것만, 동시 6개). 읽기 실패는 빈 본문.
+const CARD_BODY_LIMIT = 20
+async function cardExtras(records: Page[], bodyIds: string[]) {
+	const graded = records.filter((r) => ["과제", "평가"].includes(selectName(r, "구분") ?? ""))
+	const acts: Page[] = []
+	for (let i = 0; i < graded.length; i += 90) {
+		const part = graded.slice(i, i + 90)
+		acts.push(...await queryAllPages(DS_STUDY_ACTIVITY, { or: part.map((r) => ({ property: "학습기록", relation: { contains: r.id } })) }))
+	}
+	const bodies = new Map(await mapWithConcurrency(dedupe(bodyIds), 6, async (id: string) => [id, await readPageBodyBlocks(id)] as const) as [string, unknown[]][])
+	return (r: Page) => {
+		const kind = selectName(r, "구분") ?? "", mine = acts.filter((a) => rel(a, "학습기록").includes(r.id as string))
+		const scored = mine.map((a) => ({ c: numberOf(a, "정답 문항"), t: numberOf(a, "전체 문항") })).filter((x) => x.t && x.t > 0 && typeof x.c === "number")
+		return {
+			homework: kind === "과제" && mine.length ? {
+				submitted: mine.filter((a) => selectName(a, "과제상태") === HOMEWORK_SUBMITTED).length,
+				total: mine.length,
+				due: seoulDate(mine.map((a) => dateStartOf(a.properties?.["과제 마감일"])).find(Boolean) ?? null) || null,
+			} : null,
+			score: kind === "평가" && scored.length ? { avg: Math.round(scored.reduce((n, x) => n + (x.c as number) / (x.t as number) * 100, 0) / scored.length), count: scored.length } : null,
+			body: bodies.get(r.id as string) ?? [],
+		}
 	}
 }
 
@@ -455,7 +486,9 @@ export async function loadSession(sessionId: string) {
 			}))
 		return { recordId: r.id as string, title: anyTitleText(r), range: plain(r, "범위"), items }
 	})
-	const records = await withSubjects(await getPages(rel(session, "학습기록")))
+	const recordPages = await getPages(rel(session, "학습기록"))
+	const extra = await cardExtras(recordPages, recordPages.map((r) => r.id as string))
+	const records = (await withSubjects(recordPages)).map((r, i) => ({ ...r, ...extra(recordPages[i]) }))
 	return {
 		session: await (async () => { const c = (await classInfo(rel(session, "클래스").slice(0, 1))).get(rel(session, "클래스")[0]); return { ...sessionSummary(session), className: c?.name ?? "", classEmoji: c?.emoji ?? "" } })(),
 		students: students.map(({ dueActivityIds: _drop, ...s }) => s),

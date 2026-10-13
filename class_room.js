@@ -580,20 +580,40 @@ function paneRoster(el){
 }
 
 // ---------- 학습기록 ----------
-// 기록 카드 한 장(학습기록 탭·홈·캘린더·교재 상세 공용). v2.5.89부터 학부모 리포트 학습기록 카드(.log-card)와 같은 규칙:
-// [분류 아이콘 칸(아이콘 + 구분 글자)] [교재 · 범위](교재 없으면 주제) [보강], 아래 "• 주제"(제목에 없을 때)·과제/평가는 "• 출제: 날짜",
-// 내용은 접어 두고 오른쪽 아래 ⌄로 펼친다(연한 베이지 칸). 카드를 누르면 기록 화면.
+// 기록 카드 한 장(학습기록 탭·홈·캘린더·교재 상세 공용). v2.5.95부터 학부모 리포트 학습기록 카드(student_report_part2.js 학습기록 탭, renderLogMetaRows)와 같은 규칙:
+// [분류 아이콘 칸(아이콘 + 구분 글자)] [교재 · 범위](교재 없으면 주제) [알약: 과제 "제출 n/전체", 평가 "평균 n점", 보강],
+// 아래 줄은 펼치지 않아도 보인다: 단원("• 1-1. …", 단원 번호마다 한 줄) → 내용(선생님이 적은 글, 줄마다 앞뒤 공백 정리) → 과제는 "• 출제: 날짜"·"• 마감: 날짜".
+// 펼치기(⌄)는 Notion 페이지 본문(글·목록·사진·파일·표)이 있을 때만이고, 펼치면 본문만 연한 베이지 칸에 보인다. 카드를 누르면 기록 화면.
 const withDow=ymd=>ymd?`${ymd} (${'일월화수목금토'[new Date(ymd+'T00:00:00Z').getUTCDay()]})`:'';
 function recCard(r){
  const subject=r.subject||'',title=[subject,r.range].filter(Boolean).join(' · ')||r.topic||r.title,day=r.date||state.date;
- const rows=[r.topic&&r.topic!==subject&&r.topic!==title?r.topic:'',r.kind==='과제'||r.kind==='평가'?`출제: ${withDow(day)}`:''].filter(Boolean);
- const extra=(r.content||'').split('\n').map(l=>l.trim()).filter(Boolean).join('\n'); // 리포트처럼 줄마다 앞뒤 공백을 정리해 같은 들여쓰기로
- return `<div class="rec log-card ${extra?'has-extra':''}"><div class="log-head"><button class="log-main" type="button" data-rec="${esc(r.id)}"><span class="log-top"><span class="log-icon k-${esc(r.kind||'학습')}">${icon(r.kind||'학습')}<small>${esc(r.kind||'학습')}</small></span><span class="log-title">${esc(title)}</span>${r.makeup?'<span class="pill s-보강">보강</span>':''}</span>
- ${rows.length?`<span class="log-meta">${rows.map(x=>`<span class="log-context">• ${esc(x)}</span>`).join('')}</span>`:''}</button>
- ${extra?`<button class="log-chev" type="button" data-chev aria-expanded="false" aria-label="내용 펼치기"><span>${CHEVRON_DOWN}</span></button>`:''}</div>
- ${extra?`<div class="log-extra" hidden>${esc(extra)}</div>`:''}</div>`;}
+ const units=(r.unit||'').split(/(?=\d+-\d+\.)/).map(x=>x.trim()).filter(Boolean);
+ const note=(r.content||'').split('\n').map(l=>l.trim()).join('\n').trim();
+ const extras=r.kind==='과제'?[`출제: ${withDow(day)}`,r.homework?.due?`마감: ${withDow(r.homework.due)}`:''].filter(Boolean):[];
+ const hw=r.homework,sc=r.score;
+ const pill=hw?`<span class="pill ${hw.submitted===hw.total?'done':'miss'}">제출 ${hw.submitted}/${hw.total}</span>`:sc?`<span class="pill k-평가">평균 ${sc.avg}점</span>`:'';
+ const body=bodyHtml(r.body),meta=units.map(u=>`<span class="log-context">• ${esc(u)}</span>`).join('')+(note?`<span class="log-note">${esc(note)}</span>`:'')+extras.map(x=>`<span class="log-context">• ${esc(x)}</span>`).join('');
+ return `<div class="rec log-card ${body?'has-extra':''}"><div class="log-head"><button class="log-main" type="button" data-rec="${esc(r.id)}"><span class="log-top"><span class="log-icon k-${esc(r.kind||'학습')}">${icon(r.kind||'학습')}<small>${esc(r.kind||'학습')}</small></span><span class="log-title">${esc(title)}</span>${pill}${r.makeup?'<span class="pill s-보강">보강</span>':''}</span>
+ ${meta?`<span class="log-meta">${meta}</span>`:''}</button>
+ ${body?`<button class="log-chev" type="button" data-chev aria-expanded="false" aria-label="본문 펼치기"><span>${CHEVRON_DOWN}</span></button>`:''}</div>
+ ${body?`<div class="log-extra" hidden>${body}</div>`:''}</div>`;}
+// Notion 페이지 본문(feedBody.ts가 내려주는 블록 목록) → HTML. 글은 굵게·기울임·코드·링크만 살리고, 사진·동영상·파일은 새 탭으로 연다.
+function spansHtml(b){const sp=Array.isArray(b.spans)&&b.spans.length?b.spans:[{text:b.text||''}];
+ return sp.map(s=>{let h=esc(s.text??'');if(s.code)h=`<code>${h}</code>`;if(s.bold)h=`<b>${h}</b>`;if(s.italic)h=`<i>${h}</i>`;if(s.strikethrough)h=`<s>${h}</s>`;
+  if(s.href&&/^https?:\/\//.test(s.href))h=`<a href="${esc(s.href)}" target="_blank" rel="noopener noreferrer">${h}</a>`;return h;}).join('');}
+function bodyHtml(body){if(!Array.isArray(body)||!body.length)return '';const out=[];let list='';const close=()=>{if(list){out.push(`</${list}>`);list='';}};
+ for(const b of body){if(!b)continue;
+  if(b.type==='text'){const st=String(b.style||'paragraph'),t=spansHtml(b);
+   if(st==='bulleted_list_item'||st==='numbered_list_item'||st==='to_do'){const tag=st==='numbered_list_item'?'ol':'ul';if(list!==tag){close();out.push(`<${tag} class="lb-list">`);list=tag;}out.push(`<li>${st==='to_do'?(b.checked?'☑ ':'☐ '):''}${t}</li>`);continue;}
+   close();out.push(st.startsWith('heading')?`<p class="lb-h">${t}</p>`:st==='quote'||st==='callout'?`<p class="lb-q">${b.icon?esc(b.icon)+' ':''}${t}</p>`:st==='code'?`<pre class="lb-code">${esc(b.text||'')}</pre>`:`<p>${t}</p>`);continue;}
+  close();const url=/^https?:\/\//.test(String(b.url||''))?String(b.url):'';
+  if(b.type==='image'&&url)out.push(`<a class="lb-img" href="${esc(url)}" target="_blank" rel="noopener noreferrer"><img src="${esc(url)}" alt="${esc(b.caption||'')}" loading="lazy"></a>${b.caption?`<p class="lb-cap">${esc(b.caption)}</p>`:''}`);
+  else if((b.type==='video'||b.type==='pdf'||b.type==='file')&&url)out.push(`<p><a class="lb-file" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(b.name||b.caption||(b.type==='video'?'동영상':'첨부 파일'))}</a></p>`);
+  else if(b.type==='divider')out.push('<hr class="lb-hr">');
+  else if(b.type==='table'&&Array.isArray(b.rows))out.push(`<table class="lb-table">${b.rows.map(row=>`<tr>${(row||[]).map(c=>`<td>${spansHtml({spans:c})}</td>`).join('')}</tr>`).join('')}</table>`);}
+ close();return out.join('');}
 // 내용 펼치기·접기(모든 화면 공용, 화면을 다시 그리지 않는다)
-$('app').addEventListener('click',e=>{const b=e.target.closest('[data-chev]');if(!b)return;const x=b.closest('.log-card').querySelector('.log-extra'),open=x.hidden;x.hidden=!open;b.setAttribute('aria-expanded',open);b.setAttribute('aria-label',open?'내용 접기':'내용 펼치기');});
+$('app').addEventListener('click',e=>{const b=e.target.closest('[data-chev]');if(!b)return;const x=b.closest('.log-card').querySelector('.log-extra'),open=x.hidden;x.hidden=!open;b.setAttribute('aria-expanded',open);b.setAttribute('aria-label',open?'본문 접기':'본문 펼치기');});
 // 기록을 날짜별로(최근 날짜부터). 보고 있는 수업 날짜에는 표시를 붙인다.
 function recTimeline(recs,empty){const dates=[...new Set(recs.map(r=>r.date||''))];
  return dates.map(d=>{const day=recs.filter(r=>(r.date||'')===d),cur=day.some(r=>r.sessionId===state.sessionId);
