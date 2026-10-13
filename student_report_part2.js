@@ -978,16 +978,17 @@ function buildDailyBodyHtml(r, date) {
       <div class="donut-card">
         <div class="donut-title"><span class="inline-icon">${checkIcon}</span>출석 현황</div>
         <div class="day-status"><span class="badge ${esc(attStatus)}">${esc(attStatus)}</span></div>
+        <div class="donut-count-below">${attendanceRow && attendanceRow.arrived ? `${esc(attendanceRow.arrived)} 등원` : ""}</div>
       </div>
       <div class="donut-card${homeworkStatusToday ? " clickable" : ""}"${homeworkStatusToday ? ` onclick="showHomeworkDayModal('${date}')"` : ""}>
         <div class="donut-title"><span class="inline-icon">${KIND_ICONS["과제"]}</span>과제 현황</div>
         <div class="day-status">${homeworkStatusToday ? `<span class="badge ${homeworkStatusToday.cls}">${homeworkStatusToday.text}</span>` : `<span class="badge">해당 없음</span>`}</div>
-        ${homeworkStatusToday ? `<div class="donut-count-below">${dueTodayHomework.length}건</div>` : ""}
+        <div class="donut-count-below">${homeworkStatusToday ? `${dueTodayHomework.length}건` : ""}</div>
       </div>
       <div class="donut-card${scoredToday.length ? " clickable" : ""}"${scoredToday.length ? ` onclick="showTestPeriodModal('${date}','${date}','${esc(formatDateLabel(date))} 평가')"` : ""}>
         <div class="donut-title"><span class="inline-icon">${KIND_ICONS["평가"]}</span>평가 현황</div>
-        <div class="day-status">${testPctToday !== null ? `<span class="log-pill ${scorePillTone(testPctToday, 100)}">${testPctToday}점</span>` : `<span class="badge">해당 없음</span>`}</div>
-        ${scoredToday.length ? `<div class="donut-count-below">${scoredToday.length}건</div>` : ""}
+        <div class="day-status">${testPctToday !== null ? `<span class="log-pill ${scorePillTone(testPctToday, 100)}">${scoredToday.length > 1 ? "평균 " : ""}${testPctToday}점</span>` : `<span class="badge">해당 없음</span>`}</div>
+        <div class="donut-count-below">${scoredToday.length ? `${scoredToday.length}건` : ""}</div>
       </div>
     </div>
     ${session(KIND_ICONS["학습"], "학습", studyHtml)}

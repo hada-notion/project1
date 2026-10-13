@@ -403,6 +403,15 @@ function openFeedImage(url) {
 // 근처(KST 00시~09시)에 만들어진 기록은 그냥 앞 10자만 자르면(UTC 기준) 하루 전 날짜로 표시된다
 // (캘린더 칸이 비어보이거나 다른 날짜와 겹쳐 보이는 문제로 나타남). Asia/Seoul 기준으로 정확히
 // 변환해서 날짜를 뽑는다.
+// (v2.5.99) 시각 포함 ISO → 서울 시각 "HH:MM"(키오스크 등원·하원 시각 표시용). 값이 없거나 읽을 수 없으면 "".
+function isoToKstTime(iso) {
+  if (!iso) return ""
+  try {
+    return new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(iso))
+  } catch (e) {
+    return ""
+  }
+}
 function isoToKstDate(iso) {
   if (!iso) return null
   try {
@@ -450,7 +459,8 @@ function mapRegistration(reg) {
       // 생성된 기록은 하루 전 날짜로 잘못 표시됐다 (예: 키오스크 보강 체크인). isoToKstDate로
       // Asia/Seoul 기준 날짜를 우선 사용하고, 실패하면 기존 방식(UTC slice)으로 되돌아간다.
       const kstDate = isoToKstDate(rawDate)
-      return { date: kstDate || (rawDate ? String(rawDate).slice(0, 10) : null), weekday: a.weekday || "", status: a.status || "" }
+      // (v2.5.99) arrived/left: 키오스크가 찍은 실제 등원·하원 시각(서울 "HH:MM"). 이전 캐시에는 없을 수 있다.
+      return { date: kstDate || (rawDate ? String(rawDate).slice(0, 10) : null), weekday: a.weekday || "", status: a.status || "", arrived: isoToKstTime(a.arrived), left: isoToKstTime(a.left) }
     }),
     // 학습·과제·평가를 같은 수업일로 묶을 수 있도록 시각 포함 ISO 값을 모두 KST 날짜로 통일한다.
     study_logs: (reg.study_logs || []).map((s) => ({ type: "학습", book: s.book || "", range: s.range || "", unit: s.unit || "", date: isoToKstDate(s.iso) || (s.iso ? String(s.iso).slice(0, 10) : null), note: s.note || "", body: normalizeFeedBody(s.body), sourceBody: normalizeFeedBody(s.source_body || s.body), activityBody: normalizeFeedBody(s.activity_body) })),
