@@ -1,6 +1,6 @@
 // POST /functions/v1/class-room
-// 수업방(class_room.html)이 부르는 함수(v2.5.66). 선생님 공용 수업 세션(수업용 비밀번호, v2.5.65)과
-// 관리자 세션만 통과한다(adminSecurity.ts의 class-room 경로). 요청 본문의 action에 따라
+// 수업 관리(class_room.html)가 부르는 함수(v2.5.66). 관리자 비밀번호로 로그인한 관리자 세션만 통과한다
+// (adminSecurity.ts의 class-room 경로, v2.5.82에 수업용 비밀번호 삭제). 요청 본문의 action에 따라
 // 조회(teachers/day/session/books/activities)와 저장(save-*, create-*, update-record, 보강 대기실)을 한다.
 // 실제 로직은 _shared/classRoom.ts.
 import { CORS_HEADERS, requireAdminKey } from "../_shared/adminShared.ts"

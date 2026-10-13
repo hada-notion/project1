@@ -2,8 +2,9 @@
 // The administrator session is shared by admin settings, legal documents and school search in the same tab (the
 // server issues the same kind of session to all three), so moving between them from the top menu does not ask for
 // the password again. It lives in sessionStorage: closing the tab or logging out on any of them ends it. Admin
-// settings keeps an initial-password (0000) session in memory only. The kiosk keeps its own 30-day kiosk-scope
-// session under localStorage "admin_key" on purpose.
+// settings keeps an initial-password (0000) session in memory only. The kiosk keeps its own kiosk-scope session
+// under localStorage "admin_key" on purpose; it lasts until the admin password changes (v2.5.82). The class room
+// (수업 관리) logs in with the same admin password and keeps its 12-hour session in localStorage on that device.
 const HADA_BROWSER_SESSION_KEY = 'hada_admin_browser_session_v1';
 window.HadaAdminAuth = Object.freeze({
   // This academy's public Supabase connection from hada_config.js. Throws when the file is missing or the address is
@@ -15,7 +16,7 @@ window.HadaAdminAuth = Object.freeze({
     if (typeof c.supabaseAnonKey !== 'string' || !c.supabaseAnonKey) throw new Error('학원 연결 설정의 공개 키를 확인해 주세요.');
     return { url: c.supabaseUrl, anonKey: c.supabaseAnonKey };
   },
-  // scope 'kiosk' asks for a 30-day session limited to check-in routes.
+  // scope 'kiosk' asks for a check-in-only session that lasts until the admin password changes.
   async login(base, password, scope) {
     const res = await fetch(base.replace(/\/$/, '') + '/functions/v1/admin-security', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },

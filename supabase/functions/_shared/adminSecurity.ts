@@ -105,8 +105,6 @@ export async function authorizeKey(req:Request,provided:unknown,legacy:string):P
   if(result.kind==='webhook')return SECURITY_WEBHOOK_ROUTES.has(route);
   // Long-lived kiosk sessions: check-in and the minimal directory only (the full list exposes report tokens).
   if(result.kind==='kiosk')return route==='kiosk-checkin'||(route==='list-students'&&new URL(req.url).searchParams.get('kiosk')==='1');
-  // Shared class (teacher) sessions: the class room only (v2.5.65).
-  if(result.kind==='class')return route==='class-room';
   return false;
 }
 export async function currentInternalKey():Promise<string> {

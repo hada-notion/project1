@@ -1,4 +1,4 @@
-// 수업방(v2.5.67): 선생님 공용 수업용 비밀번호로 로그인 → 강사 선택(이 기기에 기억) → 오늘 수업(v2.5.79, 서랍 v2.5.80: 상단 ≡ 왼쪽 클래스 목록·📅 오른쪽 날짜)
+// 수업 관리(v2.5.67, v2.5.82에 이름 변경): 관리자 비밀번호로 로그인(12시간, 이 기기에 기억) → 강사 선택(이 기기에 기억) → 오늘 수업(v2.5.79, 서랍 v2.5.80: 상단 ≡ 왼쪽 클래스 목록·📅 오른쪽 날짜)
 // → 수업(학생 목록 [출석|과제 검사], 학습기록, + 기록 만들기) → 학생 공간 / 기록 카드 → 학생별 학습활동. 보강 대기실은 ≡ 서랍에서 연다.
 // 업무 데이터는 class-room 함수가 Notion에 읽고 쓴다. 체크·입력은 편집 모드에서 모아 [저장], 만들기·출제는 바로 실행.
 'use strict';
@@ -40,7 +40,7 @@ async function api(action,data={}){
  if(CFG.error)throw new Error(CFG.error);
  const res=await fetch(CFG.url+'/functions/v1/class-room',{method:'POST',headers:{'Content-Type':'application/json','x-admin-key':state.session,Authorization:'Bearer '+CFG.anonKey,apikey:CFG.anonKey},body:JSON.stringify({action,...data}),cache:'no-store'});
  const body=await res.json().catch(()=>({}));
- if(res.status===401){store.set(SESSION_KEY,'');state.session='';showLogin('로그인이 끝났어요. 수업용 비밀번호로 다시 로그인해 주세요.');throw new Error('silent');}
+ if(res.status===401){store.set(SESSION_KEY,'');state.session='';showLogin('로그인이 끝났어요. 관리자 비밀번호로 다시 로그인해 주세요.');throw new Error('silent');}
  if(!res.ok)throw new Error(body.error||'서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.');
  return body;
 }
@@ -66,13 +66,12 @@ window.addEventListener('beforeunload',e=>{if(state.edit&&Object.keys(state.draf
 // ---------- 로그인·강사 ----------
 function showLogin(message=''){
  setTabs(false);state.view='login';bar(['수업']);
- $('app').innerHTML=`<p class="page-title">${icon('lock')}수업용 로그인</p><p class="page-hint">원장님께 받은 수업용 비밀번호를 입력하세요. 이 기기에서 30일 동안 다시 묻지 않아요.</p>
- <form id="login" class="card"><label for="pw">수업용 비밀번호</label><input type="password" id="pw" autocomplete="current-password" maxlength="128" required>
- <p class="help">수업용 로그인으로는 수업방만 쓸 수 있어요. 관리자 설정·법정 서류·키오스크 설정은 열리지 않아요.</p>
+ $('app').innerHTML=`<p class="page-title">${icon('lock')}수업 관리 로그인</p><p class="page-hint">관리자 비밀번호를 입력하세요. 이 기기에서 12시간 동안 다시 묻지 않아요.</p>
+ <form id="login" class="card"><label for="pw">관리자 비밀번호</label><input type="password" id="pw" autocomplete="current-password" maxlength="128" required>
  <p class="error" id="login-err" ${message?'':'hidden'}>${esc(message)}</p><div class="actions"><button class="primary" type="submit">로그인</button></div></form>`;
  if(CFG.error){$('login-err').hidden=false;$('login-err').textContent=CFG.error;}
  $('login').onsubmit=async e=>{e.preventDefault();const btn=e.submitter,err=$('login-err');if(run.busy)return;run.busy=true;btn.classList.add('loading');err.hidden=true;
-  try{const s=await HadaAdminAuth.login(CFG.url,$('pw').value,'class');state.session=s;store.set(SESSION_KEY,s);run.busy=false;await run(start);}
+  try{const s=await HadaAdminAuth.login(CFG.url,$('pw').value);state.session=s;store.set(SESSION_KEY,s);run.busy=false;await run(start);}
   catch(x){err.hidden=false;err.textContent=x.message;}finally{run.busy=false;btn.classList.remove('loading');}};
 }
 async function loadTeachers(){if(!state.teachers.length)state.teachers=(await api('teachers')).teachers;}
@@ -83,7 +82,7 @@ function showTeachers(){
  ${state.teachers.map(t=>`<button class="row" type="button" data-id="${esc(t.id)}"><span class="av">${esc(t.name.slice(0,1))}</span><span class="meta"><span class="t">${esc(t.name)}</span><span class="d">${esc(t.role)}</span></span>${state.teacherId===t.id?icon('check','check'):''}</button>`).join('')}
  <button class="row" type="button" data-id="all"><span class="av sq">전</span><span class="meta"><span class="t">전체 수업</span><span class="d">모든 강사의 수업</span></span>${state.teacherId==='all'?icon('check','check'):''}</button></div>
  <div class="actions"><button class="secondary wide" id="logout" type="button">${icon('out','inline-icon')} 이 기기에서 로그아웃</button></div>`;
- $('logout').onclick=()=>{if(!confirm('이 기기에서 로그아웃할까요? 다시 들어오려면 수업용 비밀번호가 필요해요.'))return;store.set(SESSION_KEY,'');store.set(TEACHER_KEY,'');state.session='';state.teacherId='';showLogin();};
+ $('logout').onclick=()=>{if(!confirm('이 기기에서 로그아웃할까요? 다시 들어오려면 관리자 비밀번호가 필요해요.'))return;store.set(SESSION_KEY,'');store.set(TEACHER_KEY,'');state.session='';state.teacherId='';showLogin();};
  $('app').querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>run(async()=>{state.teacherId=b.dataset.id;state.detail=null;store.set(TEACHER_KEY,state.teacherId);await openToday();},b));
 }
 
