@@ -8,8 +8,16 @@ await db.exec(`create role anon; create role authenticated; create role service_
 create table vault.secrets(id uuid primary key default gen_random_uuid(),name text,secret text);
 create function vault.create_secret(value text,label text) returns uuid language plpgsql as $$ declare x uuid; begin insert into vault.secrets(name,secret) values(label,value) returning id into x;return x;end $$;
 create function vault.update_secret(x uuid,value text) returns void language plpgsql as $$ begin update vault.secrets set secret=value where id=x;end $$;`);
-const migrations=['20261011010000_admin_security.sql','20261012010000_admin_password_simplify.sql','20261012020000_admin_security_safeupdate.sql','20261013010000_webhook_key_rotation.sql','20261013020000_webhook_checklist.sql','20261014010000_class_password.sql'];
-for(const f of migrations)await db.exec(fs.readFileSync('supabase/migrations/'+f,'utf8'));
+const migrations=['20261011010000_admin_security.sql','20261012010000_admin_password_simplify.sql','20261012020000_admin_security_safeupdate.sql','20261013010000_webhook_key_rotation.sql','20261013020000_webhook_checklist.sql','20261014010000_class_password.sql','20261014020000_unify_admin_password.sql'];
+for(const f of migrations.slice(0,-1))await db.exec(fs.readFileSync('supabase/migrations/'+f,'utf8'));
+// v2.5.82 migration on a database that still has class and 30-day kiosk sessions: class sessions are removed,
+// kiosk sessions stop expiring by time, the class columns are dropped.
+await db.exec(`insert into public.hada_security_sessions(token_hash,version,kind,expires_at) values('${'8'.repeat(64)}',1,'class',now()+interval '30 days'),('${'6'.repeat(64)}',1,'kiosk',now()+interval '30 days')`);
+await db.exec(fs.readFileSync('supabase/migrations/'+migrations.at(-1),'utf8'));
+assert.deepEqual((await db.query("select kind,expires_at='infinity'::timestamptz as forever from public.hada_security_sessions order by kind")).rows,[{kind:'kiosk',forever:true}]);
+assert.equal((await db.query("select count(*)::int as n from information_schema.columns where table_name='hada_security_state' and column_name like 'class%'")).rows[0].n,0);
+await assert.rejects(db.exec(`insert into public.hada_security_sessions(token_hash,version,kind,expires_at) values('${'5'.repeat(64)}',1,'class',now())`));
+await db.exec("delete from public.hada_security_sessions where true");
 // Supabase rejects DELETE/UPDATE without WHERE on API connections (pg-safeupdate); PGlite does not,
 // so check the current function definition statically. INSERT ... ON CONFLICT DO UPDATE is not affected.
 const current=fs.readFileSync('supabase/migrations/'+migrations.at(-1),'utf8').replace(/--[^\n]*/g,'').replace(/\bdo\s+update\b/gi,'do upsert');
@@ -71,39 +79,13 @@ ok((await rpc('authorize',{candidate:token})).kind,'session');
 ok((await rpc('login',{verified:true,version:2,token_hash:kiosk,kind:'root'})).status,400);
 ok((await rpc('login',{verified:true,version:2,token_hash:kiosk,kind:'kiosk'})).ok,true);
 ok((await rpc('authorize',{candidate:kiosk})).kind,'kiosk');
-ok((await raw(`select (expires_at>now()+interval '29 days') as long from public.hada_security_sessions where token_hash='${kiosk}'`))[0].long,true);
+ok((await raw(`select (expires_at='infinity'::timestamptz) as forever from public.hada_security_sessions where token_hash='${kiosk}'`))[0].forever,true); // kiosk: until the password changes
 ok((await raw(`select (expires_at<now()+interval '13 hours') as short from public.hada_security_sessions where token_hash='${token}'`))[0].short,true);
 ok((await rpc('profile',{session_hash:kiosk})).status,401);
 ok((await rpc('change',{...change,session_hash:kiosk,expected_version:2})).status,401);
-// Class (teacher) password: owner sets it with an admin session; class sessions reach the class room only.
-const cls=h('1'),cls2=h('0'),classPw=pw('6');
-ok((await rpc('class-owner')).status,409); // not set yet
-ok((await rpc('class-set',{session_hash:kiosk,password_hash:classPw})).status,401);
-ok((await rpc('class-set',{session_hash:other,password_hash:classPw})).status,401);
-ok((await rpc('class-set',{session_hash:token,password_hash:'bad'})).status,400);
-ok((await rpc('class-set',{session_hash:token,password_hash:classPw})).ok,true);
-ok((await rpc('profile',{session_hash:token})).class_password_set,true);
-const co=await rpc('class-owner');ok([co.password_hash,co.class_version],[classPw,2]);
-ok((await rpc('class-login',{verified:true,class_version:1,token_hash:cls})).status,409);
-for(let i=0;i<5;i++)ok((await rpc('class-login',{verified:false,class_version:2,token_hash:cls})).status,401);
-ok((await rpc('class-owner')).status,429);
-ok((await rpc('owner')).must_change,false); // owner login is not locked by class failures
-await db.exec("update public.hada_security_state set class_locked_until=now()-interval '1 minute' where id=1");
-ok((await rpc('class-login',{verified:true,class_version:2,token_hash:'bad'})).status,400);
-ok((await rpc('class-login',{verified:true,class_version:2,token_hash:cls})).ok,true);
-ok((await rpc('authorize',{candidate:cls})).kind,'class');
-ok((await raw(`select (expires_at>now()+interval '29 days') as long from public.hada_security_sessions where token_hash='${cls}'`))[0].long,true);
-ok((await rpc('profile',{session_hash:cls})).status,401);
-ok((await rpc('class-set',{session_hash:cls,password_hash:pw('7')})).status,401);
-ok((await rpc('webhook-status',{session_hash:cls})).status,401);
-// Changing the class password ends class sessions only.
-ok((await rpc('class-login',{verified:true,class_version:2,token_hash:cls2})).ok,true);
-ok((await rpc('class-set',{session_hash:token,password_hash:pw('7')})).ok,true);
-ok((await rpc('authorize',{candidate:cls})).kind,'none');
-ok((await rpc('authorize',{candidate:cls2})).kind,'none');
-ok((await rpc('authorize',{candidate:token})).kind,'session');
-ok((await rpc('authorize',{candidate:kiosk})).kind,'kiosk');
-ok((await rpc('class-login',{verified:true,class_version:3,token_hash:cls})).ok,true);
+// v2.5.82: one password for every page. The class actions are gone (an admin session gets "unsupported").
+for(const action of ['class-owner','class-login','class-set'])ok((await rpc(action,{session_hash:token,verified:true,class_version:2,token_hash:h('1'),password_hash:pw('6')})).status,400);
+ok('class_password_set' in (await rpc('profile',{session_hash:token})),false);
 // Session expiry fails closed.
 await db.exec(`update public.hada_security_sessions set expires_at=now()-interval '1 second' where token_hash='${token}'`);
 ok((await rpc('authorize',{candidate:token})).kind,'none');
@@ -113,17 +95,14 @@ ok((await rpc('reset')).ok,true);
 ok((await rpc('authorize',{candidate:kiosk})).kind,'none');
 ok((await rpc('owner')).status,409);
 ok(await rpc('status'),{initialized:true,password_set:false});
-ok((await rpc('authorize',{candidate:cls})).kind,'none'); // reset ends class sessions too
 ok((await rpc('init',{...init,internal_key:h('a'),internal_hash:h('a'),webhook_hash:h('f')})).reset,true);
 ok((await raw('select version,must_change,password_hash,internal_hash,webhook_hash from public.hada_security_state'))[0],{version:4,must_change:true,password_hash:initial,internal_hash:key2,webhook_hash:web});
 ok(await vault(),key2);
 ok((await rpc('authorize',{candidate:web})).kind,'webhook');
-ok((await raw("select string_agg(event,',' order by id) as e from public.hada_security_audit"))[0].e,'initialized,password_and_internal_key_changed,class_password_set,class_password_set,reset_requested,reset_applied');
+ok((await raw("select string_agg(event,',' order by id) as e from public.hada_security_audit"))[0].e,'initialized,password_and_internal_key_changed,reset_requested,reset_applied');
 // Webhook key rotation: blocked while the initial password is active.
 ok((await rpc('login',{verified:true,version:4,token_hash:token})).ok,true);
 ok((await rpc('webhook-status',{session_hash:token})).status,409);
-ok((await rpc('class-owner')).status,409); // class login waits until the initial password is changed
-ok((await rpc('class-set',{session_hash:token,password_hash:pw('8')})).status,409);
 ok((await rpc('change',{session_hash:token,expected_version:4,password_hash:changed,internal_key:h('5'),internal_hash:h('5')})).ok,true);
 ok((await rpc('login',{verified:true,version:5,token_hash:token})).ok,true);
 ok((await rpc('login',{verified:true,version:5,token_hash:kiosk,kind:'kiosk'})).ok,true);
