@@ -13,11 +13,13 @@
 body{background:var(--canvas)}
 /* 상단 바·하단 탭의 내용은 본문과 같은 폭(--feed-w, 리포트와 같음) 안에 두고 왼쪽 선을 맞춘다. */
 .cr-bar{position:sticky;top:0;z-index:20;margin:0;background:var(--brand-primary);color:var(--brand-on-primary)}
-.bar-in{max-width:calc(var(--feed-w) + 2*var(--space-4));margin:0 auto;min-height:var(--header-h);display:flex;align-items:center;gap:var(--space-1);padding:0 var(--space-2)}
+.bar-in{max-width:calc(var(--feed-w) + 2*var(--space-4));margin:0 auto;min-height:var(--header-h);display:flex;align-items:center;gap:var(--space-1);padding:0 var(--space-4)}
+.bar-in>.icon-btn:first-child{margin-left:calc(-1*var(--space-3))}
+.bar-in>.icon-btn:last-child{margin-right:calc(-1*var(--space-3))}
 .cr-bar .crumbs{flex:1;min-width:0;display:flex;align-items:center;gap:var(--space-1);font-weight:700;font-size:var(--text-small);white-space:nowrap;overflow:hidden}
 .cr-bar .crumbs span:last-child{overflow:hidden;text-overflow:ellipsis}
 .cr-bar .crumbs .sep{opacity:.6}
-.cr-bar h1{flex:1;margin:0 var(--space-2);font-size:var(--text-title)}
+.cr-bar h1{flex:1;margin:0;font-size:var(--text-title)}
 .icon-btn{width:var(--hit-area);height:var(--hit-area);min-width:var(--hit-min);border:0;background:transparent;color:inherit;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-md);cursor:pointer;text-decoration:none;padding:0}
 .cr-bar .ghost{min-height:var(--hit-min);max-width:40vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* 본문 카드 안쪽 여백은 목록 줄과 같은 --space-4(리포트 18px에 가장 가까운 4px 단위 값) */
@@ -29,7 +31,8 @@ body{background:var(--canvas)}
 .icon-btn svg{width:var(--icon-md);height:var(--icon-md)}
 .cr-main{max-width:calc(var(--feed-w) + 2*var(--space-4));margin:0 auto;padding:var(--space-4) var(--space-4) var(--space-12)}
 .cr-main.with-tabs{padding-bottom:calc(3*var(--space-12))}
-.page-title{display:flex;align-items:center;gap:var(--space-2);font-size:var(--text-lead);font-weight:700;margin:var(--space-2) 0 var(--space-1)}
+.page-title{display:flex;align-items:center;gap:var(--space-2);min-height:var(--space-8);font-size:var(--text-lead);font-weight:700;margin:var(--space-2) 0 var(--space-1)}
+.page-title .nl{margin:calc(-1*var(--space-2)) calc(-1*var(--space-3)) calc(-1*var(--space-2)) 0}
 .page-title svg.line{width:var(--icon-title);height:var(--icon-title);flex:none}
 .sec-title svg.line{width:var(--icon-section);height:var(--icon-section);flex:none}
 .page-hint{color:var(--text-muted);font-size:var(--text-caption);margin:0 0 var(--space-4)}
@@ -110,9 +113,11 @@ button.row{cursor:pointer}
 .tabbar button{flex:1;min-height:calc(var(--hit-min) + var(--space-2));border:0;background:transparent;color:var(--text-subtle);font-weight:600;font-size:var(--text-caption);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-1);border-radius:var(--radius-md);cursor:pointer}
 .tabbar button svg{width:var(--icon-md);height:var(--icon-md)}
 .tabbar button.on{color:var(--brand-deep);background:var(--brand-tint)}
-.savebar{position:fixed;left:var(--space-3);right:var(--space-3);bottom:calc(var(--hit-min) + var(--space-8));z-index:21;max-width:var(--feed-w);margin:0 auto;background:var(--surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-2) var(--space-2) var(--space-4)}
+.savebar{position:fixed;left:var(--space-4);right:var(--space-4);bottom:calc(var(--hit-min) + var(--space-8));z-index:21;max-width:var(--feed-w);margin:0 auto;background:var(--surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-2) var(--space-2) var(--space-4)}
 .savebar span{flex:1;font-weight:700}
 .savebar.no-tabs{bottom:var(--space-4)}
+body.tabs-on .toast{bottom:calc(var(--hit-min) + var(--space-8))}
+body.save-on .toast{bottom:calc(3*var(--hit-min) + var(--space-3))}
 dialog.sheet{width:min(100%,var(--form-max));max-width:100%;margin:auto auto 0;border-radius:var(--radius-lg);border-bottom-left-radius:0;border-bottom-right-radius:0;max-height:85vh;overflow:auto}
 .choose{display:flex;flex-direction:column;gap:var(--space-2)}
 .choose button{display:flex;align-items:center;gap:var(--space-3);text-align:left;min-height:calc(var(--hit-min) + var(--space-4));padding:var(--space-3) var(--space-4);border:1px solid var(--brand-border);border-radius:var(--radius-md);background:var(--surface);font:inherit;color:inherit;cursor:pointer}
@@ -130,28 +135,47 @@ svg.line.check,.row svg.line,.choose svg.line,.pill svg.line{width:var(--icon-md
 .page-hint.ph{margin:0 0 var(--space-2)}
 .page-hint b{color:var(--text-ink)}
 .page-title .grow{flex:1}
-.tab-row{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:var(--space-2);margin-bottom:var(--space-2)}
+.tab-row{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:var(--space-2);margin-bottom:var(--space-2)}
 .tab-row .center-tabs{margin:0}
 .tab-row .acts{display:flex;justify-content:flex-end;align-items:center;gap:var(--space-1)}
-.tab-row .acts .primary{width:auto;min-height:var(--hit-min);height:var(--hit-min);padding:0 var(--space-4);font-size:var(--text-label)}
+/* 칸 머리 버튼(.act): 전환 탭과 같은 32px 알약·12px 글자로 보이고, 위아래 투명 여백으로 누르는 영역은 44px */
+.act{min-height:var(--hit-min);min-width:var(--hit-min);padding:0;border:0;background:transparent;font:inherit;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.act span{display:inline-flex;align-items:center;gap:var(--space-1);height:calc(var(--hit-min) - var(--space-3));padding:0 var(--space-3);border-radius:var(--radius-pill);background:var(--brand-soft);color:var(--brand-deep);font-size:var(--text-caption);font-weight:700;white-space:nowrap}
+.act.strong span{background:var(--brand-deep);color:var(--surface)}
+.act svg.line{width:var(--icon-sm);height:var(--icon-sm)}
+.pick-row .grow{flex:1;min-width:0}
+.pick-row .chips{padding-bottom:0}
+.pick{flex:none;width:var(--hit-area);display:inline-flex;justify-content:center}
+/* 날짜 탭이 여는 숨긴 날짜 입력 */
+input[type=date].date-input{position:absolute;width:1px;height:1px;padding:0;border:0;opacity:0;pointer-events:none}
+.center-tabs .tabs .date-tab span{display:inline-flex;align-items:center;gap:var(--space-1)}
+.center-tabs .tabs .date-tab svg.line{width:var(--icon-sm);height:var(--icon-sm)}
+/* 설명 줄이 빈 학생도 줄 높이가 같게 */
+.row .d:empty::before{content:"\a0"}
 .note-row{margin-top:var(--space-1)}
 .note-hint{color:var(--text-subtle);font-size:var(--text-caption);margin:var(--space-2) 0 0}
 .split{height:1px;background:var(--divider);margin:var(--space-6) 0 var(--space-4)}
 .row.sel{background:var(--brand-tint);box-shadow:inset 3px 0 0 var(--brand-deep)}
 .pbody>.sec-title:first-child{margin-top:var(--space-3)}
-.cr-main>.ph:first-child .page-title{margin-top:var(--space-1)}
+/* 모든 화면의 첫 제목은 상단 바 아래 같은 높이(본문 위 여백 16 + 4) */
+.cr-main>.ph:first-child .page-title,.cr-main>.page-title:first-child,.pane>.ph:first-child .page-title{margin-top:var(--space-1)}
 /* 넓은 화면(1081px 이상, DESIGN.md 화면 폭 3단계의 데스크탑): 폭을 --page-max까지 펴고 수업은 두 칸, 대화상자는 가운데 */
 @media(min-width:1081px){
  .cr-bar.wide .bar-in,.cr-main.wide{max-width:var(--page-max)}
- .cr-main.wide{padding-top:var(--space-5);padding-bottom:calc(2*var(--space-12))}
+ /* 한 칸 화면(강사 선택·보강 대기실)은 같은 왼쪽 선에서 본문 폭, 로그인은 가운데 */
+ .cr-main.wide[data-col=single]>*{max-width:var(--feed-w)}
+ .cr-main.wide[data-col=center]>*{max-width:var(--feed-w);margin-left:auto;margin-right:auto}
+ .cr-main.wide{padding-bottom:calc(2*var(--space-12))}
  .home{display:grid;grid-template-columns:minmax(0,1fr) var(--side-w);gap:var(--space-8);align-items:start}
+ .home .sec-title{margin-top:var(--space-1)}
  .sess-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-3)}
  .sess-grid .card-btn{margin:0}
  .sess-grid .empty{grid-column:1/-1}
  .home-side{position:sticky;top:calc(var(--header-h) + var(--space-4))}
- .two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(3,auto) 1fr;column-gap:var(--space-8);align-items:start}
+ .two{position:relative;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(3,auto) 1fr;column-gap:var(--space-8);align-items:start}
+ /* 두 칸 사이 구분선은 정가운데, 긴 칸의 끝까지 */
+ .two::before{content:'';position:absolute;top:0;bottom:0;left:50%;width:1px;background:var(--divider)}
  .two>.pane{display:grid;grid-row:span 4;grid-template-rows:subgrid;min-width:0}
- .two>.pane+.pane{border-left:1px solid var(--divider);padding-left:var(--space-8);margin-left:calc(-1*var(--space-4))}
  .savebar.in-pane{right:auto;bottom:var(--space-4);max-width:none;margin:0}
  dialog.sheet{width:min(100%,var(--dialog-md));margin:auto;border-bottom-left-radius:var(--radius-lg);border-bottom-right-radius:var(--radius-lg)}
 }
@@ -166,6 +190,6 @@ svg.line.check,.row svg.line,.choose svg.line,.pill svg.line{width:var(--icon-md
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <script src="hada_config.js"></script>
 <script src="admin_auth.js?v=ec2cac35"></script>
-<script src="class_room.js?v=6b3d6a65"></script>
+<script src="class_room.js?v=a3d89d38"></script>
 </body>
 </html>
