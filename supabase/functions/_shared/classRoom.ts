@@ -41,6 +41,7 @@ import {
 	setAssignmentGenError,
 } from "./createAssignmentTarget.ts"
 import { isRunning } from "./statusTracking.ts"
+import { text as propText, numberOf as propNumber, fileUrlOf } from "./reportCacheShared.ts"
 import { runInBackground } from "./backgroundTask.ts"
 
 type Page = Record<string, any>
@@ -216,6 +217,39 @@ export async function loadDays(from: string, to: string, teacherId?: string) {
 	return { dates: dedupe(sessions.map((p: Page) => seoulDate(p.properties?.["수업일시"]?.date?.start ?? null)).filter(Boolean)).sort() }
 }
 
+// ≡ 클래스 목록(v2.5.80): 고른 강사의 수업(기준일 4주 전 ~ 4주 뒤, 보강 제외)을 반별로 묶는다.
+// 반마다 오늘 수업(시간순), 오늘 뒤 첫 수업, 오늘 전 마지막 수업을 돌려주고, 화면이 오늘 → 다음 → 마지막 순으로 연다.
+export async function loadClasses(date: string, teacherId?: string) {
+	const { start, end } = seoulDayRange(date)
+	const t = Date.parse(start)
+	const sessions = (await queryAllPages(DS_CLASS_SESSION, {
+		and: [
+			{ property: "수업일시", date: { on_or_after: new Date(t - 28 * 86_400_000).toISOString() } },
+			{ property: "수업일시", date: { before: new Date(t + 29 * 86_400_000).toISOString() } },
+			...teacherFilter(teacherId),
+		],
+	})).filter((p: Page) => !checkboxValue(p, "보강") && rel(p, "클래스").length)
+		.sort((a: Page, b: Page) => String(a.properties?.["수업일시"]?.date?.start).localeCompare(String(b.properties?.["수업일시"]?.date?.start)))
+	const byClass = new Map<string, Page[]>()
+	for (const p of sessions) { const c = rel(p, "클래스")[0]; byClass.set(c, [...(byClass.get(c) ?? []), p]) }
+	const info = await classInfo([...byClass.keys()])
+	const brief = (p?: Page) => p ? { id: p.id as string, date: seoulDate(p.properties?.["수업일시"]?.date?.start ?? null) } : null
+	return {
+		classes: [...byClass].map(([classId, list]) => {
+			const when = (p: Page) => String(p.properties?.["수업일시"]?.date?.start ?? "")
+			const today = list.filter((p) => when(p) >= start && when(p) < end)
+			return {
+				classId,
+				name: info.get(classId)?.name ?? "",
+				emoji: info.get(classId)?.emoji ?? "",
+				today: today.map((p) => { const s = sessionSummary(p); return { id: s.id, start: s.start, end: s.end, time: s.time } }),
+				next: brief(list.find((p) => when(p) >= end)),
+				last: brief(list.filter((p) => when(p) < start).at(-1)),
+			}
+		}),
+	}
+}
+
 // 반 주간 캘린더: 같은 반의 앞뒤 수업(9주 전 ~ 5주 뒤, 보강 수업 제외)과 수업별 출석 요약.
 // present = 출석 처리됐거나 등원한 학생, absent = 결석·보강, missing = 상태도 등원도 없는 학생. 반이 없는 보강 수업은 빈 목록.
 export async function loadClassSessions(sessionId: string, around?: string) {
@@ -333,6 +367,8 @@ export async function loadBooks(sessionId: string) {
 	const owners = new Map<string, string[]>()
 	for (const r of registrations) for (const b of rel(r, "진도교재")) owners.set(b, [...(owners.get(b) ?? []), r.id])
 	const books = await getPages(Array.from(owners.keys()))
+	// 교재 카드(v2.5.80): 리포트 교재 카드처럼 표지(정규교재 "북커버")·쪽수·진행도·최근 학습 범위를 함께 준다.
+	const regulars = new Map((await getPages(dedupe(books.flatMap((b) => rel(b, "정규교재"))))).map((r) => [r.id as string, r]))
 	return {
 		registrations: registrations.map((r) => ({ id: r.id as string, name: plain(r, "이름") || anyTitleText(r) })),
 		books: books
@@ -343,6 +379,16 @@ export async function loadBooks(sessionId: string) {
 				mode: selectName(b, "진도방식") ?? "",
 				templateId: rel(b, "반별교재")[0] ?? null,
 				ownerIds: owners.get(b.id) ?? [],
+				...(() => {
+					const rp = regulars.get(rel(b, "정규교재")[0])?.properties
+					const progress = propNumber(b.properties?.["진행도"])
+					return {
+						cover: fileUrlOf(rp?.["북커버"]) ?? "",
+						pages: propNumber(rp?.["전체 페이지"]),
+						progress: progress === null ? null : Math.round(progress * 100),
+						recent: propText(b.properties?.["최근 학습 범위"]),
+					}
+				})(),
 			}))
 			.sort((a, b) => a.name.localeCompare(b.name, "ko")),
 	}
@@ -649,6 +695,7 @@ export async function handleClassRoom(body: any): Promise<unknown> {
 		case "day": return await loadDay(String(body.date ?? ""), body.teacherId)
 		case "days": return await loadDays(String(body.from ?? ""), String(body.to ?? ""), body.teacherId)
 		case "session": return await loadSession(body.sessionId)
+		case "classes": return await loadClasses(String(body.date ?? ""), body.teacherId)
 		case "class-sessions": return await loadClassSessions(body.sessionId, body.around)
 		case "books": return await loadBooks(body.sessionId)
 		case "activities": return await loadActivities(body.recordId)

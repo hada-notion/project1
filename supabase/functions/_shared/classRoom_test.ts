@@ -11,7 +11,7 @@ const D = "2026-10-13T08:00:00.000Z" // 17:00 KST
 function fixture() {
  const pages: Record<string, any> = {
   cls: { id: "cls", db: "classes", properties: { "클래스명": title("중1 B"), "이모지": text("🟡") } },
-  regular: { id: "regular", db: "regulars", properties: { "교재명": title("개념원리 1-2"), "과목": rel("math") } },
+  regular: { id: "regular", db: "regulars", properties: { "교재명": title("개념원리 1-2"), "과목": rel("math"), "북커버": { type: "files", files: [{ type: "external", external: { url: "https://example.com/cover.png" } }] }, "전체 페이지": { type: "number", number: 248 } } },
   t1: { id: "t1", db: "teachers", properties: { "이름": title("안규빈"), "직책": { select: { name: "강사" } } } },
   s1: { id: "s1", db: "sessions", properties: { "이름": title("중1 B 10.13(화)"), "수업일시": { date: { start: D, end: "2026-10-13T09:00:00.000Z" } }, "담당강사": rel("t1"), "클래스": rel("cls"), "등록": rel("ra", "rb"), "출석": rel("aa", "ab"), "학습기록": rel(), "보강": { checkbox: false }, "출석현황": formula("✅ 정상(2)") } },
   sOther: { id: "sOther", db: "sessions", properties: { "이름": title("다른 날"), "수업일시": { date: { start: "2026-10-14T08:00:00.000Z" } }, "담당강사": rel("t1"), "출석": rel(), "학습기록": rel(), "보강": { checkbox: false } } },
@@ -23,7 +23,7 @@ function fixture() {
   ra: { id: "ra", db: "registrations", properties: { "이름": title("김하늘 중1 B"), "진도교재": rel("group", "indA") } },
   rb: { id: "rb", db: "registrations", properties: { "이름": title("박서준 중1 B"), "진도교재": rel("group", "indB") } },
   rc: { id: "rc", db: "registrations", properties: { "이름": title("이도윤 중2 A"), "진도교재": rel("other") } },
-  group: { id: "group", db: "books", properties: { "진도교재": title("개념원리(중1 B)"), "진도방식": { select: { name: "그룹 진도" } }, "진행상태": { status: { name: "진행 중" } }, "정규교재": rel("regular"), "반별교재": rel() } },
+  group: { id: "group", db: "books", properties: { "진도교재": title("개념원리(중1 B)"), "진도방식": { select: { name: "그룹 진도" } }, "진행상태": { status: { name: "진행 중" } }, "정규교재": rel("regular"), "반별교재": rel(), "진행도": { type: "formula", formula: { type: "number", number: 0.344 } }, "최근 학습 범위": text("p.78-83") } },
   indA: { id: "indA", db: "books", properties: { "진도교재": title("RPM(김하늘)"), "진도방식": { select: { name: "개별 진도" } }, "진행상태": { status: { name: "진행 중" } }, "정규교재": rel(), "반별교재": rel("tpl") } },
   indB: { id: "indB", db: "books", properties: { "진도교재": title("RPM(박서준)"), "진도방식": { select: { name: "개별 진도" } }, "진행상태": { status: { name: "진행 중" } }, "정규교재": rel(), "반별교재": rel("tpl") } },
   aa: { id: "aa", db: "attendance", properties: { "출석": title("aa"), "학생이름(보고서)": formula("김하늘"), "등록": rel("ra"), "수업": rel("s1"), "수업일시": { date: { start: D } }, "출석 상태": { select: { name: "🟢 출석" } }, "등원스템프": { date: { start: "2026-10-13T07:52:00.000Z" } }, "메모": text("집중 좋음"), "선생님 한마디": text(""), "과제": rel("hw1") } },
@@ -89,6 +89,15 @@ Deno.test("day: that day's sessions for the teacher and only unassigned makeup a
  const s1 = day.sessions[0]; assert(s1.className === "중1 B" && s1.classEmoji === "🟡" && s1.arrived === 1 && s1.students === 2, "class emoji, name and arrived count")
  await rejects(() => room.loadDay("10/13"), 400)
 }))
+Deno.test("classes: the teacher's classes with today's sessions, the next and the last one", () => withMock(async () => {
+ const mine = (await room.loadClasses("2026-10-13", "t1")).classes
+ assert(mine.length === 1 && mine[0].classId === "cls" && mine[0].name === "중1 B" && mine[0].emoji === "🟡", "only classes with the teacher's non-makeup sessions")
+ assert(mine[0].today.map((x) => x.id).join() === "s1" && mine[0].today[0].time === "17:00–18:00" && mine[0].next === null && mine[0].last === null)
+ const all = (await room.loadClasses("2026-10-12")).classes
+ assert(all.length === 1 && !all[0].today.length && all[0].next?.id === "s1" && all[0].next?.date === "2026-10-13" && all[0].last?.id === "sPrev" && all[0].last?.date === "2026-10-08", "makeup sessions are skipped")
+ await rejects(() => room.loadClasses("10/13"), 400)
+ await rejects(() => room.loadClasses("2026-10-13", "../x"), 400)
+}))
 Deno.test("days: Seoul dates that have the teacher's sessions in a range", () => withMock(async () => {
  const r = await room.loadDays("2026-10-12", "2026-10-18", "t1")
  assert(r.dates.join() === "2026-10-13,2026-10-14", r.dates.join())
@@ -117,6 +126,8 @@ Deno.test("books: owners and template grouping data", () => withMock(async () =>
  const b = await room.loadBooks("s1")
  const g = b.books.find((x) => x.id === "group")!; assert(g.ownerIds.join() === "ra,rb" && g.mode === "그룹 진도")
  assert(b.books.filter((x) => x.templateId === "tpl").map((x) => x.ownerIds.join()).join("|") === "ra|rb")
+ assert(g.cover === "https://example.com/cover.png" && g.pages === 248 && g.progress === 34 && g.recent === "p.78-83", "cover, pages, progress and recent range for the book card")
+ const ind = b.books.find((x) => x.id === "indA")!; assert(ind.cover === "" && ind.pages === null && ind.progress === null && ind.recent === "", "books without a regular book or progress stay empty")
 }))
 Deno.test("records: group book links the class, repeat returns the existing record", () => withMock(async (f) => {
  const r1 = await room.createRecords({ sessionId: "s1", kind: "학습", bookIds: ["group"] })

@@ -13,9 +13,8 @@
 body{background:var(--canvas)}
 /* 상단 바·하단 탭의 내용은 본문과 같은 폭(--feed-w, 리포트와 같음) 안에 두고 왼쪽 선을 맞춘다. */
 .cr-bar{position:sticky;top:0;z-index:20;margin:0;background:var(--brand-primary);color:var(--brand-on-primary)}
-.bar-in{max-width:calc(var(--feed-w) + 2*var(--space-4));margin:0 auto;min-height:var(--header-h);display:flex;align-items:center;gap:var(--space-1);padding:0 var(--space-4)}
-.bar-in>.icon-btn:first-child{margin-left:calc(-1*var(--space-3))}
-.bar-in>.icon-btn:last-child{margin-right:calc(-1*var(--space-3))}
+/* 상단 바(v2.5.80): 학부모 리포트 상단 바(.reg-header-bar)처럼 화면 폭 전체, 양끝 버튼은 화면 가장자리에서 8px. 본문은 640 한 줄 그대로. */
+.bar-in{min-height:var(--header-h);display:flex;align-items:center;gap:var(--space-1);padding:0 var(--space-2)}
 .cr-bar .crumbs{flex:1;min-width:0;display:flex;align-items:center;gap:var(--space-1);font-weight:700;font-size:var(--text-small);white-space:nowrap;overflow:hidden}
 .cr-bar .crumbs span:last-child{overflow:hidden;text-overflow:ellipsis}
 .cr-bar .crumbs .sep{opacity:.6}
@@ -171,13 +170,11 @@ svg.line.check,.row svg.line,.choose svg.line,.pill svg.line{width:var(--icon-md
 .cal-day{height:min(calc((100cqw - 6*var(--space-1))/7*5/4),4.5rem);min-width:0;padding:0;border:0;border-radius:var(--radius-md);background:transparent;color:var(--text-subtle);font:inherit;font-size:var(--text-body);cursor:pointer;display:flex;align-items:center;justify-content:center}
 .cal-day.empty{cursor:default}
 /* 날짜 이동 캘린더(v2.5.79): 수업 있는 날은 칸을 칠하고(has) 보고 있는 날은 진하게(picked), 오늘은 빨간 테두리. 수업 없는 날은 흐리게·누를 수 없음. 출석 숫자·색은 넣지 않는다. */
-.cal-panel{margin-bottom:var(--space-4)}
 .cal-day.off{opacity:.35;cursor:default}
 .cal-day.has{background:var(--brand-light);color:var(--brand-on-primary);font-weight:700}
 .cal-day.has.picked{background:var(--brand-deep);color:var(--surface);box-shadow:none}
 .cal-day.has.today{box-shadow:inset 0 0 0 2px var(--danger)}
 .cal-nav-btn:disabled{opacity:.3;cursor:default}
-.picker-cal{box-shadow:none;padding:0}
 .row.cur{box-shadow:inset 3px 0 0 var(--brand-deep);background:var(--brand-tint)}
 /* 상단 바(v2.5.79): [≡ 수업 선택 | 클래스 이모지·이름 / 날짜·시간 | 📅 날짜 이동] */
 .tb-in{display:grid;grid-template-columns:var(--hit-min) minmax(0,1fr) var(--hit-min);align-items:center}
@@ -185,7 +182,6 @@ svg.line.check,.row svg.line,.choose svg.line,.pill svg.line{width:var(--icon-md
 .tb-title b{display:block;font-size:var(--text-lead);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tb-title small{display:block;margin-top:var(--space-1);font-size:var(--text-caption);opacity:.75}
 .tb-emo{margin-right:var(--space-2)}
-.cr-bar .icon-btn.on{background:var(--brand-tint)}
 .cr-bar .icon-btn:disabled{opacity:.3;cursor:default}
 /* 하단 가운데 + 기록 만들기 */
 .tab-in.three{align-items:center}
@@ -195,6 +191,64 @@ svg.line.check,.row svg.line,.choose svg.line,.pill svg.line{width:var(--icon-md
 .tabbar button:disabled{opacity:.35;cursor:default}
 .ph.title-row{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2)}
 .center-tabs.left{justify-content:flex-start;margin:0}
+/* 서랍(v2.5.80): ≡ 왼쪽 클래스 목록, 📅 오른쪽 이 반 날짜. 화면 높이 전체, 폭은 폰 86%·최대 360, 바깥은 어둡게. */
+dialog.drawer{position:fixed;inset:0 auto 0 0;margin:0;width:min(86vw,22.5rem);max-width:none;height:100%;max-height:none;padding:0;border:0;background:var(--surface);color:inherit;box-shadow:var(--shadow-md);overflow:auto}
+dialog.drawer.left{border-radius:0;border-top-right-radius:var(--radius-lg);border-bottom-right-radius:var(--radius-lg);animation:dr-left .18s ease-out}
+dialog.drawer.right{inset:0 0 0 auto;border-radius:0;border-top-left-radius:var(--radius-lg);border-bottom-left-radius:var(--radius-lg);animation:dr-right .18s ease-out}
+@keyframes dr-left{from{transform:translateX(-100%)}}
+@keyframes dr-right{from{transform:translateX(100%)}}
+@media(prefers-reduced-motion:reduce){dialog.drawer{animation:none!important}}
+.dr-in{min-height:100%;box-sizing:border-box;padding:0 var(--space-4) var(--space-4);display:flex;flex-direction:column}
+/* 서랍 머리는 상단 바와 같은 높이(56)·같은 가운데 선, ✕는 상단 바 버튼처럼 서랍 가장자리에서 8px */
+.dr-head{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);min-height:var(--header-h);margin:0 calc(-1*var(--space-2)) var(--space-2) 0}
+.dr-head h2{margin:0;min-width:0;font-size:var(--text-title);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.drawer .attendance-calendar.flat{box-shadow:none;padding:0}
+.dr-foot{margin-top:auto;padding-top:var(--space-4)}
+.jump{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-2);margin-top:var(--space-4)}
+.jump button{white-space:nowrap;font-size:var(--text-label)}
+/* 학생 목록 한 줄(v2.5.80): [이름] [출석] [등원] [하원] [메모]. 머리 줄과 같은 칸·같은 안쪽 여백으로 열을 맞춘다. */
+.stu{--stu-cols:minmax(0,1fr) 3.5rem 3rem 3rem var(--hit-min)}
+.stu .srow-h,.stu .s1{display:grid;grid-template-columns:var(--stu-cols);align-items:center;column-gap:var(--space-2);padding:0 var(--space-2) 0 var(--space-4)}
+.stu.editing{--stu-cols:minmax(0,1fr) auto}
+.stu .srow-h{min-height:var(--space-8);font-size:var(--text-caption);font-weight:600;color:var(--text-subtle);border-bottom:1px solid var(--divider)}
+.stu .s1{min-height:calc(var(--hit-min) + var(--space-2))}
+.stu .s1+.s1{border-top:1px solid var(--divider)}
+.stu .c{justify-self:center;text-align:center}
+.stu .tm{font-size:var(--text-label);color:var(--text-muted);font-variant-numeric:tabular-nums}
+.stu .nm{min-width:0;min-height:var(--hit-min);padding:0;border:0;background:transparent;font:inherit;font-weight:700;color:inherit;text-align:left;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center}
+.stu .seg{justify-self:end}
+.memo-btn{width:var(--hit-min);height:var(--hit-min);padding:0;border:0;border-radius:var(--radius-md);background:transparent;color:var(--text-subtle);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.memo-btn svg.line{width:var(--icon-md);height:var(--icon-md)}
+.memo-btn.has{background:var(--brand-soft);color:var(--brand-deep)}
+.chips.quick{flex-wrap:wrap;overflow:visible;margin-top:var(--space-2)}
+/* 교재 카드(v2.5.80): 학부모 리포트 교재 카드(.book-row)처럼 [표지 3:4] [교재명 / 설명 / 진도 막대 / 최근 범위]. 기록 만들기의 교재 칸과 교재 고르기 목록에 쓴다.
+   표지(72×96)가 카드 안에서 가장 높고 가운데에 오게 해(교재명은 한 줄) 표지와 카드 테두리 사이 위·왼쪽·아래 여백이 모두 12px로 같다. */
+.book-row{position:relative;display:flex;gap:var(--space-3);align-items:center;width:100%;padding:var(--space-3);border:1px solid var(--control-border);border-radius:var(--radius-md);background:var(--surface);font:inherit;color:inherit;text-align:left;cursor:pointer}
+.book-row.empty{border:2px dashed var(--brand-border);background:var(--brand-tint)}
+.book-row.on{border:2px solid var(--brand-deep)}
+.br-cover{position:relative;flex:none;width:calc(var(--space-12) + var(--space-6));aspect-ratio:3/4;border-radius:var(--radius-sm);overflow:hidden;background:var(--brand-soft);color:var(--text-subtle);display:flex;align-items:center;justify-content:center}
+.book-row.empty .br-cover{background:var(--surface);border:1px solid var(--brand-border)}
+.br-cover svg.line{width:var(--icon-lg);height:var(--icon-lg)}
+.br-cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.br-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:var(--space-1)}
+.br-title{font-weight:800;font-size:var(--text-body);line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.book-row.on .br-title{padding-right:var(--space-8)}
+.br-sub{font-size:var(--text-caption);color:var(--text-subtle)}
+.progress-line{display:flex;align-items:center;gap:var(--space-2);margin-top:var(--space-1)}
+.progress-line .track{flex:1;height:var(--space-2);border-radius:var(--radius-pill);background:var(--brand-soft);overflow:hidden}
+.progress-line .fill{display:block;height:100%;border-radius:var(--radius-pill);background:var(--brand-deep)}
+.progress-line b{font-size:var(--text-caption)}
+.br-recent{display:flex;align-items:center;gap:var(--space-1);min-width:0;font-size:var(--text-caption);color:var(--text-muted)}
+.br-recent span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.br-recent svg.line{flex:none;width:var(--icon-sm);height:var(--icon-sm)}
+.br-chev{flex:none;align-self:center;font-size:var(--text-title);color:var(--text-subtle)}
+.br-check{position:absolute;top:var(--space-3);right:var(--space-3);width:var(--space-6);height:var(--space-6);border-radius:var(--radius-pill);background:var(--brand-deep);color:var(--surface);display:flex;align-items:center;justify-content:center}
+.br-check svg.line{width:var(--icon-sm);height:var(--icon-sm)}
+.br-list{display:flex;flex-direction:column;gap:var(--space-2)}
+/* 구분 탭은 가로 전체 3등분 */
+.kind-tabs{display:block}
+.kind-tabs .tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.kind-tabs .tabs button span{padding-left:0;padding-right:0;text-align:center}
 .cal-day.plan{box-shadow:inset 0 0 0 1.5px var(--brand-border);color:var(--text-muted)}
 .cal-day.picked{box-shadow:inset 0 0 0 2px var(--brand-deep)}
 .cal-day.today,.cal-day.today.picked{box-shadow:inset 0 0 0 2px var(--danger)}
@@ -205,14 +259,16 @@ svg.line.check,.row svg.line,.choose svg.line,.pill svg.line{width:var(--icon-md
 .cal-day-head b{font-size:var(--text-label);font-weight:600;color:var(--text-subtle)}
 /* 수업 한 줄(v2.5.70): [클래스 이모지] [클래스명] [등원 n/전체] [수업 시간]. 등원은 0명 회색, 일부 노랑, 모두 초록 */
 .srow{min-height:calc(var(--hit-min) + var(--space-4))}
-.emo{flex:none;width:var(--hit-area);height:var(--hit-area);border-radius:var(--radius-md);background:var(--brand-tint);display:inline-flex;align-items:center;justify-content:center;font-size:var(--text-title)}
-.emo .pill{font-size:var(--text-caption);padding:var(--space-1)}
-.emo.ico{background:var(--brand-soft);color:var(--brand-deep)}
+/* 클래스 이모지·보강 대기실 아이콘은 바탕 도형 없이 24px 칸에(v2.5.80). 카드 왼쪽 여백에 붙고 이름과 8px — 상단 바 "🟡 중1 B"와 같은 간격. */
+.srow{column-gap:var(--space-2)}
+.emo{flex:none;width:var(--space-6);display:inline-flex;align-items:center;justify-content:center;font-size:var(--text-title);line-height:1}
+.emo.ico{color:var(--brand-deep)}
 .emo.ico svg.line{width:var(--icon-md);height:var(--icon-md)}
 .cnt-pill{flex:none;font-size:var(--text-caption);font-weight:700;padding:var(--space-1) var(--space-2);border-radius:var(--radius-pill);background:var(--brand-soft);color:var(--text-muted);font-variant-numeric:tabular-nums}
 .cnt-pill.part{background:var(--warning-soft);color:var(--warning-ink)}
 .cnt-pill.ok{background:var(--success-soft);color:var(--success-ink)}
 .time{flex:none;width:calc(var(--hit-area) + var(--space-12));text-align:right;color:var(--text-muted);font-size:var(--text-label);font-variant-numeric:tabular-nums}
+.time.none{color:var(--text-subtle)}
 .time.chev{width:auto;font-size:var(--text-title);color:var(--text-subtle)}
 .list.wait{margin-top:var(--space-3)}
 /* 강사 이름 경로 버튼: 리포트 경로 글자 그대로, 누르는 영역 44px */
@@ -229,9 +285,10 @@ svg.line.check,.row svg.line,.choose svg.line,.pill svg.line{width:var(--icon-md
 <nav class="tabbar" id="tabbar" hidden></nav>
 <div class="savebar" id="savebar" hidden><span id="save-count"></span><button class="secondary" id="save-cancel" type="button">취소</button><button class="primary inline" id="save-ok" type="button">저장</button></div>
 <dialog class="card sheet" id="sheet"></dialog>
+<dialog class="drawer" id="drawer" aria-label="서랍"></dialog>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <script src="hada_config.js"></script>
 <script src="admin_auth.js?v=ec2cac35"></script>
-<script src="class_room.js?v=efcf7c2f"></script>
+<script src="class_room.js?v=b3f42e53"></script>
 </body>
 </html>

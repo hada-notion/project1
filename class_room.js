@@ -1,5 +1,5 @@
-// 수업방(v2.5.67): 선생님 공용 수업용 비밀번호로 로그인 → 강사 선택(이 기기에 기억) → 오늘 수업(v2.5.79: 상단 ≡ 수업 선택·📅 날짜 이동)
-// → 수업(학생 목록 [출석|과제 검사], 학습기록, + 기록 만들기) → 학생 공간 / 기록 카드 → 학생별 학습활동. 보강 대기실은 ≡ 창에서 연다.
+// 수업방(v2.5.67): 선생님 공용 수업용 비밀번호로 로그인 → 강사 선택(이 기기에 기억) → 오늘 수업(v2.5.79, 서랍 v2.5.80: 상단 ≡ 왼쪽 클래스 목록·📅 오른쪽 날짜)
+// → 수업(학생 목록 [출석|과제 검사], 학습기록, + 기록 만들기) → 학생 공간 / 기록 카드 → 학생별 학습활동. 보강 대기실은 ≡ 서랍에서 연다.
 // 업무 데이터는 class-room 함수가 Notion에 읽고 쓴다. 체크·입력은 편집 모드에서 모아 [저장], 만들기·출제는 바로 실행.
 'use strict';
 const $=id=>document.getElementById(id);
@@ -21,7 +21,8 @@ const P={back:'<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 1
  refresh:'<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
  lock:'<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',square:'<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>',
  checked:'<polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
- menu:'<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>'};
+ menu:'<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>',
+ x:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',memo:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>'};
 const icon=(name,cls='')=>`<svg class="line ${cls}" viewBox="0 0 24 24" aria-hidden="true">${P[name]||''}</svg>`;
 const nlink=(id,label)=>id?`<a class="icon-btn nl" href="${notionUrl(id)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(label)} Notion에서 열기" title="Notion에서 열기">${icon('ext')}</a>`:'';
 const KINDS=['학습','과제','평가'],STATUS={'🟢 출석':'출석','🔴 결석':'결석','🔵 보강':'보강'};
@@ -33,7 +34,7 @@ function shortDate(iso){if(!iso)return '';const d=new Date(new Date(iso).getTime
 
 const state={session:store.get(SESSION_KEY),teacherId:store.get(TEACHER_KEY),teachers:[],date:seoulDate(),view:'empty',day:null,
  sessionId:'',detail:null,tab:'students',seg:'att',recKind:'전체',hwRecord:'',edit:false,editOwner:'',saver:null,draft:{},recordId:'',acts:null,student:null,noteTab:'memo',books:null,picked:new Set(),
- classWeek:[],calPanel:false,cwMonth:'',cwAnchor:'',cwFrom:'',cwTo:'',pick:null,form:null,bookCache:{}};
+ classWeek:[],cwMonth:'',cwFrom:'',cwTo:'',classes:null,form:null,bookCache:{}};
 
 async function api(action,data={}){
  if(CFG.error)throw new Error(CFG.error);
@@ -121,27 +122,56 @@ async function openToday(){
  state.date=seoulDate();state.day=await fetchDay(state.date);
  const id=nowSessionId(state.day.sessions||[]);
  if(id)return openSessionNow(id);
- state.detail=null;state.sessionId='';state.view='empty';state.calPanel=false;render();
+ state.detail=null;state.sessionId='';state.view='empty';render();
 }
 function topBar(){
  const s=state.detail?.session,cal=!!(s&&s.classIds?.length);
  const title=s?`<b><span class="tb-emo">${s.makeup?'':esc(emojiOf(s))}</span>${esc(s.makeup?s.name:(s.className||s.name))}${s.makeup?' <span class="pill s-보강">보강</span>':''}</b><small>${esc(dateLabel(state.date))} ${esc(s.time||'')}</small>`
   :`<b>${state.date===seoulDate()?'오늘 수업 없음':'수업 없음'}</b><small>${esc(dateLabel(state.date))}</small>`;
- $('bar').innerHTML=`<div class="bar-in tb-in"><button class="icon-btn" id="tb-menu" type="button" aria-label="수업 선택">${icon('menu')}</button><div class="tb-title">${title}</div><button class="icon-btn ${state.calPanel?'on':''}" id="tb-cal" type="button" aria-label="날짜 이동" aria-expanded="${!!state.calPanel}" ${cal?'':'disabled'}>${icon('cal')}</button></div>`;
- $('tb-menu').onclick=()=>{if(leaveEdit())openClassPicker();};
- $('tb-cal').onclick=()=>{state.calPanel=!state.calPanel;state.cwMonth='';state.cwAnchor='';render();};
+ $('bar').innerHTML=`<div class="bar-in tb-in"><button class="icon-btn" id="tb-menu" type="button" aria-label="클래스 선택">${icon('menu')}</button><div class="tb-title">${title}</div><button class="icon-btn" id="tb-cal" type="button" aria-label="날짜 이동" ${cal?'':'disabled'}>${icon('cal')}</button></div>`;
+ $('tb-menu').onclick=()=>{if(leaveEdit())openClassDrawer();};
+ $('tb-cal').onclick=()=>{if(leaveEdit())openDateDrawer();};
 }
-// 📅 날짜 이동(이 반): 주 한 줄 + 월 전체 보기. 이 반 수업이 있는 날만 칠하고 누를 수 있다. ‹ ›는 직전·다음 수업, [오늘]은 오늘 수업(없으면 오늘이 있는 주).
-function classCalHtml(){
- const list=state.classWeek||[];if(!state.calPanel||!list.length)return '';
- const byDate=new Map(list.map(x=>[x.date,x])),cell=d=>{const x=byDate.get(d);return dayCell(d,!!x,x&&x.id===state.sessionId,x?`data-cs="${esc(x.id)}"`:'');};
+// ---------- 서랍(v2.5.80): ≡ 왼쪽 = 강사의 클래스 목록, 📅 오른쪽 = 이 반 날짜 ----------
+// 서랍은 dialog 하나를 왼쪽·오른쪽으로 바꿔 쓴다. 바깥(어두운 곳)을 누르거나 ✕로 닫는다.
+function drawer(side,title,body){const d=$('drawer');d.className=`drawer ${side}`;
+ d.innerHTML=`<div class="dr-in"><div class="dr-head"><h2>${title}</h2><button class="icon-btn" type="button" id="dr-x" aria-label="닫기">${icon('x')}</button></div>${body}</div>`;
+ $('dr-x').onclick=()=>d.close();if(!d.open)d.showModal();return d;}
+$('drawer').addEventListener('click',e=>{if(e.target===$('drawer'))$('drawer').close();});
+// ≡ 클래스 목록: [이모지] [클래스명] [오늘 수업시간]. 오늘 수업이 있는 반을 시간순으로 위에, 나머지는 이름순(시간 칸에 "수업 없음").
+// 반을 누르면 오늘 수업(진행 중 → 다음 → 마지막) → 없으면 다음 수업 → 없으면 가장 최근 수업을 연다. 날짜는 📅에서 고른다.
+const classesKey=()=>state.teacherId+'|'+seoulDate();
+async function openClassDrawer(){
+ if(state.classes?.key===classesKey()){drawClassDrawer();api('classes',{date:seoulDate(),...teacherArg()}).then(r=>{state.classes={key:classesKey(),list:r.classes};if($('drawer').open&&$('drawer').classList.contains('left'))drawClassDrawer();}).catch(()=>{});return;}
+ await run(async()=>{state.classes={key:classesKey(),list:(await api('classes',{date:seoulDate(),...teacherArg()})).classes};drawClassDrawer();});
+}
+function drawClassDrawer(){
+ const who=state.teacherId==='all'?'전체 수업':teacherName(state.teacherId),cur=state.detail?.session?.classIds?.[0]||'';
+ const list=(state.classes?.list||[]).slice().sort((a,b)=>(!a.today.length-!b.today.length)||String(a.today[0]?.start||'').localeCompare(String(b.today[0]?.start||''))||a.name.localeCompare(b.name,'ko'));
+ const waiting=state.day?.makeupWaiting||[];
+ const d=drawer('left',esc(state.teacherId==='all'?'전체 클래스':`${who} 선생님 클래스`),
+ `<div class="list">${list.length?list.map(c=>`<button class="row srow ${c.classId===cur?'cur':''}" type="button" data-class="${esc(c.classId)}"><span class="emo">${esc(c.emoji||pickClassColorEmoji(c.name))}</span><span class="meta"><span class="t">${esc(c.name)}</span></span><span class="time ${c.today.length?'':'none'}">${esc(c.today[0]?.time||'수업 없음')}</span></button>`).join(''):'<p class="empty">앞뒤 4주 안에 수업이 있는 클래스가 없어요.</p>'}</div>
+ <div class="list wait"><button class="row srow" type="button" id="open-wait"><span class="emo ico">${icon('users')}</span><span class="meta"><span class="t">보강 대기실</span></span><span class="cnt-pill">${waiting.length}명</span><span class="time chev">›</span></button></div>
+ <div class="dr-foot"><button class="secondary wide" type="button" id="dr-who">강사 바꾸기 · ${esc(who)}</button></div>`);
+ d.querySelectorAll('[data-class]').forEach(b=>b.onclick=()=>{const c=list.find(x=>x.classId===b.dataset.class),id=nowSessionId(c.today)||c.next?.id||c.last?.id;if(!id)return;
+  if(id===state.sessionId){d.close();return;}run(async()=>{await openSessionNow(id);d.close();},b);});
+ $('open-wait').onclick=()=>{d.close();state.view='waiting';state.picked=new Set();render();};
+ $('dr-who').onclick=()=>{d.close();showTeachers();};
+}
+// 📅 이 반 날짜: 월 캘린더(수업 있는 날 칠함, 보고 있는 날 진하게, 오늘 빨간 테두리) + [‹ 직전] [다음 ›]. 날짜를 누르면 그 수업으로 가고 닫힌다(보던 탭 유지).
+function openDateDrawer(){state.cwMonth=state.date.slice(0,7);drawDateDrawer();}
+function drawDateDrawer(){
+ const s=state.detail.session,list=state.classWeek||[],byDate=new Map(list.map(x=>[x.date,x])),ym=state.cwMonth,[y,m]=ym.split('-').map(Number),first=`${ym}-01`;
+ const cell=dd=>{const x=byDate.get(dd);return dayCell(dd,!!x,x&&x.id===state.sessionId,x?`data-cs="${esc(x.id)}"`:'');};
  const i=list.findIndex(x=>x.id===state.sessionId),prev=list[i-1],next=list[i+1];
- if(!state.cwMonth){const w=weekStart(state.cwAnchor||state.date);
-  return `<div class="attendance-calendar day-mode cal-panel"><div class="cal-month-nav">${navBtn(prev?`data-cs="${esc(prev.id)}"`:'disabled','직전 수업','‹')}<div class="cal-month-title">${md(w)} ~ ${md(addDays(w,6))}</div><div class="cal-nav-right">${todayBtn('cw-today')}${navBtn(next?`data-cs="${esc(next.id)}"`:'disabled','다음 수업','›')}</div></div>
-  <div class="cal-grid">${CAL_DOW}${Array.from({length:7},(_,k)=>cell(addDays(w,k))).join('')}</div><button type="button" class="cal-collapse-btn" id="cw-month">${CHEVRON_DOWN}월 전체 보기</button></div>`;}
- const [y,m]=state.cwMonth.split('-').map(Number),first=`${state.cwMonth}-01`;
- return `<div class="attendance-calendar cal-panel"><div class="cal-month-nav">${navBtn('data-cwm="-1"','이전 달','‹')}<div class="cal-month-title">${y}년 ${m}월</div><div class="cal-nav-right">${todayBtn('cw-today')}${navBtn('data-cwm="1"','다음 달','›')}</div></div>
- <div class="cal-grid">${CAL_DOW}${Array.from({length:dowMon(first)},()=>'<div class="cal-day empty"></div>').join('')}${Array.from({length:monthDays(state.cwMonth)},(_,k)=>cell(`${state.cwMonth}-${pad(k+1)}`)).join('')}</div><button type="button" class="cal-collapse-btn" id="cw-week">${CHEVRON_UP}주로 접기</button></div>`;
+ const d=drawer('right',`<span class="tb-emo">${esc(emojiOf(s))}</span>${esc(s.className||s.name)} 날짜`,
+ `<div class="attendance-calendar flat"><div class="cal-month-nav">${navBtn('data-cwm="-1"','이전 달','‹')}<div class="cal-month-title">${y}년 ${m}월</div><div class="cal-nav-right">${todayBtn('cw-today')}${navBtn('data-cwm="1"','다음 달','›')}</div></div>
+ <div class="cal-grid">${CAL_DOW}${Array.from({length:dowMon(first)},()=>'<div class="cal-day empty"></div>').join('')}${Array.from({length:monthDays(ym)},(_,k)=>cell(`${ym}-${pad(k+1)}`)).join('')}</div></div>
+ <div class="jump"><button class="secondary" type="button" ${prev?`data-cs="${esc(prev.id)}"`:'disabled'}>‹ 직전${prev?' '+md(prev.date):''}</button><button class="secondary" type="button" ${next?`data-cs="${esc(next.id)}"`:'disabled'}>다음${next?' '+md(next.date):''} ›</button></div>`);
+ d.querySelectorAll('[data-cs]').forEach(b=>b.onclick=()=>{const id=b.dataset.cs;if(id===state.sessionId){d.close();return;}run(async()=>{await openSessionNow(id,true);d.close();},b);});
+ $('cw-today').onclick=e=>{const x=list.find(z=>z.date===seoulDate());if(x){if(x.id===state.sessionId)d.close();else run(async()=>{await openSessionNow(x.id,true);d.close();},e.currentTarget);return;}
+  run(async()=>{state.cwMonth=seoulDate().slice(0,7);await ensureClassMonth(state.cwMonth);drawDateDrawer();},e.currentTarget);};
+ d.querySelectorAll('[data-cwm]').forEach(b=>b.onclick=()=>run(async()=>{state.cwMonth=shiftMonth(state.cwMonth,Number(b.dataset.cwm));await ensureClassMonth(state.cwMonth);drawDateDrawer();},b));
 }
 // 다른 달을 보면 그 달까지 이 반 수업을 더 읽어 합친다.
 async function ensureClassMonth(ym){const list=state.classWeek||[],from=`${ym}-01`,to=`${ym}-${pad(monthDays(ym))}`;
@@ -149,83 +179,77 @@ async function ensureClassMonth(ym){const list=state.classWeek||[],from=`${ym}-0
  const more=(await api('class-sessions',{sessionId:state.sessionId,around:`${ym}-15`})).sessions||[];
  const map=new Map(list.map(x=>[x.id,x]));more.forEach(x=>map.set(x.id,x));state.classWeek=[...map.values()].sort((a,b)=>a.date.localeCompare(b.date));
  state.cwFrom=state.cwFrom&&state.cwFrom<addDays(`${ym}-15`,-63)?state.cwFrom:addDays(`${ym}-15`,-63);state.cwTo=state.cwTo&&state.cwTo>addDays(`${ym}-15`,35)?state.cwTo:addDays(`${ym}-15`,35);}
-function bindClassCal(el){
- el.querySelectorAll('[data-cs]').forEach(b=>b.onclick=()=>{const id=b.dataset.cs;if(id===state.sessionId||!leaveEdit())return;run(async()=>{await openSessionNow(id,true);state.cwMonth='';state.cwAnchor='';render();},b);});
- const t=el.querySelector('#cw-today');if(t)t.onclick=()=>{const x=(state.classWeek||[]).find(y=>y.date===seoulDate());if(x&&x.id!==state.sessionId){if(leaveEdit())run(()=>openSessionNow(x.id,true),t);return;}state.cwMonth='';state.cwAnchor=seoulDate();render();};
- const mo=el.querySelector('#cw-month');if(mo)mo.onclick=()=>run(async()=>{state.cwMonth=(state.cwAnchor||state.date).slice(0,7);await ensureClassMonth(state.cwMonth);render();},mo);
- const wk=el.querySelector('#cw-week');if(wk)wk.onclick=()=>{state.cwMonth='';render();};
- el.querySelectorAll('[data-cwm]').forEach(b=>b.onclick=()=>run(async()=>{state.cwMonth=shiftMonth(state.cwMonth,Number(b.dataset.cwm));await ensureClassMonth(state.cwMonth);render();},b));
-}
-// ≡ 수업 고르기 창: 주 한 줄(내 수업 있는 날 칠함, [오늘]) → 그날 내 수업(지금 진행 중 표시) → 보강 대기실 → 강사 바꾸기
-async function openClassPicker(){state.pick={date:state.date,day:state.day,dates:null};await run(async()=>{await pickerLoad(state.pick.date);});drawPicker();if(!$('sheet').open)$('sheet').showModal();}
-async function pickerLoad(date){const w=weekStart(date);const [day,days]=await Promise.all([date===state.date&&state.day?state.day:fetchDay(date),api('days',{from:w,to:addDays(w,6),...teacherArg()})]);state.pick={date,day,dates:new Set(days.dates)};}
-function drawPicker(){
- const p=state.pick,w=weekStart(p.date),sessions=(p.day?.sessions||[]).slice().sort((a,b)=>String(a.start).localeCompare(String(b.start)));
- const live=p.date===seoulDate()?nowSessionId(sessions):'',waiting=p.day?.makeupWaiting||[];
- const who=state.teacherId==='all'?'전체 수업':teacherName(state.teacherId);
- $('sheet').innerHTML=`<div class="dialog-head"><h2>수업 선택</h2><button class="ghost" type="button" id="sh-x">닫기</button></div>
- <div class="attendance-calendar day-mode picker-cal"><div class="cal-month-nav">${navBtn('data-pw="-7"','이전 주','‹')}<div class="cal-month-title">${md(w)} ~ ${md(addDays(w,6))}</div><div class="cal-nav-right">${todayBtn('pk-today')}${navBtn('data-pw="7"','다음 주','›')}</div></div>
- <div class="cal-grid">${CAL_DOW}${Array.from({length:7},(_,k)=>{const d=addDays(w,k);return dayCell(d,!!p.dates?.has(d),d===p.date,`data-pd="${d}"`);}).join('')}</div></div>
- <p class="group-label">${esc(longDate(p.date))} · ${esc(who)}</p>
- <div class="list">${sessions.length?sessions.map(s=>`<button class="row srow ${s.id===state.sessionId?'cur':''}" type="button" data-pick-session="${esc(s.id)}"><span class="emo">${s.makeup?'<span class="pill s-보강">보강</span>':esc(emojiOf(s))}</span><span class="meta"><span class="t">${esc(s.makeup?s.name:(s.className||s.name))}${s.id===live?' <span class="pill done">지금</span>':''}</span></span><span class="cnt-pill ${!s.students||!s.arrived?'':s.arrived>=s.students?'ok':'part'}" aria-label="등원 ${s.arrived}명, 전체 ${s.students}명">${s.arrived}/${s.students}</span><span class="time">${esc(s.time)}</span></button>`).join(''):'<p class="empty">이 날 수업이 없어요.</p>'}</div>
- <div class="list wait"><button class="row srow" type="button" id="open-wait"><span class="emo ico">${icon('users')}</span><span class="meta"><span class="t">보강 대기실</span></span><span class="cnt-pill">${waiting.length}명</span><span class="time chev">›</span></button></div>
- <div class="actions"><button class="secondary wide" type="button" id="pk-who">강사 바꾸기 · ${esc(who)}</button></div>`;
- const sh=$('sheet'),go=date=>run(async()=>{await pickerLoad(date);drawPicker();});
- $('sh-x').onclick=()=>sh.close();
- sh.querySelectorAll('[data-pw]').forEach(b=>b.onclick=()=>go(addDays(p.date,Number(b.dataset.pw))));
- sh.querySelectorAll('[data-pd]').forEach(b=>b.onclick=()=>go(b.dataset.pd));
- $('pk-today').onclick=()=>go(seoulDate());
- sh.querySelectorAll('[data-pick-session]').forEach(b=>b.onclick=()=>run(async()=>{state.date=p.date;state.day=p.day;await openSessionNow(b.dataset.pickSession);sh.close();},b));
- $('open-wait').onclick=()=>{sh.close();state.date=p.date;state.day=p.day;state.view='waiting';state.picked=new Set();render();};
- $('pk-who').onclick=()=>{sh.close();showTeachers();};
-}
 function renderEmpty(){
  topBar();setTabs(true);
- $('app').innerHTML=`<div class="list"><p class="empty tall">${state.date===seoulDate()?'오늘은':esc(dateLabel(state.date))+'에는'} ${state.teacherId==='all'?'':esc(teacherName(state.teacherId))+' 선생님 '}수업이 없어요.<br>왼쪽 위 ≡ 에서 다른 날 수업을 고를 수 있어요.</p></div>`;
+ $('app').innerHTML=`<div class="list"><p class="empty tall">${state.date===seoulDate()?'오늘은':esc(dateLabel(state.date))+'에는'} ${state.teacherId==='all'?'':esc(teacherName(state.teacherId))+' 선생님 '}수업이 없어요.<br>왼쪽 위 ≡ 에서 클래스를 고를 수 있어요.</p></div>`;
 }
-// + 기록 만들기 창(한 장): 구분 · 클래스(보고 있는 날짜의 내 수업) · 교재 · 주제 · 범위 · 내용. 만든 뒤 바로 기록 화면으로 간다.
+// + 기록 만들기 창(v2.5.80): 클래스(보고 있는 날짜의 내 수업) → 교재(리포트 교재 카드처럼 표지·진도) → 구분 → 주제 → 범위 → 내용. 만든 뒤 바로 기록 화면으로 간다.
 async function openCreateSheet(){
  if(!leaveEdit())return;
  const sessions=(state.day?.sessions||[]).slice();if(state.detail&&!sessions.some(s=>s.id===state.sessionId))sessions.push(state.detail.session);sessions.sort((a,b)=>String(a.start).localeCompare(String(b.start)));
  if(!sessions.length){toast(`${state.date===seoulDate()?'오늘':dateLabel(state.date)} 수업이 없어요. Notion에서 수업 페이지를 먼저 만들어 주세요.`);return;}
  if(state.date!==seoulDate()&&!confirm(`오늘 수업이 아닙니다. ${dateLabel(state.date)} 수업으로 기록을 만들까요?`))return;
- state.form={kind:state.form?.kind||'학습',sessionId:sessions.some(s=>s.id===state.sessionId)?state.sessionId:sessions[0].id,sessions};
+ state.form={kind:state.form?.kind||'학습',sessionId:sessions.some(s=>s.id===state.sessionId)?state.sessionId:sessions[0].id,sessions,book:null,topic:'',range:'',content:''};
  await run(async()=>{await booksFor(state.form.sessionId);});drawCreate();if(!$('sheet').open)$('sheet').showModal();
 }
 async function booksFor(id){state.bookCache=state.bookCache||{};if(!state.bookCache[id])state.bookCache[id]=await api('books',{sessionId:id});return state.bookCache[id];}
-// 교재 목록: 반 교재 / 개별 교재 묶음(모두·학생 한 명) / 학생별 교재 / 교재 없이. 진행 중인 교재만(없으면 전체).
-function bookOptions(data){
- const {books,registrations}=data,regName=id=>(registrations.find(r=>r.id===id)?.name||'').split(' ')[0];
- let shown=books.filter(b=>!b.status||b.status==='진행 중');if(!shown.length)shown=books;
+// 교재 카드 묶음: 반 교재 / 개별 교재 묶음("n명 모두"·학생 한 명) / 학생별 교재. 진행 중인 교재만(없으면 전체).
+// 묶음 카드의 진도는 평균, 최근 범위는 "첫 학생 범위 외 n명". 기록 카드에서 바꿀 때(single)는 교재 하나만 고르므로 묶음 카드를 빼고, 지금 교재(include)는 진행 중이 아니어도 보인다.
+function bookChoices(data,{single=false,include=''}={}){
+ const {books,registrations}=data,regName=id=>(registrations.find(r=>r.id===id)?.name||'').split(' ')[0],names=b=>b.ownerIds.map(regName).join(', ');
+ let shown=books.filter(b=>!b.status||b.status==='진행 중'||b.id===include);if(!shown.length)shown=books;
  const group=shown.filter(b=>b.mode==='그룹 진도'),ind=shown.filter(b=>b.mode!=='그룹 진도'),tpl={};
  ind.forEach(b=>{if(b.templateId)(tpl[b.templateId]=tpl[b.templateId]||[]).push(b);});
- const loose=ind.filter(b=>!b.templateId||tpl[b.templateId].length<2),opt=(v,l)=>`<option value="${esc(v)}">${esc(l)}</option>`;
- return (group.length?`<optgroup label="반 교재">${group.map(b=>opt(b.id,`${b.name} · ${b.ownerIds.length}명`)).join('')}</optgroup>`:'')+
-  Object.values(tpl).filter(l=>l.length>1).map(list=>`<optgroup label="${esc(list[0].name.replace(/\(.*\)$/,''))} · 개별">${opt(list.map(b=>b.id).join(','),`${list.length}명 모두(학생마다 기록)`)}${list.map(b=>opt(b.id,`${b.ownerIds.map(regName).join(', ')} · ${b.name}`)).join('')}</optgroup>`).join('')+
-  (loose.length?`<optgroup label="학생별 교재">${loose.map(b=>opt(b.id,`${b.name} · ${b.ownerIds.map(regName).join(', ')}`)).join('')}</optgroup>`:'')+
-  `<optgroup label="교재 없이">${opt('','교재 없이(주제로 기록)')}</optgroup>`;
+ const loose=ind.filter(b=>!b.templateId||tpl[b.templateId].length<2),base=n=>n.replace(/\(.*\)$/,'').trim();
+ const card=(b,sub)=>({value:b.id,title:base(b.name)||b.name,sub,cover:b.cover,progress:b.progress,recent:b.recent});
+ const out=[];
+ if(group.length)out.push({label:'반 교재',items:group.map(b=>card(b,`반 교재 · ${b.ownerIds.length}명${b.pages?` · ${b.pages}쪽`:''}`))});
+ Object.values(tpl).filter(l=>l.length>1).forEach(list=>{const p=list.map(b=>b.progress).filter(x=>x!==null),first=list.find(b=>b.recent);
+  out.push({label:`${base(list[0].name)} · 개별 ${list.length}명`,items:[...(single?[]:[{value:list.map(b=>b.id).join(','),title:base(list[0].name),sub:`개별 · ${list.length}명 모두 · 학생마다 기록`,cover:list[0].cover,
+   progress:p.length?Math.round(p.reduce((a,x)=>a+x,0)/p.length):null,recent:first?`${names(first)} ${first.recent}${list.length>1?` 외 ${list.length-1}명`:''}`:''}]),...list.map(b=>card(b,`개별 · ${names(b)}`))]});});
+ if(loose.length)out.push({label:'학생별 교재',items:loose.map(b=>card(b,`학생별 · ${names(b)}`))});
+ return out;
 }
+const BOOK_ICON='<svg class="line" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>';
+// 교재 카드 한 장(리포트 .book-row 모양). 표지 주소는 Notion 파일이라 만료될 수 있어, 그림이 안 열리면 책 아이콘으로 바뀐다.
+function bookRow(it,{attr='',on=false,chev=false}={}){
+ return `<button class="book-row ${on?'on':''}" type="button" ${attr}><span class="br-cover">${BOOK_ICON}${it.cover?`<img src="${esc(it.cover)}" alt="" loading="lazy">`:''}</span><span class="br-body"><span class="br-title">${esc(it.title)}</span><span class="br-sub">${esc(it.sub)}</span>
+ ${it.progress!==null&&it.progress!==undefined?`<span class="progress-line"><span class="track"><span class="fill" style="width:${Math.max(0,Math.min(100,it.progress))}%"></span></span><b>${it.progress}%</b></span>`:''}${it.recent?`<span class="br-recent">${icon('학습')}<span>최근 ${esc(it.recent)}</span></span>`:''}</span>${on?`<span class="br-check">${icon('check')}</span>`:''}${chev?'<span class="br-chev" aria-hidden="true">›</span>':''}</button>`;}
+const emptyBookRow=(attr,title,sub,ic=BOOK_ICON)=>`<button class="book-row empty" type="button" ${attr}><span class="br-cover">${ic}</span><span class="br-body"><span class="br-title">${title}</span><span class="br-sub">${sub}</span></span><span class="br-chev" aria-hidden="true">›</span></button>`;
+const bindCovers=root=>root.querySelectorAll('.br-cover img').forEach(i=>{i.onerror=()=>i.remove();});
+function sessionLabel(s,list){const name=s.makeup?s.name:(s.className||s.name),dup=list.filter(x=>(x.makeup?x.name:(x.className||x.name))===name).length>1;return (s.makeup?'':emojiOf(s)+' ')+name+(dup?' · '+s.time:'');}
 function drawCreate(){
- const f=state.form,data=state.bookCache[f.sessionId];
+ const f=state.form,choices=bookChoices(state.bookCache[f.sessionId]),picked=choices.flatMap(g=>g.items).find(x=>x.value===f.book);
  $('sheet').innerHTML=`<div class="dialog-head"><h2>기록 만들기</h2><button class="ghost" type="button" id="sh-x">닫기</button></div>
- <form id="cf" class="form"><label>구분</label><div class="center-tabs left"><div class="tabs" role="tablist">${KINDS.map(k=>tabBtn(k===f.kind,`data-ck="${k}"`,k)).join('')}</div></div>
- <label for="cf-s">클래스 <span class="muted">${esc(dateLabel(state.date))} 수업</span></label><select id="cf-s">${f.sessions.map(s=>`<option value="${esc(s.id)}" ${s.id===f.sessionId?'selected':''}>${esc((s.makeup?'':emojiOf(s)+' ')+(s.makeup?s.name:(s.className||s.name))+' · '+s.time)}</option>`).join('')}</select>
- <label for="cf-b">교재 <span class="muted">이 반 학생들의 교재</span></label><select id="cf-b">${bookOptions(data)}</select>
- <label for="cf-t">주제 <span class="muted" id="cf-tn">(선택)</span></label><input id="cf-t" maxlength="200" placeholder="교재 없는 기록은 리포트에 주제가 보여요">
- <label for="cf-r">범위</label><input id="cf-r" maxlength="200" placeholder="예: p.31-35">
- <label for="cf-c">내용</label><textarea id="cf-c" maxlength="2000"></textarea>
+ <form id="cf" class="form"><label for="cf-s">클래스 <span class="muted">${esc(dateLabel(state.date))} 수업</span></label><select id="cf-s">${f.sessions.map(s=>`<option value="${esc(s.id)}" ${s.id===f.sessionId?'selected':''}>${esc(sessionLabel(s,f.sessions))}</option>`).join('')}</select>
+ <label>교재 <span class="muted">이 반 학생들의 교재</span></label>${picked?bookRow(picked,{attr:'id="cf-b" aria-label="교재 바꾸기"',chev:true}):f.book===''?emptyBookRow('id="cf-b"','교재 없이 기록','주제로 기록해요 · 눌러서 바꾸기',icon('plus')):emptyBookRow('id="cf-b"','교재 비어 있음','눌러서 이 반 학생들의 교재 고르기')}
+ <label>구분</label><div class="center-tabs left kind-tabs"><div class="tabs" role="tablist">${KINDS.map(k=>tabBtn(k===f.kind,`data-ck="${k}"`,k)).join('')}</div></div>
+ <label for="cf-t">주제 <span class="muted">${f.book===''?'(필수)':'(선택)'}</span></label><input id="cf-t" maxlength="200" placeholder="교재 없는 기록은 리포트에 주제가 보여요" value="${esc(f.topic)}">
+ <label for="cf-r">범위</label><input id="cf-r" maxlength="200" placeholder="예: p.31-35" value="${esc(f.range)}">
+ <label for="cf-c">내용</label><textarea id="cf-c" maxlength="2000">${esc(f.content)}</textarea>
  <p class="error" id="cf-err" hidden></p><div class="actions"><button class="primary" type="submit">기록 만들기</button></div></form>`;
- const sh=$('sheet'),q=s=>sh.querySelector(s);
- $('sh-x').onclick=()=>sh.close();
- const need=()=>{q('#cf-tn').textContent=q('#cf-b').value?'(선택)':'(필수)';};need();q('#cf-b').onchange=need;
+ const sh=$('sheet'),q=s=>sh.querySelector(s),keep=()=>{f.topic=q('#cf-t').value;f.range=q('#cf-r').value;f.content=q('#cf-c').value;};
+ $('sh-x').onclick=()=>sh.close();bindCovers(sh);
  sh.querySelectorAll('[data-ck]').forEach(b=>b.onclick=()=>{f.kind=b.dataset.ck;sh.querySelectorAll('[data-ck]').forEach(x=>{const on=x===b;x.classList.toggle('active',on);x.setAttribute('aria-selected',on);});});
- q('#cf-s').onchange=e=>run(async()=>{f.sessionId=e.target.value;await booksFor(f.sessionId);const keep={t:q('#cf-t').value,r:q('#cf-r').value,c:q('#cf-c').value};drawCreate();q('#cf-t').value=keep.t;q('#cf-r').value=keep.r;q('#cf-c').value=keep.c;});
- q('#cf').onsubmit=e=>{e.preventDefault();const book=q('#cf-b').value,topic=q('#cf-t').value.trim(),err=q('#cf-err');err.hidden=true;
-  if(!book&&!topic){err.hidden=false;err.textContent='교재 없이 만들 때는 주제를 적어 주세요.';q('#cf-t').focus();return;}
-  run(async()=>{const r=await api('create-records',{sessionId:f.sessionId,kind:f.kind,...(book?{bookIds:book.split(',')}:{}),...(topic?{topic}:{}),range:q('#cf-r').value,content:q('#cf-c').value});
+ q('#cf-s').onchange=e=>run(async()=>{keep();f.sessionId=e.target.value;f.book=null;await booksFor(f.sessionId);drawCreate();});
+ q('#cf-b').onclick=()=>{keep();drawBookPicker(bookChoices(state.bookCache[f.sessionId]),f.book,v=>{f.book=v;drawCreate();},drawCreate,'교재 없이 기록','주제로 기록해요(주제 필수)');};
+ q('#cf').onsubmit=e=>{e.preventDefault();keep();const topic=f.topic.trim(),err=q('#cf-err');err.hidden=true;
+  if(f.book===null){err.hidden=false;err.textContent='교재를 골라 주세요. 교재 없이 만들려면 교재 고르기에서 "교재 없이 기록"을 골라요.';return;}
+  if(!f.book&&!topic){err.hidden=false;err.textContent='교재 없이 만들 때는 주제를 적어 주세요.';q('#cf-t').focus();return;}
+  run(async()=>{const r=await api('create-records',{sessionId:f.sessionId,kind:f.kind,...(f.book?{bookIds:f.book.split(',')}:{}),...(topic?{topic}:{}),range:f.range,content:f.content});
    sh.close();if(f.sessionId!==state.sessionId)await openSessionNow(f.sessionId);else await reloadSession();
    const made=r.records.filter(x=>x.created).length;toast(made?`기록 ${made}개를 만들었어요.`:'이미 있는 기록이에요. 기록 화면에서 고쳐 주세요.');
    if(r.records.length===1)await openRecordNow(r.records[0].id);else{state.view='session';state.tab='records';render();}},e.submitter);};
+}
+// 교재 고르기(기록 만들기·기록 카드 공용): 창 안을 카드 목록으로 바꿔 보여 주고, 고르면 onPick(값), 돌아가기는 onBack.
+function drawBookPicker(choices,cur,onPick,onBack,noneTitle,noneSub){
+ $('sheet').innerHTML=`<div class="dialog-head"><h2>교재 고르기</h2><button class="ghost" type="button" id="bk-back">돌아가기</button></div>
+ ${choices.map(g=>`<p class="group-label">${esc(g.label)}</p><div class="br-list">${g.items.map(it=>bookRow(it,{attr:`data-book="${esc(it.value)}"`,on:it.value===cur})).join('')}</div>`).join('')}
+ ${choices.length?'':'<div class="list"><p class="empty">이 반 학생들에게 연결된 진행 중 교재가 없어요.</p></div>'}
+ <p class="group-label">교재 없이</p><div class="br-list">${emptyBookRow('data-book=""',noneTitle,noneSub,icon('plus'))}</div>`;
+ const sh=$('sheet');bindCovers(sh);sh.scrollTop=0;if(!sh.open)sh.showModal();
+ $('bk-back').onclick=onBack;
+ sh.querySelectorAll('[data-book]').forEach(b=>b.onclick=()=>onPick(b.dataset.book));
 }
 
 // ---------- 보강 대기실 ----------
@@ -257,14 +281,14 @@ function openMakeupSheet(){
 // 리포트처럼 모든 폭에서 640 한 줄. 하단 탭으로 학생 목록 / 학습기록을 오가고, 학생 공간·기록 카드는 새 화면.
 // 칸 머리는 제목 / 안내 / 가운데 탭 3줄.
 async function openSession(id,btn){await run(()=>openSessionNow(id),btn);}
-// keep=true: 📅 날짜 이동으로 같은 반의 다른 수업으로 옮길 때 보던 탭·출석/과제 검사 전환과 열린 캘린더를 그대로 둔다.
+// keep=true: 📅 날짜 이동으로 같은 반의 다른 수업으로 옮길 때 보던 탭·출석/과제 검사 전환을 그대로 둔다.
 // 수업 날짜(서울)를 보고 있는 날짜로 삼고, 그날 내 수업 목록(state.day)을 함께 맞춘다(+ 기록 만들기의 클래스 목록).
 async function openSessionNow(id,keep=false){
  const [detail,week]=await Promise.all([api('session',{sessionId:id}),api('class-sessions',{sessionId:id}).catch(()=>({sessions:[]}))]);
  const date=ymdOf(detail.session.start)||state.date;
  if(date!==state.date||!state.day)state.day=await fetchDay(date).catch(()=>({sessions:[],makeupWaiting:[]}));
  state.date=date;state.sessionId=id;state.detail=detail;state.classWeek=week.sessions||[];state.cwFrom=addDays(date,-63);state.cwTo=addDays(date,35);state.view='session';state.books=null;
- if(!keep){state.tab='students';state.seg='att';state.recKind='전체';state.calPanel=false;state.cwMonth='';state.cwAnchor='';}
+ if(!keep){state.tab='students';state.seg='att';state.recKind='전체';}
  state.edit=false;state.draft={};state.hwRecord=state.detail.homeworkDue[0]?.recordId||'';render();}
 async function reloadSession(){state.detail=await api('session',{sessionId:state.sessionId});}
 function paneHead(title,hint,tabs='',acts=''){
@@ -285,7 +309,6 @@ function sessionBar(){const s=state.detail.session,v=state.view;
 function renderSession(){
  sessionBar();const v=state.view,el=$('app');state.saver=null;setTabs(true);
  (v==='student'?paneStudent:v==='record'?paneRecord:state.tab==='records'?paneRecords:paneStudents)(el);
- if(v==='session'&&state.calPanel){el.insertAdjacentHTML('afterbegin',classCalHtml());bindClassCal(el);}
 }
 function paneStudents(el){
  const d=state.detail,att=state.seg==='att',ed=editing('students');
@@ -297,15 +320,20 @@ function paneStudents(el){
  const acts=att?(d.students.length?editButton('students'):''):cur?editButton('students')+nlink(cur.recordId,cur.title):'';
  let body='';
  if(att){
-  body=`<div class="list">${d.students.map(s=>{const st=state.draft[s.attendanceId]?.status??s.status,ch=state.draft[s.attendanceId];
-   return `<div class="row ${ch?'changed':''} ${st==='🔴 결석'&&!ed?'dim':''}">${ed?'':`<button class="icon-btn" type="button" data-student="${esc(s.attendanceId)}" aria-label="${esc(s.name)} 학생 공간">`}<span class="av">${esc(s.name.slice(0,1))}</span>${ed?'':'</button>'}
-   <span class="meta"><span class="t">${esc(s.name)}</span><span class="d">${s.arrivedAt?'등원 '+timeOf(s.arrivedAt):''}${s.memo?(s.arrivedAt?' · ':'')+esc(s.memo):''}${!s.arrivedAt&&!s.memo?(STATUS[st]?'':'미입력'):''}</span></span>
-   ${ed?`<span class="seg">${Object.entries(STATUS).map(([v,l])=>`<button type="button" class="v-${l} ${st===v?'on':''}" data-att="${esc(s.attendanceId)}" data-v="${v}">${l}</button>`).join('')}</span>`:`<span class="pill s-${STATUS[st]||''}">${STATUS[st]||'미입력'}</span>`}</div>`;}).join('')||'<p class="empty">이 수업에 연결된 학생이 없어요.</p>'}</div>`;
+  // 한 줄(v2.5.80): [이름] [출석 상태] [등원] [하원] [메모]. 이름을 누르면 학생 공간, 메모를 누르면 메모 창(바로 저장). 편집 중에는 [이름] [출석|결석|보강]만.
+  const rows=d.students.map(s=>{const st=state.draft[s.attendanceId]?.status??s.status,ch=state.draft[s.attendanceId];
+   return `<div class="row s1 ${ch?'changed':''} ${st==='🔴 결석'&&!ed?'dim':''}">${ed?`<span class="nm">${esc(s.name)}</span>
+   <span class="seg">${Object.entries(STATUS).map(([v,l])=>`<button type="button" class="v-${l} ${st===v?'on':''}" data-att="${esc(s.attendanceId)}" data-v="${v}">${l}</button>`).join('')}</span>`
+   :`<button class="nm" type="button" data-student="${esc(s.attendanceId)}" aria-label="${esc(s.name)} 학생 공간">${esc(s.name)}</button><span class="c"><span class="pill s-${STATUS[st]||''}">${STATUS[st]||'미입력'}</span></span>
+   <span class="c tm">${s.arrivedAt?timeOf(s.arrivedAt):'–'}</span><span class="c tm">${s.leftAt?timeOf(s.leftAt):'–'}</span>
+   <button class="c memo-btn ${s.memo?'has':''}" type="button" data-memo="${esc(s.attendanceId)}" aria-label="${esc(s.name)} 메모${s.memo?' 있음':''}">${icon('memo')}</button>`}</div>`;}).join('');
+  body=d.students.length?`<div class="list stu ${ed?'editing':''}"><div class="srow-h" aria-hidden="true"><span>이름</span><span class="c">출석</span>${ed?'':'<span class="c">등원</span><span class="c">하원</span><span class="c">메모</span>'}</div>${rows}</div>`
+   :'<div class="list"><p class="empty">이 수업에 연결된 학생이 없어요.</p></div>';
  }else if(!cur)body='<div class="list"><p class="empty">오늘이 마감인 과제가 없어요.</p></div>';
  else{
   const pick=hw.length>=4?`<select id="hw-pick">${hw.map(h=>`<option value="${esc(h.recordId)}" ${h.recordId===cur.recordId?'selected':''}>${esc(h.title)}</option>`).join('')}</select>`:hw.length>1?`<div class="chips">${hw.map(h=>`<button class="chip ${h.recordId===cur.recordId?'on':''}" type="button" data-hw="${esc(h.recordId)}">${esc(h.range||h.title)} ${h.items.filter(sub).length}/${h.items.length}</button>`).join('')}</div>`:'';
   body=`${pick||ed?`<div class="toolrow pick-row"><div class="grow">${pick}</div>${ed?'<button class="act" type="button" id="all-done"><span>전원 제출</span></button>':''}</div>`:''}
-  <div class="list">${cur.items.map(i=>{const v=sub(i),ch=state.draft[i.activityId];return `<div class="row ${ch?'changed':''}"><span class="av">${esc(nameOf(i).slice(0,1))}</span><span class="meta"><span class="t">${esc(nameOf(i))}</span></span>
+  <div class="list">${cur.items.map(i=>{const v=sub(i),ch=state.draft[i.activityId];return `<div class="row ${ch?'changed':''}"><span class="meta"><span class="t">${esc(nameOf(i))}</span></span>
   ${ed?`<span class="seg"><button type="button" class="v-제출 ${v?'on':''}" data-hwact="${esc(i.activityId)}" data-v="1">제출</button><button type="button" class="v-미제출 ${v?'':'on'}" data-hwact="${esc(i.activityId)}" data-v="0">미제출</button></span>`:`<span class="pill ${v?'done':'miss'}">${v?'제출':'미제출'}</span>`}${nlink(i.activityId,nameOf(i)+' 학습활동')}</div>`;}).join('')}</div>`;
  }
  el.innerHTML=paneHead(`<p class="page-title">${icon('users')}학생 목록</p>${nlink(d.session.id,'수업')}`,hint,tabBtn(att,'data-seg="att"','출석')+tabBtn(!att,'data-seg="hw"','과제 검사'),acts)+`<div class="pbody">${body}</div>`;
@@ -317,10 +345,26 @@ function paneStudents(el){
  el.querySelectorAll('[data-hwact]').forEach(b=>b.onclick=()=>{const id=b.dataset.hwact,v=b.dataset.v==='1',orig=hw.flatMap(h=>h.items).find(i=>i.activityId===id).submitted;if(v===orig)delete state.draft[id];else state.draft[id]={submitted:v};render();});
  const ad=el.querySelector('#all-done');if(ad)ad.onclick=()=>{cur.items.forEach(i=>{if(i.submitted)delete state.draft[i.activityId];else state.draft[i.activityId]={submitted:true};});render();};
  el.querySelectorAll('[data-student]').forEach(b=>b.onclick=()=>openStudent(b.dataset.student,b));
+ el.querySelectorAll('[data-memo]').forEach(b=>b.onclick=()=>openMemo(b.dataset.memo));
  if(ed)state.saver=async()=>{const entries=Object.entries(state.draft);
   if(att)await api('save-attendance',{items:entries.map(([attendanceId,v])=>({attendanceId,...v}))});
   else await api('save-activities',{items:entries.map(([activityId,v])=>({activityId,...v}))});
   state.edit=false;state.draft={};updateSavebar();await reloadSession();toast(`저장했어요 · ${entries.length}건`);render();};
+}
+
+// 메모 창(v2.5.80): 메모를 바로 보고 고쳐 [저장]하면 바로 저장한다(편집 모드 없이). 빠른 입력은 메모 끝에 붙인다.
+const QUICK_MEMO=['교재 두고 옴','과제 안 해 옴','집중 좋음','조퇴'];
+function openMemo(id){
+ const s=state.detail.students.find(x=>x.attendanceId===id),c=state.detail.session,sh=$('sheet');
+ sh.innerHTML=`<div class="dialog-head"><h2>${esc(s.name)} 메모</h2><button class="ghost" type="button" id="sh-x">닫기</button></div>
+ <p class="page-hint">${esc(dateLabel(state.date))} ${esc(c.className||c.name)}${s.arrivedAt?' · 등원 '+timeOf(s.arrivedAt):''}${s.leftAt?' · 하원 '+timeOf(s.leftAt):''}</p>
+ <form id="mf" class="form"><textarea id="mf-t" maxlength="2000" aria-label="${esc(s.name)} 메모">${esc(s.memo)}</textarea>
+ <div class="chips quick">${QUICK_MEMO.map(q=>`<button class="chip" type="button" data-q="${esc(q)}">+ ${esc(q)}</button>`).join('')}</div>
+ <div class="actions"><button class="primary" type="submit">저장</button></div></form>`;
+ sh.showModal();$('sh-x').onclick=()=>sh.close();const t=$('mf-t');
+ sh.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{const v=t.value.trim();t.value=v?`${v}, ${b.dataset.q}`:b.dataset.q;t.focus();});
+ $('mf').onsubmit=e=>{e.preventDefault();const v=t.value;if(v===(s.memo||'')){sh.close();return;}
+  run(async()=>{await api('save-attendance',{items:[{attendanceId:id,memo:v}]});sh.close();await reloadSession();toast('메모를 저장했어요.');render();},e.submitter);};
 }
 
 // ---------- 학생 공간 ----------
@@ -358,16 +402,20 @@ function paneRecords(el){
  el.querySelector('#new-rec').onclick=()=>openCreateSheet();
 }
 async function openRecord(id,btn){if(!leaveEdit())return;await run(()=>openRecordNow(id),btn);}
-async function openRecordNow(id){{state.recordId=id;state.acts=await api('activities',{recordId:id});state.books=await booksFor(state.sessionId);state.view='record';state.edit=false;state.draft={};render();}}
+async function openRecordNow(id){{state.recordId=id;state.acts=await api('activities',{recordId:id});state.books=await booksFor(state.sessionId);recEditFrom(state.acts.record);state.view='record';state.edit=false;state.draft={};render();}}
+// 기록 카드 입력 칸의 지금 값(교재·주제·범위·내용). 교재를 고르는 동안에도 적던 글자를 잃지 않게 따로 둔다.
+const recEditFrom=r=>{state.recEdit={book:r.bookId||'',topic:r.topic||'',range:r.range||'',content:r.content||''};};
 const ACT_LABEL={학습:'학생별 기록 만들기',과제:'과제 출제',평가:'평가 만들기'};
 function paneRecord(el){
  const {record:r,activities:acts}=state.acts,ed=editing('record');
- const book=state.books.books.find(b=>b.id===r.bookId),v=k=>state.draft[k]??r[k]??'';
+ const re=state.recEdit,v=k=>re[k]??'';
+ // 이 수업 학생들의 교재 목록에 없는 교재가 연결돼 있으면(학생이 바뀐 경우 등) 이름 없이 그 사실만 보여 준다.
+ const item=bookChoices(state.books,{single:true,include:re.book}).flatMap(g=>g.items).find(x=>x.value===re.book)||(re.book?{value:re.book,title:'연결된 교재',sub:'이 수업 학생들의 교재 목록에 없어요 · 눌러서 바꾸기',cover:'',progress:null,recent:''}:null);
  const scoring=r.kind==='평가',checking=r.kind==='과제';
  el.innerHTML=paneHead(`<p class="page-title"><span class="kind-icon k-${esc(r.kind)}" title="${esc(r.kind)}">${icon(r.kind||'학습')}</span>${esc(r.title)}</p>`,`학생 <b>${r.registrationIds.length}명</b>에게 연결된 기록이에요${r.makeup?' · 보강 기록이라 진도율에서 빠져요':''}`,'',acts.length&&(scoring||checking)?editButton('record'):'')+`<div class="pbody">
- <form class="card form" id="rec-form"><label>교재 <span class="muted">이 수업 학생들의 교재만 보여요</span></label>
- <select id="rec-book"><option value="">교재 없음</option>${state.books.books.map(b=>`<option value="${esc(b.id)}" ${b.id===r.bookId?'selected':''}>${esc(b.name)}</option>`).join('')}</select>
- <label for="rec-topic">주제 ${book?'<span class="muted">(선택)</span>':''}</label><input id="rec-topic" maxlength="200" value="${esc(v('topic'))}" placeholder="교재 없는 기록은 리포트에 주제가 보여요">
+ <form class="card form" id="rec-form"><label>교재 <span class="muted">이 수업 학생들의 교재</span></label>
+ ${item?bookRow(item,{attr:'id="rec-book" aria-label="교재 바꾸기"',chev:true}):emptyBookRow('id="rec-book"','교재 없음','눌러서 교재 고르기')}
+ <label for="rec-topic">주제 ${item?'<span class="muted">(선택)</span>':''}</label><input id="rec-topic" maxlength="200" value="${esc(v('topic'))}" placeholder="교재 없는 기록은 리포트에 주제가 보여요">
  <label for="rec-range">범위</label><input id="rec-range" maxlength="200" value="${esc(v('range'))}" placeholder="예: p.31-35">
  <label for="rec-content">내용</label><textarea id="rec-content">${esc(v('content'))}</textarea>
  <div class="actions"><button class="secondary" type="submit" id="rec-save">기록 저장</button></div></form>
@@ -378,9 +426,11 @@ function paneRecord(el){
   ${scoring?(ed?`<span class="score"><input inputmode="numeric" data-cor="${esc(a.id)}" value="${cor??''}" aria-label="${esc(a.name)} 맞힌 문항"> / <input inputmode="numeric" data-tot="${esc(a.id)}" value="${tot??''}" aria-label="${esc(a.name)} 전체 문항"></span>`:`<span class="pill k-평가">${cor??'–'} / ${tot??'–'}</span>`):''}${nlink(a.id,a.name+' 학습활동')}</div>`;}).join('')}</div>`
  :`<div class="list"><p class="empty">아직 학습활동이 없어요.</p></div>`}
  ${acts.length?'':`<div class="actions"><button class="primary" type="button" id="make-acts" ${r.activityStatus==='🔄 작업중'?'disabled':''}>${esc(ACT_LABEL[r.kind]||'학습활동 만들기')} · ${r.registrationIds.length}명</button></div>${r.activityStatus==='🔄 작업중'?'<p class="help">만드는 중이에요. 잠시 뒤 새로고침해 주세요.</p>':''}`}</div>`;
- const q=s=>el.querySelector(s);
- q('#rec-form').onsubmit=e=>{e.preventDefault();const body={recordId:r.id,topic:q('#rec-topic').value,range:q('#rec-range').value,content:q('#rec-content').value};if((q('#rec-book').value||null)!==r.bookId)body.bookId=q('#rec-book').value||null;
-  run(async()=>{await api('update-record',body);state.acts=await api('activities',{recordId:r.id});await reloadSession();toast('기록을 저장했어요.');render();},e.submitter);};
+ const q=s=>el.querySelector(s);bindCovers(el);
+ [['#rec-topic','topic'],['#rec-range','range'],['#rec-content','content']].forEach(([s,k])=>q(s).oninput=e=>{re[k]=e.target.value;});
+ q('#rec-book').onclick=()=>drawBookPicker(bookChoices(state.books,{single:true,include:re.book}),re.book,val=>{re.book=val;$('sheet').close();render();},()=>$('sheet').close(),'교재 없음','교재 없이 주제로 기록해요');
+ q('#rec-form').onsubmit=e=>{e.preventDefault();const body={recordId:r.id,topic:re.topic,range:re.range,content:re.content};if((re.book||null)!==r.bookId)body.bookId=re.book||null;
+  run(async()=>{await api('update-record',body);state.acts=await api('activities',{recordId:r.id});recEditFrom(state.acts.record);await reloadSession();toast('기록을 저장했어요.');render();},e.submitter);};
  if(q('#make-acts'))q('#make-acts').onclick=e=>run(async()=>{const res=await api('create-activities',{recordId:r.id});toast(res.status==='already_processing'?'이미 만드는 중이에요.':`학습활동을 만들고 있어요 · ${res.students}명`);setTimeout(()=>run(async()=>{const fresh=await api('activities',{recordId:r.id});if(state.view==='record'&&state.recordId===r.id){state.acts=fresh;render();}}),4000);},e.currentTarget);
  bindEdit(el);
  const setDraft=(id,patch)=>{const a=acts.find(x=>x.id===id),cur={...(state.draft['a:'+id]||{}),...patch};const same=Object.entries(cur).every(([k,val])=>a[k]===val);if(same)delete state.draft['a:'+id];else state.draft['a:'+id]=cur;updateSavebar();};
