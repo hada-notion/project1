@@ -14,6 +14,7 @@ const P={back:'<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 1
  학습:'<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>',
  과제:'<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>',
  평가:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
+ grid:'<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
  cal:'<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
  out:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
  plus:'<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',check:'<polyline points="20 6 9 17 4 12"/>',
@@ -53,7 +54,7 @@ function bar(crumbs,{back,notion,right='',who=false}={}){
 // 수업 목록에서도 하단 탭을 두어 [학생 목록]·[학습기록]이 방금 보던 수업으로 돌아간다. 화면은 저장된 내용으로 먼저 그리고 뒤에서 새로 읽는다.
 function setTabs(on){const tb=$('tabbar');tb.hidden=!on;$('app').classList.toggle('with-tabs',!!on);document.body.classList.toggle('tabs-on',!!on);if(!on)return;
  const cur=state.view==='home'?'home':state.tab;
- tb.innerHTML=`<div class="tab-in"><button type="button" data-tab="home" class="${cur==='home'?'on':''}">${icon('cal')}<span>수업 목록</span></button><button type="button" data-tab="students" class="${cur==='students'?'on':''}">${icon('users')}<span>학생 목록</span></button><button type="button" data-tab="records" class="${cur==='records'?'on':''}">${icon('학습')}<span>학습기록</span></button></div>`;
+ tb.innerHTML=`<div class="tab-in"><button type="button" data-tab="home" class="${cur==='home'?'on':''}">${icon('grid')}<span>수업 목록</span></button><button type="button" data-tab="students" class="${cur==='students'?'on':''}">${icon('users')}<span>학생 목록</span></button><button type="button" data-tab="records" class="${cur==='records'?'on':''}">${icon('학습')}<span>학습기록</span></button></div>`;
  tb.querySelectorAll('button').forEach(b=>b.onclick=()=>{if(b.dataset.tab===cur&&state.view!=='student'&&state.view!=='record')return;if(!leaveEdit())return;
   if(b.dataset.tab==='home'){state.view='home';render();loadDay().then(()=>{if(state.view==='home')render();}).catch(()=>{});return;}
   const back=state.view==='home';state.tab=b.dataset.tab;state.view='session';render();
@@ -131,7 +132,7 @@ function renderHome(){
  $('who').onclick=showTeachers;
  $('refresh').onclick=e=>run(async()=>{state.calKey='';await loadDay();renderHome();},e.currentTarget);
  const d=state.day,sessions=d?d.sessions:[],waiting=d?d.makeupWaiting:[];
- $('app').innerHTML=`<p class="page-title">${icon('cal')}수업</p><p class="page-hint">날짜를 누르면 그날 수업을 볼 수 있어요</p>
+ $('app').innerHTML=`<p class="page-title">${icon('grid')}수업</p><p class="page-hint">날짜를 누르면 그날 수업을 볼 수 있어요</p>
  ${calendarHtml()}
  <div class="cal-day-head"><b>${esc(longDate(state.date))}</b><span class="pill">수업 ${sessions.length}</span></div>
  <div class="list">${sessions.length?sessions.map(sessionRow).join(''):`<p class="empty">이 날 ${state.teacherId==='all'?'':'이 강사의 '}수업이 없어요.</p>`}</div>
