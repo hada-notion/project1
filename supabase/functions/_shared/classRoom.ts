@@ -285,10 +285,11 @@ export async function loadClassRecords(sessionId: string) {
 		const part = sessions.slice(i, i + 90)
 		for (const r of await queryAllPages(DS_LEARNING_RECORD, { or: part.map((p: Page) => ({ property: "수업", relation: { contains: p.id } })) })) found.set(r.id as string, r)
 	}
-	const records = [...found.values()].map((r) => {
+	const pages = [...found.values()], summaries = await withSubjects(pages)
+	const records = pages.map((r, i) => {
 		const sid = rel(r, "수업").find((id) => byId.has(id)) ?? null
 		const start = sid ? byId.get(sid)?.properties?.["수업일시"]?.date?.start ?? null : null
-		return { ...recordSummary(r), sessionId: sid, date: seoulDate(start), start }
+		return { ...summaries[i], sessionId: sid, date: seoulDate(start), start }
 	})
 	records.sort((a, b) => String(b.start ?? "").localeCompare(String(a.start ?? "")) || a.title.localeCompare(b.title, "ko"))
 	return { records: records.map(({ start, ...r }) => ({ ...r, time: seoulTime(start) })) }
@@ -342,6 +343,16 @@ function recordSummary(r: Page) {
 	}
 }
 
+// 기록 카드 제목용 교재 이름(v2.5.89, 리포트 학습기록 카드 "교재 · 범위"): 정규교재(교재) 이름 → 진도교재 이름(괄호 앞) → 주제.
+async function withSubjects(records: Page[]) {
+	const ids = dedupe(records.flatMap((r) => [rel(r, "교재")[0], rel(r, "진도교재")[0]].filter(Boolean) as string[]))
+	const names = new Map((await getPages(ids)).map((b) => [b.id as string, anyTitleText(b)]))
+	return records.map((r) => {
+		const regular = names.get(rel(r, "교재")[0] ?? ""), progress = names.get(rel(r, "진도교재")[0] ?? "")
+		return { ...recordSummary(r), subject: regular || (progress ?? "").replace(/\(.*\)$/, "").trim() || plain(r, "주제") }
+	})
+}
+
 // 수업 상세: 학생(출석)·오늘 마감 과제·학습기록.
 export async function loadSession(sessionId: string) {
 	if (!isId(sessionId)) throw new ClassRoomError(400, "수업 형식이 올바르지 않습니다.")
@@ -378,7 +389,7 @@ export async function loadSession(sessionId: string) {
 			}))
 		return { recordId: r.id as string, title: anyTitleText(r), range: plain(r, "범위"), items }
 	})
-	const records = (await getPages(rel(session, "학습기록"))).map(recordSummary)
+	const records = await withSubjects(await getPages(rel(session, "학습기록")))
 	return {
 		session: await (async () => { const c = (await classInfo(rel(session, "클래스").slice(0, 1))).get(rel(session, "클래스")[0]); return { ...sessionSummary(session), className: c?.name ?? "", classEmoji: c?.emoji ?? "" } })(),
 		students: students.map(({ dueActivityIds: _drop, ...s }) => s),

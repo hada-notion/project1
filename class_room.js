@@ -539,13 +539,24 @@ function paneStudent(el){
 }
 
 // ---------- 학습기록 ----------
-// 기록 카드 한 장(학습기록 탭·홈·캘린더 공용)
-const recCard=r=>`<div class="rec"><button class="rec-head" type="button" data-rec="${esc(r.id)}"><span class="kind-icon k-${esc(r.kind)}" title="${esc(r.kind)}">${icon(r.kind||'학습')}</span><span class="t">${esc(r.title)}</span>${r.makeup?'<span class="pill s-보강">보강</span>':''}</button>
-  <div class="rec-body">${esc([r.range,r.topic&&!r.title.includes(r.topic)?r.topic:''].filter(Boolean).join(' · ')||'내용을 적어 주세요')} · 학생 ${r.registrationIds.length}명${r.activities?` · 학습활동 ${r.activities}건`:''}</div></div>`;
+// 기록 카드 한 장(학습기록 탭·홈·캘린더·교재 상세 공용). v2.5.89부터 학부모 리포트 학습기록 카드(.log-card)와 같은 규칙:
+// [분류 아이콘 칸(아이콘 + 구분 글자)] [교재 · 범위](교재 없으면 주제) [보강], 아래 "• 주제"(제목에 없을 때)·과제/평가는 "• 출제: 날짜",
+// 내용은 접어 두고 오른쪽 아래 ⌄로 펼친다(연한 베이지 칸). 카드를 누르면 기록 화면.
+const withDow=ymd=>ymd?`${ymd} (${'일월화수목금토'[new Date(ymd+'T00:00:00Z').getUTCDay()]})`:'';
+function recCard(r){
+ const subject=r.subject||'',title=[subject,r.range].filter(Boolean).join(' · ')||r.topic||r.title,day=r.date||state.date;
+ const rows=[r.topic&&r.topic!==subject&&r.topic!==title?r.topic:'',r.kind==='과제'||r.kind==='평가'?`출제: ${withDow(day)}`:''].filter(Boolean);
+ const extra=(r.content||'').split('\n').map(l=>l.trim()).filter(Boolean).join('\n'); // 리포트처럼 줄마다 앞뒤 공백을 정리해 같은 들여쓰기로
+ return `<div class="rec log-card ${extra?'has-extra':''}"><div class="log-head"><button class="log-main" type="button" data-rec="${esc(r.id)}"><span class="log-top"><span class="log-icon k-${esc(r.kind||'학습')}">${icon(r.kind||'학습')}<small>${esc(r.kind||'학습')}</small></span><span class="log-title">${esc(title)}</span>${r.makeup?'<span class="pill s-보강">보강</span>':''}</span>
+ ${rows.length?`<span class="log-meta">${rows.map(x=>`<span class="log-context">• ${esc(x)}</span>`).join('')}</span>`:''}</button>
+ ${extra?`<button class="log-chev" type="button" data-chev aria-expanded="false" aria-label="내용 펼치기"><span>${CHEVRON_DOWN}</span></button>`:''}</div>
+ ${extra?`<div class="log-extra" hidden>${esc(extra)}</div>`:''}</div>`;}
+// 내용 펼치기·접기(모든 화면 공용, 화면을 다시 그리지 않는다)
+$('app').addEventListener('click',e=>{const b=e.target.closest('[data-chev]');if(!b)return;const x=b.closest('.log-card').querySelector('.log-extra'),open=x.hidden;x.hidden=!open;b.setAttribute('aria-expanded',open);b.setAttribute('aria-label',open?'내용 접기':'내용 펼치기');});
 // 기록을 날짜별로(최근 날짜부터). 보고 있는 수업 날짜에는 표시를 붙인다.
 function recTimeline(recs,empty){const dates=[...new Set(recs.map(r=>r.date||''))];
  return dates.map(d=>{const day=recs.filter(r=>(r.date||'')===d),cur=day.some(r=>r.sessionId===state.sessionId);
-  return `<p class="group-label rec-date ${cur?'cur':''}">${esc(d?longDate(d):'날짜 없음')}${cur?' · 보고 있는 수업':''}</p>${day.map(recCard).join('')}`;}).join('')||`<div class="list"><p class="empty">${esc(empty)}</p></div>`;}
+  return `<p class="group-label rec-date ${cur?'cur':''}">${esc(d?withDow(d):'날짜 없음')}${cur?' · 보고 있는 수업':''}</p>${day.map(recCard).join('')}`;}).join('')||`<div class="list"><p class="empty">${esc(empty)}</p></div>`;}
 // 학습기록 탭(v2.5.89): 이 반 앞뒤 수업(9주 전 ~ 5주 뒤)의 기록을 날짜별로. [전체 · 학습 · 과제 · 평가], + 기록 만들기는 보고 있는 수업에.
 function paneRecords(el){
  const all=ensureClassRecords(),k=state.recKind||'전체',fab=`<button class="fab" type="button" id="new-rec">${icon('plus')}<span>기록 만들기</span></button>`;
