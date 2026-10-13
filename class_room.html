@@ -13,9 +13,8 @@
 body{background:var(--canvas)}
 /* 상단 바·하단 탭의 내용은 본문과 같은 폭(--feed-w, 리포트와 같음) 안에 두고 왼쪽 선을 맞춘다. */
 .cr-bar{position:sticky;top:0;z-index:20;margin:0;background:var(--brand-primary);color:var(--brand-on-primary)}
-.bar-in{max-width:calc(var(--feed-w) + 2*var(--space-4));margin:0 auto;min-height:var(--header-h);display:flex;align-items:center;gap:var(--space-1);padding:0 var(--space-4)}
-.bar-in>.icon-btn:first-child{margin-left:calc(-1*var(--space-3))}
-.bar-in>.icon-btn:last-child{margin-right:calc(-1*var(--space-3))}
+/* 상단 바(v2.5.80): 학부모 리포트 상단 바(.reg-header-bar)처럼 화면 폭 전체, 양끝 버튼은 화면 가장자리에서 8px. 본문은 640 한 줄 그대로. */
+.bar-in{min-height:var(--header-h);display:flex;align-items:center;gap:var(--space-1);padding:0 var(--space-2)}
 .cr-bar .crumbs{flex:1;min-width:0;display:flex;align-items:center;gap:var(--space-1);font-weight:700;font-size:var(--text-small);white-space:nowrap;overflow:hidden}
 .cr-bar .crumbs span:last-child{overflow:hidden;text-overflow:ellipsis}
 .cr-bar .crumbs .sep{opacity:.6}
