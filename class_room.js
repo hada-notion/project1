@@ -223,13 +223,13 @@ function drawCreate(){
  $('sheet').innerHTML=`<div class="dialog-head"><h2>기록 만들기</h2><button class="ghost" type="button" id="sh-x">닫기</button></div>
  <form id="cf" class="form"><label for="cf-s">클래스 <span class="muted">${esc(dateLabel(state.date))} 수업</span></label><select id="cf-s">${f.sessions.map(s=>`<option value="${esc(s.id)}" ${s.id===f.sessionId?'selected':''}>${esc(sessionLabel(s,f.sessions))}</option>`).join('')}</select>
  <label>교재 <span class="muted">이 반 학생들의 교재</span></label>${picked?bookRow(picked,{attr:'id="cf-b" aria-label="교재 바꾸기"',chev:true}):f.book===''?emptyBookRow('id="cf-b"','교재 없이 기록','주제로 기록해요 · 눌러서 바꾸기',icon('plus')):emptyBookRow('id="cf-b"','교재 비어 있음','눌러서 이 반 학생들의 교재 고르기')}
- <label>구분</label><div class="center-tabs left kind-tabs"><div class="tabs" role="tablist">${KINDS.map(k=>tabBtn(k===f.kind,`data-ck="${k}"`,k)).join('')}</div></div>
+ <label>구분</label><div class="center-tabs left kind-tabs"><div class="tabs" role="tablist">${KINDS.map(k=>`<button type="button" role="tab" aria-selected="${k===f.kind}" class="${k===f.kind?'active':''}" data-ck="${k}"><span>${icon(k,'kind-ic')}${k}</span></button>`).join('')}</div></div>
  <label for="cf-t">주제 <span class="muted">${f.book===''?'(필수)':'(선택)'}</span></label><input id="cf-t" maxlength="200" placeholder="교재 없는 기록은 리포트에 주제가 보여요" value="${esc(f.topic)}">
  <label for="cf-r">범위</label><input id="cf-r" maxlength="200" placeholder="예: p.31-35" value="${esc(f.range)}">
  <label for="cf-c">내용</label><textarea id="cf-c" maxlength="2000">${esc(f.content)}</textarea>
  <p class="error" id="cf-err" hidden></p><div class="actions"><button class="primary" type="submit">기록 만들기</button></div></form>`;
  const sh=$('sheet'),q=s=>sh.querySelector(s),keep=()=>{f.topic=q('#cf-t').value;f.range=q('#cf-r').value;f.content=q('#cf-c').value;};
- $('sh-x').onclick=()=>sh.close();bindCovers(sh);
+ $('sh-x').onclick=()=>sh.close();bindCovers(sh);bulletize(q('#cf-c'));
  sh.querySelectorAll('[data-ck]').forEach(b=>b.onclick=()=>{f.kind=b.dataset.ck;sh.querySelectorAll('[data-ck]').forEach(x=>{const on=x===b;x.classList.toggle('active',on);x.setAttribute('aria-selected',on);});});
  q('#cf-s').onchange=e=>run(async()=>{keep();f.sessionId=e.target.value;f.book=null;await booksFor(f.sessionId);drawCreate();});
  q('#cf-b').onclick=()=>{keep();drawBookPicker(bookChoices(state.bookCache[f.sessionId]),f.book,v=>{f.book=v;drawCreate();},drawCreate,'교재 없이 기록','주제로 기록해요(주제 필수)');};
@@ -293,6 +293,21 @@ async function openSessionNow(id,keep=false){
 async function reloadSession(){state.detail=await api('session',{sessionId:state.sessionId});}
 function paneHead(title,hint,tabs='',acts=''){
  return `<div class="ph title-row">${title}</div><p class="page-hint ph">${hint}</p>`+(tabs||acts?`<div class="ph tab-row"><span></span>${tabs?`<div class="center-tabs"><div class="tabs" role="tablist">${tabs}</div></div>`:'<span></span>'}<span class="acts">${acts}</span></div>`:'');
+}
+// 내용 칸 글머리(v2.5.81): 줄 맨 앞에서 "- " 또는 "* "를 치면 Notion처럼 "• "로 바뀐다. 글머리 줄에서 Enter는 다음 줄에도 "• "를 잇고,
+// 빈 글머리 줄에서 Enter, 글머리 바로 뒤에서 Backspace는 글머리만 지운다. 저장은 글자 그대로("• ")라 리포트에도 점으로 보인다. 한글 조합 중에는 건드리지 않는다.
+const BULLET='• ';
+function bulletize(ta,onChange){
+ const lineStart=()=>ta.value.lastIndexOf('\n',ta.selectionStart-1)+1;
+ const set=(v,pos)=>{ta.value=v;ta.setSelectionRange(pos,pos);if(onChange)onChange();};
+ ta.addEventListener('input',e=>{if(e.isComposing||ta.selectionStart!==ta.selectionEnd)return;const p=ta.selectionStart,s=lineStart(),head=ta.value.slice(s,p);
+  if(head==='- '||head==='* ')set(ta.value.slice(0,s)+BULLET+ta.value.slice(p),s+BULLET.length);});
+ ta.addEventListener('keydown',e=>{if(e.isComposing||e.keyCode===229||ta.selectionStart!==ta.selectionEnd)return;const p=ta.selectionStart,s=lineStart();
+  if(!ta.value.startsWith(BULLET,s)||p<s+BULLET.length)return;
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();const end=ta.value.indexOf('\n',p),lineEnd=end<0?ta.value.length:end;
+   if(ta.value.slice(s,lineEnd)===BULLET)set(ta.value.slice(0,s)+ta.value.slice(lineEnd),s);
+   else set(ta.value.slice(0,p)+'\n'+BULLET+ta.value.slice(p),p+1+BULLET.length);}
+  else if(e.key==='Backspace'&&p===s+BULLET.length){e.preventDefault();set(ta.value.slice(0,s)+ta.value.slice(p),s);}});
 }
 const tabBtn=(on,attr,label)=>`<button type="button" role="tab" aria-selected="${on}" class="${on?'active':''}" ${attr}><span>${esc(label)}</span></button>`;
 const editing=owner=>state.edit&&state.editOwner===owner;
@@ -428,6 +443,7 @@ function paneRecord(el){
  ${acts.length?'':`<div class="actions"><button class="primary" type="button" id="make-acts" ${r.activityStatus==='🔄 작업중'?'disabled':''}>${esc(ACT_LABEL[r.kind]||'학습활동 만들기')} · ${r.registrationIds.length}명</button></div>${r.activityStatus==='🔄 작업중'?'<p class="help">만드는 중이에요. 잠시 뒤 새로고침해 주세요.</p>':''}`}</div>`;
  const q=s=>el.querySelector(s);bindCovers(el);
  [['#rec-topic','topic'],['#rec-range','range'],['#rec-content','content']].forEach(([s,k])=>q(s).oninput=e=>{re[k]=e.target.value;});
+ bulletize(q('#rec-content'),()=>{re.content=q('#rec-content').value;});
  q('#rec-book').onclick=()=>drawBookPicker(bookChoices(state.books,{single:true,include:re.book}),re.book,val=>{re.book=val;$('sheet').close();render();},()=>$('sheet').close(),'교재 없음','교재 없이 주제로 기록해요');
  q('#rec-form').onsubmit=e=>{e.preventDefault();const body={recordId:r.id,topic:re.topic,range:re.range,content:re.content};if((re.book||null)!==r.bookId)body.bookId=re.book||null;
   run(async()=>{await api('update-record',body);state.acts=await api('activities',{recordId:r.id});recEditFrom(state.acts.record);await reloadSession();toast('기록을 저장했어요.');render();},e.submitter);};

@@ -248,7 +248,12 @@ dialog.drawer.right{inset:0 0 0 auto;border-radius:0;border-top-left-radius:var(
 /* 구분 탭은 가로 전체 3등분 */
 .kind-tabs{display:block}
 .kind-tabs .tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
-.kind-tabs .tabs button span{padding-left:0;padding-right:0;text-align:center}
+.kind-tabs .tabs button span{padding-left:0;padding-right:0;display:flex;align-items:center;justify-content:center;gap:var(--space-1)}
+/* 구분 탭 아이콘(v2.5.81): 기록 박스 분류 아이콘과 같은 그림·색(학습 edit-2 --info-ink, 과제 clipboard --warning-ink, 평가 file-text --success-ink) */
+.kind-tabs svg.kind-ic{flex:none;width:var(--icon-sm);height:var(--icon-sm)}
+.kind-tabs [data-ck="학습"] svg.kind-ic{color:var(--info-ink)}
+.kind-tabs [data-ck="과제"] svg.kind-ic{color:var(--warning-ink)}
+.kind-tabs [data-ck="평가"] svg.kind-ic{color:var(--success-ink)}
 .cal-day.plan{box-shadow:inset 0 0 0 1.5px var(--brand-border);color:var(--text-muted)}
 .cal-day.picked{box-shadow:inset 0 0 0 2px var(--brand-deep)}
 .cal-day.today,.cal-day.today.picked{box-shadow:inset 0 0 0 2px var(--danger)}
@@ -289,6 +294,6 @@ dialog.drawer.right{inset:0 0 0 auto;border-radius:0;border-top-left-radius:var(
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <script src="hada_config.js"></script>
 <script src="admin_auth.js?v=ec2cac35"></script>
-<script src="class_room.js?v=b3f42e53"></script>
+<script src="class_room.js?v=b273899a"></script>
 </body>
 </html>
