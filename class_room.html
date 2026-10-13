@@ -301,8 +301,9 @@ body.snap-on .cr-main{max-width:none;padding:0}
 .intro-greeting{margin:0 0 var(--space-1);font-size:var(--text-small);color:var(--brand-deep)}
 .intro-name{margin:0 0 var(--space-2);font-size:var(--text-display);font-weight:800;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .intro-sub{margin:0 0 var(--space-8);font-size:var(--text-small);color:var(--text-muted)}
-.class-group{width:100%;max-width:var(--dialog-sm);display:flex;flex-direction:column;gap:var(--space-3);margin-bottom:var(--space-6)}
-.class-card{display:flex;align-items:center;gap:var(--space-3);width:100%;min-height:calc(var(--hit-min) + var(--space-5));padding:var(--space-3) var(--space-5);border:1px solid var(--brand-border);border-radius:var(--radius-lg);background:var(--surface);box-shadow:var(--shadow-card);font:inherit;color:var(--brand-deep);text-align:left;cursor:pointer}
+/* 클래스 카드 크기(v2.5.92): 리포트 첫 화면 .class-btn(높이 약 52, 간격 10)과 같게. 카드 5개까지 일반 폰 한 화면에 들어온다 */
+.class-group{width:100%;max-width:var(--dialog-sm);display:flex;flex-direction:column;gap:calc(2.5*var(--space-1));margin-bottom:var(--space-6)}
+.class-card{display:flex;align-items:center;gap:var(--space-3);width:100%;min-height:calc(var(--hit-min) + var(--space-2));padding:var(--space-3) var(--space-5);border:1px solid var(--brand-border);border-radius:var(--radius-lg);background:var(--surface);box-shadow:var(--shadow-card);font:inherit;color:var(--brand-deep);text-align:left;cursor:pointer}
 .class-card .cc-name{flex:1;min-width:0;font-weight:700;font-size:var(--text-body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cb-badge{flex:none;padding:var(--space-1) var(--space-3);border-radius:var(--radius-pill);background:var(--brand-soft);color:var(--text-muted);font-size:var(--text-caption);font-weight:700;font-variant-numeric:tabular-nums}
 .cb-badge.on{background:var(--success-soft);color:var(--success-ink)}
@@ -312,12 +313,12 @@ body.snap-on .cr-main{max-width:none;padding:0}
 /* 넘김 안내(리포트 .swipe-hint·.up-hint): 12px 글자 + 겹화살표, 아래 안내는 통통 튄다. 누르는 영역 44px */
 .swipe-hint,.up-hint{position:absolute;left:50%;transform:translateX(-50%);min-height:var(--hit-min);min-width:calc(4*var(--hit-min));padding:0 var(--space-3);border:0;background:transparent;font:inherit;font-size:var(--text-caption);color:var(--text-muted);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center}
 /* 첫 칸의 [통합 시간표 보기]는 내용 아래에 붙는다(v2.5.91): 칸이 넉넉하면 칸 맨 아래, 내용이 길면 보강 대기실 아래로 밀려 겹치지 않는다. */
-.swipe-hint{position:static;transform:none;flex:none;margin-top:var(--space-6)}
+.swipe-hint{position:static;transform:none;flex:none;margin-top:var(--space-5);padding-bottom:var(--space-3)} /* 아래 여백: 겹화살표가 6px 튀어도 잘리지 않게(v2.5.92) */
 /* 다른 클래스 접기(v2.5.91): 카드와 같은 폭의 점선 없는 옅은 줄, 펼치면 ⌄가 뒤집힌다 */
 .more-card{display:flex;align-items:center;justify-content:center;gap:var(--space-1);width:100%;min-height:var(--hit-min);border:0;border-radius:var(--radius-lg);background:var(--brand-soft);font:inherit;font-size:var(--text-label);font-weight:700;color:var(--text-muted);cursor:pointer}
 .more-card svg.line{width:var(--icon-sm);height:var(--icon-sm);transition:transform .15s ease}
 .more-card.open svg.line{transform:rotate(180deg)}
-.class-more{display:flex;flex-direction:column;gap:var(--space-3)}
+.class-more{display:flex;flex-direction:column;gap:calc(2.5*var(--space-1))}
 .class-more[hidden]{display:none}
 .up-hint{top:var(--space-3);color:var(--text-subtle)}
 .swipe-hint .chevron,.up-hint .chevron{display:block;width:var(--icon-md);height:var(--icon-md)}
