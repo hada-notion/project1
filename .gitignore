@@ -2,3 +2,6 @@
 *.private.txt
 .env
 .env.*
+
+# Python bytecode
+__pycache__/

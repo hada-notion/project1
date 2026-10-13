@@ -124,8 +124,17 @@
 </form>
 <div id="dashboard" hidden><div class="dash-grid">
 <section class="dash-col"><h3 class="subhead">관리자 비밀번호</h3><p class="help">키오스크·법정 서류·학교 검색 화면에서 씁니다.</p><div class="status" id="due-status"></div><button class="primary" id="start-change" type="button">비밀번호 변경</button></section>
+<section class="dash-col"><h3 class="subhead">수업용 비밀번호</h3><p class="help">선생님들이 수업방에서 함께 씁니다. 수업방 기능만 열려요.</p><div class="status" id="class-summary"></div><button class="secondary wide" id="open-class" type="button">수업용 비밀번호 정하기</button></section>
 <section class="dash-col"><h3 class="subhead">Notion 웹훅 키</h3><p class="help">Notion 버튼·자동화가 서버를 부를 때 씁니다.</p><div class="status" id="webhook-summary"></div><button class="secondary wide" id="open-webhook" type="button">웹훅 키 교체</button></section>
 </div><div class="dash-foot"><button class="secondary" id="logout" type="button">로그아웃</button></div></div>
+<form id="class-form" class="narrow" hidden>
+<label for="class-current">현재 관리자 비밀번호</label><input type="password" id="class-current" autocomplete="current-password" maxlength="128" required>
+<label for="class-new">새 수업용 비밀번호</label><input type="password" id="class-new" autocomplete="new-password" minlength="8" maxlength="128" required>
+<label for="class-confirm">새 수업용 비밀번호 확인</label><input type="password" id="class-confirm" autocomplete="new-password" minlength="8" maxlength="128" required>
+<p class="help">관리자 비밀번호와 다르게, 8자 이상으로 정해 주세요. 바꾸면 선생님들은 새 비밀번호로 다시 로그인해요. 수업용 로그인으로는 관리자 설정·법정 서류·키오스크 설정이 열리지 않아요.</p>
+<button class="primary" type="submit">저장</button>
+<button class="secondary wide" id="class-back" type="button">돌아가기</button>
+</form>
 <form id="webhook-form" class="narrow" hidden>
 <ol class="flow"><li>새 웹훅 키를 만들면 화면에 표시되고, 교체를 마칠 때까지 이 탭에서 언제든 다시 복사할 수 있습니다.</li><li>교체 기간에는 이전 키와 새 키가 모두 동작합니다. Notion 버튼·자동화의 키를 하나씩 바꿉니다.</li><li>이전 키로 들어오는 호출이 없어지면 교체를 완료합니다. 이때 이전 키가 삭제되어 더 이상 동작하지 않습니다.</li></ol>
 <label for="webhook-password">현재 관리자 비밀번호</label><input type="password" id="webhook-password" autocomplete="current-password" maxlength="128" required>
@@ -182,6 +191,6 @@
 <noscript><p class="notice">관리자 설정을 사용하려면 JavaScript가 필요합니다.</p></noscript>
 </div>
 <script src="assets/hada-shortcuts.js?v=956b3656"></script>
-<script src="hada_config.js"></script><script src="admin_auth.js?v=ec2cac35"></script><script src="admin_settings.js?v=6779cc79"></script>
+<script src="hada_config.js"></script><script src="admin_auth.js?v=ec2cac35"></script><script src="admin_settings.js?v=46eb7127"></script>
 </body>
 </html>

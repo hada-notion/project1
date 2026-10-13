@@ -1,7 +1,7 @@
 'use strict';
 (() => {
 const $=id=>document.getElementById(id);
-const forms=['login-form','change-form','dashboard','webhook-form','webhook-key','webhook-progress'];
+const forms=['login-form','change-form','dashboard','class-form','webhook-form','webhook-key','webhook-progress'];
 let base='',session='',mustChange=false,busy=false;
 // The login is shared with legal documents and school search in this tab (admin_auth.js): the server issues the same
 // kind of administrator session to all three. A session from the initial password (0000) is kept only in memory until
@@ -297,6 +297,9 @@ async function profile(){
  HadaAdminAuth.saveSession(mustChange?'':session);
  if(mustChange){text('owner-status','초기 비밀번호 사용 중');notice('초기 비밀번호를 사용 중입니다. 새 비밀번호로 변경해 주세요.','warn');showChange(true);return;}
  text('owner-status','변경 완료');
+ // Shared class (teacher) password for the class room (v2.5.65).
+ text('class-summary',info.class_password_set?`${date(info.class_changed_at)}에 정했어요.`:'아직 정하지 않았어요. 정하면 선생님들이 수업방에 로그인할 수 있어요.');
+ text('open-class',info.class_password_set?'수업용 비밀번호 변경':'수업용 비밀번호 정하기');
  try{await loadWebhook();}catch{text('webhook-summary','웹훅 키 상태를 확인하지 못했습니다. 잠시 후 다시 로그인해 주세요.');}
  text('due-status',info.change_due?'마지막 변경 후 3개월이 지났습니다. 보안을 위해 비밀번호를 변경해 주세요.':'현재 권장 변경 기간 내에 있습니다. 유출이 의심되면 즉시 변경해 주세요.');
  panel('dashboard','관리자 보안 설정','관리자 비밀번호는 Notion 웹훅 키와 따로 바꿀 수 있어요.');
@@ -324,6 +327,9 @@ $('close-help').onclick=()=>$('help-dialog').close();
 $('open-webhook').onclick=e=>task(openWebhook,e.currentTarget,webhook.rotating&&!links?'불러오는 중… (처음엔 Notion 링크를 찾느라 최대 1분)':'불러오는 중…');
 $('webhook-back').onclick=()=>task(profile);
 $('progress-back').onclick=()=>task(profile);
+$('open-class').onclick=()=>{clearPasswords();panel('class-form','수업용 비밀번호','선생님들이 수업방에 들어올 때 함께 쓰는 비밀번호예요.');$('class-current').focus();};
+$('class-back').onclick=()=>task(profile);
+$('class-form').onsubmit=e=>{e.preventDefault();task(async()=>{if($('class-new').value!==$('class-confirm').value)throw new Error('새 수업용 비밀번호와 확인 값이 일치하지 않습니다.');const data=await request('class-set',{current_password:$('class-current').value,class_password:$('class-new').value});clearPasswords();await profile();notice(data.message||'수업용 비밀번호를 저장했어요.');},e.submitter,'저장 중…');};
 $('webhook-form').onsubmit=e=>{e.preventDefault();task(async()=>{
  const data=await request('webhook-start',{current_password:$('webhook-password').value});clearPasswords();
  $('new-webhook-key').value=data.key;keepNewKey(data.key);panel('webhook-key','새 웹훅 키가 만들어졌습니다','지금부터 이전 키와 새 키가 모두 동작합니다. 아래 키를 복사해 주세요.');$('new-webhook-key').select();});};
