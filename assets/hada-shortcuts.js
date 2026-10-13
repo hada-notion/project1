@@ -9,8 +9,8 @@ const ICONS={
  legal:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line>',
  school:'<circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>',
  external:'<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line>',
- tablet:'<rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line>',
- book:'<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>',
+ check:'<polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>',
+ edit:'<path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>',
 };
 // [주소, 메뉴 이름, 아이콘, 설명(마우스를 올리면 보임)]. 새 탭 메뉴는 넓은 화면에서 ↗와 이름, 폰 폭에서는 각자의 아이콘만 보인다.
 const PAGES=[
@@ -19,8 +19,8 @@ const PAGES=[
  ['school_search.html','학교 검색','school','나이스에서 학교를 찾아 Notion 학교 페이지와 연결'],
 ];
 const EXTERNAL=[
- ['attendance_kiosk.html','키오스크','tablet','학원 입구 태블릿에서 전화번호로 등원·하원 체크(새 탭)','출결 키오스크(새 탭에서 열림)'],
- ['class_room.html','수업 관리','book','선생님이 수업별 출석·과제·학습기록을 관리(새 탭)','수업 관리(새 탭에서 열림)'],
+ ['attendance_kiosk.html','키오스크','check','학원 입구 태블릿에서 전화번호로 등원·하원 체크(새 탭)','출결 키오스크(새 탭에서 열림)'],
+ ['class_room.html','수업 관리','edit','선생님이 수업별 출석·과제·학습기록을 관리(새 탭)','수업 관리(새 탭에서 열림)'],
 ];
 const icon=name=>`<svg class="line nav-icon" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
 function link(href,label,iconName,title,cls){const a=document.createElement('a');a.href=href;a.className=cls;a.title=title;a.innerHTML=icon(iconName);const t=document.createElement('span');t.className='nav-label';t.textContent=label;a.append(t);a.setAttribute('aria-label',label);return a}
