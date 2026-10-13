@@ -377,22 +377,30 @@ body.snap-on .cr-main{max-width:none;padding:0}
 .check-row .sum b{color:var(--text-ink)}
 .note-tabs{margin:0 0 var(--space-2)}
 /* 학생 명부(v2.5.93): [이름 학교 · 학년] / 연락처(누르면 전화, 44px) / ↗ 학생 보고서 */
-.roster .t small{font-weight:400;font-size:var(--text-label);color:var(--text-subtle);margin-left:var(--space-1)}
-.roster .meta>.phones{display:flex;flex-wrap:wrap;column-gap:var(--space-4)}
-.roster .tel{display:inline-flex;align-items:center;min-height:var(--hit-min);color:var(--brand-deep);font-size:var(--text-label);font-weight:600;text-decoration:none;font-variant-numeric:tabular-nums}
-.roster .no-tel{display:inline-flex;align-items:center;min-height:var(--hit-min);font-size:var(--text-label);color:var(--text-subtle)}
-.roster .no-rep{flex:none;font-size:var(--text-caption);color:var(--text-subtle)}
-.icon-btn.rep{flex:none;color:var(--brand-deep)}
-/* 반 요약(v2.5.94): 요약 3칸(리포트 .home-stats) + 최근 평가 반 평균 막대(최대 5개, 막대 높이 = 점수 %) */
+.icon-btn.rep{flex:none;margin-left:auto;margin-right:calc(-11*var(--space-1));color:var(--brand-deep)}
+/* 반 요약(v2.5.94, v2.5.96): 요약 3칸(리포트 .home-stats: 출석률·과제이행률·최근 평가 평균) + 리포트 "최근 평가 추이"와 같은 꺾은선 그래프
+   (student_report.html .chart-wrap: 폭 최대 480, 400:220, 선·점 --brand-deep, 눈금선 --divider, 눈금 숫자 --text-subtle) */
 .cls-sum{margin-bottom:var(--space-4)}
 .cls-sum .group-label{margin-top:var(--space-4)}
-.tbars{display:flex;gap:var(--space-4);align-items:flex-end;justify-content:center}
-.tb{flex:0 1 var(--hit-area);min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:var(--space-1);font-size:var(--text-caption);color:var(--text-subtle)}
-.tb-bar{height:calc(2.5*var(--hit-area));display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:var(--space-1)} /* 점수 숫자는 막대 바로 위, 막대는 칸 높이의 80%까지 */
-.tb i{display:block;width:var(--space-6);border-radius:var(--radius-sm);border-bottom-left-radius:0;border-bottom-right-radius:0;background:var(--brand-mid)}
-.tb b{color:var(--text-ink)}
-.tb small{max-width:100%;font-size:var(--text-caption);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.roster .meta>.r-stats{display:flex;flex-wrap:wrap;gap:var(--space-1);margin-top:var(--space-1)}
+.trend{width:100%;max-width:calc(10*var(--space-12));margin:0 auto;aspect-ratio:400/220;max-height:min(34vh,300px)}
+.trend svg{width:100%;height:100%;display:block}
+.trend .tg{stroke:var(--divider);stroke-width:1}
+.trend .tt{fill:var(--text-subtle)}
+.trend .tl{fill:none;stroke:var(--brand-deep);stroke-width:2}
+.trend .td{fill:var(--brand-deep)}
+.trend .tv{fill:var(--brand-deep);font-weight:700}
+.trend .tx{fill:var(--text-muted)}
+/* 학생 줄(v2.5.96): [이름 학교·학년 … ↗(이름과 같은 높이)] / 알약 / ⌄ 펼치면 연락처·보고서 상태(기록 카드 펼치기와 같은 모양) */
+.roster .r1+.r1{border-top:1px solid var(--divider)}
+.r-body{padding:var(--space-2) var(--space-12) var(--space-3) var(--space-4);min-height:calc(var(--hit-min) + var(--space-4))}
+.r-top{display:flex;align-items:center;gap:var(--space-2);min-height:var(--hit-min)}
+.r-name{flex:0 1 auto;min-width:0;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.r-name small{font-weight:400;font-size:var(--text-label);color:var(--text-subtle);margin-left:var(--space-1)}
+.r-stats{display:flex;flex-wrap:wrap;gap:var(--space-1)}
+.r-extra .phones{display:flex;flex-wrap:wrap;column-gap:var(--space-4)}
+.r-extra .tel{display:inline-flex;align-items:center;min-height:var(--hit-min);color:var(--brand-deep);font-size:var(--text-label);font-weight:600;text-decoration:none;font-variant-numeric:tabular-nums}
+.r-extra .no-tel{display:inline-flex;align-items:center;min-height:var(--hit-min);font-size:var(--text-label);color:var(--text-subtle)}
+.r-extra .no-rep{margin:0;font-size:var(--text-caption);color:var(--text-subtle)}
 .home-stat b{display:block;font-size:var(--text-body);font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .home-stat small{display:block;margin-top:var(--space-1);font-size:var(--text-caption);color:var(--text-muted)}
 .home-stat.good b{color:var(--success-ink)}
@@ -452,6 +460,6 @@ body.snap-on .cr-main{max-width:none;padding:0}
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <script src="hada_config.js"></script>
 <script src="admin_auth.js?v=4ffde89c"></script>
-<script src="class_room.js?v=ecbbc67c"></script>
+<script src="class_room.js?v=4116ae06"></script>
 </body>
 </html>
