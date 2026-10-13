@@ -423,7 +423,7 @@ font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto San
 
 1. 고치기 전 화면을 캡처한다(1280×900·375×812).
 2. 토큰과 공용 부품으로 고친다. 새 값이 꼭 필요하면 먼저 `assets/hada-tokens.css`와 이 문서에 추가하고 이유를 적는다. 요청받지 않은 화면은 함께 바꾸지 않는다(1부 11장).
-3. `node tests/design-lint.cjs`를 실행한다. 공용 파일(`hada-tokens.css`, `hada-ui.css`, `hada-shortcuts.js`, `admin_auth.js`, `admin_settings.js`)을 고쳤으면 먼저 `node tests/design-lint.cjs --fix`로 화면의 `?v=` 버전 표시를 갱신한다. 버전 표시는 파일 내용의 해시라서 내용이 바뀌면 주소가 바뀌고, 브라우저가 예전 파일(GitHub Pages는 10분 보관)을 쓰지 않는다. 갱신을 빠뜨리면 이 검사가 실패한다. 학원별 설정 파일 `hada_config.js`는 일부러 버전 표시를 붙이지 않는다. 붙이면 학원마다 화면 파일 내용이 달라져 업데이트 때 화면 파일을 통째로 바꿀 수 없다.
+3. `node tests/design-lint.cjs`를 실행한다. 공용 파일(`hada-tokens.css`, `hada-ui.css`, `hada-shortcuts.js`, `admin_auth.js`, `admin_settings.js`, `class_room.js`)이나 학부모 리포트 스크립트(`student_report_part1.js`, `student_report_part2.js`, v2.5.77부터)를 고쳤으면 먼저 `node tests/design-lint.cjs --fix`로 화면의 `?v=` 버전 표시를 갱신한다. 버전 표시는 파일 내용의 해시라서 내용이 바뀌면 주소가 바뀌고, 브라우저가 예전 파일(GitHub Pages는 10분 보관)을 쓰지 않는다. 갱신을 빠뜨리면 이 검사가 실패한다. 학원별 설정 파일 `hada_config.js`는 일부러 버전 표시를 붙이지 않는다. 붙이면 학원마다 화면 파일 내용이 달라져 업데이트 때 화면 파일을 통째로 바꿀 수 없다.
 4. 화면 검사(1부 10장 크기에서 가로 넘침, 버튼 높이 44px 이상, 글자 잘림)를 실행하고 전후 캡처를 비교해 보고한다.
 
 
