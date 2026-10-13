@@ -89,6 +89,15 @@ Deno.test("day: that day's sessions for the teacher and only unassigned makeup a
  const s1 = day.sessions[0]; assert(s1.className === "중1 B" && s1.classEmoji === "🟡" && s1.arrived === 1 && s1.students === 2, "class emoji, name and arrived count")
  await rejects(() => room.loadDay("10/13"), 400)
 }))
+Deno.test("classes: the teacher's classes with today's sessions, the next and the last one", () => withMock(async () => {
+ const mine = (await room.loadClasses("2026-10-13", "t1")).classes
+ assert(mine.length === 1 && mine[0].classId === "cls" && mine[0].name === "중1 B" && mine[0].emoji === "🟡", "only classes with the teacher's non-makeup sessions")
+ assert(mine[0].today.map((x) => x.id).join() === "s1" && mine[0].today[0].time === "17:00–18:00" && mine[0].next === null && mine[0].last === null)
+ const all = (await room.loadClasses("2026-10-12")).classes
+ assert(all.length === 1 && !all[0].today.length && all[0].next?.id === "s1" && all[0].next?.date === "2026-10-13" && all[0].last?.id === "sPrev" && all[0].last?.date === "2026-10-08", "makeup sessions are skipped")
+ await rejects(() => room.loadClasses("10/13"), 400)
+ await rejects(() => room.loadClasses("2026-10-13", "../x"), 400)
+}))
 Deno.test("days: Seoul dates that have the teacher's sessions in a range", () => withMock(async () => {
  const r = await room.loadDays("2026-10-12", "2026-10-18", "t1")
  assert(r.dates.join() === "2026-10-13,2026-10-14", r.dates.join())

@@ -1,5 +1,5 @@
-// 수업방(v2.5.67): 선생님 공용 수업용 비밀번호로 로그인 → 강사 선택(이 기기에 기억) → 오늘 수업(v2.5.79: 상단 ≡ 수업 선택·📅 날짜 이동)
-// → 수업(학생 목록 [출석|과제 검사], 학습기록, + 기록 만들기) → 학생 공간 / 기록 카드 → 학생별 학습활동. 보강 대기실은 ≡ 창에서 연다.
+// 수업방(v2.5.67): 선생님 공용 수업용 비밀번호로 로그인 → 강사 선택(이 기기에 기억) → 오늘 수업(v2.5.79, 서랍 v2.5.80: 상단 ≡ 왼쪽 클래스 목록·📅 오른쪽 날짜)
+// → 수업(학생 목록 [출석|과제 검사], 학습기록, + 기록 만들기) → 학생 공간 / 기록 카드 → 학생별 학습활동. 보강 대기실은 ≡ 서랍에서 연다.
 // 업무 데이터는 class-room 함수가 Notion에 읽고 쓴다. 체크·입력은 편집 모드에서 모아 [저장], 만들기·출제는 바로 실행.
 'use strict';
 const $=id=>document.getElementById(id);
@@ -21,7 +21,8 @@ const P={back:'<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 1
  refresh:'<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
  lock:'<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',square:'<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>',
  checked:'<polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
- menu:'<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>'};
+ menu:'<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>',
+ x:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',memo:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'};
 const icon=(name,cls='')=>`<svg class="line ${cls}" viewBox="0 0 24 24" aria-hidden="true">${P[name]||''}</svg>`;
 const nlink=(id,label)=>id?`<a class="icon-btn nl" href="${notionUrl(id)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(label)} Notion에서 열기" title="Notion에서 열기">${icon('ext')}</a>`:'';
 const KINDS=['학습','과제','평가'],STATUS={'🟢 출석':'출석','🔴 결석':'결석','🔵 보강':'보강'};
@@ -33,7 +34,7 @@ function shortDate(iso){if(!iso)return '';const d=new Date(new Date(iso).getTime
 
 const state={session:store.get(SESSION_KEY),teacherId:store.get(TEACHER_KEY),teachers:[],date:seoulDate(),view:'empty',day:null,
  sessionId:'',detail:null,tab:'students',seg:'att',recKind:'전체',hwRecord:'',edit:false,editOwner:'',saver:null,draft:{},recordId:'',acts:null,student:null,noteTab:'memo',books:null,picked:new Set(),
- classWeek:[],calPanel:false,cwMonth:'',cwAnchor:'',cwFrom:'',cwTo:'',pick:null,form:null,bookCache:{}};
+ classWeek:[],cwMonth:'',cwFrom:'',cwTo:'',classes:null,form:null,bookCache:{}};
 
 async function api(action,data={}){
  if(CFG.error)throw new Error(CFG.error);
@@ -121,27 +122,56 @@ async function openToday(){
  state.date=seoulDate();state.day=await fetchDay(state.date);
  const id=nowSessionId(state.day.sessions||[]);
  if(id)return openSessionNow(id);
- state.detail=null;state.sessionId='';state.view='empty';state.calPanel=false;render();
+ state.detail=null;state.sessionId='';state.view='empty';render();
 }
 function topBar(){
  const s=state.detail?.session,cal=!!(s&&s.classIds?.length);
  const title=s?`<b><span class="tb-emo">${s.makeup?'':esc(emojiOf(s))}</span>${esc(s.makeup?s.name:(s.className||s.name))}${s.makeup?' <span class="pill s-보강">보강</span>':''}</b><small>${esc(dateLabel(state.date))} ${esc(s.time||'')}</small>`
   :`<b>${state.date===seoulDate()?'오늘 수업 없음':'수업 없음'}</b><small>${esc(dateLabel(state.date))}</small>`;
- $('bar').innerHTML=`<div class="bar-in tb-in"><button class="icon-btn" id="tb-menu" type="button" aria-label="수업 선택">${icon('menu')}</button><div class="tb-title">${title}</div><button class="icon-btn ${state.calPanel?'on':''}" id="tb-cal" type="button" aria-label="날짜 이동" aria-expanded="${!!state.calPanel}" ${cal?'':'disabled'}>${icon('cal')}</button></div>`;
- $('tb-menu').onclick=()=>{if(leaveEdit())openClassPicker();};
- $('tb-cal').onclick=()=>{state.calPanel=!state.calPanel;state.cwMonth='';state.cwAnchor='';render();};
+ $('bar').innerHTML=`<div class="bar-in tb-in"><button class="icon-btn" id="tb-menu" type="button" aria-label="클래스 선택">${icon('menu')}</button><div class="tb-title">${title}</div><button class="icon-btn" id="tb-cal" type="button" aria-label="날짜 이동" ${cal?'':'disabled'}>${icon('cal')}</button></div>`;
+ $('tb-menu').onclick=()=>{if(leaveEdit())openClassDrawer();};
+ $('tb-cal').onclick=()=>{if(leaveEdit())openDateDrawer();};
 }
-// 📅 날짜 이동(이 반): 주 한 줄 + 월 전체 보기. 이 반 수업이 있는 날만 칠하고 누를 수 있다. ‹ ›는 직전·다음 수업, [오늘]은 오늘 수업(없으면 오늘이 있는 주).
-function classCalHtml(){
- const list=state.classWeek||[];if(!state.calPanel||!list.length)return '';
- const byDate=new Map(list.map(x=>[x.date,x])),cell=d=>{const x=byDate.get(d);return dayCell(d,!!x,x&&x.id===state.sessionId,x?`data-cs="${esc(x.id)}"`:'');};
+// ---------- 서랍(v2.5.80): ≡ 왼쪽 = 강사의 클래스 목록, 📅 오른쪽 = 이 반 날짜 ----------
+// 서랍은 dialog 하나를 왼쪽·오른쪽으로 바꿔 쓴다. 바깥(어두운 곳)을 누르거나 ✕로 닫는다.
+function drawer(side,title,body){const d=$('drawer');d.className=`drawer ${side}`;
+ d.innerHTML=`<div class="dr-in"><div class="dr-head"><h2>${title}</h2><button class="icon-btn" type="button" id="dr-x" aria-label="닫기">${icon('x')}</button></div>${body}</div>`;
+ $('dr-x').onclick=()=>d.close();if(!d.open)d.showModal();return d;}
+$('drawer').addEventListener('click',e=>{if(e.target===$('drawer'))$('drawer').close();});
+// ≡ 클래스 목록: [이모지] [클래스명] [오늘 수업시간]. 오늘 수업이 있는 반을 시간순으로 위에, 나머지는 이름순(시간 칸 비움).
+// 반을 누르면 오늘 수업(진행 중 → 다음 → 마지막) → 없으면 다음 수업 → 없으면 가장 최근 수업을 연다. 날짜는 📅에서 고른다.
+const classesKey=()=>state.teacherId+'|'+seoulDate();
+async function openClassDrawer(){
+ if(state.classes?.key===classesKey()){drawClassDrawer();api('classes',{date:seoulDate(),...teacherArg()}).then(r=>{state.classes={key:classesKey(),list:r.classes};if($('drawer').open&&$('drawer').classList.contains('left'))drawClassDrawer();}).catch(()=>{});return;}
+ await run(async()=>{state.classes={key:classesKey(),list:(await api('classes',{date:seoulDate(),...teacherArg()})).classes};drawClassDrawer();});
+}
+function drawClassDrawer(){
+ const who=state.teacherId==='all'?'전체 수업':teacherName(state.teacherId),cur=state.detail?.session?.classIds?.[0]||'';
+ const list=(state.classes?.list||[]).slice().sort((a,b)=>(!a.today.length-!b.today.length)||String(a.today[0]?.start||'').localeCompare(String(b.today[0]?.start||''))||a.name.localeCompare(b.name,'ko'));
+ const waiting=state.day?.makeupWaiting||[];
+ const d=drawer('left',esc(state.teacherId==='all'?'전체 클래스':`${who} 선생님 클래스`),
+ `<div class="list">${list.length?list.map(c=>`<button class="row srow ${c.classId===cur?'cur':''}" type="button" data-class="${esc(c.classId)}"><span class="emo">${esc(c.emoji||pickClassColorEmoji(c.name))}</span><span class="meta"><span class="t">${esc(c.name)}</span></span><span class="time">${esc(c.today[0]?.time||'')}</span></button>`).join(''):'<p class="empty">앞뒤 4주 안에 수업이 있는 클래스가 없어요.</p>'}</div>
+ <div class="list wait"><button class="row srow" type="button" id="open-wait"><span class="emo ico">${icon('users')}</span><span class="meta"><span class="t">보강 대기실</span></span><span class="cnt-pill">${waiting.length}명</span><span class="time chev">›</span></button></div>
+ <div class="dr-foot"><button class="secondary wide" type="button" id="dr-who">강사 바꾸기 · ${esc(who)}</button></div>`);
+ d.querySelectorAll('[data-class]').forEach(b=>b.onclick=()=>{const c=list.find(x=>x.classId===b.dataset.class),id=nowSessionId(c.today)||c.next?.id||c.last?.id;if(!id)return;
+  if(id===state.sessionId){d.close();return;}run(async()=>{await openSessionNow(id);d.close();},b);});
+ $('open-wait').onclick=()=>{d.close();state.view='waiting';state.picked=new Set();render();};
+ $('dr-who').onclick=()=>{d.close();showTeachers();};
+}
+// 📅 이 반 날짜: 월 캘린더(수업 있는 날 칠함, 보고 있는 날 진하게, 오늘 빨간 테두리) + [‹ 직전] [다음 ›]. 날짜를 누르면 그 수업으로 가고 닫힌다(보던 탭 유지).
+function openDateDrawer(){state.cwMonth=state.date.slice(0,7);drawDateDrawer();}
+function drawDateDrawer(){
+ const s=state.detail.session,list=state.classWeek||[],byDate=new Map(list.map(x=>[x.date,x])),ym=state.cwMonth,[y,m]=ym.split('-').map(Number),first=`${ym}-01`;
+ const cell=dd=>{const x=byDate.get(dd);return dayCell(dd,!!x,x&&x.id===state.sessionId,x?`data-cs="${esc(x.id)}"`:'');};
  const i=list.findIndex(x=>x.id===state.sessionId),prev=list[i-1],next=list[i+1];
- if(!state.cwMonth){const w=weekStart(state.cwAnchor||state.date);
-  return `<div class="attendance-calendar day-mode cal-panel"><div class="cal-month-nav">${navBtn(prev?`data-cs="${esc(prev.id)}"`:'disabled','직전 수업','‹')}<div class="cal-month-title">${md(w)} ~ ${md(addDays(w,6))}</div><div class="cal-nav-right">${todayBtn('cw-today')}${navBtn(next?`data-cs="${esc(next.id)}"`:'disabled','다음 수업','›')}</div></div>
-  <div class="cal-grid">${CAL_DOW}${Array.from({length:7},(_,k)=>cell(addDays(w,k))).join('')}</div><button type="button" class="cal-collapse-btn" id="cw-month">${CHEVRON_DOWN}월 전체 보기</button></div>`;}
- const [y,m]=state.cwMonth.split('-').map(Number),first=`${state.cwMonth}-01`;
- return `<div class="attendance-calendar cal-panel"><div class="cal-month-nav">${navBtn('data-cwm="-1"','이전 달','‹')}<div class="cal-month-title">${y}년 ${m}월</div><div class="cal-nav-right">${todayBtn('cw-today')}${navBtn('data-cwm="1"','다음 달','›')}</div></div>
- <div class="cal-grid">${CAL_DOW}${Array.from({length:dowMon(first)},()=>'<div class="cal-day empty"></div>').join('')}${Array.from({length:monthDays(state.cwMonth)},(_,k)=>cell(`${state.cwMonth}-${pad(k+1)}`)).join('')}</div><button type="button" class="cal-collapse-btn" id="cw-week">${CHEVRON_UP}주로 접기</button></div>`;
+ const d=drawer('right',`<span class="tb-emo">${esc(emojiOf(s))}</span>${esc(s.className||s.name)} 날짜`,
+ `<div class="attendance-calendar flat"><div class="cal-month-nav">${navBtn('data-cwm="-1"','이전 달','‹')}<div class="cal-month-title">${y}년 ${m}월</div><div class="cal-nav-right">${todayBtn('cw-today')}${navBtn('data-cwm="1"','다음 달','›')}</div></div>
+ <div class="cal-grid">${CAL_DOW}${Array.from({length:dowMon(first)},()=>'<div class="cal-day empty"></div>').join('')}${Array.from({length:monthDays(ym)},(_,k)=>cell(`${ym}-${pad(k+1)}`)).join('')}</div></div>
+ <div class="jump"><button class="secondary" type="button" ${prev?`data-cs="${esc(prev.id)}"`:'disabled'}>‹ 직전${prev?' '+md(prev.date):''}</button><button class="secondary" type="button" ${next?`data-cs="${esc(next.id)}"`:'disabled'}>다음${next?' '+md(next.date):''} ›</button></div>`);
+ d.querySelectorAll('[data-cs]').forEach(b=>b.onclick=()=>{const id=b.dataset.cs;if(id===state.sessionId){d.close();return;}run(async()=>{await openSessionNow(id,true);d.close();},b);});
+ $('cw-today').onclick=e=>{const x=list.find(z=>z.date===seoulDate());if(x){if(x.id===state.sessionId)d.close();else run(async()=>{await openSessionNow(x.id,true);d.close();},e.currentTarget);return;}
+  run(async()=>{state.cwMonth=seoulDate().slice(0,7);await ensureClassMonth(state.cwMonth);drawDateDrawer();},e.currentTarget);};
+ d.querySelectorAll('[data-cwm]').forEach(b=>b.onclick=()=>run(async()=>{state.cwMonth=shiftMonth(state.cwMonth,Number(b.dataset.cwm));await ensureClassMonth(state.cwMonth);drawDateDrawer();},b));
 }
 // 다른 달을 보면 그 달까지 이 반 수업을 더 읽어 합친다.
 async function ensureClassMonth(ym){const list=state.classWeek||[],from=`${ym}-01`,to=`${ym}-${pad(monthDays(ym))}`;
@@ -149,39 +179,9 @@ async function ensureClassMonth(ym){const list=state.classWeek||[],from=`${ym}-0
  const more=(await api('class-sessions',{sessionId:state.sessionId,around:`${ym}-15`})).sessions||[];
  const map=new Map(list.map(x=>[x.id,x]));more.forEach(x=>map.set(x.id,x));state.classWeek=[...map.values()].sort((a,b)=>a.date.localeCompare(b.date));
  state.cwFrom=state.cwFrom&&state.cwFrom<addDays(`${ym}-15`,-63)?state.cwFrom:addDays(`${ym}-15`,-63);state.cwTo=state.cwTo&&state.cwTo>addDays(`${ym}-15`,35)?state.cwTo:addDays(`${ym}-15`,35);}
-function bindClassCal(el){
- el.querySelectorAll('[data-cs]').forEach(b=>b.onclick=()=>{const id=b.dataset.cs;if(id===state.sessionId||!leaveEdit())return;run(async()=>{await openSessionNow(id,true);state.cwMonth='';state.cwAnchor='';render();},b);});
- const t=el.querySelector('#cw-today');if(t)t.onclick=()=>{const x=(state.classWeek||[]).find(y=>y.date===seoulDate());if(x&&x.id!==state.sessionId){if(leaveEdit())run(()=>openSessionNow(x.id,true),t);return;}state.cwMonth='';state.cwAnchor=seoulDate();render();};
- const mo=el.querySelector('#cw-month');if(mo)mo.onclick=()=>run(async()=>{state.cwMonth=(state.cwAnchor||state.date).slice(0,7);await ensureClassMonth(state.cwMonth);render();},mo);
- const wk=el.querySelector('#cw-week');if(wk)wk.onclick=()=>{state.cwMonth='';render();};
- el.querySelectorAll('[data-cwm]').forEach(b=>b.onclick=()=>run(async()=>{state.cwMonth=shiftMonth(state.cwMonth,Number(b.dataset.cwm));await ensureClassMonth(state.cwMonth);render();},b));
-}
-// ≡ 수업 고르기 창: 주 한 줄(내 수업 있는 날 칠함, [오늘]) → 그날 내 수업(지금 진행 중 표시) → 보강 대기실 → 강사 바꾸기
-async function openClassPicker(){state.pick={date:state.date,day:state.day,dates:null};await run(async()=>{await pickerLoad(state.pick.date);});drawPicker();if(!$('sheet').open)$('sheet').showModal();}
-async function pickerLoad(date){const w=weekStart(date);const [day,days]=await Promise.all([date===state.date&&state.day?state.day:fetchDay(date),api('days',{from:w,to:addDays(w,6),...teacherArg()})]);state.pick={date,day,dates:new Set(days.dates)};}
-function drawPicker(){
- const p=state.pick,w=weekStart(p.date),sessions=(p.day?.sessions||[]).slice().sort((a,b)=>String(a.start).localeCompare(String(b.start)));
- const live=p.date===seoulDate()?nowSessionId(sessions):'',waiting=p.day?.makeupWaiting||[];
- const who=state.teacherId==='all'?'전체 수업':teacherName(state.teacherId);
- $('sheet').innerHTML=`<div class="dialog-head"><h2>수업 선택</h2><button class="ghost" type="button" id="sh-x">닫기</button></div>
- <div class="attendance-calendar day-mode picker-cal"><div class="cal-month-nav">${navBtn('data-pw="-7"','이전 주','‹')}<div class="cal-month-title">${md(w)} ~ ${md(addDays(w,6))}</div><div class="cal-nav-right">${todayBtn('pk-today')}${navBtn('data-pw="7"','다음 주','›')}</div></div>
- <div class="cal-grid">${CAL_DOW}${Array.from({length:7},(_,k)=>{const d=addDays(w,k);return dayCell(d,!!p.dates?.has(d),d===p.date,`data-pd="${d}"`);}).join('')}</div></div>
- <p class="group-label">${esc(longDate(p.date))} · ${esc(who)}</p>
- <div class="list">${sessions.length?sessions.map(s=>`<button class="row srow ${s.id===state.sessionId?'cur':''}" type="button" data-pick-session="${esc(s.id)}"><span class="emo">${s.makeup?'<span class="pill s-보강">보강</span>':esc(emojiOf(s))}</span><span class="meta"><span class="t">${esc(s.makeup?s.name:(s.className||s.name))}${s.id===live?' <span class="pill done">지금</span>':''}</span></span><span class="cnt-pill ${!s.students||!s.arrived?'':s.arrived>=s.students?'ok':'part'}" aria-label="등원 ${s.arrived}명, 전체 ${s.students}명">${s.arrived}/${s.students}</span><span class="time">${esc(s.time)}</span></button>`).join(''):'<p class="empty">이 날 수업이 없어요.</p>'}</div>
- <div class="list wait"><button class="row srow" type="button" id="open-wait"><span class="emo ico">${icon('users')}</span><span class="meta"><span class="t">보강 대기실</span></span><span class="cnt-pill">${waiting.length}명</span><span class="time chev">›</span></button></div>
- <div class="actions"><button class="secondary wide" type="button" id="pk-who">강사 바꾸기 · ${esc(who)}</button></div>`;
- const sh=$('sheet'),go=date=>run(async()=>{await pickerLoad(date);drawPicker();});
- $('sh-x').onclick=()=>sh.close();
- sh.querySelectorAll('[data-pw]').forEach(b=>b.onclick=()=>go(addDays(p.date,Number(b.dataset.pw))));
- sh.querySelectorAll('[data-pd]').forEach(b=>b.onclick=()=>go(b.dataset.pd));
- $('pk-today').onclick=()=>go(seoulDate());
- sh.querySelectorAll('[data-pick-session]').forEach(b=>b.onclick=()=>run(async()=>{state.date=p.date;state.day=p.day;await openSessionNow(b.dataset.pickSession);sh.close();},b));
- $('open-wait').onclick=()=>{sh.close();state.date=p.date;state.day=p.day;state.view='waiting';state.picked=new Set();render();};
- $('pk-who').onclick=()=>{sh.close();showTeachers();};
-}
 function renderEmpty(){
  topBar();setTabs(true);
- $('app').innerHTML=`<div class="list"><p class="empty tall">${state.date===seoulDate()?'오늘은':esc(dateLabel(state.date))+'에는'} ${state.teacherId==='all'?'':esc(teacherName(state.teacherId))+' 선생님 '}수업이 없어요.<br>왼쪽 위 ≡ 에서 다른 날 수업을 고를 수 있어요.</p></div>`;
+ $('app').innerHTML=`<div class="list"><p class="empty tall">${state.date===seoulDate()?'오늘은':esc(dateLabel(state.date))+'에는'} ${state.teacherId==='all'?'':esc(teacherName(state.teacherId))+' 선생님 '}수업이 없어요.<br>왼쪽 위 ≡ 에서 클래스를 고를 수 있어요.</p></div>`;
 }
 // + 기록 만들기 창(한 장): 구분 · 클래스(보고 있는 날짜의 내 수업) · 교재 · 주제 · 범위 · 내용. 만든 뒤 바로 기록 화면으로 간다.
 async function openCreateSheet(){
@@ -257,14 +257,14 @@ function openMakeupSheet(){
 // 리포트처럼 모든 폭에서 640 한 줄. 하단 탭으로 학생 목록 / 학습기록을 오가고, 학생 공간·기록 카드는 새 화면.
 // 칸 머리는 제목 / 안내 / 가운데 탭 3줄.
 async function openSession(id,btn){await run(()=>openSessionNow(id),btn);}
-// keep=true: 📅 날짜 이동으로 같은 반의 다른 수업으로 옮길 때 보던 탭·출석/과제 검사 전환과 열린 캘린더를 그대로 둔다.
+// keep=true: 📅 날짜 이동으로 같은 반의 다른 수업으로 옮길 때 보던 탭·출석/과제 검사 전환을 그대로 둔다.
 // 수업 날짜(서울)를 보고 있는 날짜로 삼고, 그날 내 수업 목록(state.day)을 함께 맞춘다(+ 기록 만들기의 클래스 목록).
 async function openSessionNow(id,keep=false){
  const [detail,week]=await Promise.all([api('session',{sessionId:id}),api('class-sessions',{sessionId:id}).catch(()=>({sessions:[]}))]);
  const date=ymdOf(detail.session.start)||state.date;
  if(date!==state.date||!state.day)state.day=await fetchDay(date).catch(()=>({sessions:[],makeupWaiting:[]}));
  state.date=date;state.sessionId=id;state.detail=detail;state.classWeek=week.sessions||[];state.cwFrom=addDays(date,-63);state.cwTo=addDays(date,35);state.view='session';state.books=null;
- if(!keep){state.tab='students';state.seg='att';state.recKind='전체';state.calPanel=false;state.cwMonth='';state.cwAnchor='';}
+ if(!keep){state.tab='students';state.seg='att';state.recKind='전체';}
  state.edit=false;state.draft={};state.hwRecord=state.detail.homeworkDue[0]?.recordId||'';render();}
 async function reloadSession(){state.detail=await api('session',{sessionId:state.sessionId});}
 function paneHead(title,hint,tabs='',acts=''){
@@ -285,7 +285,6 @@ function sessionBar(){const s=state.detail.session,v=state.view;
 function renderSession(){
  sessionBar();const v=state.view,el=$('app');state.saver=null;setTabs(true);
  (v==='student'?paneStudent:v==='record'?paneRecord:state.tab==='records'?paneRecords:paneStudents)(el);
- if(v==='session'&&state.calPanel){el.insertAdjacentHTML('afterbegin',classCalHtml());bindClassCal(el);}
 }
 function paneStudents(el){
  const d=state.detail,att=state.seg==='att',ed=editing('students');
@@ -297,15 +296,20 @@ function paneStudents(el){
  const acts=att?(d.students.length?editButton('students'):''):cur?editButton('students')+nlink(cur.recordId,cur.title):'';
  let body='';
  if(att){
-  body=`<div class="list">${d.students.map(s=>{const st=state.draft[s.attendanceId]?.status??s.status,ch=state.draft[s.attendanceId];
-   return `<div class="row ${ch?'changed':''} ${st==='🔴 결석'&&!ed?'dim':''}">${ed?'':`<button class="icon-btn" type="button" data-student="${esc(s.attendanceId)}" aria-label="${esc(s.name)} 학생 공간">`}<span class="av">${esc(s.name.slice(0,1))}</span>${ed?'':'</button>'}
-   <span class="meta"><span class="t">${esc(s.name)}</span><span class="d">${s.arrivedAt?'등원 '+timeOf(s.arrivedAt):''}${s.memo?(s.arrivedAt?' · ':'')+esc(s.memo):''}${!s.arrivedAt&&!s.memo?(STATUS[st]?'':'미입력'):''}</span></span>
-   ${ed?`<span class="seg">${Object.entries(STATUS).map(([v,l])=>`<button type="button" class="v-${l} ${st===v?'on':''}" data-att="${esc(s.attendanceId)}" data-v="${v}">${l}</button>`).join('')}</span>`:`<span class="pill s-${STATUS[st]||''}">${STATUS[st]||'미입력'}</span>`}</div>`;}).join('')||'<p class="empty">이 수업에 연결된 학생이 없어요.</p>'}</div>`;
+  // 한 줄(v2.5.80): [이름] [출석 상태] [등원] [하원] [메모]. 이름을 누르면 학생 공간, 메모를 누르면 메모 창(바로 저장). 편집 중에는 [이름] [출석|결석|보강]만.
+  const rows=d.students.map(s=>{const st=state.draft[s.attendanceId]?.status??s.status,ch=state.draft[s.attendanceId];
+   return `<div class="row s1 ${ch?'changed':''} ${st==='🔴 결석'&&!ed?'dim':''}">${ed?`<span class="nm">${esc(s.name)}</span>
+   <span class="seg">${Object.entries(STATUS).map(([v,l])=>`<button type="button" class="v-${l} ${st===v?'on':''}" data-att="${esc(s.attendanceId)}" data-v="${v}">${l}</button>`).join('')}</span>`
+   :`<button class="nm" type="button" data-student="${esc(s.attendanceId)}" aria-label="${esc(s.name)} 학생 공간">${esc(s.name)}</button><span class="c"><span class="pill s-${STATUS[st]||''}">${STATUS[st]||'미입력'}</span></span>
+   <span class="c tm">${s.arrivedAt?timeOf(s.arrivedAt):'–'}</span><span class="c tm">${s.leftAt?timeOf(s.leftAt):'–'}</span>
+   <button class="c memo-btn ${s.memo?'has':''}" type="button" data-memo="${esc(s.attendanceId)}" aria-label="${esc(s.name)} 메모${s.memo?' 있음':''}">${icon('memo')}</button>`}</div>`;}).join('');
+  body=d.students.length?`<div class="list stu ${ed?'editing':''}"><div class="srow-h" aria-hidden="true"><span>이름</span><span class="c">출석</span>${ed?'':'<span class="c">등원</span><span class="c">하원</span><span class="c">메모</span>'}</div>${rows}</div>`
+   :'<div class="list"><p class="empty">이 수업에 연결된 학생이 없어요.</p></div>';
  }else if(!cur)body='<div class="list"><p class="empty">오늘이 마감인 과제가 없어요.</p></div>';
  else{
   const pick=hw.length>=4?`<select id="hw-pick">${hw.map(h=>`<option value="${esc(h.recordId)}" ${h.recordId===cur.recordId?'selected':''}>${esc(h.title)}</option>`).join('')}</select>`:hw.length>1?`<div class="chips">${hw.map(h=>`<button class="chip ${h.recordId===cur.recordId?'on':''}" type="button" data-hw="${esc(h.recordId)}">${esc(h.range||h.title)} ${h.items.filter(sub).length}/${h.items.length}</button>`).join('')}</div>`:'';
   body=`${pick||ed?`<div class="toolrow pick-row"><div class="grow">${pick}</div>${ed?'<button class="act" type="button" id="all-done"><span>전원 제출</span></button>':''}</div>`:''}
-  <div class="list">${cur.items.map(i=>{const v=sub(i),ch=state.draft[i.activityId];return `<div class="row ${ch?'changed':''}"><span class="av">${esc(nameOf(i).slice(0,1))}</span><span class="meta"><span class="t">${esc(nameOf(i))}</span></span>
+  <div class="list">${cur.items.map(i=>{const v=sub(i),ch=state.draft[i.activityId];return `<div class="row ${ch?'changed':''}"><span class="meta"><span class="t">${esc(nameOf(i))}</span></span>
   ${ed?`<span class="seg"><button type="button" class="v-제출 ${v?'on':''}" data-hwact="${esc(i.activityId)}" data-v="1">제출</button><button type="button" class="v-미제출 ${v?'':'on'}" data-hwact="${esc(i.activityId)}" data-v="0">미제출</button></span>`:`<span class="pill ${v?'done':'miss'}">${v?'제출':'미제출'}</span>`}${nlink(i.activityId,nameOf(i)+' 학습활동')}</div>`;}).join('')}</div>`;
  }
  el.innerHTML=paneHead(`<p class="page-title">${icon('users')}학생 목록</p>${nlink(d.session.id,'수업')}`,hint,tabBtn(att,'data-seg="att"','출석')+tabBtn(!att,'data-seg="hw"','과제 검사'),acts)+`<div class="pbody">${body}</div>`;
@@ -317,10 +321,26 @@ function paneStudents(el){
  el.querySelectorAll('[data-hwact]').forEach(b=>b.onclick=()=>{const id=b.dataset.hwact,v=b.dataset.v==='1',orig=hw.flatMap(h=>h.items).find(i=>i.activityId===id).submitted;if(v===orig)delete state.draft[id];else state.draft[id]={submitted:v};render();});
  const ad=el.querySelector('#all-done');if(ad)ad.onclick=()=>{cur.items.forEach(i=>{if(i.submitted)delete state.draft[i.activityId];else state.draft[i.activityId]={submitted:true};});render();};
  el.querySelectorAll('[data-student]').forEach(b=>b.onclick=()=>openStudent(b.dataset.student,b));
+ el.querySelectorAll('[data-memo]').forEach(b=>b.onclick=()=>openMemo(b.dataset.memo));
  if(ed)state.saver=async()=>{const entries=Object.entries(state.draft);
   if(att)await api('save-attendance',{items:entries.map(([attendanceId,v])=>({attendanceId,...v}))});
   else await api('save-activities',{items:entries.map(([activityId,v])=>({activityId,...v}))});
   state.edit=false;state.draft={};updateSavebar();await reloadSession();toast(`저장했어요 · ${entries.length}건`);render();};
+}
+
+// 메모 창(v2.5.80): 메모를 바로 보고 고쳐 [저장]하면 바로 저장한다(편집 모드 없이). 빠른 입력은 메모 끝에 붙인다.
+const QUICK_MEMO=['교재 두고 옴','과제 안 해 옴','집중 좋음','조퇴'];
+function openMemo(id){
+ const s=state.detail.students.find(x=>x.attendanceId===id),c=state.detail.session,sh=$('sheet');
+ sh.innerHTML=`<div class="dialog-head"><h2>${esc(s.name)} 메모</h2><button class="ghost" type="button" id="sh-x">닫기</button></div>
+ <p class="page-hint">${esc(dateLabel(state.date))} ${esc(c.className||c.name)}${s.arrivedAt?' · 등원 '+timeOf(s.arrivedAt):''}${s.leftAt?' · 하원 '+timeOf(s.leftAt):''}</p>
+ <form id="mf" class="form"><textarea id="mf-t" maxlength="2000" aria-label="${esc(s.name)} 메모">${esc(s.memo)}</textarea>
+ <div class="chips quick">${QUICK_MEMO.map(q=>`<button class="chip" type="button" data-q="${esc(q)}">+ ${esc(q)}</button>`).join('')}</div>
+ <div class="actions"><button class="primary" type="submit">저장</button></div></form>`;
+ sh.showModal();$('sh-x').onclick=()=>sh.close();const t=$('mf-t');
+ sh.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{const v=t.value.trim();t.value=v?`${v}, ${b.dataset.q}`:b.dataset.q;t.focus();});
+ $('mf').onsubmit=e=>{e.preventDefault();const v=t.value;if(v===(s.memo||'')){sh.close();return;}
+  run(async()=>{await api('save-attendance',{items:[{attendanceId:id,memo:v}]});sh.close();await reloadSession();toast('메모를 저장했어요.');render();},e.submitter);};
 }
 
 // ---------- 학생 공간 ----------
