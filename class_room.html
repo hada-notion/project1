@@ -221,6 +221,34 @@ dialog.drawer.right{inset:0 0 0 auto;border-radius:0;border-top-left-radius:var(
 .memo-btn svg.line{width:var(--icon-md);height:var(--icon-md)}
 .memo-btn.has{background:var(--brand-soft);color:var(--brand-deep)}
 .chips.quick{flex-wrap:wrap;overflow:visible;margin-top:var(--space-2)}
+/* 교재 카드(v2.5.80): 학부모 리포트 교재 카드(.book-row)처럼 [표지 3:4] [교재명 / 설명 / 진도 막대 / 최근 범위]. 기록 만들기의 교재 칸과 교재 고르기 목록에 쓴다.
+   표지(72×96)가 카드 안에서 가장 높고 가운데에 오게 해(교재명은 한 줄) 표지와 카드 테두리 사이 위·왼쪽·아래 여백이 모두 12px로 같다. */
+.book-row{position:relative;display:flex;gap:var(--space-3);align-items:center;width:100%;padding:var(--space-3);border:1px solid var(--control-border);border-radius:var(--radius-md);background:var(--surface);font:inherit;color:inherit;text-align:left;cursor:pointer}
+.book-row.empty{border:2px dashed var(--brand-border);background:var(--brand-tint)}
+.book-row.on{border:2px solid var(--brand-deep)}
+.br-cover{position:relative;flex:none;width:calc(var(--space-12) + var(--space-6));aspect-ratio:3/4;border-radius:var(--radius-sm);overflow:hidden;background:var(--brand-soft);color:var(--text-subtle);display:flex;align-items:center;justify-content:center}
+.book-row.empty .br-cover{background:var(--surface);border:1px solid var(--brand-border)}
+.br-cover svg.line{width:var(--icon-lg);height:var(--icon-lg)}
+.br-cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.br-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:var(--space-1)}
+.br-title{font-weight:800;font-size:var(--text-body);line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.book-row.on .br-title{padding-right:var(--space-8)}
+.br-sub{font-size:var(--text-caption);color:var(--text-subtle)}
+.progress-line{display:flex;align-items:center;gap:var(--space-2);margin-top:var(--space-1)}
+.progress-line .track{flex:1;height:var(--space-2);border-radius:var(--radius-pill);background:var(--brand-soft);overflow:hidden}
+.progress-line .fill{display:block;height:100%;border-radius:var(--radius-pill);background:var(--brand-deep)}
+.progress-line b{font-size:var(--text-caption)}
+.br-recent{display:flex;align-items:center;gap:var(--space-1);min-width:0;font-size:var(--text-caption);color:var(--text-muted)}
+.br-recent span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.br-recent svg.line{flex:none;width:var(--icon-sm);height:var(--icon-sm)}
+.br-chev{flex:none;align-self:center;font-size:var(--text-title);color:var(--text-subtle)}
+.br-check{position:absolute;top:var(--space-3);right:var(--space-3);width:var(--space-6);height:var(--space-6);border-radius:var(--radius-pill);background:var(--brand-deep);color:var(--surface);display:flex;align-items:center;justify-content:center}
+.br-check svg.line{width:var(--icon-sm);height:var(--icon-sm)}
+.br-list{display:flex;flex-direction:column;gap:var(--space-2)}
+/* 구분 탭은 가로 전체 3등분 */
+.kind-tabs{display:block}
+.kind-tabs .tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.kind-tabs .tabs button span{padding-left:0;padding-right:0;text-align:center}
 .cal-day.plan{box-shadow:inset 0 0 0 1.5px var(--brand-border);color:var(--text-muted)}
 .cal-day.picked{box-shadow:inset 0 0 0 2px var(--brand-deep)}
 .cal-day.today,.cal-day.today.picked{box-shadow:inset 0 0 0 2px var(--danger)}
@@ -261,6 +289,6 @@ dialog.drawer.right{inset:0 0 0 auto;border-radius:0;border-top-left-radius:var(
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <script src="hada_config.js"></script>
 <script src="admin_auth.js?v=ec2cac35"></script>
-<script src="class_room.js?v=4dd1d6fa"></script>
+<script src="class_room.js?v=916c4692"></script>
 </body>
 </html>

@@ -41,6 +41,7 @@ import {
 	setAssignmentGenError,
 } from "./createAssignmentTarget.ts"
 import { isRunning } from "./statusTracking.ts"
+import { text as propText, numberOf as propNumber, fileUrlOf } from "./reportCacheShared.ts"
 import { runInBackground } from "./backgroundTask.ts"
 
 type Page = Record<string, any>
@@ -366,6 +367,8 @@ export async function loadBooks(sessionId: string) {
 	const owners = new Map<string, string[]>()
 	for (const r of registrations) for (const b of rel(r, "진도교재")) owners.set(b, [...(owners.get(b) ?? []), r.id])
 	const books = await getPages(Array.from(owners.keys()))
+	// 교재 카드(v2.5.80): 리포트 교재 카드처럼 표지(정규교재 "북커버")·쪽수·진행도·최근 학습 범위를 함께 준다.
+	const regulars = new Map((await getPages(dedupe(books.flatMap((b) => rel(b, "정규교재"))))).map((r) => [r.id as string, r]))
 	return {
 		registrations: registrations.map((r) => ({ id: r.id as string, name: plain(r, "이름") || anyTitleText(r) })),
 		books: books
@@ -376,6 +379,16 @@ export async function loadBooks(sessionId: string) {
 				mode: selectName(b, "진도방식") ?? "",
 				templateId: rel(b, "반별교재")[0] ?? null,
 				ownerIds: owners.get(b.id) ?? [],
+				...(() => {
+					const rp = regulars.get(rel(b, "정규교재")[0])?.properties
+					const progress = propNumber(b.properties?.["진행도"])
+					return {
+						cover: fileUrlOf(rp?.["북커버"]) ?? "",
+						pages: propNumber(rp?.["전체 페이지"]),
+						progress: progress === null ? null : Math.round(progress * 100),
+						recent: propText(b.properties?.["최근 학습 범위"]),
+					}
+				})(),
 			}))
 			.sort((a, b) => a.name.localeCompare(b.name, "ko")),
 	}
