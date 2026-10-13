@@ -720,6 +720,18 @@ body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
 .donut-title .inline-icon { width: 16px; height: 16px; }
 .day-status { margin: 4px 0 6px; min-height: 34px; display: flex; align-items: center; justify-content: center; }
 .day-status .badge { font-size: 15px; font-weight: 700; padding: 6px 16px; }
+/* (v2.5.97) 보고서 위 요약 3칸(출석·과제·평가): 일간 평가 현황 점수 알약은 상태 배지와 같은 크기, 좁은 폰에서는 3칸이 들어가게 제목·도넛·배지를 조금 줄인다 */
+.day-status .log-pill { font-size: 15px; font-weight: 700; padding: 6px 16px; }
+.report-donut-row.three .donut-card { min-width: 0; }
+@media (max-width: 480px) {
+  .report-donut-row.three { gap: 8px; }
+  .report-donut-row.three .donut-card { padding: 14px 4px; }
+  .report-donut-row.three .donut-title { font-size: 13px; white-space: nowrap; }
+  .report-donut-row.three .donut-title .inline-icon { width: 14px; height: 14px; }
+  .report-donut-row.three .donut { width: 68px; height: 68px; }
+  .report-donut-row.three .donut-hole { width: 50px; height: 50px; font-size: 13px; }
+  .report-donut-row.three .day-status .badge, .report-donut-row.three .day-status .log-pill { font-size: 13px; padding: 5px 10px; white-space: nowrap; }
+}
 .card.rep-card { padding: 16px; margin-bottom: 10px; overflow: hidden; }
 .rep-sub { font-size: 13px; font-weight: 600; color: var(--text-subtle); margin: 4px 2px 8px; }
 .card + .rep-sub { margin-top: 16px; }
@@ -910,6 +922,6 @@ body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
 
 <script src="hada_config.js"></script>
 <script src="student_report_part1.js?v=5bbab92f"></script>
-<script src="student_report_part2.js?v=a3fbc7bc"></script>
+<script src="student_report_part2.js?v=d5d63941"></script>
 </body>
 </html>
