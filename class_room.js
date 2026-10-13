@@ -138,7 +138,7 @@ function drawer(side,title,body){const d=$('drawer');d.className=`drawer ${side}
  d.innerHTML=`<div class="dr-in"><div class="dr-head"><h2>${title}</h2><button class="icon-btn" type="button" id="dr-x" aria-label="닫기">${icon('x')}</button></div>${body}</div>`;
  $('dr-x').onclick=()=>d.close();if(!d.open)d.showModal();return d;}
 $('drawer').addEventListener('click',e=>{if(e.target===$('drawer'))$('drawer').close();});
-// ≡ 클래스 목록: [이모지] [클래스명] [오늘 수업시간]. 오늘 수업이 있는 반을 시간순으로 위에, 나머지는 이름순(시간 칸 비움).
+// ≡ 클래스 목록: [이모지] [클래스명] [오늘 수업시간]. 오늘 수업이 있는 반을 시간순으로 위에, 나머지는 이름순(시간 칸에 "수업 없음").
 // 반을 누르면 오늘 수업(진행 중 → 다음 → 마지막) → 없으면 다음 수업 → 없으면 가장 최근 수업을 연다. 날짜는 📅에서 고른다.
 const classesKey=()=>state.teacherId+'|'+seoulDate();
 async function openClassDrawer(){
@@ -150,7 +150,7 @@ function drawClassDrawer(){
  const list=(state.classes?.list||[]).slice().sort((a,b)=>(!a.today.length-!b.today.length)||String(a.today[0]?.start||'').localeCompare(String(b.today[0]?.start||''))||a.name.localeCompare(b.name,'ko'));
  const waiting=state.day?.makeupWaiting||[];
  const d=drawer('left',esc(state.teacherId==='all'?'전체 클래스':`${who} 선생님 클래스`),
- `<div class="list">${list.length?list.map(c=>`<button class="row srow ${c.classId===cur?'cur':''}" type="button" data-class="${esc(c.classId)}"><span class="emo">${esc(c.emoji||pickClassColorEmoji(c.name))}</span><span class="meta"><span class="t">${esc(c.name)}</span></span><span class="time">${esc(c.today[0]?.time||'')}</span></button>`).join(''):'<p class="empty">앞뒤 4주 안에 수업이 있는 클래스가 없어요.</p>'}</div>
+ `<div class="list">${list.length?list.map(c=>`<button class="row srow ${c.classId===cur?'cur':''}" type="button" data-class="${esc(c.classId)}"><span class="emo">${esc(c.emoji||pickClassColorEmoji(c.name))}</span><span class="meta"><span class="t">${esc(c.name)}</span></span><span class="time ${c.today.length?'':'none'}">${esc(c.today[0]?.time||'수업 없음')}</span></button>`).join(''):'<p class="empty">앞뒤 4주 안에 수업이 있는 클래스가 없어요.</p>'}</div>
  <div class="list wait"><button class="row srow" type="button" id="open-wait"><span class="emo ico">${icon('users')}</span><span class="meta"><span class="t">보강 대기실</span></span><span class="cnt-pill">${waiting.length}명</span><span class="time chev">›</span></button></div>
  <div class="dr-foot"><button class="secondary wide" type="button" id="dr-who">강사 바꾸기 · ${esc(who)}</button></div>`);
  d.querySelectorAll('[data-class]').forEach(b=>b.onclick=()=>{const c=list.find(x=>x.classId===b.dataset.class),id=nowSessionId(c.today)||c.next?.id||c.last?.id;if(!id)return;
