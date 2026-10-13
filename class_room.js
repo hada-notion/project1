@@ -553,18 +553,27 @@ function openMemo(id,key='memo'){
 }
 
 // ---------- 학생 탭(v2.5.93, 반 요약 v2.5.94) ----------
-// 위: 반 요약 카드(보고 있는 수업 달·지난달 출석률, 최근 평가 평균, 최근 평가 5개 반 평균 막대). 아래: 반 학생 명부
-// [이름 학교 · 학년] / [출석 n% · 평가 n점](낮으면 빨강: 출석 80% 미만, 점수 60점 미만) / 학생·우선 연락처(누르면 전화) / ↗ 학생 보고서(새 탭).
+// 위: 반 요약 카드(보고 있는 수업 달 출석률·과제이행률·최근 평가 평균, 그리고 리포트 "최근 평가 추이"와 같은 꺾은선 그래프, v2.5.96). 아래: 반 학생 명부
+// [이름 학교 · 학년 … ↗ 학생 보고서(새 탭, 이름과 같은 줄)] / [출석 n% · 평가 n점](낮으면 빨강: 출석 80% 미만, 점수 60점 미만) /
+// 연락처(누르면 전화)·보고서 상태는 기록 카드와 같은 ⌄ 펼치기 안에(v2.5.96).
 // 학생 탭을 열 때만 읽는다(roster, class-stats). 보고서 링크가 꺼져 있거나 토큰이 없으면 ↗ 대신 안내 글자.
 function ensureStats(){const id=state.sessionId;if(state.statsCache[id])return state.statsCache[id];
  if(ensureStats.busy!==id){ensureStats.busy=id;whenLoaded(api('class-stats',{sessionId:id}).then(r=>{state.statsCache[id]=r;}).finally(()=>{ensureStats.busy=null;}));}return null;}
 const monthName=ym=>Number(ym.slice(5))+'월';
 function classSummary(st){
  if(!st)return '<div class="card cls-sum"><p class="empty">반 요약을 불러오는 중…</p></div>';
- const pct=r=>r===null||r===undefined?'–':r+'%',t=st.tests,avg=t.length?Math.round(t.reduce((n,x)=>n+x.avg,0)/t.length):null;
+ const pct=r=>r===null||r===undefined?'–':r+'%',t=st.tests,avg=t.length?Math.round(t.reduce((n,x)=>n+x.avg,0)/t.length*10)/10:null;
  const tone=(v,lo)=>v===null||v===undefined?'':v>=90?'good':v<lo?'bad':'';
- return `<div class="card cls-sum"><div class="home-stats">${stat(pct(st.month.rate),`${monthName(st.month.ym)} 출석률`,tone(st.month.rate,80))}${stat(pct(st.prev.rate),`${monthName(st.prev.ym)} 출석률`)}${stat(avg===null?'–':avg+'점','최근 평가 평균',tone(avg,60))}</div>
- ${t.length?`<p class="group-label">최근 평가 ${t.length}개 · 반 평균</p><div class="tbars" role="img" aria-label="최근 평가 반 평균 ${t.map(x=>`${md(x.date)} ${x.avg}점`).join(', ')}">${t.map(x=>`<div class="tb"><span class="tb-bar"><b>${x.avg}</b><i style="height:${Math.max(6,x.avg)*0.8}%"></i></span><span>${esc(md(x.date))}</span><small>${esc((x.range||x.subject||'평가').slice(0,8))}</small></div>`).join('')}</div>`:'<p class="empty">점수가 있는 평가가 아직 없어요.</p>'}</div>`;}
+ return `<div class="card cls-sum"><div class="home-stats">${stat(pct(st.month.rate),`${monthName(st.month.ym)} 출석률`,tone(st.month.rate,80))}${stat(pct(st.homework.rate),`${monthName(st.homework.ym)} 과제이행률`,tone(st.homework.rate,80))}${stat(avg===null?'–':avg.toFixed(1)+'점','최근 평가 평균',tone(avg,60))}</div>
+ <p class="group-label">최근 평가 추이 · 반 평균</p>${trendChart(t)}</div>`;}
+// 최근 평가 추이(v2.5.96): 학부모 리포트 buildTestTrendChartHtml과 같은 그림(400×200, 0~100 눈금 20 간격, 선·점, 점 위 "n.n점", 아래 "MM.DD"). 색은 토큰(CSS .trend).
+function trendChart(points){
+ if(!points.length)return '<p class="empty">점수가 있는 평가가 아직 없어요.</p>';
+ const W=400,H=200,PX=30,PT=20,PB=34,step=points.length>1?(W-PX*2)/(points.length-1):0,x=i=>PX+i*step+(points.length>1?0:(W-PX*2)/2),y=v=>PT+(H-PT-PB)-(v/100)*(H-PT-PB);
+ const grid=[0,20,40,60,80,100].map(v=>`<line class="tg" x1="${PX}" y1="${y(v)}" x2="${W-PX}" y2="${y(v)}"/><text class="tt" x="2" y="${y(v)+4}" font-size="9">${v}</text>`).join('');
+ const line=points.length>1?`<polyline class="tl" points="${points.map((p,i)=>`${x(i)},${y(p.avg)}`).join(' ')}"/>`:'';
+ const dots=points.map((p,i)=>`<circle class="td" cx="${x(i)}" cy="${y(p.avg)}" r="4"/><text class="tv" x="${x(i)}" y="${y(p.avg)-10}" font-size="11" text-anchor="middle">${p.avg.toFixed(1)}점</text><text class="tx" x="${x(i)}" y="${H-10}" font-size="10" text-anchor="middle">${esc(p.date.slice(5).replace('-','.'))}</text>`).join('');
+ return `<div class="trend" role="img" aria-label="최근 평가 반 평균 ${points.map(p=>`${md(p.date)} ${p.avg}점`).join(', ')}"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${grid}${line}${dots}</svg></div>`;}
 function ensureRoster(){const id=state.sessionId;if(state.rosterCache[id])return state.rosterCache[id];
  if(ensureRoster.busy!==id){ensureRoster.busy=id;whenLoaded(api('roster',{sessionId:id}).then(r=>{state.rosterCache[id]=r.students;}).finally(()=>{ensureRoster.busy=null;}));}return null;}
 const telHref=p=>'tel:'+String(p).replace(/[^0-9+]/g,'');
@@ -573,10 +582,14 @@ function paneRoster(el){
  if(!list){el.innerHTML=head('학생 정보를 불러오는 중…')+`<div class="pbody">${classSummary(st)}</div>`;return;}
  const per=s=>st?.students?.[s.registrationId],pill=(txt,low)=>`<span class="pill ${low?'miss':''}">${txt}</span>`;
  const tel=(label,p)=>p?`<a class="tel" href="${esc(telHref(p))}" aria-label="${label} ${esc(p)} 전화 걸기">${label} ${esc(p)}</a>`:'';
- el.innerHTML=head(`학생 <b>${list.length}</b>명 · 출석률은 ${st?monthName(st.month.ym):'이번 달'}, 점수는 최근 평가 · 번호를 누르면 전화, ↗는 학생 보고서(새 탭)`)+`<div class="pbody">${classSummary(st)}${list.length?`<div class="list roster">${list.map(s=>`<div class="row r1"><span class="meta"><span class="t">${esc(s.name)}${s.school||s.grade?`<small>${esc([s.school,s.grade].filter(Boolean).join(' · '))}</small>`:''}</span>
-  ${(()=>{const x=per(s);if(!x)return '';const a=x.rate!==null&&x.rate!==undefined?pill(`출석 ${x.rate}%`,x.rate<80):'',b=x.score!==null&&x.score!==undefined?pill(`평가 ${x.score}점`,x.score<60):'';return a||b?`<span class="r-stats">${a}${b}</span>`:'';})()}
-  <span class="phones">${tel('학생',s.studentPhone)}${tel('우선',s.parentPhone)}${s.studentPhone||s.parentPhone?'':'<span class="no-tel">연락처 없음</span>'}</span></span>
-  ${s.reportToken?`<a class="icon-btn rep" href="student_report.html?token=${encodeURIComponent(s.reportToken)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(s.name)} 학생 보고서 새 탭에서 열기" title="학생 보고서">${icon('ext')}</a>`:`<span class="no-rep">${s.reportOff?'보고서 꺼짐':'보고서 없음'}</span>`}</div>`).join('')}</div>`:'<div class="list"><p class="empty">이 수업에 연결된 학생이 없어요.</p></div>'}</div>`;
+ el.innerHTML=head(`학생 <b>${list.length}</b>명 · 출석률은 ${st?monthName(st.month.ym):'이번 달'}, 점수는 최근 평가 · ↗ 학생 보고서(새 탭) · 펼치면 연락처`)+`<div class="pbody">${classSummary(st)}${list.length?`<div class="list roster">${list.map(s=>{const x=per(s),
+  a=x&&x.rate!==null&&x.rate!==undefined?pill(`출석 ${x.rate}%`,x.rate<80):'',b=x&&x.score!==null&&x.score!==undefined?pill(`평가 ${x.score}점`,x.score<60):'';
+  return `<div class="r1 log-card"><div class="log-head r-body"><div class="r-top"><span class="r-name">${esc(s.name)}${s.school||s.grade?`<small>${esc([s.school,s.grade].filter(Boolean).join(' · '))}</small>`:''}</span>
+  ${s.reportToken?`<a class="icon-btn rep" href="student_report.html?token=${encodeURIComponent(s.reportToken)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(s.name)} 학생 보고서 새 탭에서 열기" title="학생 보고서">${icon('ext')}</a>`:''}</div>
+  ${a||b?`<div class="r-stats">${a}${b}</div>`:''}
+  <button class="log-chev" type="button" data-chev="연락처" aria-expanded="false" aria-label="${esc(s.name)} 연락처 펼치기"><span>${CHEVRON_DOWN}</span></button></div>
+  <div class="log-extra r-extra" hidden><div class="phones">${tel('학생',s.studentPhone)}${tel('우선',s.parentPhone)}${s.studentPhone||s.parentPhone?'':'<span class="no-tel">연락처 없음</span>'}</div>
+  ${s.reportToken?'':`<p class="no-rep">${s.reportOff?'학생 보고서 링크가 꺼져 있어요.':'학생 보고서 링크가 없어요.'}</p>`}</div></div>`;}).join('')}</div>`:'<div class="list"><p class="empty">이 수업에 연결된 학생이 없어요.</p></div>'}</div>`;
 }
 
 // ---------- 학습기록 ----------
@@ -613,7 +626,7 @@ function bodyHtml(body){if(!Array.isArray(body)||!body.length)return '';const ou
   else if(b.type==='table'&&Array.isArray(b.rows))out.push(`<table class="lb-table">${b.rows.map(row=>`<tr>${(row||[]).map(c=>`<td>${spansHtml({spans:c})}</td>`).join('')}</tr>`).join('')}</table>`);}
  close();return out.join('');}
 // 내용 펼치기·접기(모든 화면 공용, 화면을 다시 그리지 않는다)
-$('app').addEventListener('click',e=>{const b=e.target.closest('[data-chev]');if(!b)return;const x=b.closest('.log-card').querySelector('.log-extra'),open=x.hidden;x.hidden=!open;b.setAttribute('aria-expanded',open);b.setAttribute('aria-label',open?'본문 접기':'본문 펼치기');});
+$('app').addEventListener('click',e=>{const b=e.target.closest('[data-chev]');if(!b)return;const x=b.closest('.log-card').querySelector('.log-extra'),open=x.hidden;x.hidden=!open;b.setAttribute('aria-expanded',open);const what=b.dataset.chev||'본문';b.setAttribute('aria-label',open?`${what} 접기`:`${what} 펼치기`);});
 // 기록을 날짜별로(최근 날짜부터). 보고 있는 수업 날짜에는 표시를 붙인다.
 function recTimeline(recs,empty){const dates=[...new Set(recs.map(r=>r.date||''))];
  return dates.map(d=>{const day=recs.filter(r=>(r.date||'')===d),cur=day.some(r=>r.sessionId===state.sessionId);

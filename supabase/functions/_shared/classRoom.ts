@@ -293,10 +293,11 @@ async function sessionRecords(sessions: Page[]) {
 	return [...found.values()]
 }
 
-// 반 요약(v2.5.94): 학생 탭 위 반 요약과 학생별 출석률·최근 평가 점수. 범위는 캘린더·반 학습기록과 같은 같은 반 앞뒤 수업(9주 전 ~ 5주 뒤, 보강 제외).
-// 출석률 = 출석(🟢 출석, 또는 상태 없이 등원) ÷ 확인된 출석(출석·결석·보강). 아직 아무것도 입력되지 않은 출석과 앞으로의 수업은 빼고, 보강은 결석처럼 센다.
-// 월은 보고 있는 수업 날짜의 달과 그 전 달(학생별 출석률은 보고 있는 달). 반이 없는 보강 수업은 그 수업만 센다.
-// 평가 = 같은 범위 "평가" 학습기록의 학습활동 점수(정답 문항 ÷ 전체 문항 × 100, 전체 문항이 있는 것만). 반 평균은 최근 5개, 학생별은 가장 최근 점수.
+// 반 요약(v2.5.94, 기준 v2.5.96): 학생 탭 위 반 요약과 학생별 출석률·최근 평가 점수. 범위는 캘린더·반 학습기록과 같은 같은 반 앞뒤 수업(9주 전 ~ 5주 뒤, 보강 제외).
+// 출석률 = 학부모 리포트 월간 보고서와 같은 기준(v2.5.96): (출석 + 보강, 또는 상태 없이 등원) ÷ 확인된 출석(출석·보강·결석). 아직 아무것도 입력되지 않은 출석과 앞으로의 수업은 뺀다.
+// 과제이행률(v2.5.96) = 그 달에 마감인 과제 학습활동(과제 마감일 기준) 중 제출 비율. 아직 마감일이 오지 않은 과제는 뺀다.
+// 월은 보고 있는 수업 날짜의 달(학생별 출석률도 그 달). 반이 없는 보강 수업은 그 수업만 센다.
+// 평가 = 같은 범위 "평가" 학습기록의 학습활동 점수(정답 문항 ÷ 전체 문항 × 100, 전체 문항이 있는 것만). 반 평균(소수 한 자리, 리포트 평가 추이와 같음)은 최근 5개, 학생별은 가장 최근 점수.
 export async function loadClassStats(sessionId: string, now = Date.now()) {
 	if (!isId(sessionId)) throw new ClassRoomError(400, "수업 형식이 올바르지 않습니다.")
 	const session = await getPage(sessionId) as Page
@@ -305,47 +306,52 @@ export async function loadClassStats(sessionId: string, now = Date.now()) {
 	if (!sessions.length) sessions = [session]
 	const startOf = (p?: Page) => p?.properties?.["수업일시"]?.date?.start ?? null
 	const byId = new Map(sessions.map((p) => [p.id as string, p]))
-	const ym = seoulDate(startOf(session)).slice(0, 7)
-	const [yy, mm] = ym.split("-").map(Number)
-	const prevYm = mm === 1 ? `${yy - 1}-12` : `${yy}-${String(mm - 1).padStart(2, "0")}`
-	const months: Record<string, { present: number; counted: number }> = { [ym]: { present: 0, counted: 0 }, [prevYm]: { present: 0, counted: 0 } }
+	const ym = seoulDate(startOf(session)).slice(0, 7), today = seoulDate(new Date(now).toISOString())
+	const month = { present: 0, counted: 0 }, hw = { done: 0, total: 0 }
 	const students: Record<string, { present: number; counted: number; score: number | null; scoreDate: string | null }> = {}
 	const student = (id: string) => (students[id] ??= { present: 0, counted: 0, score: null, scoreDate: null })
 	for (const a of attendances) {
 		const start = startOf(byId.get(rel(a, "수업").find((id) => byId.has(id)) ?? ""))
-		if (!start || Date.parse(start) > now) continue
+		if (!start || Date.parse(start) > now || seoulDate(start).slice(0, 7) !== ym) continue
 		const status = selectName(a, "출석 상태") ?? ""
-		const present = status === "🟢 출석" || (!status && !!dateStart(a, "등원스템프"))
-		if (!present && status !== "🔴 결석" && status !== "🔵 보강") continue
-		const month = months[seoulDate(start).slice(0, 7)]
-		if (!month) continue
+		const present = status === "🟢 출석" || status === "🔵 보강" || (!status && !!dateStart(a, "등원스템프"))
+		if (!present && status !== "🔴 결석") continue
 		month.counted++
 		if (present) month.present++
 		const reg = rel(a, "등록")[0]
-		if (reg && seoulDate(start).slice(0, 7) === ym) { const s = student(reg); s.counted++; if (present) s.present++ }
+		if (reg) { const s = student(reg); s.counted++; if (present) s.present++ }
 	}
-	// 평가 점수
-	const records = (await sessionRecords(sessions)).filter((r) => selectName(r, "구분") === "평가")
+	// 과제이행률·평가 점수: 같은 범위의 과제·평가 학습기록과 그 학습활동
+	const records = (await sessionRecords(sessions)).filter((r) => ["과제", "평가"].includes(selectName(r, "구분") ?? ""))
 	const acts: Page[] = []
 	for (let i = 0; i < records.length; i += 90) {
 		const part = records.slice(i, i + 90)
 		acts.push(...await queryAllPages(DS_STUDY_ACTIVITY, { or: part.map((r) => ({ property: "학습기록", relation: { contains: r.id } })) }))
 	}
-	const summaries = new Map((await withSubjects(records)).map((r) => [r.id, r]))
-	const tests = records.map((r) => {
+	const homeworkIds = new Set(records.filter((r) => selectName(r, "구분") === "과제").map((r) => r.id as string))
+	for (const a of acts) {
+		if (!rel(a, "학습기록").some((id) => homeworkIds.has(id))) continue
+		const due = seoulDate(dateStartOf(a.properties?.["과제 마감일"]) ?? null)
+		if (!due || due.slice(0, 7) !== ym || due > today) continue
+		hw.total++
+		if (selectName(a, "과제상태") === HOMEWORK_SUBMITTED) hw.done++
+	}
+	const tests0 = records.filter((r) => selectName(r, "구분") === "평가")
+	const summaries = new Map((await withSubjects(tests0)).map((r) => [r.id, r]))
+	const tests = tests0.map((r) => {
 		const start = startOf(byId.get(rel(r, "수업").find((id) => byId.has(id)) ?? ""))
 		const scored = acts.filter((a) => rel(a, "학습기록").includes(r.id as string)).map((a) => ({ reg: rel(a, "등록")[0] ?? "", correct: numberOf(a, "정답 문항"), total: numberOf(a, "전체 문항") }))
-			.filter((x) => x.total && x.total > 0 && typeof x.correct === "number").map((x) => ({ reg: x.reg, score: Math.round((x.correct as number) / (x.total as number) * 100) }))
+			.filter((x) => x.total && x.total > 0 && typeof x.correct === "number").map((x) => ({ reg: x.reg, pct: (x.correct as number) / (x.total as number) * 100 }))
 		const s = summaries.get(r.id as string)
 		return { id: r.id as string, subject: s?.subject ?? "", range: s?.range ?? "", date: seoulDate(start), start: start ?? "", scored }
 	}).filter((t) => t.scored.length && t.start && Date.parse(t.start) <= now).sort((a, b) => a.start.localeCompare(b.start))
-	for (const t of tests) for (const x of t.scored) if (x.reg) { const s = student(x.reg); s.score = x.score; s.scoreDate = t.date }
-	const rate = (m: { present: number; counted: number }) => ({ ...m, rate: m.counted ? Math.round(m.present / m.counted * 100) : null })
+	for (const t of tests) for (const x of t.scored) if (x.reg) { const s = student(x.reg); s.score = Math.round(x.pct); s.scoreDate = t.date }
+	const pct = (n: number, d: number) => d ? Math.round(n / d * 100) : null
 	return {
-		month: { ym, ...rate(months[ym]) },
-		prev: { ym: prevYm, ...rate(months[prevYm]) },
-		tests: tests.slice(-5).map((t) => ({ id: t.id, subject: t.subject, range: t.range, date: t.date, avg: Math.round(t.scored.reduce((n, x) => n + x.score, 0) / t.scored.length), count: t.scored.length })),
-		students: Object.fromEntries(Object.entries(students).map(([id, s]) => [id, { ...s, rate: s.counted ? Math.round(s.present / s.counted * 100) : null }])),
+		month: { ym, ...month, rate: pct(month.present, month.counted) },
+		homework: { ym, ...hw, rate: pct(hw.done, hw.total) },
+		tests: tests.slice(-5).map((t) => ({ id: t.id, subject: t.subject, range: t.range, date: t.date, avg: Math.round(t.scored.reduce((n, x) => n + x.pct, 0) / t.scored.length * 10) / 10, count: t.scored.length })),
+		students: Object.fromEntries(Object.entries(students).map(([id, s]) => [id, { ...s, rate: pct(s.present, s.counted) }])),
 	}
 }
 
