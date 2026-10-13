@@ -465,6 +465,13 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
     if (!bookTitle) {
       bookTitle = text(lprops["학습"])
     }
+    // (v2.5.66) 교재 없는 기록은 "주제"를 먼저 쓴다(교재명 → 주제 → 구분). 규칙대로 지은 제목
+    // ("[학습] …(반) 10.13(화)")은 화면에 맞지 않아 구분으로 대신하고, 손으로 적은 옛 제목은 그대로 둔다.
+    if (!bookId) {
+      const topic = text(lprops["주제"])
+      if (topic) bookTitle = topic
+      else if (/^[(학습|과제|평가)]/.test(bookTitle)) bookTitle = category || "학습"
+    }
     // (참고) 이 수정 배포 시 scripts/check-known-regressions.sh의 오래된 검사 2건(100점 💯 문구,
     // 새로고침 버튼 <img> 요구)이 최신 Feather 아이콘 통일 작업과 맞지 않아 회귀 가드를 함께
     // 갱신했다(같은 날짜 커밋 참고).
