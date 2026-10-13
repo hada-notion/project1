@@ -170,6 +170,17 @@ Deno.test("학습기록: 클래스 없는 복사/직접 교재는 해당 등록�
   await learning.finishCreateLearningRecord("session");const rec=f.created.filter(p=>p.db==="records").at(-1);assert(rec && ids(rec,"등록")==="a" && ids(rec,"출석")==="att-a" && ids(rec,"진도교재")===owned.id)
  }
 }))
+Deno.test("학습기록: 보강 수업은 반 교재도 가진 학생만 연결하고 보강 체크", () => withMock(async f => {
+ for(const makeup of [false,true]){
+  const grp: any=book("group"+makeup,"그룹 진도",["class"],["a"]);f.pages[grp.id]=grp;grp.properties["오늘 학습"]={checkbox:true}
+  f.pages.a.properties["진도교재"]=rel(grp.id);f.pages.b.properties["진도교재"]=rel()
+  f.pages.session={id:"session",db:"sessions",properties:{"등록":rel("a","b"),"출석":rel("att-a","att-b"),"클래스":rel(),"수업일시":{date:{start:"2026-10-06T20:00:00+09:00"}},"보강":{checkbox:makeup}}}
+  for(const id of ["a","b"])f.pages["att-"+id]={id:"att-"+id,db:"attendance",properties:{"등록":rel(id)}}
+  await learning.finishCreateLearningRecord("session");const rec=f.created.filter(p=>p.db==="records").at(-1)
+  if(makeup)assert(rec && ids(rec,"등록")==="a" && ids(rec,"출석")==="att-a" && rec.properties["보강"]?.checkbox===true,"보강 수업")
+  else assert(rec && ids(rec,"등록")==="a,b" && ids(rec,"출석")==="att-a,att-b" && rec.properties["보강"]===undefined,"정규 수업")
+ }
+}))
 Deno.test("서식으로 나뉜 교재명·등록명도 전체 제목 사용", () => withMock(async f => {
  f.pages.regular.properties["교재명"].title=[{plain_text:"쎈 ",text:{content:"쎈 "}},{plain_text:"중등 수학 3-2",text:{content:"중등 수학 3-2"}}]
  f.pages.a.properties["이름"].title=[{plain_text:"김철수 ",text:{content:"김철수 "}},{plain_text:"중3 A",text:{content:"중3 A"}}]

@@ -157,6 +157,12 @@ export async function fixAttendanceForClassSession(
   const timetableIds = relIds(props["시간표"])
   const classIds = relIds(props["클래스"])
   const dateProp = props["수업일시"]?.date
+  // 보강 수업("보강" 체크)은 모인 학생으로 진행하는 임시 수업이라 등록 현황과 맞추지 않는다. 보강 수업은
+  // 시간표·클래스 없이 만들어 아래 조건에도 걸리지만, 실수로 연결돼 있어도 보강 출석을 건드리지 않게 먼저 막는다(v2.5.64).
+  if (props["보강"]?.checkbox === true) {
+    log.push(`[skip] ${sessionName}: 보강 수업`)
+    return
+  }
   if (timetableIds.length === 0 || classIds.length === 0 || !dateProp) {
     log.push(`[skip] ${sessionName}: missing 시간표/클래스/수업일시`)
     return

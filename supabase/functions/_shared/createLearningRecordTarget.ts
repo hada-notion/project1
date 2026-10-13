@@ -32,6 +32,7 @@ const PROP_SESSION_REGISTRATION = "등록"
 const PROP_SESSION_ATTENDANCE = "출석"
 const PROP_SESSION_DATETIME = "수업일시"
 const PROP_SESSION_CLASS = "클래스"
+const PROP_SESSION_MAKEUP = "보강" // 수업(학원) DB checkbox: 보강 수업
 
 const PROP_ATTENDANCE_REGISTRATION = "등록"
 export const PROP_ATTENDANCE_SESSION = "수업" // 출석(학원) DB의 수업 relation (limit 1) — index.ts가 클릭된 페이지 판별에 씀
@@ -187,6 +188,9 @@ export async function finishCreateLearningRecord(sessionId: string): Promise<unk
 		const sessionRegistrationIds = dedupe(relIds(sessionPage, PROP_SESSION_REGISTRATION))
 		const sessionAttendanceIds = dedupe(relIds(sessionPage, PROP_SESSION_ATTENDANCE))
 		const sessionClassIds = relIds(sessionPage, PROP_SESSION_CLASS)
+		// 보강 수업(수업 DB "보강" 체크): 여러 반 학생이 모이는 임시 수업이라, 반 교재(그룹 진도)도 그 교재를 가진
+		// 학생에게만 연결하고, 만든 학습기록에 "보강"을 체크해 진도교재 진행도 계산에서 빠지게 한다(v2.5.64).
+		const sessionIsMakeup = checkboxValue(sessionPage, PROP_SESSION_MAKEUP)
 
 		if (sessionRegistrationIds.length === 0) {
 			return { message: "session_has_no_registrations", sessionId }
@@ -246,7 +250,7 @@ export async function finishCreateLearningRecord(sessionId: string): Promise<unk
 
 				let attendanceIds: string[]
 				let registrationIds: string[]
-				if (progressType === GROUP_PROGRESS_TYPE) {
+				if (progressType === GROUP_PROGRESS_TYPE && !sessionIsMakeup) {
 					attendanceIds = sessionAttendanceIds
 					registrationIds = sessionRegistrationIds
 				} else {
@@ -283,6 +287,7 @@ export async function finishCreateLearningRecord(sessionId: string): Promise<unk
 					[PROP_RECORD_REGISTRATION]: { relation: registrationIds.map((id) => ({ id })) },
 					[PROP_RECORD_SESSION]: { relation: [{ id: sessionId }] },
 					[PROP_RECORD_CATEGORY]: { select: { name: "학습" } },
+					...(sessionIsMakeup ? { [PROP_RECORD_MAKEUP]: { checkbox: true } } : {}),
 				}
 				if (regularBookId) {
 					createProps[PROP_RECORD_REGULAR_BOOK] = { relation: [{ id: regularBookId }] }
