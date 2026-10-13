@@ -36,6 +36,9 @@ export type AttendanceRow = {
   status: string
   check_in: string
   check_out: string
+  // v2.5.99: 키오스크가 찍은 실제 등원·하원 시각(Notion "등원스템프"·"하원스템프"). check_in·check_out은 수업 시작·끝 시각이다.
+  arrived_at: string | null
+  left_at: string | null
   teacher_comment: string
   study_log_ids: string[]
   notion_last_edited_time: string
@@ -55,6 +58,8 @@ export function buildAttendanceRow(page: any): AttendanceRow | null {
     status: normalizeStatus(text(page.properties?.["출석 상태"])),
     check_in: formatTimeFromIso(classIso),
     check_out: formatTimeFromIso(classEndIso),
+    arrived_at: dateStartOf(page.properties?.["등원스템프"]),
+    left_at: dateStartOf(page.properties?.["하원스템프"]),
     teacher_comment: text(page.properties?.["선생님 한마디"]),
     study_log_ids: relationIds(page.properties?.["학습기록"]),
     notion_last_edited_time: page.last_edited_time,

@@ -268,6 +268,8 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
         status: r.status,
         in: r.check_in,
         out: r.check_out,
+        arrived: r.arrived_at ?? null,
+        left: r.left_at ?? null,
         comment: r.teacher_comment,
       }
     })
@@ -288,7 +290,7 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
   const attendance_rows = attendanceEntries
     .filter((e) => (e.iso ?? "").slice(0, 10) <= todayIso)
     .slice(0, 200)
-    .map((e) => ({ iso: e.iso, date: e.date, weekday: e.weekday, status: e.status, in: e.in, out: e.out }))
+    .map((e) => ({ iso: e.iso, date: e.date, weekday: e.weekday, status: e.status, in: e.in, out: e.out, arrived: e.arrived, left: e.left }))
 
   const teacher_comments = attendanceEntries
     .filter((e) => e.comment && (e.iso ?? "").slice(0, 10) <= todayIso)

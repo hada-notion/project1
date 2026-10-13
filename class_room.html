@@ -23,6 +23,9 @@ body{background:var(--canvas)}
 .cr-bar .crumbs{flex:1;min-width:0;display:flex;align-items:center;gap:var(--space-1);font-weight:700;font-size:var(--text-small);white-space:nowrap;overflow:hidden}
 .cr-bar .crumbs span:last-child{overflow:hidden;text-overflow:ellipsis}
 .cr-bar .crumbs .sep{opacity:.6}
+/* 누르는 경로 글자(v2.5.98): 리포트 경로처럼 글자 그대로, 누르는 영역 44px, 마우스를 올리면 밑줄 */
+.crumb-link{flex:none;min-height:var(--hit-min);padding:0;border:0;background:transparent;font:inherit;color:inherit;cursor:pointer;white-space:nowrap}
+.crumb-link:hover,.crumb-link:focus-visible{text-decoration:underline;text-underline-offset:3px}
 .cr-bar h1{flex:1;margin:0;font-size:var(--text-title)}
 .icon-btn{width:var(--hit-area);height:var(--hit-area);min-width:var(--hit-min);border:0;background:transparent;color:inherit;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-md);cursor:pointer;text-decoration:none;padding:0}
 .cr-bar .ghost{min-height:var(--hit-min);max-width:40vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -460,6 +463,6 @@ body.snap-on .cr-main{max-width:none;padding:0}
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <script src="hada_config.js"></script>
 <script src="admin_auth.js?v=4ffde89c"></script>
-<script src="class_room.js?v=4116ae06"></script>
+<script src="class_room.js?v=74fddc3d"></script>
 </body>
 </html>

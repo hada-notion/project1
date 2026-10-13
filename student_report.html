@@ -723,6 +723,8 @@ body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
 /* (v2.5.97) 보고서 위 요약 3칸(출석·과제·평가): 일간 평가 현황 점수 알약은 상태 배지와 같은 크기, 좁은 폰에서는 3칸이 들어가게 제목·도넛·배지를 조금 줄인다 */
 .day-status .log-pill { font-size: 15px; font-weight: 700; padding: 6px 16px; }
 .report-donut-row.three .donut-card { min-width: 0; }
+/* (v2.5.99) 일간 세 칸은 아래 줄(등원 시각 · n건)을 늘 두고, 비어 있어도 한 줄 높이를 지켜 세 칸 높이가 같다 */
+.report-donut-row.three .donut-count-below { min-height: 1.4em; }
 @media (max-width: 480px) {
   .report-donut-row.three { gap: 8px; }
   .report-donut-row.three .donut-card { padding: 14px 4px; }
@@ -921,7 +923,7 @@ body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
 </div>
 
 <script src="hada_config.js"></script>
-<script src="student_report_part1.js?v=5bbab92f"></script>
-<script src="student_report_part2.js?v=d5d63941"></script>
+<script src="student_report_part1.js?v=48c8ebc8"></script>
+<script src="student_report_part2.js?v=e44317cf"></script>
 </body>
 </html>

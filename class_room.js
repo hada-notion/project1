@@ -55,8 +55,9 @@ async function run(fn,btn){if(run.busy)return;run.busy=true;if(btn){btn.classLis
 function bar(crumbs,{back,notion,right='',who=false}={}){
  $('bar').hidden=false;document.body.classList.remove('snap-on');
  $('bar').innerHTML='<div class="bar-in">'+(back?`<button class="icon-btn" id="bar-back" type="button" aria-label="뒤로">${icon('back')}</button>`:'')+
-  (crumbs.length===1&&!back?`<h1>${esc(crumbs[0])}</h1>`:`<div class="crumbs">${crumbs.map((c,i)=>i===0&&who?`<button class="crumb-btn" id="who" type="button" aria-label="강사 바꾸기">${esc(c)} ▾</button>`:`<span>${esc(c)}</span>`).join('<span class="sep">›</span>')}</div>`)+right+(notion?nlink(notion,crumbs.at(-1)):'')+'</div>';
+  (crumbs.length===1&&!back?`<h1>${esc(crumbs[0])}</h1>`:`<div class="crumbs">${crumbs.map((c,i)=>c&&c.go?`<button class="crumb-link" type="button" data-ci="${i}">${esc(c.label)}</button>`:`<span>${esc(c?.label??c)}</span>`).join('<span class="sep">›</span>')}</div>`)+right+(notion?nlink(notion,crumbs.at(-1)?.label??crumbs.at(-1)):'')+'</div>';
  if(back)$('bar-back').onclick=back;
+ $('bar').querySelectorAll('[data-ci]').forEach(b=>b.onclick=()=>crumbs[Number(b.dataset.ci)].go());
 }
 // 하단 탭(v2.5.87): 리포트 등록 상세처럼 [홈 | 교재 | 캘린더 | 학습기록 | 학생]. 탭은 앱처럼 쌓지 않는다(뒤로가기 규칙은 아래 "뒤로가기").
 const TABS=[['home','home','홈'],['books','book','교재'],['calendar','cal','캘린더'],['records','학습','학습기록'],['students','users','학생']];
@@ -378,13 +379,19 @@ function heroHtml(){const s=state.detail.session,tname=teacherName(s.teacherIds?
  return `<div class="hero-in"><p class="hero-title">${s.makeup?'':`<span class="emo">${esc(emojiOf(s))}</span>`}<span class="nm">${esc(className(s))}</span>${s.makeup?' <span class="pill s-보강">보강</span>':''}${nlink(s.id,'수업')}</p>
  <p class="hero-sub">${[tname?tname+' 선생님':'',s.makeup?dateLabel(state.date)+' '+(s.time||''):classPattern()].filter(Boolean).map(esc).join(' · ')}</p></div>`;}
 function classBar(){const s=state.detail.session;
- bar([whoName(),className(s),TAB_NAME[state.tab]||''],{back:()=>{if(nav.stack.length)return navBack();if(!leaveEdit())return;if(state.tab!=='home'){state.tab='home';nav.replace=true;render();}else run(()=>showMain());},
+ bar([crumbToMain(),state.tab==='home'?className(s):crumbToTab('home',className(s)),TAB_NAME[state.tab]||''],{back:()=>{if(nav.stack.length)return navBack();if(!leaveEdit())return;if(state.tab!=='home'){state.tab='home';nav.replace=true;render();}else run(()=>showMain());},
   right:`<button class="icon-btn" id="bar-refresh" type="button" aria-label="새로고침">${icon('refresh')}</button>`});
  $('bar-refresh').onclick=e=>{if(!leaveEdit())return;state.classRecs=null;if(state.bookCache)delete state.bookCache[state.sessionId];delete state.rosterCache[state.sessionId];delete state.statsCache[state.sessionId];run(()=>openSessionNow(state.sessionId,true),e.currentTarget);};}
+// 경로 글자 누르기(v2.5.98, 학부모 리포트 경로처럼): 강사 이름 → 첫 화면, 반 이름 → 그 반 홈, "교재" → 교재 탭. 마지막 글자(지금 화면)는 누르지 않는다.
+// 그 화면이 방문 기록에 있으면 뒤로가기를 여러 번 한 것처럼 돌아가고(기록이 꼬이지 않게), 없으면 그 화면을 바로 연다.
+function backTo(match,fallback){if(!leaveEdit())return;let i=nav.stack.length-1;while(i>=0&&!match(nav.stack[i]))i--;
+ if(i<0)return fallback();nav.chain=nav.stack.length-1-i;navBack();}
+const crumbToMain=()=>({label:whoName(),go:()=>backTo(s=>s.view==='main',()=>run(()=>showMain()))});
+const crumbToTab=(tab,label)=>({label,go:()=>backTo(s=>s.view==='session'&&s.tab===tab&&sameClass(s),()=>{state.tab=tab;state.view='session';if(tab==='calendar')state.calOpen=false;nav.replace=true;render();})});
 function sessionBar(){const s=state.detail.session,v=state.view;
  if(v==='session')return classBar();
- const extra=v==='book'?['교재',state.bookItem.title]:[state.acts.record.kind||'기록'];
- bar([className(s),...extra],{back:()=>{if(nav.stack.length)return navBack();if(!leaveEdit())return;if(v==='record')state.tab='records';if(v==='book')state.tab='books';state.view='session';render();},
+ const extra=v==='book'?[crumbToTab('books','교재'),state.bookItem.title]:[state.acts.record.kind||'기록'];
+ bar([crumbToTab('home',className(s)),...extra],{back:()=>{if(nav.stack.length)return navBack();if(!leaveEdit())return;if(v==='record')state.tab='records';if(v==='book')state.tab='books';state.view='session';render();},
   notion:v==='book'?state.bookItem.value.split(',')[0]:state.acts.record.id});}
 function renderSession(){
  sessionBar();const v=state.view,el=$('app');state.saver=null;setTabs(true);setHero(v==='session'&&state.tab==='home'?heroHtml():'');
@@ -595,14 +602,15 @@ function paneRoster(el){
 // ---------- 학습기록 ----------
 // 기록 카드 한 장(학습기록 탭·홈·캘린더·교재 상세 공용). v2.5.95부터 학부모 리포트 학습기록 카드(student_report_part2.js 학습기록 탭, renderLogMetaRows)와 같은 규칙:
 // [분류 아이콘 칸(아이콘 + 구분 글자)] [교재 · 범위](교재 없으면 주제) [알약: 과제 "제출 n/전체", 평가 "평균 n점", 보강],
-// 아래 줄은 펼치지 않아도 보인다: 단원("• 1-1. …", 단원 번호마다 한 줄) → 내용(선생님이 적은 글, 줄마다 앞뒤 공백 정리) → 과제는 "• 출제: 날짜"·"• 마감: 날짜".
+// 아래 줄은 펼치지 않아도 보인다: 단원("• 1-1. …", 단원 번호마다 한 줄) → 내용(선생님이 적은 글, 줄마다 앞뒤 공백 정리) → 과제는 "• 마감: 날짜"(출제일은 묶음 날짜라 뺌, v2.5.98).
 // 펼치기(⌄)는 Notion 페이지 본문(글·목록·사진·파일·표)이 있을 때만이고, 펼치면 본문만 연한 베이지 칸에 보인다. 카드를 누르면 기록 화면.
 const withDow=ymd=>ymd?`${ymd} (${'일월화수목금토'[new Date(ymd+'T00:00:00Z').getUTCDay()]})`:'';
 function recCard(r){
- const subject=r.subject||'',title=[subject,r.range].filter(Boolean).join(' · ')||r.topic||r.title,day=r.date||state.date;
+ const subject=r.subject||'',title=[subject,r.range].filter(Boolean).join(' · ')||r.topic||r.title;
  const units=(r.unit||'').split(/(?=\d+-\d+\.)/).map(x=>x.trim()).filter(Boolean);
  const note=(r.content||'').split('\n').map(l=>l.trim()).join('\n').trim();
- const extras=r.kind==='과제'?[`출제: ${withDow(day)}`,r.homework?.due?`마감: ${withDow(r.homework.due)}`:''].filter(Boolean):[];
+ // 기록 카드는 늘 날짜·수업으로 묶인 곳에 보이므로(학습기록 탭·홈·캘린더·교재 상세) 출제일은 묶음 날짜와 겹쳐 빼고 마감만(v2.5.98)
+ const extras=r.kind==='과제'&&r.homework?.due?[`마감: ${withDow(r.homework.due)}`]:[];
  const hw=r.homework,sc=r.score;
  const pill=hw?`<span class="pill ${hw.submitted===hw.total?'done':'miss'}">제출 ${hw.submitted}/${hw.total}</span>`:sc?`<span class="pill k-평가">평균 ${sc.avg}점</span>`:'';
  const body=bodyHtml(r.body),meta=units.map(u=>`<span class="log-context">• ${esc(u)}</span>`).join('')+(note?`<span class="log-note">${esc(note)}</span>`:'')+extras.map(x=>`<span class="log-context">• ${esc(x)}</span>`).join('');
@@ -691,7 +699,8 @@ function paneRecord(el){
 // 홈에서 뒤로가기는 첫 화면으로. 같은 반 안에서 수업을 바꾸면(홈 ‹ ›, 캘린더 날짜) 칸을 쌓지 않고, 다른 탭에서 홈으로 돌아가도 고른 수업을 그대로 본다.
 // 창을 닫는 동작(✕·바깥·Esc·저장 뒤 닫기)도 모두 방문 기록을 거쳐(history.back) 기록과 화면이 어긋나지 않게 한다. 처음 화면에서는 원래대로 나간다.
 // 방문 기록마다 순번(idx)을 붙여 뒤로가기와 앞으로 가기를 구분한다. 앞으로 가기는 되돌릴 화면이 없으므로 바로 한 칸 뒤로 돌려 무시한다.
-const nav={stack:[],layers:[],after:null,count:0,last:null,restoring:false,idx:0,skip:false,replace:false};
+const nav={stack:[],layers:[],after:null,count:0,last:null,restoring:false,idx:0,skip:false,replace:false,chain:0};
+const chainNext=()=>{if(nav.chain>0){nav.chain--;setTimeout(navBack,0);}};
 history.replaceState({cr:'base',idx:0},'');
 const navPush=kind=>history.pushState({cr:kind,idx:++nav.idx},'');
 const NAV_FIELDS=['calOpen','bookItem','view','tab','sessionId','recordId','seg','recKind','detail','classWeek','cwFrom','cwTo','date','day','acts','recEdit','books','hwRecord','picked'];
@@ -727,11 +736,11 @@ window.addEventListener('popstate',e=>{
  if(idx>nav.idx){nav.skip=true;history.back();return;}
  nav.idx=idx;
  if(nav.layers.length){const n=Math.max(1,nav.count);nav.count=0;for(let i=0;i<n&&nav.layers.length;i++)nav.layers.pop()();const then=nav.after;nav.after=null;if(then)then();return;}
- const prev=nav.stack.pop();if(!prev)return;
+ const prev=nav.stack.pop();if(!prev){nav.chain=0;return;}
  if(!leaveEdit()){nav.stack.push(prev);navPush('screen');return;}
  // 반 상세의 다른 탭 → 홈: 보고 있는 수업(‹ ›·캘린더로 고른 수업)은 그대로 두고 탭만 되돌린다.
- if(state.view==='session'&&prev.view==='session'&&sameClass(prev)){nav.restoring=true;state.tab=prev.tab;state.calOpen=prev.calOpen;if(prev.calOpen===false)state.cwMonth=state.date.slice(0,7);render();nav.restoring=false;nav.last=takeSnap();return;}
- nav.restoring=true;for(const k of NAV_FIELDS)state[k]=prev[k];render();nav.restoring=false;nav.last=takeSnap();
+ if(state.view==='session'&&prev.view==='session'&&sameClass(prev)){nav.restoring=true;state.tab=prev.tab;state.calOpen=prev.calOpen;if(prev.calOpen===false)state.cwMonth=state.date.slice(0,7);render();nav.restoring=false;nav.last=takeSnap();chainNext();return;}
+ nav.restoring=true;for(const k of NAV_FIELDS)state[k]=prev[k];render();nav.restoring=false;nav.last=takeSnap();chainNext();
  if(state.view==='session'&&state.sessionId)reloadSession().then(()=>{if(state.view==='session'&&!state.edit)render();}).catch(()=>{});
 });
 [$('sheet'),$('drawer')].forEach(d=>d.addEventListener('cancel',e=>{e.preventDefault();navBack();}));
