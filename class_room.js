@@ -194,10 +194,10 @@ async function openCreateSheet(){
 }
 async function booksFor(id){state.bookCache=state.bookCache||{};if(!state.bookCache[id])state.bookCache[id]=await api('books',{sessionId:id});return state.bookCache[id];}
 // 교재 카드 묶음: 반 교재 / 개별 교재 묶음("n명 모두"·학생 한 명) / 학생별 교재. 진행 중인 교재만(없으면 전체).
-// 묶음 카드의 진도는 평균, 최근 범위는 "첫 학생 범위 외 n명".
-function bookChoices(data){
+// 묶음 카드의 진도는 평균, 최근 범위는 "첫 학생 범위 외 n명". 기록 카드에서 바꿀 때(single)는 교재 하나만 고르므로 묶음 카드를 빼고, 지금 교재(include)는 진행 중이 아니어도 보인다.
+function bookChoices(data,{single=false,include=''}={}){
  const {books,registrations}=data,regName=id=>(registrations.find(r=>r.id===id)?.name||'').split(' ')[0],names=b=>b.ownerIds.map(regName).join(', ');
- let shown=books.filter(b=>!b.status||b.status==='진행 중');if(!shown.length)shown=books;
+ let shown=books.filter(b=>!b.status||b.status==='진행 중'||b.id===include);if(!shown.length)shown=books;
  const group=shown.filter(b=>b.mode==='그룹 진도'),ind=shown.filter(b=>b.mode!=='그룹 진도'),tpl={};
  ind.forEach(b=>{if(b.templateId)(tpl[b.templateId]=tpl[b.templateId]||[]).push(b);});
  const loose=ind.filter(b=>!b.templateId||tpl[b.templateId].length<2),base=n=>n.replace(/\(.*\)$/,'').trim();
@@ -205,8 +205,8 @@ function bookChoices(data){
  const out=[];
  if(group.length)out.push({label:'반 교재',items:group.map(b=>card(b,`반 교재 · ${b.ownerIds.length}명${b.pages?` · ${b.pages}쪽`:''}`))});
  Object.values(tpl).filter(l=>l.length>1).forEach(list=>{const p=list.map(b=>b.progress).filter(x=>x!==null),first=list.find(b=>b.recent);
-  out.push({label:`${base(list[0].name)} · 개별 ${list.length}명`,items:[{value:list.map(b=>b.id).join(','),title:base(list[0].name),sub:`개별 · ${list.length}명 모두 · 학생마다 기록`,cover:list[0].cover,
-   progress:p.length?Math.round(p.reduce((a,x)=>a+x,0)/p.length):null,recent:first?`${names(first)} ${first.recent}${list.length>1?` 외 ${list.length-1}명`:''}`:''},...list.map(b=>card(b,`개별 · ${names(b)}`))]});});
+  out.push({label:`${base(list[0].name)} · 개별 ${list.length}명`,items:[...(single?[]:[{value:list.map(b=>b.id).join(','),title:base(list[0].name),sub:`개별 · ${list.length}명 모두 · 학생마다 기록`,cover:list[0].cover,
+   progress:p.length?Math.round(p.reduce((a,x)=>a+x,0)/p.length):null,recent:first?`${names(first)} ${first.recent}${list.length>1?` 외 ${list.length-1}명`:''}`:''}]),...list.map(b=>card(b,`개별 · ${names(b)}`))]});});
  if(loose.length)out.push({label:'학생별 교재',items:loose.map(b=>card(b,`학생별 · ${names(b)}`))});
  return out;
 }
@@ -232,7 +232,7 @@ function drawCreate(){
  $('sh-x').onclick=()=>sh.close();bindCovers(sh);
  sh.querySelectorAll('[data-ck]').forEach(b=>b.onclick=()=>{f.kind=b.dataset.ck;sh.querySelectorAll('[data-ck]').forEach(x=>{const on=x===b;x.classList.toggle('active',on);x.setAttribute('aria-selected',on);});});
  q('#cf-s').onchange=e=>run(async()=>{keep();f.sessionId=e.target.value;f.book=null;await booksFor(f.sessionId);drawCreate();});
- q('#cf-b').onclick=()=>{keep();drawBookPicker();};
+ q('#cf-b').onclick=()=>{keep();drawBookPicker(bookChoices(state.bookCache[f.sessionId]),f.book,v=>{f.book=v;drawCreate();},drawCreate,'교재 없이 기록','주제로 기록해요(주제 필수)');};
  q('#cf').onsubmit=e=>{e.preventDefault();keep();const topic=f.topic.trim(),err=q('#cf-err');err.hidden=true;
   if(f.book===null){err.hidden=false;err.textContent='교재를 골라 주세요. 교재 없이 만들려면 교재 고르기에서 "교재 없이 기록"을 골라요.';return;}
   if(!f.book&&!topic){err.hidden=false;err.textContent='교재 없이 만들 때는 주제를 적어 주세요.';q('#cf-t').focus();return;}
@@ -241,16 +241,15 @@ function drawCreate(){
    const made=r.records.filter(x=>x.created).length;toast(made?`기록 ${made}개를 만들었어요.`:'이미 있는 기록이에요. 기록 화면에서 고쳐 주세요.');
    if(r.records.length===1)await openRecordNow(r.records[0].id);else{state.view='session';state.tab='records';render();}},e.submitter);};
 }
-// 교재 고르기: 같은 창 안에서 카드 목록으로 바꿔 보여 주고, 고르면 기록 만들기로 돌아간다(적던 내용은 그대로).
-function drawBookPicker(){
- const f=state.form,choices=bookChoices(state.bookCache[f.sessionId]);
+// 교재 고르기(기록 만들기·기록 카드 공용): 창 안을 카드 목록으로 바꿔 보여 주고, 고르면 onPick(값), 돌아가기는 onBack.
+function drawBookPicker(choices,cur,onPick,onBack,noneTitle,noneSub){
  $('sheet').innerHTML=`<div class="dialog-head"><h2>교재 고르기</h2><button class="ghost" type="button" id="bk-back">돌아가기</button></div>
- ${choices.map(g=>`<p class="group-label">${esc(g.label)}</p><div class="br-list">${g.items.map(it=>bookRow(it,{attr:`data-book="${esc(it.value)}"`,on:it.value===f.book})).join('')}</div>`).join('')}
+ ${choices.map(g=>`<p class="group-label">${esc(g.label)}</p><div class="br-list">${g.items.map(it=>bookRow(it,{attr:`data-book="${esc(it.value)}"`,on:it.value===cur})).join('')}</div>`).join('')}
  ${choices.length?'':'<div class="list"><p class="empty">이 반 학생들에게 연결된 진행 중 교재가 없어요.</p></div>'}
- <p class="group-label">교재 없이</p><div class="br-list">${emptyBookRow('data-book=""','교재 없이 기록','주제로 기록해요(주제 필수)',icon('plus'))}</div>`;
- const sh=$('sheet');bindCovers(sh);sh.scrollTop=0;
- $('bk-back').onclick=drawCreate;
- sh.querySelectorAll('[data-book]').forEach(b=>b.onclick=()=>{f.book=b.dataset.book;drawCreate();});
+ <p class="group-label">교재 없이</p><div class="br-list">${emptyBookRow('data-book=""',noneTitle,noneSub,icon('plus'))}</div>`;
+ const sh=$('sheet');bindCovers(sh);sh.scrollTop=0;if(!sh.open)sh.showModal();
+ $('bk-back').onclick=onBack;
+ sh.querySelectorAll('[data-book]').forEach(b=>b.onclick=()=>onPick(b.dataset.book));
 }
 
 // ---------- 보강 대기실 ----------
@@ -403,16 +402,20 @@ function paneRecords(el){
  el.querySelector('#new-rec').onclick=()=>openCreateSheet();
 }
 async function openRecord(id,btn){if(!leaveEdit())return;await run(()=>openRecordNow(id),btn);}
-async function openRecordNow(id){{state.recordId=id;state.acts=await api('activities',{recordId:id});state.books=await booksFor(state.sessionId);state.view='record';state.edit=false;state.draft={};render();}}
+async function openRecordNow(id){{state.recordId=id;state.acts=await api('activities',{recordId:id});state.books=await booksFor(state.sessionId);recEditFrom(state.acts.record);state.view='record';state.edit=false;state.draft={};render();}}
+// 기록 카드 입력 칸의 지금 값(교재·주제·범위·내용). 교재를 고르는 동안에도 적던 글자를 잃지 않게 따로 둔다.
+const recEditFrom=r=>{state.recEdit={book:r.bookId||'',topic:r.topic||'',range:r.range||'',content:r.content||''};};
 const ACT_LABEL={학습:'학생별 기록 만들기',과제:'과제 출제',평가:'평가 만들기'};
 function paneRecord(el){
  const {record:r,activities:acts}=state.acts,ed=editing('record');
- const book=state.books.books.find(b=>b.id===r.bookId),v=k=>state.draft[k]??r[k]??'';
+ const re=state.recEdit,v=k=>re[k]??'';
+ // 이 수업 학생들의 교재 목록에 없는 교재가 연결돼 있으면(학생이 바뀐 경우 등) 이름 없이 그 사실만 보여 준다.
+ const item=bookChoices(state.books,{single:true,include:re.book}).flatMap(g=>g.items).find(x=>x.value===re.book)||(re.book?{value:re.book,title:'연결된 교재',sub:'이 수업 학생들의 교재 목록에 없어요 · 눌러서 바꾸기',cover:'',progress:null,recent:''}:null);
  const scoring=r.kind==='평가',checking=r.kind==='과제';
  el.innerHTML=paneHead(`<p class="page-title"><span class="kind-icon k-${esc(r.kind)}" title="${esc(r.kind)}">${icon(r.kind||'학습')}</span>${esc(r.title)}</p>`,`학생 <b>${r.registrationIds.length}명</b>에게 연결된 기록이에요${r.makeup?' · 보강 기록이라 진도율에서 빠져요':''}`,'',acts.length&&(scoring||checking)?editButton('record'):'')+`<div class="pbody">
- <form class="card form" id="rec-form"><label>교재 <span class="muted">이 수업 학생들의 교재만 보여요</span></label>
- <select id="rec-book"><option value="">교재 없음</option>${state.books.books.map(b=>`<option value="${esc(b.id)}" ${b.id===r.bookId?'selected':''}>${esc(b.name)}</option>`).join('')}</select>
- <label for="rec-topic">주제 ${book?'<span class="muted">(선택)</span>':''}</label><input id="rec-topic" maxlength="200" value="${esc(v('topic'))}" placeholder="교재 없는 기록은 리포트에 주제가 보여요">
+ <form class="card form" id="rec-form"><label>교재 <span class="muted">이 수업 학생들의 교재</span></label>
+ ${item?bookRow(item,{attr:'id="rec-book" aria-label="교재 바꾸기"',chev:true}):emptyBookRow('id="rec-book"','교재 없음','눌러서 교재 고르기')}
+ <label for="rec-topic">주제 ${item?'<span class="muted">(선택)</span>':''}</label><input id="rec-topic" maxlength="200" value="${esc(v('topic'))}" placeholder="교재 없는 기록은 리포트에 주제가 보여요">
  <label for="rec-range">범위</label><input id="rec-range" maxlength="200" value="${esc(v('range'))}" placeholder="예: p.31-35">
  <label for="rec-content">내용</label><textarea id="rec-content">${esc(v('content'))}</textarea>
  <div class="actions"><button class="secondary" type="submit" id="rec-save">기록 저장</button></div></form>
@@ -423,9 +426,11 @@ function paneRecord(el){
   ${scoring?(ed?`<span class="score"><input inputmode="numeric" data-cor="${esc(a.id)}" value="${cor??''}" aria-label="${esc(a.name)} 맞힌 문항"> / <input inputmode="numeric" data-tot="${esc(a.id)}" value="${tot??''}" aria-label="${esc(a.name)} 전체 문항"></span>`:`<span class="pill k-평가">${cor??'–'} / ${tot??'–'}</span>`):''}${nlink(a.id,a.name+' 학습활동')}</div>`;}).join('')}</div>`
  :`<div class="list"><p class="empty">아직 학습활동이 없어요.</p></div>`}
  ${acts.length?'':`<div class="actions"><button class="primary" type="button" id="make-acts" ${r.activityStatus==='🔄 작업중'?'disabled':''}>${esc(ACT_LABEL[r.kind]||'학습활동 만들기')} · ${r.registrationIds.length}명</button></div>${r.activityStatus==='🔄 작업중'?'<p class="help">만드는 중이에요. 잠시 뒤 새로고침해 주세요.</p>':''}`}</div>`;
- const q=s=>el.querySelector(s);
- q('#rec-form').onsubmit=e=>{e.preventDefault();const body={recordId:r.id,topic:q('#rec-topic').value,range:q('#rec-range').value,content:q('#rec-content').value};if((q('#rec-book').value||null)!==r.bookId)body.bookId=q('#rec-book').value||null;
-  run(async()=>{await api('update-record',body);state.acts=await api('activities',{recordId:r.id});await reloadSession();toast('기록을 저장했어요.');render();},e.submitter);};
+ const q=s=>el.querySelector(s);bindCovers(el);
+ [['#rec-topic','topic'],['#rec-range','range'],['#rec-content','content']].forEach(([s,k])=>q(s).oninput=e=>{re[k]=e.target.value;});
+ q('#rec-book').onclick=()=>drawBookPicker(bookChoices(state.books,{single:true,include:re.book}),re.book,val=>{re.book=val;$('sheet').close();render();},()=>$('sheet').close(),'교재 없음','교재 없이 주제로 기록해요');
+ q('#rec-form').onsubmit=e=>{e.preventDefault();const body={recordId:r.id,topic:re.topic,range:re.range,content:re.content};if((re.book||null)!==r.bookId)body.bookId=re.book||null;
+  run(async()=>{await api('update-record',body);state.acts=await api('activities',{recordId:r.id});recEditFrom(state.acts.record);await reloadSession();toast('기록을 저장했어요.');render();},e.submitter);};
  if(q('#make-acts'))q('#make-acts').onclick=e=>run(async()=>{const res=await api('create-activities',{recordId:r.id});toast(res.status==='already_processing'?'이미 만드는 중이에요.':`학습활동을 만들고 있어요 · ${res.students}명`);setTimeout(()=>run(async()=>{const fresh=await api('activities',{recordId:r.id});if(state.view==='record'&&state.recordId===r.id){state.acts=fresh;render();}}),4000);},e.currentTarget);
  bindEdit(el);
  const setDraft=(id,patch)=>{const a=acts.find(x=>x.id===id),cur={...(state.draft['a:'+id]||{}),...patch};const same=Object.entries(cur).every(([k,val])=>a[k]===val);if(same)delete state.draft['a:'+id];else state.draft['a:'+id]=cur;updateSavebar();};
