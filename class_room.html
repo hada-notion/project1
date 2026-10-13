@@ -289,12 +289,15 @@ dialog.drawer.right{inset:0 0 0 auto;border-radius:0;border-top-left-radius:var(
    첫 화면: 리포트 첫 화면(.intro-section·.class-btn)처럼 배경 그대로, 가운데에 강사 이름·담당 클래스 카드·보강 대기실, 오른쪽 위 새로고침·☰.
    아래로 넘기면 주간 시간표(리포트 통합 시간표 .week-grid 모양). */
 /* 첫 화면 넘김(v2.5.90): 학부모 리포트 첫 화면(student_report.html .scroll-container·.snap-section·.swipe-hint·.up-hint)과 같은 구조.
-   화면 높이 칸 두 개(① 강사·클래스 ② 통합 시간표)를 위아래로 넘기면 칸 단위로 멈춘다. 클래스가 많아 칸보다 길면 그 칸 안에서 이어서 내려간다. */
+   화면 높이 칸 두 개(① 강사·클래스 ② 통합 시간표)를 위아래로 넘기면 칸 단위로 멈춘다. 클래스가 많아 칸보다 길면 그 칸 안에서 이어서 내려간다.
+   v2.5.91: 내용은 위아래 여백(margin auto)으로 가운데에 두어, 칸보다 길어도 위가 잘리지 않고 위에서부터 보인다. 바깥 문서는 움직이지 않는다. */
+html:has(body.snap-on),body.snap-on{height:100%;overflow:hidden}
 body.snap-on .cr-main{max-width:none;padding:0}
 .scroll-container{height:100svh;overflow-y:auto;scroll-snap-type:y mandatory;overscroll-behavior-y:none}
 .snap-section{position:relative;min-height:100svh;box-sizing:border-box;scroll-snap-align:start;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:var(--space-12) var(--space-4)}
 .intro-tools{position:absolute;top:var(--space-2);right:var(--space-2);display:flex;gap:var(--space-1)}
-.intro-in{width:100%;max-width:var(--feed-w);display:flex;flex-direction:column;align-items:center}
+.intro-in{width:100%;max-width:var(--feed-w);display:flex;flex-direction:column;align-items:center;margin:auto 0}
+.snap-section.intro{justify-content:flex-start;padding-bottom:var(--space-2)}
 .intro-greeting{margin:0 0 var(--space-1);font-size:var(--text-small);color:var(--brand-deep)}
 .intro-name{margin:0 0 var(--space-2);font-size:var(--text-display);font-weight:800;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .intro-sub{margin:0 0 var(--space-8);font-size:var(--text-small);color:var(--text-muted)}
@@ -308,7 +311,14 @@ body.snap-on .cr-main{max-width:none;padding:0}
 .wait-card svg.line{width:var(--icon-md);height:var(--icon-md);color:var(--brand-deep)}
 /* 넘김 안내(리포트 .swipe-hint·.up-hint): 12px 글자 + 겹화살표, 아래 안내는 통통 튄다. 누르는 영역 44px */
 .swipe-hint,.up-hint{position:absolute;left:50%;transform:translateX(-50%);min-height:var(--hit-min);min-width:calc(4*var(--hit-min));padding:0 var(--space-3);border:0;background:transparent;font:inherit;font-size:var(--text-caption);color:var(--text-muted);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.swipe-hint{bottom:var(--space-3)}
+/* 첫 칸의 [통합 시간표 보기]는 내용 아래에 붙는다(v2.5.91): 칸이 넉넉하면 칸 맨 아래, 내용이 길면 보강 대기실 아래로 밀려 겹치지 않는다. */
+.swipe-hint{position:static;transform:none;flex:none;margin-top:var(--space-6)}
+/* 다른 클래스 접기(v2.5.91): 카드와 같은 폭의 점선 없는 옅은 줄, 펼치면 ⌄가 뒤집힌다 */
+.more-card{display:flex;align-items:center;justify-content:center;gap:var(--space-1);width:100%;min-height:var(--hit-min);border:0;border-radius:var(--radius-lg);background:var(--brand-soft);font:inherit;font-size:var(--text-label);font-weight:700;color:var(--text-muted);cursor:pointer}
+.more-card svg.line{width:var(--icon-sm);height:var(--icon-sm);transition:transform .15s ease}
+.more-card.open svg.line{transform:rotate(180deg)}
+.class-more{display:flex;flex-direction:column;gap:var(--space-3)}
+.class-more[hidden]{display:none}
 .up-hint{top:var(--space-3);color:var(--text-subtle)}
 .swipe-hint .chevron,.up-hint .chevron{display:block;width:var(--icon-md);height:var(--icon-md)}
 .swipe-hint .chevron svg.line,.up-hint .chevron svg.line{width:100%;height:100%;display:block}
@@ -405,6 +415,6 @@ body.snap-on .cr-main{max-width:none;padding:0}
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <script src="hada_config.js"></script>
 <script src="admin_auth.js?v=4ffde89c"></script>
-<script src="class_room.js?v=69b5fc4e"></script>
+<script src="class_room.js?v=237f6976"></script>
 </body>
 </html>

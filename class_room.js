@@ -171,17 +171,24 @@ function renderMain(){
  setTabs(false);setHero('');$('bar').hidden=true;
  if(!state.classes){$('app').innerHTML='<p class="empty">불러오는 중…</p>';run(()=>showMain(true));return;}
  const list=sortedClasses(),w=state.day?.makeupWaiting||[],mon=weekStart(seoulDate());
+ // 클래스가 많을 때(v2.5.91): 정렬 순서(오늘 수업 시간순 → 다음 수업순)대로 위 4개만 보이고, 나머지는 "다른 클래스 n개 ⌄" 한 줄로 접는다.
+ // 4개면 일반 폰(카카오톡 인앱 포함) 한 화면에 첫 화면이 다 들어온다. 5개까지는 1개만 접는 게 어색해 모두 보인다.
+ // 누르면 전부 펼치고 다시 누르면 접는다(기억하지 않음). 접힌 반 중 오늘 수업이 있으면 "오늘 n개 포함"을 붙인다.
+ const MAIN_SHOW=4,fold=list.length>MAIN_SHOW+1,shown=fold?list.slice(0,MAIN_SHOW):list,others=fold?list.slice(MAIN_SHOW):[],othersToday=others.filter(c=>c.today.length).length;
+ const card=c=>`<button class="class-card" type="button" data-class="${esc(c.classId)}"><span class="emo">${esc(c.emoji||pickClassColorEmoji(c.name))}</span><span class="cc-name">${esc(c.name)}</span>${classBadge(c)}</button>`;
  // 리포트 첫 화면처럼 화면 높이 두 칸을 위아래로 넘긴다(scroll-snap): ① 강사·클래스 ② 통합 시간표.
  document.body.classList.add('snap-on');
  $('app').innerHTML=`<div class="scroll-container" id="snap"><section class="snap-section intro"><div class="intro-tools"><button class="icon-btn" id="m-refresh" type="button" aria-label="새로고침">${icon('refresh')}</button><button class="icon-btn" id="m-menu" type="button" aria-label="메뉴">${icon('menu')}</button></div>
  <div class="intro-in"><p class="intro-greeting">수업 관리</p><h1 class="intro-name">${esc(whoName())}</h1><p class="intro-sub">${esc(whoRole())} · 담당 클래스 ${list.length}개</p>
- <div class="class-group">${list.map(c=>`<button class="class-card" type="button" data-class="${esc(c.classId)}"><span class="emo">${esc(c.emoji||pickClassColorEmoji(c.name))}</span><span class="cc-name">${esc(c.name)}</span>${classBadge(c)}</button>`).join('')||'<p class="empty">앞뒤 4주 안에 수업이 있는 클래스가 없어요.</p>'}</div>
+ <div class="class-group">${shown.map(card).join('')||'<p class="empty">앞뒤 4주 안에 수업이 있는 클래스가 없어요.</p>'}
+ ${others.length?`<button class="more-card" type="button" id="more-cls" aria-expanded="false" aria-controls="cls-more"><span>다른 클래스 ${others.length}개${othersToday?` · 오늘 ${othersToday}개 포함`:''}</span>${CHEVRON_DOWN}</button><div class="class-more" id="cls-more" hidden>${others.map(card).join('')}</div>`:''}</div>
  <button class="wait-card" type="button" id="open-wait">${icon('users')}<span>보강 대기실</span><span class="cnt-pill">${w.length}명</span></button></div>
  <button class="swipe-hint" type="button" id="to-week">통합 시간표 보기<span class="chevron"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg></span></button></section>
  <section class="snap-section timetable-section" id="week"><button class="up-hint" type="button" id="to-intro"><span class="chevron"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg></span>이전으로</button>
  <h2 class="tt-title"><span class="tt-icon"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg></span>통합 시간표</h2><p class="tt-hint">담당 반들의 이번 주(${esc(md(mon))} ~ ${esc(md(addDays(mon,6)))}) 수업을 요일별로 합쳐서 보여줘요</p>${weekGrid(list)}</section></div>`;
  $('m-refresh').onclick=e=>run(()=>showMain(true),e.currentTarget);
  $('m-menu').onclick=openMenu;
+ const more=$('more-cls');if(more)more.onclick=()=>{const box=$('cls-more'),open=box.hidden;box.hidden=!open;more.setAttribute('aria-expanded',open);more.classList.toggle('open',open);};
  $('to-week').onclick=()=>$('week').scrollIntoView({behavior:'smooth'});
  $('to-intro').onclick=()=>$('snap').scrollTo({top:0,behavior:'smooth'});
  $('open-wait').onclick=()=>{state.view='waiting';state.picked=new Set();render();};
