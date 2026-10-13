@@ -65,7 +65,7 @@ window.addEventListener('beforeunload',e=>{if(state.edit&&Object.keys(state.draf
 
 // ---------- 로그인·강사 ----------
 function showLogin(message=''){
- setTabs(false);state.view='login';bar(['수업']);
+ setTabs(false);state.view='login';bar(['수업 관리']);
  $('app').innerHTML=`<p class="page-title">${icon('lock')}수업 관리 로그인</p><p class="page-hint">관리자 비밀번호를 입력하세요. 이 기기에서 12시간 동안 다시 묻지 않아요.</p>
  <form id="login" class="card"><label for="pw">관리자 비밀번호</label><input type="password" id="pw" autocomplete="current-password" maxlength="128" required>
  <p class="error" id="login-err" ${message?'':'hidden'}>${esc(message)}</p><div class="actions"><button class="primary" type="submit">로그인</button></div></form>`;
