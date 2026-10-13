@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex">
 <title>하다 수업방</title>
-<link rel="stylesheet" href="assets/hada-ui.css?v=729d184a">
+<link rel="stylesheet" href="assets/hada-ui.css?v=5e83c8d8">
 <style>
-/* 수업방(v2.5.67): 선생님이 휴대폰으로 쓰는 화면. 모양은 학부모 리포트(상단 베이지 바, 하단 탭, 카드)를 따르고
+/* 수업방(v2.5.67): 선생님이 휴대폰으로 쓰는 화면(v2.5.69부터 PC 두 칸 배치도 함께). 모양은 학부모 리포트(상단 베이지 바, 하단 탭, 카드)를 따르고
    값은 공용 토큰만 쓴다(docs/DESIGN.md). 분류 색: 학습 --info, 과제 --warning, 평가 --success.
    소제목은 1부 4장 4단계(탭 제목 17px·아이콘 18 / 섹션 제목 15px·아이콘 16 / 묶음 라벨 13px 옅은색 / 카드 안 라벨)를 따른다. */
 body{background:var(--canvas)}
@@ -124,6 +124,37 @@ svg.line.check,.row svg.line,.choose svg.line,.pill svg.line{width:var(--icon-md
 .bars div{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:var(--space-1);font-size:var(--text-caption);color:var(--text-subtle)}
 .bars i{display:block;width:var(--space-6);border-radius:var(--radius-sm);border-bottom-left-radius:0;border-bottom-right-radius:0;background:var(--brand-mid)}
 .bars b{color:var(--text-ink)}
+/* 칸 머리(v2.5.69): 제목 / 안내(집계 숫자 포함) / 가운데 탭 + 오른쪽 버튼. 리포트처럼 본문이 상단 바 가까이에서 시작한다. */
+.ph{min-width:0}
+.ph .page-title{margin:0 0 var(--space-1)}
+.page-hint.ph{margin:0 0 var(--space-2)}
+.page-hint b{color:var(--text-ink)}
+.page-title .grow{flex:1}
+.tab-row{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:var(--space-2);margin-bottom:var(--space-2)}
+.tab-row .center-tabs{margin:0}
+.tab-row .acts{display:flex;justify-content:flex-end;align-items:center;gap:var(--space-1)}
+.tab-row .acts .primary{width:auto;min-height:var(--hit-min);height:var(--hit-min);padding:0 var(--space-4);font-size:var(--text-label)}
+.note-row{margin-top:var(--space-1)}
+.note-hint{color:var(--text-subtle);font-size:var(--text-caption);margin:var(--space-2) 0 0}
+.split{height:1px;background:var(--divider);margin:var(--space-6) 0 var(--space-4)}
+.row.sel{background:var(--brand-tint);box-shadow:inset 3px 0 0 var(--brand-deep)}
+.pbody>.sec-title:first-child{margin-top:var(--space-3)}
+.cr-main>.ph:first-child .page-title{margin-top:var(--space-1)}
+/* 넓은 화면(1081px 이상, DESIGN.md 화면 폭 3단계의 데스크탑): 폭을 --page-max까지 펴고 수업은 두 칸, 대화상자는 가운데 */
+@media(min-width:1081px){
+ .cr-bar.wide .bar-in,.cr-main.wide{max-width:var(--page-max)}
+ .cr-main.wide{padding-top:var(--space-5);padding-bottom:calc(2*var(--space-12))}
+ .home{display:grid;grid-template-columns:minmax(0,1fr) var(--side-w);gap:var(--space-8);align-items:start}
+ .sess-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-3)}
+ .sess-grid .card-btn{margin:0}
+ .sess-grid .empty{grid-column:1/-1}
+ .home-side{position:sticky;top:calc(var(--header-h) + var(--space-4))}
+ .two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(3,auto) 1fr;column-gap:var(--space-8);align-items:start}
+ .two>.pane{display:grid;grid-row:span 4;grid-template-rows:subgrid;min-width:0}
+ .two>.pane+.pane{border-left:1px solid var(--divider);padding-left:var(--space-8);margin-left:calc(-1*var(--space-4))}
+ .savebar.in-pane{right:auto;bottom:var(--space-4);max-width:none;margin:0}
+ dialog.sheet{width:min(100%,var(--dialog-md));margin:auto;border-bottom-left-radius:var(--radius-lg);border-bottom-right-radius:var(--radius-lg)}
+}
 </style>
 </head>
 <body>
@@ -135,6 +166,6 @@ svg.line.check,.row svg.line,.choose svg.line,.pill svg.line{width:var(--icon-md
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <script src="hada_config.js"></script>
 <script src="admin_auth.js?v=ec2cac35"></script>
-<script src="class_room.js?v=f0532d3a"></script>
+<script src="class_room.js?v=6b3d6a65"></script>
 </body>
 </html>

@@ -30,7 +30,7 @@ function timeOf(iso){if(!iso)return '';const d=new Date(new Date(iso).getTime()+
 function shortDate(iso){if(!iso)return '';const d=new Date(new Date(iso).getTime()+(String(iso).includes('T')?9*3600e3:0));return `${d.getUTCMonth()+1}/${d.getUTCDate()}`;}
 
 const state={session:store.get(SESSION_KEY),teacherId:store.get(TEACHER_KEY),teachers:[],date:seoulDate(),view:'home',day:null,
- sessionId:'',detail:null,tab:'students',seg:'att',hwRecord:'',edit:false,draft:{},recordId:'',acts:null,student:null,books:null,picked:new Set()};
+ sessionId:'',detail:null,tab:'students',seg:'att',recKind:'전체',hwRecord:'',edit:false,editOwner:'',saver:null,draft:{},recordId:'',acts:null,student:null,stuTab:'과제',noteTab:'memo',books:null,picked:new Set()};
 
 async function api(action,data={}){
  if(CFG.error)throw new Error(CFG.error);
@@ -52,7 +52,15 @@ function setTabs(on){const tb=$('tabbar');tb.hidden=!on;$('app').classList.toggl
  tb.innerHTML=`<div class="tab-in"><button type="button" data-tab="students" class="${state.tab==='students'?'on':''}">${icon('users')}<span>학생 목록</span></button><button type="button" data-tab="records" class="${state.tab==='records'?'on':''}">${icon('학습')}<span>학습기록</span></button></div>`;
  tb.querySelectorAll('button').forEach(b=>b.onclick=()=>{if(!leaveEdit())return;state.tab=b.dataset.tab;state.view='session';render();});}
 function leaveEdit(){if(state.edit&&Object.keys(state.draft).length&&!confirm('저장하지 않은 변경이 있어요. 버리고 나갈까요?'))return false;state.edit=false;state.draft={};updateSavebar();return true;}
-function updateSavebar(){const n=Object.keys(state.draft).length;$('savebar').hidden=!state.edit||!n;$('savebar').classList.toggle('no-tabs',$('tabbar').hidden);$('save-count').textContent=`변경 ${n}건`;}
+function updateSavebar(){const sb=$('savebar'),n=Object.keys(state.draft).length;sb.hidden=!state.edit||!n;sb.classList.toggle('no-tabs',$('tabbar').hidden);$('save-count').textContent=`변경 ${n}건`;
+ // 넓은 화면에서는 편집 중인 칸 아래에 붙인다
+ const pane=!sb.hidden&&wide()&&document.querySelector(`[data-owner="${state.editOwner}"]`);
+ sb.classList.toggle('in-pane',!!pane);if(pane){const r=pane.getBoundingClientRect();sb.style.left=r.left+'px';sb.style.width=r.width+'px';}else{sb.style.left='';sb.style.width='';}}
+// 넓은 화면(DESIGN.md 화면 폭 3단계의 데스크탑, 1081px 이상)
+const WIDE=matchMedia('(min-width:1081px)'),wide=()=>WIDE.matches;
+function setWide(on){$('app').classList.toggle('wide',on);$('bar').classList.toggle('wide',on);}
+WIDE.addEventListener('change',()=>{if(state.session&&state.teacherId&&state.view!=='login')render();});
+window.addEventListener('resize',()=>updateSavebar());
 window.addEventListener('beforeunload',e=>{if(state.edit&&Object.keys(state.draft).length){e.preventDefault();e.returnValue='';}});
 
 // ---------- 로그인·강사 ----------
@@ -82,19 +90,24 @@ function showTeachers(){
 // ---------- 오늘 수업 ----------
 async function loadDay(){state.day=await api('day',{date:state.date,...(state.teacherId&&state.teacherId!=='all'?{teacherId:state.teacherId}:{})});}
 function renderHome(){
- setTabs(false);const who=state.teacherId==='all'?'전체 수업':teacherName(state.teacherId);
+ setTabs(false);setWide(wide());const who=state.teacherId==='all'?'전체 수업':teacherName(state.teacherId);
  bar(['수업'],{right:`<button class="ghost" id="who" type="button">${esc(who)} ▾</button><button class="icon-btn" id="refresh" type="button" aria-label="새로고침">${icon('refresh')}</button>`,notion:state.teacherId&&state.teacherId!=='all'?state.teacherId:''});
  $('who').onclick=showTeachers;
  $('refresh').onclick=e=>run(async()=>{await loadDay();renderHome();},e.currentTarget);
  const d=state.day,chips=[-1,0,1].map(o=>seoulDate(o));
  const sessions=d?d.sessions:[];
- $('app').innerHTML=`<div class="chips">${chips.map((c,i)=>`<button class="chip ${state.date===c?'on':''}" type="button" data-date="${c}">${['어제','오늘','내일'][i]} ${dateLabel(c)}</button>`).join('')}
+ const waiting=d?d.makeupWaiting:[];
+ // 넓은 화면: 수업 카드 2열 + 오른쪽 보강 대기실 칸(화면을 내려도 따라온다)
+ $('app').innerHTML=`<div class="home"><section class="home-main"><div class="chips">${chips.map((c,i)=>`<button class="chip ${state.date===c?'on':''}" type="button" data-date="${c}">${['어제','오늘','내일'][i]} ${dateLabel(c)}</button>`).join('')}
   <label class="chip ${chips.includes(state.date)?'':'on'}">${icon('cal')}<input type="date" id="pick-date" value="${state.date}" aria-label="날짜 고르기"></label></div>
   <h2 class="sec-title">${icon('cal')}${esc(dateLabel(state.date))} 수업 <span class="cnt">${sessions.length}</span></h2>
-  ${sessions.length?sessions.map(s=>`<button class="card-btn" type="button" data-session="${esc(s.id)}"><span class="top"><span class="av sq">${esc((s.name||'수').slice(0,2))}</span><span class="meta"><span class="t">${esc(s.name)} ${s.makeup?'<span class="pill s-보강">보강</span>':''}</span><span class="d">${esc(s.time)}${s.teacherIds.length?' · '+esc(s.teacherIds.map(teacherName).filter(Boolean).join(', ')):''}</span></span></span>
-   <span class="facts"><span class="fact">학생 ${s.students}명</span>${s.attendanceSummary?`<span class="fact ${/정상/.test(s.attendanceSummary)?'ok':'warn'}">${esc(s.attendanceSummary.split('\n')[0])}</span>`:''}<span class="fact info">기록 ${s.records}</span></span></button>`).join(''):`<p class="empty">이 날 ${state.teacherId==='all'?'':'이 강사의 '}수업이 없어요.</p>`}
-  ${d&&d.makeupWaiting.length?`<h2 class="sec-title">${icon('users')}보강 대기실 <span class="cnt">${d.makeupWaiting.length}명</span></h2>
-  <button class="card-btn" type="button" id="open-wait"><span class="top"><span class="av sq">보</span><span class="meta"><span class="t">보강 대기실</span><span class="d">수업에 아직 배정하지 않은 보강 학생</span></span></span><span class="facts">${d.makeupWaiting.slice(0,4).map(w=>`<span class="fact">${esc(w.name)}</span>`).join('')}</span></button>`:''}`;
+  <div class="sess-grid">${sessions.length?sessions.map(s=>`<button class="card-btn" type="button" data-session="${esc(s.id)}"><span class="top"><span class="av sq">${esc((s.name||'수').slice(0,2))}</span><span class="meta"><span class="t">${esc(s.name)} ${s.makeup?'<span class="pill s-보강">보강</span>':''}</span><span class="d">${esc(s.time)}${s.teacherIds.length?' · '+esc(s.teacherIds.map(teacherName).filter(Boolean).join(', ')):''}</span></span></span>
+   <span class="facts"><span class="fact">학생 ${s.students}명</span>${s.attendanceSummary?`<span class="fact ${/정상/.test(s.attendanceSummary)?'ok':'warn'}">${esc(s.attendanceSummary.split('\n')[0])}</span>`:''}<span class="fact info">기록 ${s.records}</span></span></button>`).join(''):`<p class="empty">이 날 ${state.teacherId==='all'?'':'이 강사의 '}수업이 없어요.</p>`}</div></section>
+  ${wide()?`<aside class="home-side"><h2 class="sec-title">${icon('users')}보강 대기실 <span class="cnt">${waiting.length}명</span></h2>
+  ${waiting.length?`<div class="list">${waiting.slice(0,6).map(w=>`<div class="row"><span class="av">${esc(w.name.slice(0,1))}</span><span class="meta"><span class="t">${esc(w.name)}</span><span class="d">${esc(w.className)}${w.start?' · '+shortDate(w.start):''}</span></span></div>`).join('')}</div>${waiting.length>6?`<p class="help">외 ${waiting.length-6}명</p>`:''}
+  <div class="actions"><button class="secondary wide" type="button" id="open-wait">보강 대기실 열기</button></div>`:'<p class="empty">배정할 보강 학생이 없어요.</p>'}</aside>`
+  :d&&d.makeupWaiting.length?`<h2 class="sec-title">${icon('users')}보강 대기실 <span class="cnt">${d.makeupWaiting.length}명</span></h2>
+  <button class="card-btn" type="button" id="open-wait"><span class="top"><span class="av sq">보</span><span class="meta"><span class="t">보강 대기실</span><span class="d">수업에 아직 배정하지 않은 보강 학생</span></span></span><span class="facts">${d.makeupWaiting.slice(0,4).map(w=>`<span class="fact">${esc(w.name)}</span>`).join('')}</span></button>`:''}</div>`;
  $('app').querySelectorAll('[data-date]').forEach(b=>b.onclick=()=>run(async()=>{state.date=b.dataset.date;await loadDay();renderHome();}));
  $('pick-date').onchange=e=>run(async()=>{if(!e.target.value)return;state.date=e.target.value;await loadDay();renderHome();});
  $('app').querySelectorAll('[data-session]').forEach(b=>b.onclick=()=>openSession(b.dataset.session,b));
@@ -127,76 +140,111 @@ function openMakeupSheet(){
 }
 
 // ---------- 수업 ----------
+// 휴대폰·태블릿은 한 칸(하단 탭으로 학생 목록 / 학습기록 전환). 넓은 화면(1081px 이상, DESIGN.md 화면 폭 3단계의 데스크탑)은
+// 두 칸: 왼쪽 학생 목록은 그대로 두고 오른쪽 칸이 학습기록 / 학생 공간 / 기록 카드로 바뀐다.
+// 칸 머리는 제목 / 안내 / 가운데 탭 3줄이고, 넓은 화면에서는 두 칸이 같은 격자 줄(subgrid)을 써서 첫 카드 높이가 맞는다.
 async function openSession(id,btn){await run(()=>openSessionNow(id),btn);}
-async function openSessionNow(id){{state.sessionId=id;state.detail=await api('session',{sessionId:id});state.view='session';state.tab='students';state.seg='att';state.edit=false;state.draft={};state.hwRecord=state.detail.homeworkDue[0]?.recordId||'';render();}}
+async function openSessionNow(id){{state.sessionId=id;state.detail=await api('session',{sessionId:id});state.view='session';state.tab='students';state.seg='att';state.recKind='전체';state.edit=false;state.draft={};state.hwRecord=state.detail.homeworkDue[0]?.recordId||'';render();}}
 async function reloadSession(){state.detail=await api('session',{sessionId:state.sessionId});}
-function sessionBar(extra=[]){const s=state.detail.session;bar(['수업',s.name,...extra],{back:()=>{if(!leaveEdit())return;if(extra.length){state.view='session';render();}else{state.view='home';run(async()=>{await loadDay();render();});}},notion:extra.length?'':s.id});}
-function renderSession(){if(state.tab==='records')return renderRecords();
- setTabs(true);sessionBar();const d=state.detail,att=state.seg==='att';
- const head=`<p class="page-title">${icon('users')}학생 목록</p><p class="page-hint">${att?'키오스크로 등원한 학생은 시각이 함께 보여요. 웹 출석은 상태만 바꾸고 알림톡은 보내지 않아요.':'오늘이 마감인 과제예요. 과제마다 제출·미제출만 체크해요.'}</p>
-  <div class="center-tabs"><div class="tabs" role="tablist"><button type="button" class="${att?'active':''}" data-seg="att"><span>출석</span></button><button type="button" class="${att?'':'active'}" data-seg="hw"><span>과제 검사</span></button></div></div>`;
+function paneHead(title,hint,tabs='',acts=''){
+ return `<div class="ph">${title}</div><p class="page-hint ph">${hint}</p>`+(tabs||acts||wide()?`<div class="ph tab-row"><span></span>${tabs?`<div class="center-tabs"><div class="tabs" role="tablist">${tabs}</div></div>`:'<span></span>'}<span class="acts">${acts}</span></div>`:'');
+}
+const tabBtn=(on,attr,label)=>`<button type="button" role="tab" aria-selected="${on}" class="${on?'active':''}" ${attr}><span>${esc(label)}</span></button>`;
+const editing=owner=>state.edit&&state.editOwner===owner;
+function editButton(owner){return `<button class="ghost" type="button" data-edit="${owner}">${editing(owner)?'취소':'편집'}</button>`;}
+// 편집은 한 번에 한 칸만. 다른 칸의 [편집]을 누르면 지금 편집을 정리(변경이 있으면 확인)하고 넘어간다.
+function bindEdit(root){root.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{const owner=b.dataset.edit;
+ if(editing(owner)){state.edit=false;state.draft={};}else{if(!leaveEdit())return;state.edit=true;state.editOwner=owner;state.draft={};}
+ state.saver=null;updateSavebar();render();});}
+function sessionBar(){const s=state.detail.session,v=state.view;
+ const extra=v==='student'?[state.student.name]:v==='record'?[state.acts.record.kind||'기록']:[];
+ bar(['수업',s.name,...extra],{back:()=>{if(!leaveEdit())return;if(extra.length){if(v==='record')state.tab='records';state.view='session';render();}else{state.view='home';run(async()=>{await loadDay();render();});}},
+  notion:v==='student'?state.student.attendanceId:v==='record'?state.acts.record.id:s.id});}
+function renderSession(){
+ sessionBar();const v=state.view;state.saver=null;
+ if(wide()){
+  setTabs(false);setWide(true);
+  $('app').innerHTML=`<div class="two"><section class="pane" id="pane-l" data-owner="students"></section><section class="pane" id="pane-r" data-owner="${v==='session'?'records':v}"></section></div>`;
+  paneStudents($('pane-l'));
+  (v==='student'?paneStudent:v==='record'?paneRecord:paneRecords)($('pane-r'));
+ }else{
+  setTabs(true);
+  (v==='student'?paneStudent:v==='record'?paneRecord:state.tab==='records'?paneRecords:paneStudents)($('app'));
+ }
+}
+function paneStudents(el){
+ const d=state.detail,att=state.seg==='att',ed=editing('students');
+ const n=s=>d.students.filter(x=>(state.draft[x.attendanceId]?.status??x.status)===s).length;
+ const hw=d.homeworkDue,cur=hw.find(h=>h.recordId===state.hwRecord)||hw[0],sub=i=>state.draft[i.activityId]?.submitted??i.submitted;
+ const nameOf=i=>d.students.find(s=>s.attendanceId===i.attendanceId)?.name||'학생';
+ const picked=wide()&&state.view==='student'?state.student.attendanceId:'';
+ const hint=att?`출석 <b>${n('🟢 출석')}</b> · 결석 <b>${n('🔴 결석')}</b> · 보강 <b>${n('🔵 보강')}</b> · 웹 출석은 알림톡을 보내지 않아요`
+  :cur?`제출 <b>${cur.items.filter(sub).length}</b> · 미제출 <b>${cur.items.filter(i=>!sub(i)).length}</b> · 오늘이 마감인 과제예요`:'오늘이 마감인 과제를 제출·미제출로 체크해요';
+ const acts=att?(d.students.length?editButton('students'):''):cur?editButton('students')+nlink(cur.recordId,cur.title):'';
  let body='';
  if(att){
-  const n=s=>d.students.filter(x=>(state.draft[x.attendanceId]?.status??x.status)===s).length;
-  body=`<div class="toolrow"><span class="sum">출석 <b>${n('🟢 출석')}</b> · 결석 <b>${n('🔴 결석')}</b> · 보강 <b>${n('🔵 보강')}</b></span>${editButton()}</div>
-  <div class="list">${d.students.map(s=>{const st=state.draft[s.attendanceId]?.status??s.status,ch=state.draft[s.attendanceId];
-   return `<div class="row ${ch?'changed':''} ${st==='🔴 결석'&&!state.edit?'dim':''}">${state.edit?'':`<button class="icon-btn" type="button" data-student="${esc(s.attendanceId)}" aria-label="${esc(s.name)} 학생 공간">`}<span class="av">${esc(s.name.slice(0,1))}</span>${state.edit?'':'</button>'}
+  body=`<div class="list">${d.students.map(s=>{const st=state.draft[s.attendanceId]?.status??s.status,ch=state.draft[s.attendanceId];
+   return `<div class="row ${ch?'changed':''} ${s.attendanceId===picked?'sel':''} ${st==='🔴 결석'&&!ed?'dim':''}">${ed?'':`<button class="icon-btn" type="button" data-student="${esc(s.attendanceId)}" aria-label="${esc(s.name)} 학생 공간">`}<span class="av">${esc(s.name.slice(0,1))}</span>${ed?'':'</button>'}
    <span class="meta"><span class="t">${esc(s.name)}</span><span class="d">${s.arrivedAt?'등원 '+timeOf(s.arrivedAt):''}${s.memo?(s.arrivedAt?' · ':'')+esc(s.memo):''}${!s.arrivedAt&&!s.memo?(STATUS[st]?'':'미입력'):''}</span></span>
-   ${state.edit?`<span class="seg">${Object.entries(STATUS).map(([v,l])=>`<button type="button" class="v-${l} ${st===v?'on':''}" data-att="${esc(s.attendanceId)}" data-v="${v}">${l}</button>`).join('')}</span>`:`<span class="pill s-${STATUS[st]||''}">${STATUS[st]||'미입력'}</span>${s.registrationId?'':''}`}</div>`;}).join('')||'<p class="empty">이 수업에 연결된 학생이 없어요.</p>'}</div>`;
- }else{
-  const hw=d.homeworkDue;
-  if(!hw.length)body='<p class="empty">오늘이 마감인 과제가 없어요.</p>';
-  else{const cur=hw.find(h=>h.recordId===state.hwRecord)||hw[0];const sub=i=>state.draft[i.activityId]?.submitted??i.submitted;
-   const nameOf=i=>d.students.find(s=>s.attendanceId===i.attendanceId)?.name||'학생';
-   const pick=hw.length>=4?`<select id="hw-pick">${hw.map(h=>`<option value="${esc(h.recordId)}" ${h.recordId===cur.recordId?'selected':''}>${esc(h.title)}</option>`).join('')}</select>`:hw.length>1?`<div class="chips">${hw.map(h=>`<button class="chip ${h.recordId===cur.recordId?'on':''}" type="button" data-hw="${esc(h.recordId)}">${esc(h.range||h.title)} ${h.items.filter(sub).length}/${h.items.length}</button>`).join('')}</div>`:`<p class="target">${esc(cur.title)}${cur.range?' · '+esc(cur.range):''}</p>`;
-   body=`${pick}<div class="toolrow"><span class="sum">제출 <b>${cur.items.filter(sub).length}</b> · 미제출 <b>${cur.items.filter(i=>!sub(i)).length}</b></span>${state.edit?'<button class="ghost" type="button" id="all-done">전원 제출</button>':''}${editButton()}${nlink(cur.recordId,cur.title)}</div>
-   <div class="list">${cur.items.map(i=>{const v=sub(i),ch=state.draft[i.activityId];return `<div class="row ${ch?'changed':''}"><span class="av">${esc(nameOf(i).slice(0,1))}</span><span class="meta"><span class="t">${esc(nameOf(i))}</span></span>
-   ${state.edit?`<span class="seg"><button type="button" class="v-제출 ${v?'on':''}" data-hwact="${esc(i.activityId)}" data-v="1">제출</button><button type="button" class="v-미제출 ${v?'':'on'}" data-hwact="${esc(i.activityId)}" data-v="0">미제출</button></span>`:`<span class="pill ${v?'done':'miss'}">${v?'제출':'미제출'}</span>`}${nlink(i.activityId,nameOf(i)+' 학습활동')}</div>`;}).join('')}</div>`;}
+   ${ed?`<span class="seg">${Object.entries(STATUS).map(([v,l])=>`<button type="button" class="v-${l} ${st===v?'on':''}" data-att="${esc(s.attendanceId)}" data-v="${v}">${l}</button>`).join('')}</span>`:`<span class="pill s-${STATUS[st]||''}">${STATUS[st]||'미입력'}</span>`}</div>`;}).join('')||'<p class="empty">이 수업에 연결된 학생이 없어요.</p>'}</div>`;
+ }else if(!cur)body='<p class="empty">오늘이 마감인 과제가 없어요.</p>';
+ else{
+  const pick=hw.length>=4?`<select id="hw-pick">${hw.map(h=>`<option value="${esc(h.recordId)}" ${h.recordId===cur.recordId?'selected':''}>${esc(h.title)}</option>`).join('')}</select>`:hw.length>1?`<div class="chips">${hw.map(h=>`<button class="chip ${h.recordId===cur.recordId?'on':''}" type="button" data-hw="${esc(h.recordId)}">${esc(h.range||h.title)} ${h.items.filter(sub).length}/${h.items.length}</button>`).join('')}</div>`:'';
+  body=`${pick}${ed?'<div class="toolrow"><span class="sum"></span><button class="ghost" type="button" id="all-done">전원 제출</button></div>':''}
+  <div class="list">${cur.items.map(i=>{const v=sub(i),ch=state.draft[i.activityId];return `<div class="row ${ch?'changed':''}"><span class="av">${esc(nameOf(i).slice(0,1))}</span><span class="meta"><span class="t">${esc(nameOf(i))}</span></span>
+  ${ed?`<span class="seg"><button type="button" class="v-제출 ${v?'on':''}" data-hwact="${esc(i.activityId)}" data-v="1">제출</button><button type="button" class="v-미제출 ${v?'':'on'}" data-hwact="${esc(i.activityId)}" data-v="0">미제출</button></span>`:`<span class="pill ${v?'done':'miss'}">${v?'제출':'미제출'}</span>`}${nlink(i.activityId,nameOf(i)+' 학습활동')}</div>`;}).join('')}</div>`;
  }
- $('app').innerHTML=head+body;
- $('app').querySelectorAll('[data-seg]').forEach(b=>b.onclick=()=>{if(!leaveEdit())return;state.seg=b.dataset.seg;renderSession();});
- $('app').querySelectorAll('[data-hw]').forEach(b=>b.onclick=()=>{if(!leaveEdit())return;state.hwRecord=b.dataset.hw;renderSession();});
- if($('hw-pick'))$('hw-pick').onchange=e=>{if(!leaveEdit()){e.target.value=state.hwRecord;return;}state.hwRecord=e.target.value;renderSession();};
- bindEdit(renderSession);
- $('app').querySelectorAll('[data-att]').forEach(b=>b.onclick=()=>{const id=b.dataset.att,orig=d.students.find(s=>s.attendanceId===id).status;if(b.dataset.v===orig)delete state.draft[id];else state.draft[id]={status:b.dataset.v};updateSavebar();renderSession();});
- $('app').querySelectorAll('[data-hwact]').forEach(b=>b.onclick=()=>{const id=b.dataset.hwact,v=b.dataset.v==='1',orig=d.homeworkDue.flatMap(h=>h.items).find(i=>i.activityId===id).submitted;if(v===orig)delete state.draft[id];else state.draft[id]={submitted:v};updateSavebar();renderSession();});
- if($('all-done'))$('all-done').onclick=()=>{const cur=d.homeworkDue.find(h=>h.recordId===state.hwRecord)||d.homeworkDue[0];cur.items.forEach(i=>{if(i.submitted)delete state.draft[i.activityId];else state.draft[i.activityId]={submitted:true};});updateSavebar();renderSession();};
- $('app').querySelectorAll('[data-student]').forEach(b=>b.onclick=()=>openStudent(b.dataset.student,b));
- $('save-ok').onclick=e=>run(async()=>{const entries=Object.entries(state.draft);
+ el.innerHTML=paneHead(`<p class="page-title">${icon('users')}학생 목록</p>`,hint,tabBtn(att,'data-seg="att"','출석')+tabBtn(!att,'data-seg="hw"','과제 검사'),acts)+`<div class="pbody">${body}</div>`;
+ el.querySelectorAll('[data-seg]').forEach(b=>b.onclick=()=>{if(!leaveEdit())return;state.seg=b.dataset.seg;render();});
+ el.querySelectorAll('[data-hw]').forEach(b=>b.onclick=()=>{if(!leaveEdit())return;state.hwRecord=b.dataset.hw;render();});
+ const hp=el.querySelector('#hw-pick');if(hp)hp.onchange=e=>{if(!leaveEdit()){e.target.value=state.hwRecord;return;}state.hwRecord=e.target.value;render();};
+ bindEdit(el);
+ el.querySelectorAll('[data-att]').forEach(b=>b.onclick=()=>{const id=b.dataset.att,orig=d.students.find(s=>s.attendanceId===id).status;if(b.dataset.v===orig)delete state.draft[id];else state.draft[id]={status:b.dataset.v};render();});
+ el.querySelectorAll('[data-hwact]').forEach(b=>b.onclick=()=>{const id=b.dataset.hwact,v=b.dataset.v==='1',orig=hw.flatMap(h=>h.items).find(i=>i.activityId===id).submitted;if(v===orig)delete state.draft[id];else state.draft[id]={submitted:v};render();});
+ const ad=el.querySelector('#all-done');if(ad)ad.onclick=()=>{cur.items.forEach(i=>{if(i.submitted)delete state.draft[i.activityId];else state.draft[i.activityId]={submitted:true};});render();};
+ el.querySelectorAll('[data-student]').forEach(b=>b.onclick=()=>openStudent(b.dataset.student,b));
+ if(ed)state.saver=async()=>{const entries=Object.entries(state.draft);
   if(att)await api('save-attendance',{items:entries.map(([attendanceId,v])=>({attendanceId,...v}))});
   else await api('save-activities',{items:entries.map(([activityId,v])=>({activityId,...v}))});
-  state.edit=false;state.draft={};updateSavebar();await reloadSession();toast(`저장했어요 · ${entries.length}건`);renderSession();},e.currentTarget);
+  state.edit=false;state.draft={};updateSavebar();await reloadSession();toast(`저장했어요 · ${entries.length}건`);render();};
 }
-function editButton(){return state.edit?`<button class="ghost" type="button" id="edit-off">취소</button>`:`<button class="ghost" type="button" id="edit-on">편집</button>`;}
-function bindEdit(again){if($('edit-on'))$('edit-on').onclick=()=>{state.edit=true;state.draft={};updateSavebar();again();};if($('edit-off'))$('edit-off').onclick=()=>{state.edit=false;state.draft={};updateSavebar();again();};$('save-cancel').onclick=()=>{state.edit=false;state.draft={};updateSavebar();again();};}
 
 // ---------- 학생 공간 ----------
-async function openStudent(attendanceId,btn){await run(async()=>{const s=state.detail.students.find(x=>x.attendanceId===attendanceId);state.student={...s,data:s.registrationId?await api('student',{registrationId:s.registrationId}):{homework:[],tests:[],memos:[]}};state.view='student';state.edit=false;state.draft={};render();},btn);}
-function renderStudent(){
- setTabs(true);const s=state.student,d=s.data;bar(['수업',state.detail.session.name,s.name],{back:()=>{if(!leaveEdit())return;state.view='session';render();},notion:s.attendanceId});
- const memo=state.draft.memo??s.memo,comment=state.draft.comment??s.comment;
- const tests=d.tests.slice().reverse();
- $('app').innerHTML=`<div class="toolrow"><span class="av">${esc(s.name.slice(0,1))}</span><span class="meta"><span class="t">${esc(s.name)}</span> <span class="pill s-${STATUS[s.status]||''}">${STATUS[s.status]||'미입력'}${s.arrivedAt?' '+timeOf(s.arrivedAt):''}</span></span>${editButton()}${nlink(s.registrationId,s.name+' 등록')}</div>
- <h2 class="sec-title">${icon('과제')}과제 현황</h2><div class="list">${d.homework.map(h=>`<div class="row"><span class="meta"><span class="t">${esc(h.range||h.title)}</span><span class="d">${h.due?'마감 '+shortDate(h.due):''}</span></span><span class="pill ${h.submitted?'done':'miss'}">${h.submitted?'제출':'미제출'}</span>${nlink(h.id,h.title)}</div>`).join('')||'<p class="empty">최근 과제가 없어요.</p>'}</div>
- <h2 class="sec-title">${icon('평가')}평가 결과</h2><div class="list">${tests.length?`<div class="bars">${tests.map(t=>{const p=Math.round((t.correct||0)/t.total*100);return `<div><b>${p}</b><i style="height:${Math.max(6,p)}%"></i><span>${esc((t.range||t.title).slice(0,8))}</span></div>`;}).join('')}</div>`:'<p class="empty">점수가 있는 평가가 없어요.</p>'}</div>
- <h2 class="sec-title">${icon('lock')}메모 <span class="pill">학부모에게 안 보여요</span></h2>
- ${state.edit?`<div class="form"><textarea id="memo" aria-label="메모">${esc(memo)}</textarea></div>`:`<div class="card">${memo?esc(memo):'<span class="muted">오늘 메모가 없어요.</span>'}${d.memos.filter(m=>m.attendanceId!==s.attendanceId).slice(0,4).map(m=>`<p class="help"><b>${shortDate(m.date)}</b> ${esc(m.memo)}</p>`).join('')}</div>`}
- <h2 class="sec-title">${icon('users')}선생님 한마디 <span class="pill done">학부모 리포트에 보여요</span></h2>
- ${state.edit?`<div class="form"><textarea id="comment" aria-label="선생님 한마디">${esc(comment)}</textarea></div><p class="help">선생님 한마디는 다음 리포트 새로고침 때 학부모 화면에 반영돼요.</p>`:`<div class="card">${comment?esc(comment):'<span class="muted">오늘 한마디가 없어요.</span>'}</div>`}`;
- bindEdit(renderStudent);
- for(const k of ['memo','comment'])if($(k))$(k).oninput=e=>{if(e.target.value===s[k])delete state.draft[k];else state.draft[k]=e.target.value;updateSavebar();};
- $('save-ok').onclick=e=>run(async()=>{await api('save-attendance',{items:[{attendanceId:s.attendanceId,...state.draft}]});Object.assign(s,state.draft);state.edit=false;state.draft={};updateSavebar();await reloadSession();toast('저장했어요.');renderStudent();},e.currentTarget);
+// 위: 과제·평가(보기만), 아래: 메모·선생님 한마디(편집). 넓은 화면은 위를 [과제|평가] 탭으로, 휴대폰은 차례로 쌓는다.
+async function openStudent(attendanceId,btn){if(!leaveEdit())return;await run(async()=>{const s=state.detail.students.find(x=>x.attendanceId===attendanceId);state.student={...s,data:s.registrationId?await api('student',{registrationId:s.registrationId}):{homework:[],tests:[],memos:[]}};state.view='student';state.stuTab='과제';state.noteTab='memo';state.edit=false;state.draft={};render();},btn);}
+function paneStudent(el){
+ const s=state.student,d=s.data,ed=editing('student'),w=wide(),key=state.noteTab||'memo',val=state.draft[key]??s[key]??'';
+ const tests=d.tests.slice().reverse(),last=d.tests[0],done=d.homework.filter(h=>h.submitted).length;
+ const hint=[d.homework.length?`과제 제출 <b>${done}/${d.homework.length}</b>`:'',last?`최근 평가 <b>${Math.round((last.correct||0)/last.total*100)}점</b>`:''].filter(Boolean).join(' · ')||'최근 과제와 평가가 없어요';
+ const reg=nlink(s.registrationId,s.name+' 등록');
+ const title=`<p class="page-title">${icon('users')}${esc(s.name)} <span class="pill s-${STATUS[s.status]||''}">${STATUS[s.status]||'미입력'}${s.arrivedAt?' '+timeOf(s.arrivedAt):''}</span>${w?'':`<span class="grow"></span>${reg}`}</p>`;
+ const hwHtml=`<div class="list">${d.homework.map(h=>`<div class="row"><span class="meta"><span class="t">${esc(h.range||h.title)}</span><span class="d">${h.due?'마감 '+shortDate(h.due):''}</span></span><span class="pill ${h.submitted?'done':'miss'}">${h.submitted?'제출':'미제출'}</span>${nlink(h.id,h.title)}</div>`).join('')||'<p class="empty">최근 과제가 없어요.</p>'}</div>`;
+ const testHtml=`<div class="list">${tests.length?`<div class="bars">${tests.map(t=>{const p=Math.round((t.correct||0)/t.total*100);return `<div><b>${p}</b><i style="height:${Math.max(6,p)}%"></i><span>${esc((t.range||t.title).slice(0,8))}</span></div>`;}).join('')}</div>`:'<p class="empty">점수가 있는 평가가 없어요.</p>'}</div>`;
+ const past=key==='memo'?d.memos.filter(m=>m.attendanceId!==s.attendanceId).slice(0,4).map(m=>`<p class="help"><b>${shortDate(m.date)}</b> ${esc(m.memo)}</p>`).join(''):'';
+ const note=`<div class="tab-row note-row"><span></span><div class="center-tabs"><div class="tabs" role="tablist">${tabBtn(key==='memo','data-note="memo"','메모')}${tabBtn(key==='comment','data-note="comment"','선생님 한마디')}</div></div><span class="acts">${editButton('student')}</span></div>
+ ${ed?`<div class="form"><textarea data-key="${key}" aria-label="${key==='memo'?'메모':'선생님 한마디'}">${esc(val)}</textarea></div>`:`<div class="card">${val?esc(val):`<span class="muted">${key==='memo'?'오늘 메모가 없어요.':'오늘 한마디가 없어요.'}</span>`}${past}</div>`}
+ <p class="note-hint">${key==='memo'?'메모는 학부모에게 안 보여요.':'선생님 한마디는 다음 리포트 새로고침 때 학부모 화면에 반영돼요.'}</p>`;
+ const tab=state.stuTab||'과제';
+ el.innerHTML=w?paneHead(title,hint,tabBtn(tab==='과제','data-stab="과제"','과제')+tabBtn(tab==='평가','data-stab="평가"','평가'),reg)+`<div class="pbody">${tab==='과제'?hwHtml:testHtml}<div class="split"></div>${note}</div>`
+  :paneHead(title,hint)+`<div class="pbody"><h2 class="sec-title">${icon('과제')}과제 현황</h2>${hwHtml}<h2 class="sec-title">${icon('평가')}평가 결과</h2>${testHtml}<h2 class="sec-title">${icon('lock')}메모 · 한마디</h2>${note}</div>`;
+ el.querySelectorAll('[data-stab]').forEach(b=>b.onclick=()=>{state.stuTab=b.dataset.stab;render();});
+ el.querySelectorAll('[data-note]').forEach(b=>b.onclick=()=>{state.noteTab=b.dataset.note;render();});
+ bindEdit(el);
+ el.querySelectorAll('textarea[data-key]').forEach(t=>t.oninput=()=>{const k=t.dataset.key;if(t.value===(s[k]??''))delete state.draft[k];else state.draft[k]=t.value;updateSavebar();});
+ if(ed)state.saver=async()=>{await api('save-attendance',{items:[{attendanceId:s.attendanceId,...state.draft}]});Object.assign(s,state.draft);state.edit=false;state.draft={};updateSavebar();await reloadSession();toast('저장했어요.');render();};
 }
 
 // ---------- 학습기록 ----------
-function renderRecords(){
- setTabs(true);sessionBar();const recs=state.detail.records;
- $('app').innerHTML=`<p class="page-title">${icon('학습')}학습기록</p><p class="page-hint">기록을 누르면 교재·주제·범위·내용을 적고 학습활동을 만들어요.</p>
- ${recs.map(r=>`<div class="rec"><button class="rec-head" type="button" data-rec="${esc(r.id)}"><span class="kind-icon k-${esc(r.kind)}" title="${esc(r.kind)}">${icon(r.kind||'학습')}</span><span class="t">${esc(r.title)}</span>${r.makeup?'<span class="pill s-보강">보강</span>':''}</button>
-  <div class="rec-body">${esc([r.range,r.topic&&!r.title.includes(r.topic)?r.topic:''].filter(Boolean).join(' · ')||'내용을 적어 주세요')} · 학생 ${r.registrationIds.length}명${r.activities?` · 학습활동 ${r.activities}건`:''}</div></div>`).join('')||'<p class="empty">아직 기록이 없어요.</p>'}
- <div class="actions"><button class="primary" type="button" id="new-rec">${icon('plus','inline-icon')}기록 만들기</button></div>`;
- $('app').querySelectorAll('[data-rec]').forEach(b=>b.onclick=()=>openRecord(b.dataset.rec,b));
- $('new-rec').onclick=openKindSheet;
+function paneRecords(el){
+ const all=state.detail.records,k=state.recKind||'전체',recs=k==='전체'?all:all.filter(r=>r.kind===k);
+ const hint=KINDS.map(x=>`${x} <b>${all.filter(r=>r.kind===x).length}</b>`).join(' · ')+(wide()?' · 기록을 누르면 범위·내용과 학습활동을 적어요':'');
+ el.innerHTML=paneHead(`<p class="page-title">${icon('학습')}학습기록</p>`,hint,['전체',...KINDS].map(x=>tabBtn(x===k,`data-rk="${x}"`,x)).join(''),wide()?`<button class="primary inline" type="button" id="new-rec">${icon('plus','inline-icon')} 기록</button>`:'')+
+ `<div class="pbody">${recs.map(r=>`<div class="rec"><button class="rec-head" type="button" data-rec="${esc(r.id)}"><span class="kind-icon k-${esc(r.kind)}" title="${esc(r.kind)}">${icon(r.kind||'학습')}</span><span class="t">${esc(r.title)}</span>${r.makeup?'<span class="pill s-보강">보강</span>':''}</button>
+  <div class="rec-body">${esc([r.range,r.topic&&!r.title.includes(r.topic)?r.topic:''].filter(Boolean).join(' · ')||'내용을 적어 주세요')} · 학생 ${r.registrationIds.length}명${r.activities?` · 학습활동 ${r.activities}건`:''}</div></div>`).join('')||`<p class="empty">${k==='전체'?'아직 기록이 없어요.':`${k} 기록이 없어요.`}</p>`}
+ ${wide()?'':`<div class="actions"><button class="primary" type="button" id="new-rec">${icon('plus','inline-icon')}기록 만들기</button></div>`}</div>`;
+ el.querySelectorAll('[data-rk]').forEach(b=>b.onclick=()=>{state.recKind=b.dataset.rk;render();});
+ el.querySelectorAll('[data-rec]').forEach(b=>b.onclick=()=>openRecord(b.dataset.rec,b));
+ el.querySelector('#new-rec').onclick=openKindSheet;
 }
 function openKindSheet(){
  $('sheet').innerHTML=`<div class="dialog-head"><h2>어떤 기록을 만들까요?</h2><button class="ghost" type="button" id="sh-x">닫기</button></div><div class="choose">
@@ -226,46 +274,47 @@ function openBookSheet(kind,filter='진행 중'){
  $('sheet').querySelectorAll('[data-books]').forEach(b=>b.onclick=()=>create({bookIds:b.dataset.books.split(',')},b));
  $('nobook').onsubmit=e=>{e.preventDefault();create({topic:$('topic').value.trim()},e.submitter);};
 }
-async function openRecord(id,btn){await run(()=>openRecordNow(id),btn);}
+async function openRecord(id,btn){if(!leaveEdit())return;await run(()=>openRecordNow(id),btn);}
 async function openRecordNow(id){{state.recordId=id;state.acts=await api('activities',{recordId:id});if(!state.books)state.books=await api('books',{sessionId:state.sessionId});state.view='record';state.edit=false;state.draft={};render();}}
 const ACT_LABEL={학습:'학생별 기록 만들기',과제:'과제 출제',평가:'평가 만들기'};
-function renderRecord(){
- setTabs(true);const {record:r,activities:acts}=state.acts;bar(['수업',state.detail.session.name,r.kind||'기록'],{back:()=>{if(!leaveEdit())return;state.view='session';state.tab='records';render();},notion:r.id});
+function paneRecord(el){
+ const {record:r,activities:acts}=state.acts,ed=editing('record');
  const book=state.books.books.find(b=>b.id===r.bookId),v=k=>state.draft[k]??r[k]??'';
  const scoring=r.kind==='평가',checking=r.kind==='과제';
- $('app').innerHTML=`<p class="page-title"><span class="kind-icon k-${esc(r.kind)}" title="${esc(r.kind)}">${icon(r.kind||'학습')}</span>${esc(r.title)}</p>
- <form class="form" id="rec-form"><label>교재 <span class="muted">이 수업 학생들의 교재만 보여요</span></label>
+ el.innerHTML=paneHead(`<p class="page-title"><span class="kind-icon k-${esc(r.kind)}" title="${esc(r.kind)}">${icon(r.kind||'학습')}</span>${esc(r.title)}</p>`,`학생 <b>${r.registrationIds.length}명</b>에게 연결된 기록이에요${r.makeup?' · 보강 기록이라 진도율에서 빠져요':''}`)+`<div class="pbody">
+ <form class="card form" id="rec-form"><label>교재 <span class="muted">이 수업 학생들의 교재만 보여요</span></label>
  <select id="rec-book"><option value="">교재 없음</option>${state.books.books.map(b=>`<option value="${esc(b.id)}" ${b.id===r.bookId?'selected':''}>${esc(b.name)}</option>`).join('')}</select>
- <p class="target">학생 ${r.registrationIds.length}명에게 연결된 기록이에요${r.makeup?' · 보강 기록이라 진도율에서 빠져요':''}.</p>
  <label for="rec-topic">주제 ${book?'<span class="muted">(선택)</span>':''}</label><input id="rec-topic" maxlength="200" value="${esc(v('topic'))}" placeholder="교재 없는 기록은 리포트에 주제가 보여요">
  <label for="rec-range">범위</label><input id="rec-range" maxlength="200" value="${esc(v('range'))}" placeholder="예: p.31-35">
  <label for="rec-content">내용</label><textarea id="rec-content">${esc(v('content'))}</textarea>
  <div class="actions"><button class="secondary" type="submit" id="rec-save">기록 저장</button></div></form>
- <h2 class="sec-title">${icon(r.kind||'학습')}학습활동 <span class="cnt">${acts.length}명</span><span class="grow"></span>${acts.length&&(scoring||checking)?editButton():''}</h2>
+ <h2 class="sec-title">${icon(r.kind||'학습')}학습활동 <span class="cnt">${acts.length}명</span><span class="grow"></span>${acts.length&&(scoring||checking)?editButton('record'):''}</h2>
  ${acts.length?`<div class="list">${acts.map(a=>{const ch=state.draft['a:'+a.id];const sub=ch?.submitted??a.submitted,cor=ch?.correct??a.correct,tot=ch?.total??a.total;
   return `<div class="row ${ch?'changed':''}"><span class="av">${esc(a.name.slice(0,1))}</span><span class="meta"><span class="t">${esc(a.name)}</span>${scoring&&tot?`<span class="d">${Math.round((cor||0)/tot*100)}점</span>`:''}</span>
-  ${checking?(state.edit?`<span class="seg"><button type="button" class="v-제출 ${sub?'on':''}" data-sub="${esc(a.id)}" data-v="1">제출</button><button type="button" class="v-미제출 ${sub?'':'on'}" data-sub="${esc(a.id)}" data-v="0">미제출</button></span>`:`<span class="pill ${sub?'done':'miss'}">${sub?'제출':'미제출'}</span>`):''}
-  ${scoring?(state.edit?`<span class="score"><input inputmode="numeric" data-cor="${esc(a.id)}" value="${cor??''}" aria-label="${esc(a.name)} 맞힌 문항"> / <input inputmode="numeric" data-tot="${esc(a.id)}" value="${tot??''}" aria-label="${esc(a.name)} 전체 문항"></span>`:`<span class="pill k-평가">${cor??'–'} / ${tot??'–'}</span>`):''}${nlink(a.id,a.name+' 학습활동')}</div>`;}).join('')}</div>`
+  ${checking?(ed?`<span class="seg"><button type="button" class="v-제출 ${sub?'on':''}" data-sub="${esc(a.id)}" data-v="1">제출</button><button type="button" class="v-미제출 ${sub?'':'on'}" data-sub="${esc(a.id)}" data-v="0">미제출</button></span>`:`<span class="pill ${sub?'done':'miss'}">${sub?'제출':'미제출'}</span>`):''}
+  ${scoring?(ed?`<span class="score"><input inputmode="numeric" data-cor="${esc(a.id)}" value="${cor??''}" aria-label="${esc(a.name)} 맞힌 문항"> / <input inputmode="numeric" data-tot="${esc(a.id)}" value="${tot??''}" aria-label="${esc(a.name)} 전체 문항"></span>`:`<span class="pill k-평가">${cor??'–'} / ${tot??'–'}</span>`):''}${nlink(a.id,a.name+' 학습활동')}</div>`;}).join('')}</div>`
  :`<p class="empty">아직 학습활동이 없어요.</p>`}
- ${acts.length?'':`<div class="actions"><button class="primary" type="button" id="make-acts" ${r.activityStatus==='🔄 작업중'?'disabled':''}>${esc(ACT_LABEL[r.kind]||'학습활동 만들기')} · ${r.registrationIds.length}명</button></div>${r.activityStatus==='🔄 작업중'?'<p class="help">만드는 중이에요. 잠시 뒤 새로고침해 주세요.</p>':''}`}`;
- $('rec-form').onsubmit=e=>{e.preventDefault();const body={recordId:r.id,topic:$('rec-topic').value,range:$('rec-range').value,content:$('rec-content').value};if(($('rec-book').value||null)!==r.bookId)body.bookId=$('rec-book').value||null;
-  run(async()=>{await api('update-record',body);state.acts=await api('activities',{recordId:r.id});await reloadSession();toast('기록을 저장했어요.');renderRecord();},e.submitter);};
- if($('make-acts'))$('make-acts').onclick=e=>run(async()=>{const res=await api('create-activities',{recordId:r.id});toast(res.status==='already_processing'?'이미 만드는 중이에요.':`학습활동을 만들고 있어요 · ${res.students}명`);setTimeout(()=>run(async()=>{state.acts=await api('activities',{recordId:r.id});if(state.view==='record')renderRecord();}),4000);},e.currentTarget);
- bindEdit(renderRecord);
+ ${acts.length?'':`<div class="actions"><button class="primary" type="button" id="make-acts" ${r.activityStatus==='🔄 작업중'?'disabled':''}>${esc(ACT_LABEL[r.kind]||'학습활동 만들기')} · ${r.registrationIds.length}명</button></div>${r.activityStatus==='🔄 작업중'?'<p class="help">만드는 중이에요. 잠시 뒤 새로고침해 주세요.</p>':''}`}</div>`;
+ const q=s=>el.querySelector(s);
+ q('#rec-form').onsubmit=e=>{e.preventDefault();const body={recordId:r.id,topic:q('#rec-topic').value,range:q('#rec-range').value,content:q('#rec-content').value};if((q('#rec-book').value||null)!==r.bookId)body.bookId=q('#rec-book').value||null;
+  run(async()=>{await api('update-record',body);state.acts=await api('activities',{recordId:r.id});await reloadSession();toast('기록을 저장했어요.');render();},e.submitter);};
+ if(q('#make-acts'))q('#make-acts').onclick=e=>run(async()=>{const res=await api('create-activities',{recordId:r.id});toast(res.status==='already_processing'?'이미 만드는 중이에요.':`학습활동을 만들고 있어요 · ${res.students}명`);setTimeout(()=>run(async()=>{const fresh=await api('activities',{recordId:r.id});if(state.view==='record'&&state.recordId===r.id){state.acts=fresh;render();}}),4000);},e.currentTarget);
+ bindEdit(el);
  const setDraft=(id,patch)=>{const a=acts.find(x=>x.id===id),cur={...(state.draft['a:'+id]||{}),...patch};const same=Object.entries(cur).every(([k,val])=>a[k]===val);if(same)delete state.draft['a:'+id];else state.draft['a:'+id]=cur;updateSavebar();};
- $('app').querySelectorAll('[data-sub]').forEach(b=>b.onclick=()=>{setDraft(b.dataset.sub,{submitted:b.dataset.v==='1'});renderRecord();});
+ el.querySelectorAll('[data-sub]').forEach(b=>b.onclick=()=>{setDraft(b.dataset.sub,{submitted:b.dataset.v==='1'});render();});
  const num=v=>v.trim()===''?null:Number(v);
- $('app').querySelectorAll('[data-cor]').forEach(i=>i.onchange=()=>setDraft(i.dataset.cor,{correct:num(i.value)}));
- $('app').querySelectorAll('[data-tot]').forEach(i=>i.onchange=()=>{setDraft(i.dataset.tot,{total:num(i.value)});$('app').querySelectorAll('[data-tot]').forEach(o=>{if(!o.value){o.value=i.value;setDraft(o.dataset.tot,{total:num(i.value)});}});});
- $('save-ok').onclick=e=>run(async()=>{const items=Object.entries(state.draft).filter(([k])=>k.startsWith('a:')).map(([k,v])=>({activityId:k.slice(2),...v}));
-  await api('save-activities',{items});state.edit=false;state.draft={};updateSavebar();state.acts=await api('activities',{recordId:r.id});toast(`저장했어요 · ${items.length}명`);renderRecord();},e.currentTarget);
+ el.querySelectorAll('[data-cor]').forEach(i=>i.onchange=()=>setDraft(i.dataset.cor,{correct:num(i.value)}));
+ el.querySelectorAll('[data-tot]').forEach(i=>i.onchange=()=>{setDraft(i.dataset.tot,{total:num(i.value)});el.querySelectorAll('[data-tot]').forEach(o=>{if(!o.value){o.value=i.value;setDraft(o.dataset.tot,{total:num(i.value)});}});});
+ if(ed)state.saver=async()=>{const items=Object.entries(state.draft).filter(([k])=>k.startsWith('a:')).map(([k,v])=>({activityId:k.slice(2),...v}));
+  await api('save-activities',{items});state.edit=false;state.draft={};updateSavebar();state.acts=await api('activities',{recordId:r.id});toast(`저장했어요 · ${items.length}명`);render();};
 }
 
 // ---------- 시작 ----------
 function render(){
  if(!state.session)return showLogin();
  if(!state.teacherId)return showTeachers();
- ({home:renderHome,waiting:renderWaiting,session:renderSession,student:renderStudent,record:renderRecord,teachers:showTeachers}[state.view]||renderHome)();
+ setWide(false);
+ ({home:renderHome,waiting:renderWaiting,session:renderSession,student:renderSession,record:renderSession,teachers:showTeachers}[state.view]||renderHome)();
  updateSavebar();
 }
 async function start(){
@@ -276,4 +325,7 @@ async function start(){
  if(want&&state.teacherId){await openSessionNow(want);return;}
  state.view='home';render();
 }
+// 저장 막대는 편집 중인 칸이 정한 저장 동작(state.saver)을 부른다.
+$('save-ok').onclick=e=>{if(state.saver)run(state.saver,e.currentTarget);};
+$('save-cancel').onclick=()=>{state.edit=false;state.draft={};updateSavebar();render();};
 if(!state.session)showLogin();else run(start);

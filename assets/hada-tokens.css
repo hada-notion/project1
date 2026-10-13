@@ -32,6 +32,8 @@
  --page-max:1180px;--form-max:560px;
  /* 리포트와 수업방의 본문 폭(1부 6장, 리포트 --feed-w와 같은 값) */
  --feed-w:640px;--dialog-sm:440px;--dialog-md:600px;
+ /* 수업방 넓은 화면의 오른쪽 보조 칸(보강 대기실) 폭 */
+ --side-w:360px;
  --control-h:3rem;--control-lg:3.5rem;--logo-h:2.25rem;--icon-sm:.875rem;--icon-section:1rem;--icon-title:1.125rem;--icon-md:1.25rem;--icon-lg:1.75rem;
  /* 기기 화면 모드(출결 키오스크): 세로 카드 폭과, 그 폭에 맞춘 기준 글자 크기(카드 360px일 때 16px).
     길이÷길이 계산은 브라우저가 무시하므로 같은 비율을 화면 단위로 적는다: 90vw·16/360=4vw, 90vh·.68·16/360≈2.72vh,
