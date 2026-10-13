@@ -95,8 +95,6 @@ button.row{cursor:pointer}
 .center-tabs .tabs button.active{background:transparent;box-shadow:none}
 .center-tabs .tabs button.active span{background:var(--surface);color:var(--brand-deep);box-shadow:var(--shadow-card)}
 .rec{background:var(--surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-card);margin-bottom:var(--space-3);overflow:hidden}
-.rec-head{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-4);width:100%;border:0;background:transparent;font:inherit;color:inherit;text-align:left;cursor:pointer}
-.rec-head .t{flex:1;min-width:0;font-weight:700}
 /* 분류 아이콘 칸(리포트 학습기록 .log-icon): 색은 분류색 -soft 바탕 + -ink 선 */
 .kind-icon{flex:none;width:var(--hit-area);height:var(--hit-area);border-radius:var(--radius-md);display:inline-flex;align-items:center;justify-content:center}
 .kind-icon svg.line{width:var(--icon-section);height:var(--icon-section)}
@@ -104,7 +102,26 @@ button.row{cursor:pointer}
 .kind-icon.k-과제,.page-title .k-과제{background:var(--warning-soft);color:var(--warning-ink)}
 .kind-icon.k-평가,.page-title .k-평가{background:var(--success-soft);color:var(--success-ink)}
 .page-title .kind-icon{width:var(--space-8);height:var(--space-8)}
-.rec-body{background:var(--brand-tint);padding:var(--space-3) var(--space-4) var(--space-4);font-size:var(--text-small);color:var(--text-muted)}
+/* 기록 카드(v2.5.89): 학부모 리포트 학습기록 카드(student_report.html .log-card·.log-icon·.log-title·.log-context·.log-extra-chevron·.log-extra)와 같은 규칙.
+   아이콘 칸 44px에 아이콘과 구분 글자, 제목 14px 굵게, 아래 "• " 줄 12px 옅은 글자, 내용은 접어 두고 ⌄(테두리 원, 누르는 영역 44px)로 펼친다. */
+.log-head{position:relative}
+.log-main{display:block;width:100%;padding:var(--space-3) var(--space-4);border:0;background:transparent;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.log-card.has-extra .log-main{padding-right:var(--space-12)}
+.log-top{display:flex;align-items:center;gap:var(--space-3);min-height:var(--hit-min)}
+.log-icon{flex:none;width:var(--hit-area);height:var(--hit-area);border-radius:var(--radius-md);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.log-icon svg.line{width:var(--icon-section);height:var(--icon-section)}
+.log-icon small{font-size:var(--text-caption);font-weight:700;line-height:1}
+.log-icon.k-학습{background:var(--info-soft);color:var(--info-ink)}
+.log-icon.k-과제{background:var(--warning-soft);color:var(--warning-ink)}
+.log-icon.k-평가{background:var(--success-soft);color:var(--success-ink)}
+.log-title{flex:1;min-width:0;font-weight:700;font-size:var(--text-small);line-height:1.4}
+.log-meta{display:block;margin-top:var(--space-2)}
+.log-context{display:block;font-size:var(--text-caption);color:var(--text-muted);white-space:pre-wrap;margin-bottom:var(--space-1)}
+.log-chev{position:absolute;right:var(--space-1);bottom:0;width:var(--hit-min);height:var(--hit-min);padding:0;border:0;background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.log-chev span{width:var(--space-6);height:var(--space-6);border-radius:50%;border:1px solid var(--brand-border);background:var(--surface);color:var(--brand-deep);display:flex;align-items:center;justify-content:center}
+.log-chev svg.line{width:var(--icon-sm);height:var(--icon-sm)}
+.log-chev[aria-expanded="true"] span{transform:rotate(180deg)}
+.log-extra{background:var(--brand-tint);padding:var(--space-3) var(--space-4);font-size:var(--text-small);color:var(--text-muted);white-space:pre-wrap}
 .form label{margin-top:var(--space-4)}
 .form textarea{width:100%;min-height:calc(var(--control-h) * 2);font:inherit;padding:var(--space-3);border:1px solid var(--control-border);border-radius:var(--radius-md);background:var(--surface);color:var(--text-ink);resize:vertical}
 .box{display:flex;align-items:center;gap:var(--space-3);min-height:var(--control-h);border:1px solid var(--control-border);border-radius:var(--radius-md);background:var(--surface);padding:var(--space-2) var(--space-3);width:100%;font:inherit;color:inherit;text-align:left;cursor:pointer}
@@ -339,6 +356,15 @@ dialog.drawer.right{inset:0 0 0 auto;border-radius:0;border-top-left-radius:var(
 /* 학습기록 탭 + 기록 만들기(떠 있는 버튼): 본문 오른쪽 끝, 하단 탭 위 */
 .fab{position:fixed;z-index:19;right:max(var(--space-4),calc((100vw - var(--feed-w))/2));bottom:calc(var(--hit-min) + var(--space-8) + var(--space-2));min-height:calc(var(--hit-min) + var(--space-1));padding:0 var(--space-5) 0 var(--space-4);border:0;border-radius:var(--radius-pill);background:var(--brand-deep);color:var(--surface);font:inherit;font-weight:700;box-shadow:var(--shadow-float);display:inline-flex;align-items:center;gap:var(--space-2);cursor:pointer}
 .fab svg.line{width:var(--icon-md);height:var(--icon-md)}
+/* v2.5.89 홈 "교재 진도"(리포트 홈 교재 진도처럼 한 카드에 [교재명 / 진도 막대]), 교재 상세, 학습기록 날짜 묶음 */
+.bp-row{display:block;width:100%;padding:var(--space-3) var(--space-4);border:0;background:transparent;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.bp-row+.bp-row{border-top:1px solid var(--divider)}
+.bp-t{display:block;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bp-t small{margin-left:var(--space-2);font-weight:400;font-size:var(--text-caption);color:var(--text-subtle)}
+.row .pct{flex:none;font-weight:700;font-size:var(--text-label);color:var(--brand-deep);font-variant-numeric:tabular-nums}
+.book-row.static{cursor:default}
+.bk-note{margin:var(--space-3) 0 0}
+.rec-date.cur{color:var(--brand-deep)}
 /* 넓은 화면은 아래에서 올라오는 창 대신 가운데 대화상자 */
 @media(min-width:1081px){
  dialog.sheet{width:min(100%,var(--dialog-md));margin:auto;border-bottom-left-radius:var(--radius-lg);border-bottom-right-radius:var(--radius-lg)}
@@ -356,6 +382,6 @@ dialog.drawer.right{inset:0 0 0 auto;border-radius:0;border-top-left-radius:var(
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <script src="hada_config.js"></script>
 <script src="admin_auth.js?v=4ffde89c"></script>
-<script src="class_room.js?v=5158c9b7"></script>
+<script src="class_room.js?v=0200035a"></script>
 </body>
 </html>
