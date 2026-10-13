@@ -22,7 +22,7 @@ const P={back:'<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 1
  lock:'<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',square:'<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>',
  checked:'<polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
  menu:'<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>',
- x:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',memo:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'};
+ x:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',memo:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>'};
 const icon=(name,cls='')=>`<svg class="line ${cls}" viewBox="0 0 24 24" aria-hidden="true">${P[name]||''}</svg>`;
 const nlink=(id,label)=>id?`<a class="icon-btn nl" href="${notionUrl(id)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(label)} Notion에서 열기" title="Notion에서 열기">${icon('ext')}</a>`:'';
 const KINDS=['학습','과제','평가'],STATUS={'🟢 출석':'출석','🔴 결석':'결석','🔵 보강':'보강'};
