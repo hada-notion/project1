@@ -35,7 +35,7 @@ const SOURCE_CONFIGS: SourceConfig[] = [
     type: "learning_record",
     dataSourceId: DS_LEARNING_RECORD,
     registrationProp: "등록",
-    meaningfulProps: ["내용", "범위", "구분", "진도교재", "교재", "과목", "출석", "수업", "등록", "학습활동"],
+    meaningfulProps: ["내용", "범위", "구분", "주제", "진도교재", "교재", "과목", "출석", "수업", "등록", "학습활동"],
   },
   {
     type: "study_activity",
