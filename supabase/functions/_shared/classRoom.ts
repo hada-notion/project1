@@ -365,8 +365,8 @@ export async function loadClassRecords(sessionId: string) {
 	const byId = new Map(sessions.map((p) => [p.id as string, p]))
 	const pages = await sessionRecords(sessions), summaries = await withSubjects(pages)
 	const startOfRecord = (r: Page) => { const sid = rel(r, "수업").find((id) => byId.has(id)); return sid ? byId.get(sid)?.properties?.["수업일시"]?.date?.start ?? "" : "" }
-	const recent = pages.slice().sort((a, b) => String(startOfRecord(b)).localeCompare(String(startOfRecord(a)))).slice(0, CARD_BODY_LIMIT).map((r) => r.id as string)
-	const extra = await cardExtras(pages, recent)
+	// (v2.5.111 속도) 본문은 카드를 펼칠 때 record-body로 따로 읽는다
+	const extra = await cardExtras(pages, [])
 	const records = pages.map((r, i) => {
 		const sid = rel(r, "수업").find((id) => byId.has(id)) ?? null
 		const start = sid ? byId.get(sid)?.properties?.["수업일시"]?.date?.start ?? null : null
@@ -438,7 +438,6 @@ function recordSummary(r: Page) {
 
 // 기록 카드(v2.5.95, 학부모 리포트 학습기록 카드와 같은 규칙): 과제는 제출 수·마감일, 평가는 평균 점수, 그리고 페이지 본문(블록).
 // 본문은 bodyIds(화면에 먼저 보이는 최근 기록)만 읽는다(리포트처럼 최근 것만, 동시 6개). 읽기 실패는 빈 본문.
-const CARD_BODY_LIMIT = 20
 async function cardExtras(records: Page[], bodyIds: string[]) {
 	const graded = records.filter((r) => ["과제", "평가"].includes(selectName(r, "구분") ?? ""))
 	const acts: Page[] = []
@@ -509,7 +508,7 @@ export async function loadSession(sessionId: string) {
 		return { recordId: r.id as string, title: anyTitleText(r), range: plain(r, "범위"), items }
 	})
 	const recordPages = await getPages(rel(session, "학습기록"))
-	const extra = await cardExtras(recordPages, recordPages.map((r) => r.id as string))
+	const extra = await cardExtras(recordPages, []) // (v2.5.111 속도) 본문은 펼칠 때 record-body로
 	const records = (await withSubjects(recordPages)).map((r, i) => ({ ...r, ...extra(recordPages[i]) }))
 	return {
 		session: await (async () => { const c = (await classInfo(rel(session, "클래스").slice(0, 1))).get(rel(session, "클래스")[0]); return { ...sessionSummary(session), className: c?.name ?? "", classEmoji: c?.emoji ?? "" } })(),
@@ -883,6 +882,12 @@ export async function deleteMakeupSession(sessionId: string) {
 }
 
 // ---------- 요청 처리 ----------
+// 기록 카드 본문(v2.5.111): 카드를 펼칠 때 그 기록 한 장의 Notion 본문만 읽는다(feedBody.ts와 같은 블록 목록).
+export async function loadRecordBody(recordId: string) {
+	if (!isId(recordId)) throw new ClassRoomError(400, "기록 형식이 올바르지 않습니다.")
+	return { recordId, body: await readPageBodyBlocks(recordId) }
+}
+
 export async function handleClassRoom(body: any): Promise<unknown> {
 	switch (body?.action) {
 		case "teachers": return { teachers: await listTeachers() }
@@ -896,6 +901,7 @@ export async function handleClassRoom(body: any): Promise<unknown> {
 		case "class-stats": return await loadClassStats(body.sessionId)
 		case "books": return await loadBooks(body.sessionId)
 		case "activities": return await loadActivities(body.recordId)
+		case "record-body": return await loadRecordBody(body.recordId)
 		case "student": return await loadStudent(body.registrationId)
 		case "save-attendance": return await saveAttendance(body.items)
 		case "save-activities": return await saveActivities(body.items)

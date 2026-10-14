@@ -176,12 +176,16 @@ Deno.test("record cards: unit, homework count and due, test average, page body (
  f.pages.e1 = { id: "e1", db: "activities", properties: { "학습활동": title("e1"), "학습기록": rel("recT"), "정답 문항": num(9), "전체 문항": num(10) } }
  f.pages.e2 = { id: "e2", db: "activities", properties: { "학습활동": title("e2"), "학습기록": rel("recT"), "정답 문항": num(7), "전체 문항": num(10) } }
  const r = await room.loadClassRecords("s1"), by = (id: string): any => r.records.find((x: any) => x.id === id)
- assert(by("recA").unit === "1-1. 평면좌표" && by("recA").content === "선과제 테스트" && JSON.stringify(by("recA").body).includes("본문 한 줄") && by("recA").homework === null, JSON.stringify(by("recA")))
+ assert(by("recA").unit === "1-1. 평면좌표" && by("recA").content === "선과제 테스트" && by("recA").body.length === 0 && by("recA").homework === null, JSON.stringify(by("recA")))
  assert(JSON.stringify(by("recH").homework) === JSON.stringify({ submitted: 1, total: 2, due: "2026-10-16" }) && by("recH").body.length === 0, JSON.stringify(by("recH").homework))
  assert(JSON.stringify(by("recT").score) === JSON.stringify({ avg: 80, count: 2 }), JSON.stringify(by("recT").score))
  f.pages.s1.properties["학습기록"] = rel("recA", "recH")
  const ses: any = await room.loadSession("s1")
- assert(ses.records.length === 2 && ses.records.find((x: any) => x.id === "recH").homework.total === 2 && ses.records.find((x: any) => x.id === "recA").body.length === 1, "session records carry the same card fields")
+ assert(ses.records.length === 2 && ses.records.find((x: any) => x.id === "recH").homework.total === 2 && ses.records.find((x: any) => x.id === "recA").body.length === 0, "session records carry the same card fields, no body (v2.5.111)")
+ // 본문은 펼칠 때 record-body로(v2.5.111)
+ const rb: any = await room.handleClassRoom({ action: "record-body", recordId: "recA" })
+ assert(rb.recordId === "recA" && JSON.stringify(rb.body).includes("본문 한 줄"), JSON.stringify(rb))
+ await rejects(() => room.loadRecordBody("../x"), 400)
  f.pages.recO = { id: "recO", db: "records", properties: { "학습": title("다른 날 기록"), "구분": { select: { name: "학습" } }, "수업": rel("sOther") } }
  assert((await room.loadClassRecords("sOther")).records.map((x: any) => x.id).join() === "recO", "no class: only that session")
  await rejects(() => room.loadClassRecords("../x"), 400)
