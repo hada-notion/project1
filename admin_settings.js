@@ -87,6 +87,7 @@ const CHECKLIST=[
   ['attendance-delete','삭제',AUTO,route('cascade-delete'),DELETE]]],
  ['학습기록(학원)',[
   ['record-assignment','학습활동 생성',BUTTON,route('create-assignment')],
+  ['record-units','단원 입력',BUTTON,route('fill-record-units')],
   ['record-delete','삭제',AUTO,route('cascade-delete'),DELETE]]],
  ['학습활동(학원)',[['assignment-delete','삭제',AUTO,route('cascade-delete'),DELETE]]],
  ['보고서(학원)',[['report-send','보고서 전송',BUTTON,route('send-report')]]],
@@ -168,6 +169,7 @@ const DESC={
  'attendance-record':'이 출석의 학습기록을 만듭니다. 수업 없이 온 보강 출석이면 보강으로 표시합니다.',
  'attendance-report':'이 학생의 일일 보고서를 학부모에게 보냅니다. 보내기 전에 리포트를 최신 내용으로 맞춥니다.',
  'record-assignment':'이 학습기록의 대상 학생마다 학습활동(과제)을 만듭니다.',
+ 'record-units':'지금 범위(쉼표로 여러 구간)로 교재 단원을 찾아 단원을 새로 채웁니다. 범위를 정한 뒤 누릅니다.',
  'report-send':'이 보고서(주간 또는 월간)를 학부모에게 알림톡으로 보냅니다.',
  'outbox-send':'이 발송함의 구분(주간·월간 보고서 또는 수강료)에 맞는 건 중 "일괄전송 선택"이 체크된 건을 이름순으로 10건씩 차례로 보냅니다. 건수가 많아도 다시 누르지 않고 기다립니다.',
  'tuition-notice':'이 수강료 안내를 학부모에게 알림톡으로 보냅니다.',

@@ -314,10 +314,12 @@ function drawCreate(){
 // 범위 글자 속 숫자의 처음~끝 쪽에 걸친 단원을 찾는다. 단원 i는 그 시작쪽부터 다음 단원 시작쪽 앞까지.
 function unitsLibraryId(data,value){const id=String(value||'').split(',')[0];return (data?.books||[]).find(b=>b.id===id)?.libraryId||null;}
 function unitsOfBook(data,value){const id=String(value||'').split(',')[0];return (data?.books||[]).find(b=>b.id===id)?.units||[];}
+// 쉼표로 여러 구간(v2.5.127): "12-24, 31-35" → 구간마다 숫자의 처음~끝. 서버 _shared/unitRange.ts와 같은 규칙.
 function unitsInRange(units,range){
- const n=(String(range||'').match(/\d+/g)||[]).map(Number).filter(x=>x>0&&x<=5000);if(!units.length||!n.length)return null;
+ const segs=String(range||'').split(/[,，]/).map(p=>{const n=(p.match(/\d+/g)||[]).map(Number).filter(x=>x>0&&x<=5000);return n.length?{a:Math.min(...n),b:Math.max(...n)}:null;}).filter(Boolean);
+ if(!units.length||!segs.length)return null;
  const paged=units.filter(u=>u.page!==null&&u.page!==undefined);if(!paged.length)return {none:'이 교재 단원에는 시작쪽이 없어 범위로 찾을 수 없어요.'};
- const a=Math.min(...n),b=Math.max(...n),hit=paged.filter((u,i)=>{const next=paged[i+1]?.page;return u.page<=b&&(next===undefined||next-1>=a);});
+ const hit=paged.filter((u,i)=>{const next=paged[i+1]?.page,end=next===undefined||next===null?Infinity:next-1;return segs.some(s=>u.page<=s.b&&end>=s.a);});
  return hit.length?{units:hit}:{none:'범위에 맞는 단원이 없어요.'};
 }
 // 단원 칸(v2.5.126): 안내 한 줄 + [단원 고르기] 체크 목록. sel.ids가 null이면 범위로 자동, 배열이면 직접 고른 것.

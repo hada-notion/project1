@@ -45,7 +45,7 @@ import { text as propText, numberOf as propNumber, fileUrlOf, dateStartOf } from
 import { readPageBodyBlocks } from "./feedBody.ts"
 import { libraryCopyReady, readBooks, readUnits, sortUnits } from "./libraryCopy.ts"
 import { textbookSources } from "./textbookSearch.ts"
-import { SELECTED_UNITS, cleanUnitIds, selectedUnitsEnabled, unitNamesOf, unitTextOf, unitIdsOf } from "./selectedUnits.ts"
+import { cleanUnitIds, selectedUnitsProp, unitNamesOf, unitTextOf, unitIdsOf } from "./selectedUnits.ts"
 import { runInBackground } from "./backgroundTask.ts"
 import { mirrorJobs, mirrorPageIds, mirrorSaved, removePages } from "./classRoomCopy.ts"
 import { libraryIds } from "./libraryProp.ts"
@@ -758,9 +758,9 @@ export async function createRecords(body: any) {
 	for (const key of ["range", "content"]) if (body?.[key] !== undefined && typeof body[key] !== "string") throw new ClassRoomError(400, "입력 형식이 올바르지 않습니다.")
 	const range = typeof body?.range === "string" ? body.range.trim().slice(0, 200) : ""
 	const content = typeof body?.content === "string" ? body.content.trim().slice(0, 2000) : ""
-	// 고른 단원(v2.5.126): unitBookId(라이브러리 교재)가 같은 기록에만 넣는다. 학습기록 DB에 "선택 단원"이 없으면 넣지 않는다.
+	// 고른 단원(v2.5.126): unitBookId(라이브러리 교재)가 같은 기록에만 넣는다. 학습기록 DB에 단원 관계("단원" 또는 "선택 단원")가 없으면 넣지 않는다.
 	const unitIds = cleanUnitIds(body?.unitIds), unitBookId = typeof body?.unitBookId === "string" ? body.unitBookId : null
-	const unitsOn = !!(unitIds?.length && unitBookId) && await selectedUnitsEnabled()
+	const unitProp = unitIds?.length && unitBookId ? await selectedUnitsProp() : null, unitsOn = !!unitProp
 	const ctx = await sessionContext(body?.sessionId)
 	const registrations = await getPages(rel(ctx.session, "등록"))
 	const existing = await getPages(rel(ctx.session, "학습기록"))
@@ -793,7 +793,7 @@ export async function createRecords(body: any) {
 		if (range) props["범위"] = richText(range)
 		if (content) props["내용"] = richText(content)
 		if (ctx.makeup) props["보강"] = { checkbox: true }
-		if (unitsOn && regularBookId === unitBookId) props[SELECTED_UNITS] = relation(unitIds!)
+		if (unitProp && regularBookId === unitBookId) props[unitProp] = relation(unitIds!)
 		const page = await createPage(DS_LEARNING_RECORD, props) as Page
 		existing.push(page)
 		results.push({ id: page.id as string, title: anyTitleText(page) || String((props["학습"] as any).title[0].text.content), created: true })
@@ -814,8 +814,8 @@ export async function updateRecord(body: any) {
 	}
 	// 고른 단원(v2.5.126): unitIds를 보내면(빈 배열이면 지움) "선택 단원"을 그대로 바꾼다. 속성이 없는 학원은 건너뛴다.
 	const unitIds = cleanUnitIds(body?.unitIds)
-	const unitsOn = unitIds !== null && await selectedUnitsEnabled()
-	if (unitsOn) props[SELECTED_UNITS] = relation(unitIds!)
+	const unitProp = unitIds !== null ? await selectedUnitsProp() : null, unitsOn = !!unitProp
+	if (unitProp) props[unitProp] = relation(unitIds!)
 	let bookId = rel(record, "진도교재")[0] ?? null
 	let regularBook: Page | null = null
 	if (body.bookId !== undefined) {
