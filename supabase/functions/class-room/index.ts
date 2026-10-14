@@ -2,9 +2,10 @@
 // 수업 관리(class_room.html)가 부르는 함수(v2.5.66). 관리자 비밀번호로 로그인한 관리자 세션만 통과한다
 // (adminSecurity.ts의 class-room 경로, v2.5.82에 수업용 비밀번호 삭제). 요청 본문의 action에 따라
 // 조회(teachers/day/session/books/activities)와 저장(save-*, create-*, update-record, 보강 대기실)을 한다.
-// 실제 로직은 _shared/classRoom.ts.
+// 실제 로직은 _shared/classRoom.ts. 읽기 위치(Notion·복사본)는 CLASS_ROOM_SOURCE가 정한다(v2.5.116, _shared/classRoomRead.ts).
 import { CORS_HEADERS, requireAdminKey } from "../_shared/adminShared.ts"
-import { ClassRoomError, handleClassRoom } from "../_shared/classRoom.ts"
+import { ClassRoomError } from "../_shared/classRoom.ts"
+import { handleClassRoomWithSource } from "../_shared/classRoomRead.ts"
 
 // (v2.5.108, 속도 측정 0단계) 이 함수 안에서만 Notion API 호출 수를 센다. 공용 Notion 모듈은 건드리지 않는다.
 // 같은 함수 인스턴스가 여러 요청을 동시에 처리하면 그 사이 호출이 함께 세어질 수 있다(측정용 근사값).
@@ -34,7 +35,7 @@ Deno.serve(async (req: Request) => {
     try { body = JSON.parse(raw) } catch { return json({ error: "요청 형식이 올바르지 않습니다." }, 400) }
     // (v2.5.108, 속도 측정 0단계) 응답에 서버 처리 시간과 Notion 호출 수를 함께 싣는다. 화면은 ?timing=1일 때만 보여 준다.
     const calls0 = notionCount.calls, wait0 = notionCount.waitMs
-    const result = await handleClassRoom(body)
+    const result = await handleClassRoomWithSource(body)
     const _timing = { ms: Date.now() - startedAt, notion: notionCount.calls - calls0, notionWaitMs: notionCount.waitMs - wait0 }
     return json(result && typeof result === "object" && !Array.isArray(result) ? { ...result, _timing } : { result, _timing })
   } catch (err) {

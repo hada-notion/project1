@@ -6,6 +6,10 @@ const db=new PGlite();
 await db.exec('create role anon; create role authenticated;');
 const sql=fs.readFileSync('supabase/migrations/20261014050000_class_room_copy.sql','utf8');
 await db.exec(sql);await db.exec(sql); // 다시 적용해도 오류 없음(if not exists)
+// v2.5.116 읽기 전환 열(보강 대기실 반 이름·원문 수업 시각)
+const readSql=fs.readFileSync('supabase/migrations/20261014070000_class_room_copy_read.sql','utf8');
+await db.exec(readSql);await db.exec(readSql);
+assert.deepEqual((await db.query("select column_name from information_schema.columns where table_name='cr_attendance' and column_name in ('class_label','class_start_text') order by 1")).rows.map(r=>r.column_name),['class_label','class_start_text']);
 const tables=(await db.query("select table_name from information_schema.tables where table_schema='public' and table_name like 'cr\\_%' order by 1")).rows.map(r=>r.table_name);
 assert.deepEqual(tables,['cr_activities','cr_attendance','cr_records','cr_sessions']);
 const rls=(await db.query("select relname from pg_class where relname like 'cr\\_%' and relkind='r' and relrowsecurity order by 1")).rows.map(r=>r.relname);
@@ -22,5 +26,5 @@ assert.deepEqual((await db.query("select id from cr_records where session_ids &&
 assert.deepEqual((await db.query("select id from cr_attendance where session_ids && '{s1}'")).rows.map(r=>r.id),['a1']);
 assert.deepEqual((await db.query("select id from cr_activities where due_on='2026-10-14'")).rows.map(r=>r.id),['k1']);
 await assert.rejects(db.exec("insert into cr_sessions(id) values('x')"),/notion_edited_at/,'notion_edited_at required');
-console.log('Class room copy migration passed: 4 tables, RLS on, no anon/authenticated grants, re-apply safe, class/date/array searches');
+console.log('Class room copy migration passed: 4 tables + read columns, RLS on, no anon/authenticated grants, re-apply safe, class/date/array searches');
 })().catch(e=>{console.error(e);process.exit(1)});

@@ -41,6 +41,8 @@ const state={session:store.get(SESSION_KEY),teacherId:store.get(TEACHER_KEY),tea
  sessionId:'',detail:null,tab:'home',bookSeg:'진행 중',bookItem:null,classRecs:null,calOpen:false,calMode:'att',rosterCache:{},statsCache:{},seg:'att',recKind:'전체',hwRecord:'',edit:false,editOwner:'',saver:null,draft:{},recordId:'',acts:null,books:null,picked:new Set(),
  classWeek:[],cwMonth:'',cwFrom:'',cwTo:'',classes:null,form:null,bookCache:{},bookByRegs:{},cwStale:false,bodyCache:{}};
 
+// ⟳ 새로고침(v2.5.116): 서버가 수업 관리 복사본을 읽을 때 Notion에서 직접 고친 것을 먼저 맞춘다(Notion을 읽을 때는 바로 끝남). 실패해도 그냥 다시 읽는다.
+async function syncCopy(){await api('sync-copy').catch(()=>{});}
 async function api(action,data={}){
  if(CFG.error)throw new Error(CFG.error);
  const t0=performance.now();
@@ -48,12 +50,12 @@ async function api(action,data={}){
  const body=await res.json().catch(()=>({}));
  if(res.status===401){store.set(SESSION_KEY,'');state.session='';showLogin('로그인이 끝났어요. 관리자 비밀번호로 다시 로그인해 주세요.');throw new Error('silent');}
  if(!res.ok)throw new Error(body.error||'서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.');
- if(TIMING)logTiming(action,Math.round(performance.now()-t0),body._timing);
+ if(TIMING)logTiming(action,Math.round(performance.now()-t0),body._timing,body._source);
  return body;
 }
 // 속도 측정(v2.5.108, 0단계): 주소에 ?timing=1이면 최근 동작 12개의 [동작 · 왕복 ms · 서버 ms · Notion 호출 수]를 오른쪽 아래에 보인다. 평소에는 아무것도 하지 않는다.
 const TIMING=new URLSearchParams(location.search).get('timing')==='1';
-function logTiming(action,ms,t){(logTiming.rows=logTiming.rows||[]).unshift({action,ms,server:t?.ms,notion:t?.notion,retries:t?.retries});logTiming.rows.length=Math.min(logTiming.rows.length,12);
+function logTiming(action,ms,t,src){(logTiming.rows=logTiming.rows||[]).unshift({action:src==='copy'?action+' [복사본]':action,ms,server:t?.ms,notion:t?.notion,retries:t?.retries});logTiming.rows.length=Math.min(logTiming.rows.length,12);
  let el=$('timing');if(!el){el=document.createElement('pre');el.id='timing';el.className='timing';document.body.appendChild(el);}
  el.textContent='동작 · 왕복 · 서버 · Notion\n'+logTiming.rows.map(r=>`${r.action} · ${r.ms}ms · ${r.server??'–'}ms · ${r.notion??'–'}회${r.retries?` (재시도 ${r.retries})`:''}`).join('\n');
  console.info('[timing]',action,ms+'ms',t);}
@@ -199,7 +201,7 @@ function renderMain(){
  <button class="swipe-hint" type="button" id="to-week">통합 시간표 보기<span class="chevron"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg></span></button></section>
  <section class="snap-section timetable-section" id="week"><button class="up-hint" type="button" id="to-intro"><span class="chevron"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg></span>이전으로</button>
  <h2 class="tt-title"><span class="tt-icon"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg></span>통합 시간표</h2><p class="tt-hint">담당 반들의 이번 주(${esc(md(mon))} ~ ${esc(md(addDays(mon,6)))}) 수업을 요일별로 합쳐서 보여줘요</p>${weekGrid(list)}</section></div>`;
- $('m-refresh').onclick=e=>run(()=>showMain(true),e.currentTarget);
+ $('m-refresh').onclick=e=>run(async()=>{await syncCopy();await showMain(true);},e.currentTarget);
  $('m-menu').onclick=openMenu;
  const more=$('more-cls');if(more)more.onclick=()=>{const box=$('cls-more'),open=box.hidden;box.hidden=!open;more.setAttribute('aria-expanded',open);more.classList.toggle('open',open);};
  $('to-week').onclick=()=>$('week').scrollIntoView({behavior:'smooth'});
@@ -408,7 +410,7 @@ function heroHtml(){const s=state.detail.session,tname=teacherName(s.teacherIds?
 function classBar(){const s=state.detail.session;
  bar([crumbToMain(),state.tab==='home'?className(s):crumbToTab('home',className(s)),TAB_NAME[state.tab]||''],{back:()=>{if(nav.stack.length)return navBack();if(!leaveEdit())return;if(state.tab!=='home'){state.tab='home';nav.replace=true;render();}else run(()=>showMain());},
   right:`<button class="icon-btn" id="bar-refresh" type="button" aria-label="새로고침">${icon('refresh')}</button>`});
- $('bar-refresh').onclick=e=>{if(!leaveEdit())return;state.classRecs=null;state.cwStale=true;state.bookCache={};state.bookByRegs={};state.bodyCache={};delete state.rosterCache[state.sessionId];delete state.statsCache[state.sessionId];run(()=>openSessionNow(state.sessionId,true),e.currentTarget);};}
+ $('bar-refresh').onclick=e=>{if(!leaveEdit())return;state.classRecs=null;state.cwStale=true;state.bookCache={};state.bookByRegs={};state.bodyCache={};delete state.rosterCache[state.sessionId];delete state.statsCache[state.sessionId];run(async()=>{await syncCopy();await openSessionNow(state.sessionId,true);},e.currentTarget);};}
 // 경로 글자 누르기(v2.5.98, 학부모 리포트 경로처럼): 강사 이름 → 첫 화면, 반 이름 → 그 반 홈, "교재" → 교재 탭. 마지막 글자(지금 화면)는 누르지 않는다.
 // 그 화면이 방문 기록에 있으면 뒤로가기를 여러 번 한 것처럼 돌아가고(기록이 꼬이지 않게), 없으면 그 화면을 바로 연다.
 function backTo(match,fallback){if(!leaveEdit())return;let i=nav.stack.length-1;while(i>=0&&!match(nav.stack[i]))i--;
