@@ -43,12 +43,20 @@ const state={session:store.get(SESSION_KEY),teacherId:store.get(TEACHER_KEY),tea
 
 async function api(action,data={}){
  if(CFG.error)throw new Error(CFG.error);
+ const t0=performance.now();
  const res=await fetch(CFG.url+'/functions/v1/class-room',{method:'POST',headers:{'Content-Type':'application/json','x-admin-key':state.session,Authorization:'Bearer '+CFG.anonKey,apikey:CFG.anonKey},body:JSON.stringify({action,...data}),cache:'no-store'});
  const body=await res.json().catch(()=>({}));
  if(res.status===401){store.set(SESSION_KEY,'');state.session='';showLogin('로그인이 끝났어요. 관리자 비밀번호로 다시 로그인해 주세요.');throw new Error('silent');}
  if(!res.ok)throw new Error(body.error||'서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.');
+ if(TIMING)logTiming(action,Math.round(performance.now()-t0),body._timing);
  return body;
 }
+// 속도 측정(v2.5.108, 0단계): 주소에 ?timing=1이면 최근 동작 12개의 [동작 · 왕복 ms · 서버 ms · Notion 호출 수]를 오른쪽 아래에 보인다. 평소에는 아무것도 하지 않는다.
+const TIMING=new URLSearchParams(location.search).get('timing')==='1';
+function logTiming(action,ms,t){(logTiming.rows=logTiming.rows||[]).unshift({action,ms,server:t?.ms,notion:t?.notion,retries:t?.retries});logTiming.rows.length=Math.min(logTiming.rows.length,12);
+ let el=$('timing');if(!el){el=document.createElement('pre');el.id='timing';el.className='timing';document.body.appendChild(el);}
+ el.textContent='동작 · 왕복 · 서버 · Notion\n'+logTiming.rows.map(r=>`${r.action} · ${r.ms}ms · ${r.server??'–'}ms · ${r.notion??'–'}회${r.retries?` (재시도 ${r.retries})`:''}`).join('\n');
+ console.info('[timing]',action,ms+'ms',t);}
 function toast(msg){const t=$('toast');t.textContent=msg;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,2400);}
 async function run(fn,btn){if(run.busy)return;run.busy=true;if(btn){btn.classList.add('loading');btn.setAttribute('aria-busy','true');}
  try{await fn();}catch(e){if(e.message!=='silent')toast(e.message);}finally{run.busy=false;if(btn){btn.classList.remove('loading');btn.removeAttribute('aria-busy');}}}

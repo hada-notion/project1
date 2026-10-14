@@ -466,6 +466,8 @@ body.snap-on .cr-main{max-width:none;padding:0}
 .sum-chip.ok b{color:var(--success-ink)}.sum-chip.mid b{color:var(--warning-ink)}.sum-chip.bad b{color:var(--danger-ink)}
 .sum-chip:disabled{cursor:default;opacity:.55}
 /* 학습기록 타임라인 오늘 묶음(v2.5.103): 오늘 기록 카드는 테두리 */
+/* 속도 측정 칸(?timing=1, v2.5.108): 화면 오른쪽 아래, 누르기를 막지 않음 */
+.timing{position:fixed;right:var(--space-2);bottom:calc(var(--hit-min) + var(--space-8));z-index:50;margin:0;max-width:calc(100% - 2*var(--space-2));padding:var(--space-2) var(--space-3);border-radius:var(--radius-md);background:var(--surface);box-shadow:var(--shadow-md);font:var(--text-micro)/1.5 var(--font-mono);color:var(--text-ink);white-space:pre-wrap;pointer-events:none}
 .rec-day.today .log-card{box-shadow:inset 0 0 0 1.5px var(--brand-border),var(--shadow-card)}
 /* 학습기록 탭 + 기록 만들기(떠 있는 버튼): 본문 오른쪽 끝, 하단 탭 위 */
 .fab{position:fixed;z-index:19;right:max(var(--space-4),calc((100vw - var(--feed-w))/2));bottom:calc(var(--hit-min) + var(--space-8) + var(--space-2));min-height:calc(var(--hit-min) + var(--space-1));padding:0 var(--space-5) 0 var(--space-4);border:0;border-radius:var(--radius-pill);background:var(--brand-deep);color:var(--surface);font:inherit;font-weight:700;box-shadow:var(--shadow-float);display:inline-flex;align-items:center;gap:var(--space-2);cursor:pointer}
@@ -496,6 +498,6 @@ body.snap-on .cr-main{max-width:none;padding:0}
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <script src="hada_config.js"></script>
 <script src="admin_auth.js?v=4ffde89c"></script>
-<script src="class_room.js?v=cda80ffa"></script>
+<script src="class_room.js?v=80908b14"></script>
 </body>
 </html>
