@@ -138,6 +138,7 @@ export function normalizeStatus(s: string): string {
   if (s.includes("결석")) return "결석"
   if (s.includes("보강")) return "보강"
   if (s.includes("출석")) return "출석"
+  if (s.includes("일부")) return "일부 제출"
   if (s.includes("미제출")) return "미제출"
   if (s.includes("제출")) return "제출"
   return s.replace(/^[^\w가-힣]+/u, "").trim()

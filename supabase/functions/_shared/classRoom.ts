@@ -62,6 +62,18 @@ export const KINDS = ["학습", "과제", "평가"] as const
 export const ATTENDANCE_STATUSES = ["🟢 출석", "🔴 결석", "🔵 보강"] as const
 export const HOMEWORK_SUBMITTED = "🔵 제출"
 const HOMEWORK_MISSING = "🔴 미제출"
+// 과제상태 3단계(v2.6.9): 제출 / 일부 제출 / 미제출. 제출 수는 "제출"만 센다(일부 제출은 세지 않음).
+const HOMEWORK_PARTIAL = "🟡 일부 제출"
+export const HOMEWORK_STATES = ["제출", "일부 제출", "미제출"] as const
+const HOMEWORK_OPTION: Record<string, string> = { "제출": HOMEWORK_SUBMITTED, "일부 제출": HOMEWORK_PARTIAL, "미제출": HOMEWORK_MISSING }
+// Notion 선택값 → 화면 상태("" = 아직 안 정함). 이모지가 달라도 글자로 판단한다.
+export function homeworkState(name: string | null | undefined): string {
+	const s = String(name ?? "")
+	if (s.includes("일부")) return "일부 제출"
+	if (s.includes("미제출")) return "미제출"
+	if (s.includes("제출")) return "제출"
+	return ""
+}
 const GROUP_PROGRESS = "그룹 진도"
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"]
 const MAX_ITEMS = 60
@@ -545,8 +557,15 @@ export async function loadRoster(sessionId: string) {
 			name: studentName(a),
 			school: of(person, "학교(설문)"),
 			grade: of(person, "학년(설문)"),
+			studentId: person?.id as string ?? null,
 			studentPhone: of(person, "학생 연락처"),
 			parentPhone: of(reg, "학부모 연락처"),
+			// 연락처 전체(v2.6.9): 우선 연락 대상과 어머니·아버지·기타 보호자(학생과의 관계).
+			primary: person ? selectName(person, "우선 연락 대상") ?? "" : "",
+			motherPhone: of(person, "어머니 연락처"),
+			fatherPhone: of(person, "아버지 연락처"),
+			guardianPhone: of(person, "기타 보호자 연락처"),
+			guardianRelation: of(person, "학생과의 관계"),
 			reportToken: raw && !off ? raw : null,
 			reportOff: off,
 		}
@@ -641,8 +660,10 @@ export async function loadActivities(recordId: string) {
 					registrationId: rel(a, "등록")[0] ?? null,
 					name: (attendanceId && nameByAttendance.get(attendanceId)) || anyTitleText(a),
 					submitted: selectName(a, "과제상태") === HOMEWORK_SUBMITTED,
+					status: homeworkState(selectName(a, "과제상태")),
 					correct: numberOf(a, "정답 문항"),
 					total: numberOf(a, "전체 문항"),
+					memo: plain(a, "메모"),
 				}
 			})
 			.sort((x, y) => x.name.localeCompare(y.name, "ko")),
@@ -704,7 +725,15 @@ export async function saveActivities(items: unknown) {
 	const updates = items.map((it: any) => {
 		if (!isId(it?.activityId)) throw new ClassRoomError(400, "학습활동 형식이 올바르지 않습니다.")
 		const props: Record<string, unknown> = { ...touched() }
-		if (it.submitted !== undefined) props["과제상태"] = { select: { name: it.submitted ? HOMEWORK_SUBMITTED : HOMEWORK_MISSING } }
+		if (it.status !== undefined) {
+			if (it.status !== "" && !(HOMEWORK_STATES as readonly string[]).includes(it.status)) throw new ClassRoomError(400, "과제 상태가 올바르지 않습니다.")
+			props["과제상태"] = { select: it.status ? { name: HOMEWORK_OPTION[it.status] } : null }
+		} else if (it.submitted !== undefined) props["과제상태"] = { select: { name: it.submitted ? HOMEWORK_SUBMITTED : HOMEWORK_MISSING } }
+		// 학습활동 메모(v2.6.9, 내부용 — 학부모 리포트에 보이지 않음)
+		if (it.memo !== undefined) {
+			if (typeof it.memo !== "string") throw new ClassRoomError(400, "메모 형식이 올바르지 않습니다.")
+			props["메모"] = richText(it.memo.trim().slice(0, 2000))
+		}
 		for (const [key, prop] of [["correct", "정답 문항"], ["total", "전체 문항"]] as const) {
 			if (it[key] === undefined) continue
 			const v = it[key]
