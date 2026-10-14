@@ -15,9 +15,9 @@ const LIB = [
 	{ id: "22222222-2222-4222-8222-222222222222", properties: { "교재명": { title: tt("쎈 중등 수학 1-2") }, "시리즈": { select: { name: "쎈" } }, "출판사": { select: { name: "좋은책신사고" } }, "북커버": { files: [{ external: { url: "https://contents.kyobobook.co.kr/x.jpg" } }] }, "사용중": { checkbox: true }, ISBN13: { rich_text: tt("9788928334001") }, "단원목록": { relation: [{ id: "u1" }, { id: "u2" }], has_more: false } } },
 	{ id: "11111111-1111-4111-8111-111111111111", properties: { "교재명": { title: tt("개념원리 수학 1-1") }, "시리즈": { select: null }, "북커버": { files: [] }, "사용중": { checkbox: false }, "단원목록": { relation: [], has_more: false } } },
 ]
-const UNITS = [{ id: "u2", book: "22222222-2222-4222-8222-222222222222", name: "1-2. 일차부등식", page: 30 }, { id: "u1", book: "22222222-2222-4222-8222-222222222222", name: "1-1. 다항식", page: 8 }, { id: "u3", book: "22222222-2222-4222-8222-222222222222", name: "부록", page: null }]
+const UNITS = [{ id: "u2", book: "22222222-2222-4222-8222-222222222222", name: "1-2. 일차부등식", page: 30 }, { id: "u1", book: "22222222-2222-4222-8222-222222222222", name: "1-1. 다항식", page: 8 }, { id: "u3", book: "22222222-2222-4222-8222-222222222222", name: "부록", page: null, exams: 1 }]
 function mock(opts: { existing?: string[]; failUnitAt?: number; nlFail?: boolean; kakaoFail?: boolean } = {}) {
-	const created: any[] = [], calls: string[] = [], headers: Record<string, string>[] = []
+	const created: any[] = [], calls: string[] = [], headers: Record<string, string>[] = [], patched: any[] = []
 	const reply = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status })
 	const fetch = async (input: any, init: any = {}) => {
 		const url = String(input); calls.push(url); headers.push({ ...(init.headers ?? {}) })
@@ -44,9 +44,10 @@ function mock(opts: { existing?: string[]; failUnitAt?: number; nlFail?: boolean
 		}
 		if (url.endsWith("/data_sources/units/query")) {
 			const id = JSON.parse(init.body).filter.relation.contains
-			return reply({ results: UNITS.filter((u) => u.book === id).map((u) => ({ id: u.id, properties: { "단원명": { title: [{ plain_text: u.name }] }, "시작페이지": { number: u.page } } })), has_more: false })
+			return reply({ results: UNITS.filter((u) => u.book === id).map((u: any) => ({ id: u.id, properties: { "단원명": { type: "title", title: [{ plain_text: u.name }] }, "시작페이지": { type: "number", number: u.page }, "라이브러리": { type: "relation", relation: [{ id: u.book }] }, "시험범위": { type: "relation", relation: Array.from({ length: u.exams ?? 0 }, (_, k) => ({ id: "exam" + k })) } } })), has_more: false })
 		}
 		const got = url.match(/\/pages\/([^/?]+)$/)?.[1]
+		if (got && init.method === "PATCH") { patched.push({ id: got, body: JSON.parse(init.body) }); return reply({ id: got }) }
 		if (got && !init.method) return got === "11111111-1111-4111-8111-111111111111" || got === "22222222-2222-4222-8222-222222222222" ? reply({ id: got, parent: { data_source_id: "books" } }) : got === "33333333-3333-4333-8333-333333333333" ? reply({ id: got, parent: { data_source_id: "elsewhere" } }) : reply({ message: "missing" }, 404)
 		if (url.endsWith("/pages") && init.method === "POST") {
 			const body = JSON.parse(init.body)
@@ -55,7 +56,7 @@ function mock(opts: { existing?: string[]; failUnitAt?: number; nlFail?: boolean
 		}
 		throw new Error("unmocked " + url)
 	}
-	return { fetch, created, calls, headers }
+	return { fetch, created, calls, headers, patched }
 }
 async function withMock(m: ReturnType<typeof mock>, run: () => Promise<void>) {
 	const original = globalThis.fetch; globalThis.fetch = m.fetch as typeof fetch
@@ -232,5 +233,49 @@ Deno.test("register-custom: title required, optional ISBN/cover/price, https cov
 	})
 	await withMock(mock({ existing: ["9791169513371"] }), async () => {
 		await rejects(() => tb.registerCustom({ title: "x", isbn13: "9791169513371", units: [] }), 409)
+	})
+})
+
+// ---------- v2.5.121: 단원 편집·북커버 수정 ----------
+const BOOK = "22222222-2222-4222-8222-222222222222"
+Deno.test("units: uses counts links other than the library relation", async () => {
+	await withMock(mock(), async () => {
+		const r = await tb.bookUnits(BOOK)
+		assert(r.units.map((u) => u.uses).join() === "0,0,1", JSON.stringify(r.units))
+	})
+})
+
+Deno.test("edit-units: update, trash and add in one save; linked units are kept", async () => {
+	const m = mock()
+	await withMock(m, async () => {
+		const r: any = await tb.editUnits({ bookId: BOOK, update: [{ id: "u1", name: "1-1. 다항식의 연산", page: 9 }, { id: "u2", name: "1-2. 일차부등식", page: 30 }], remove: ["u2", "u3"], add: [{ name: "1-3. 연립방정식", page: 44 }, { name: "1-1. 다항식의 연산" }] })
+		assert(r.ok && r.updated === 1 && r.removed === 1 && r.added === 1 && r.skipped === 1 && r.blocked.join() === "부록", JSON.stringify(r))
+		const [up, del] = m.patched
+		assert(up.id === "u1" && up.body.properties["단원명"].title[0].text.content === "1-1. 다항식의 연산" && up.body.properties["시작페이지"].number === 9, JSON.stringify(up))
+		assert(del.id === "u2" && del.body.archived === true && m.patched.length === 2, "only the unlinked unit goes to trash, unchanged rows not patched")
+		assert(m.created.length === 1 && m.created[0].properties["라이브러리"].relation[0].id === BOOK)
+	})
+})
+
+Deno.test("edit-units: refuses units of other books, empty names, bad pages, nothing to do", async () => {
+	await withMock(mock(), async () => {
+		await tb.editUnits({ bookId: BOOK, update: [{ id: "u1", name: "x", page: "" }] })
+		await rejects(() => tb.editUnits({ bookId: BOOK, remove: ["zzz"] }), 400, /이 교재의 단원이 아닌/)
+		await rejects(() => tb.editUnits({ bookId: BOOK, update: [{ id: "u1", name: " " }] }), 400, /단원명/)
+		await rejects(() => tb.editUnits({ bookId: BOOK, update: [{ id: "u1", name: "x", page: 0 }] }), 400, /시작쪽/)
+		await rejects(() => tb.editUnits({ bookId: BOOK }), 400)
+		await rejects(() => tb.editUnits({ bookId: "33333333-3333-4333-8333-333333333333", add: [{ name: "x" }] }), 403)
+	})
+})
+
+Deno.test("set-cover: https image or empty, only on library books", async () => {
+	const m = mock()
+	await withMock(m, async () => {
+		await tb.setCover({ bookId: BOOK, cover: "https://contents.kyobobook.co.kr/sih/fit-in/458x0/pdt/9788928334858.jpg" })
+		await tb.setCover({ bookId: BOOK, cover: "" })
+		assert(m.patched[0].body.properties["북커버"].files[0].external.url.endsWith("9788928334858.jpg") && m.patched[1].body.properties["북커버"].files.length === 0, JSON.stringify(m.patched))
+		await rejects(() => tb.setCover({ bookId: BOOK, cover: "http://a/b.jpg" }), 400)
+		await rejects(() => tb.setCover({ bookId: BOOK, cover: "javascript:alert(1)" }), 400)
+		await rejects(() => tb.setCover({ bookId: "33333333-3333-4333-8333-333333333333", cover: "" }), 403)
 	})
 })

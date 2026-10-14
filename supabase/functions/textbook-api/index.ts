@@ -8,9 +8,11 @@
 //   library  {}                              라이브러리 전체(시리즈별로 묶을 정보)
 //   units    { bookId }                      한 교재의 단원목록
 //   add-units { bookId, units }              이미 있는 교재에 단원 추가(같은 이름은 건너뜀)
+//   edit-units { bookId, update, remove, add } 단원 수정·삭제(휴지통, 다른 곳에 연결된 단원은 막음)·추가(v2.5.121)
+//   set-cover { bookId, cover }              북커버 바꾸기(https 주소, 빈 값이면 지움, v2.5.121)
 // 실제 로직은 _shared/textbookSearch.ts, 목차 규칙은 _shared/textbookToc.ts.
 import { CORS_HEADERS, requireAdminKey } from "../_shared/adminShared.ts"
-import { TextbookError, addUnits, bookDetail, bookUnits, libraryBooks, parsePasted, registerBook, registerCustom, searchBooks } from "../_shared/textbookSearch.ts"
+import { TextbookError, addUnits, bookDetail, bookUnits, editUnits, libraryBooks, parsePasted, registerBook, registerCustom, searchBooks, setCover } from "../_shared/textbookSearch.ts"
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { ...CORS_HEADERS, "Content-Type": "application/json", "Cache-Control": "no-store" } })
 
@@ -33,6 +35,8 @@ Deno.serve(async (req: Request) => {
       case "library": return json(await libraryBooks())
       case "units": return json(await bookUnits(body.bookId))
       case "add-units": return json(await addUnits(body))
+      case "edit-units": return json(await editUnits(body))
+      case "set-cover": return json(await setCover(body))
       default: return json({ error: "지원하지 않는 작업입니다." }, 400)
     }
   } catch (err) {

@@ -11,7 +11,7 @@
 //   - 같은 ISBN13이 라이브러리에 있으면 "등록됨"으로 보여 주고 다시 만들지 않는다.
 
 import { NOTION_API, DS_PROGRESS_BOOK } from "./constants.ts"
-import { fetchWithRetry, notionHeaders, queryAllPages } from "./notionClient.ts"
+import { archivePage, fetchWithRetry, notionHeaders, queryAllPages, updatePageProperties } from "./notionClient.ts"
 import { cleanUnits, parseToc } from "./textbookToc.ts"
 import { libraryKey, libraryProp } from "./libraryProp.ts"
 import { type Book, BookSourceError, isIsbn13, lookupIsbn, searchTitle } from "./bookSources.ts"
@@ -218,13 +218,13 @@ async function bookPageOf(bookId: unknown) {
 	return { id: page.id as string, src }
 }
 
-// 한 교재의 단원목록(시작쪽 순, 쪽이 없으면 이름 순으로 뒤에)
+// 한 교재의 단원목록(시작쪽 순, 쪽이 없으면 이름 순으로 뒤에). uses: 다른 곳(시험범위 등)에 연결된 수(v2.5.121)
 export async function bookUnits(bookId: unknown) {
 	const { id, src } = await bookPageOf(bookId)
 	const pages = await queryAllPages(src.units, { property: src.unitsLink, relation: { contains: id } })
 	const units = pages.map((p: any) => {
 		const n = p.properties?.["시작페이지"]?.number
-		return { id: p.id as string, name: plainOf(p, "단원명"), page: typeof n === "number" ? n : null }
+		return { id: p.id as string, name: plainOf(p, "단원명"), page: typeof n === "number" ? n : null, uses: unitUses(p, src.unitsLink) }
 	}).sort((a: any, b: any) => (a.page ?? Infinity) - (b.page ?? Infinity) || a.name.localeCompare(b.name, "ko", { numeric: true }))
 	return { bookId: id, units }
 }
@@ -247,4 +247,69 @@ export async function addUnits(body: any) {
 		return { ok: false, created, skipped: units.length - fresh.length, error: `단원 ${fresh.length}개 중 ${created}개만 추가했습니다. 다시 시도하면 이미 만든 단원은 건너뜁니다.` }
 	}
 	return { ok: true, created, skipped: units.length - fresh.length }
+}
+
+// ---------- 단원 편집·북커버 수정(v2.5.121) ----------
+// 단원 페이지에서 라이브러리 관계 말고 다른 관계(예: 시험정보 DB의 시험범위)에 연결된 수. 0이 아니면 지우지 않는다.
+function unitUses(p: any, unitsLink: string): number {
+	let n = 0
+	for (const [k, v] of Object.entries(p?.properties ?? {}) as [string, any][]) if (k !== unitsLink && v?.type === "relation") n += (v.relation ?? []).length + (v.has_more ? 1 : 0)
+	return n
+}
+const unitPageNum = (v: unknown) => { const n = Number(v); return v === null || v === "" || v === undefined ? null : Number.isInteger(n) && n >= 1 && n <= 2000 ? n : NaN }
+
+// 한 교재의 단원을 한 번에 고친다: update [{ id, name, page }] · remove [id] · add [{ name, page }].
+// 고치거나 지우는 단원은 이 교재의 단원이어야 한다. 다른 곳에 연결된 단원은 지우지 않고 blocked로 돌려준다.
+// 지우기는 Notion 휴지통(30일 안에 복구 가능). 같은 이름의 단원은 새로 만들지 않는다.
+export async function editUnits(body: any) {
+	const { id, src } = await bookPageOf(body?.bookId)
+	const update = Array.isArray(body?.update) ? body.update : [], remove = Array.isArray(body?.remove) ? body.remove.map(String) : []
+	const add = cleanUnits(body?.add)
+	if (update.length + remove.length + add.length === 0) throw new TextbookError(400, "바꿀 내용이 없습니다.")
+	if (update.length + remove.length + add.length > 300) throw new TextbookError(400, "한 번에 300개까지 고칠 수 있습니다.")
+	const pages = await queryAllPages(src.units, { property: src.unitsLink, relation: { contains: id } })
+	const mine = new Map(pages.map((p: any) => [compact(p.id), p]))
+	const own = (uid: unknown) => mine.get(compact(String(uid ?? "")))
+	const fixes = update.map((u: any) => {
+		const p = own(u?.id)
+		if (!p) throw new TextbookError(400, "이 교재의 단원이 아닌 항목이 있습니다.")
+		const name = String(u?.name ?? "").replace(/\s+/g, " ").trim().slice(0, 100), page = unitPageNum(u?.page)
+		if (!name) throw new TextbookError(400, "단원명이 비어 있는 줄이 있습니다.")
+		if (Number.isNaN(page)) throw new TextbookError(400, "시작쪽은 1~2000 사이 숫자입니다.")
+		return { p, name, page }
+	})
+	const drops = remove.map((uid: string) => { const p = own(uid); if (!p) throw new TextbookError(400, "이 교재의 단원이 아닌 항목이 있습니다."); return p })
+	const blocked = drops.filter((p: any) => unitUses(p, src.unitsLink) > 0).map((p: any) => plainOf(p, "단원명"))
+	const dropIds = new Set(drops.filter((p: any) => unitUses(p, src.unitsLink) === 0).map((p: any) => compact(p.id)))
+	const names = new Set(pages.filter((p: any) => !dropIds.has(compact(p.id))).map((p: any) => plainOf(p, "단원명")))
+	for (const f of fixes) names.add(f.name)
+	const fresh = add.filter((u) => !names.has(u.name) && names.add(u.name))
+	const done = { updated: 0, removed: 0, added: 0 }
+	try {
+		for (const f of fixes) {
+			if (dropIds.has(compact(f.p.id))) continue
+			if (f.name === plainOf(f.p, "단원명") && f.page === (f.p.properties?.["시작페이지"]?.number ?? null)) continue
+			await updatePageProperties(f.p.id, { "단원명": title(f.name), "시작페이지": { number: f.page } })
+			done.updated++
+		}
+		for (const p of drops) if (dropIds.has(compact(p.id))) { await archivePage(p.id); done.removed++ }
+		for (const u of fresh) {
+			await createOnce(src.units, { "단원명": title(u.name), [src.unitsLink]: { relation: [{ id }] }, ...(u.page ? { "시작페이지": { number: u.page } } : {}) })
+			done.added++
+		}
+	} catch (err) {
+		console.error("[textbook-api] 단원 편집 중단:", (err as Error).message)
+		return { ok: false, ...done, blocked, skipped: add.length - fresh.length, error: `저장하다 멈췄습니다(수정 ${done.updated} · 삭제 ${done.removed} · 추가 ${done.added}). 다시 열어 확인해 주세요.` }
+	}
+	return { ok: true, ...done, blocked, skipped: add.length - fresh.length }
+}
+
+// 북커버 바꾸기: https 이미지 주소, 빈 값이면 지운다.
+export async function setCover(body: any) {
+	const { id } = await bookPageOf(body?.bookId)
+	const cover = String(body?.cover ?? "").trim()
+	if (cover && (!/^https:\/\/[^\s]+$/i.test(cover) || cover.length > 1000)) throw new TextbookError(400, "표지 주소는 https로 시작하는 이미지 주소여야 합니다.")
+	const fileName = "cover" + (/\.(png|gif|webp)(\?|$)/i.exec(cover)?.[0]?.replace(/\?$/, "") ?? ".jpg")
+	await updatePageProperties(id, { "북커버": { files: cover ? [{ type: "external", name: fileName, external: { url: cover } }] : [] } })
+	return { ok: true, cover }
 }
