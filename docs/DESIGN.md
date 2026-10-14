@@ -387,7 +387,7 @@ font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto San
 | `attendance_kiosk.html` | 공용 토큰·부품 | 기기 화면 모드(`html.device`) |
 | `admin_settings.html` | 공용 토큰·부품 | |
 | `school_search.html` | 공용 토큰·부품 | |
-| `library.html` | 공용 토큰·부품 | 라이브러리(Notion 정규교재 DB). 아래 "라이브러리 규칙" |
+| `library.html` | 공용 토큰·부품 | 라이브러리(Notion 라이브러리(학원) DB, 옛 이름 정규교재). 아래 "라이브러리 규칙" |
 | `legal_documents.html` | 공용 토큰·부품 | 조회 화면만. 출력 문서는 인쇄 문서 구역 |
 | `class_room.html` | 공용 토큰·부품 | 수업 관리. 학부모 리포트와 같은 구조(첫 화면 강사·클래스·통합 시간표, 반 상세 하단 탭 [홈 · 교재 · 캘린더 · 학습기록 · 학생]). 아래 "수업 관리 규칙" |
 
