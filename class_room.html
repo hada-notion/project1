@@ -387,7 +387,8 @@ body.snap-on .cr-main{max-width:none;padding:0}
 .check-row{margin:0 0 var(--space-2);min-height:var(--hit-min)}
 .check-row .sum{margin:0}
 .check-row .sum b{color:var(--text-ink)}
-.note-tabs{margin:0 0 var(--space-2)}
+/* 메모 창 [메모 | 선생님 한마디]: 전환 탭 기준 아래 16(.center-tabs.left의 margin:0보다 우선) */
+.center-tabs.note-tabs{margin:0 0 var(--space-4)}
 /* 학생 명부(v2.5.93): [이름 학교 · 학년] / 연락처(누르면 전화, 44px) / ↗ 학생 보고서 */
 .icon-btn.rep{flex:none;margin-left:auto;margin-right:calc(-11*var(--space-1));color:var(--brand-deep)}
 /* 반 요약(v2.5.94, v2.5.96): 요약 3칸(리포트 .home-stats: 출석률·과제이행률·최근 평가 평균) + 리포트 "최근 평가 추이"와 같은 꺾은선 그래프
