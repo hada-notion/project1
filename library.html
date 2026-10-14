@@ -99,7 +99,7 @@ dialog.sheet[open]{display:flex}
 }
 </style></head><body><div class="shell">
 <nav class="top" aria-label="서비스 정보"><div class="brand"><img class="logo" src="assets/brand/hada-wordmark.png" alt="HADA" width="96" height="36"><div class="wordmark">하다<span>학원관리</span></div></div><div class="app-nav" id="app-nav"></div><div class="topright"><button class="ghost" id="logout" type="button" hidden>로그아웃</button><span class="badge">관리자 전용</span></div></nav>
-<header><h1>라이브러리</h1><p class="muted">학원에서 쓰는 교재(Notion 라이브러리 DB)를 시리즈별로 보고, 알라딘에서 찾아 새 교재와 단원목록을 추가합니다.</p></header>
+<header><h1>라이브러리</h1><p class="muted">학원에서 쓰는 교재(Notion 라이브러리 DB)를 시리즈별로 보고, 교재명이나 ISBN으로 찾아 새 교재와 단원목록을 추가합니다.</p></header>
 <p class="notice info" id="status" role="status" aria-live="polite">관리자 비밀번호로 로그인하세요.</p>
 <main>
 <section class="card" id="login"><div class="narrow"><h2>관리자 확인</h2><form id="loginForm"><label for="key">관리자 비밀번호</label><input id="key" type="password" autocomplete="current-password" required autofocus><p class="help">관리자 설정과 같은 비밀번호입니다. 로그인은 관리자 설정·법정 서류·학교 검색과 함께 쓰이고, 이 탭을 닫거나 로그아웃하면 해제됩니다.</p><button class="primary">확인</button></form></div></section>
@@ -114,10 +114,10 @@ dialog.sheet[open]{display:flex}
 <section class="card" id="add" hidden>
 <h2>교재 찾기</h2>
 <form id="searchForm"><div class="field-row"><div><label for="query">교재명 · 시리즈 · ISBN</label><input id="query" type="search" placeholder="예: 쎈 중등 수학 1-1 또는 ISBN 13자리" required minlength="2" maxlength="80"></div><button class="secondary">검색</button></div></form>
-<div class="other-ways"><p class="help">국내도서와 외국도서를 함께 찾아요. 다른 서점에서 본 책은 ISBN으로 찾고, 알라딘에 없는 교재는 직접 추가하세요.</p><button class="secondary" type="button" id="manual-add">직접 추가</button></div>
+<div class="other-ways"><p class="help">국내 도서와 수입 원서를 함께 찾아요. 서점에서 본 책은 ISBN으로 찾고, 검색에 없는 교재는 직접 추가하세요.</p><button class="secondary" type="button" id="manual-add">직접 추가</button></div>
 <div class="pick-bar" id="pick-bar" hidden><p id="pick-count"></p><button class="primary" id="open-sheet" type="button">라이브러리에 추가</button></div>
 <div id="results"></div>
-<p class="help source-note">도서 정보 출처: 알라딘 인터넷서점(www.aladin.co.kr) · 표지: 교보문고</p>
+<p class="help source-note">도서 정보 출처: 국립중앙도서관 ISBN 서지정보 · 카카오 책 검색 · 표지: 교보문고(없으면 국립중앙도서관·카카오)</p>
 </section>
 </div>
 </main>
@@ -129,13 +129,13 @@ dialog.sheet[open]{display:flex}
 <div class="sheet-body" id="sheet-body"></div>
 <div class="sheet-foot" id="sheet-foot"></div>
 </dialog>
-<script src="assets/hada-shortcuts.js?v=e2f17f5f"></script><script src="hada_config.js"></script><script src="admin_auth.js?v=4ffde89c"></script>
+<script src="assets/hada-shortcuts.js?v=c5c40163"></script><script src="hada_config.js"></script><script src="admin_auth.js?v=4ffde89c"></script>
 <script>
 'use strict';
-// 라이브러리(v2.5.118, Notion 라이브러리 DB): [열기] 시리즈별 교재 → 단원 창(단원 추가) / [추가] 알라딘 검색(국내·외국도서 함께·ISBN, v2.5.119)·직접 추가 → 체크 → 창에서 한 권씩 단원 확인·등록.
+// 라이브러리(v2.5.118, Notion 라이브러리 DB): [열기] 시리즈별 교재 → 단원 창(단원 추가) / [추가] 국립중앙도서관·카카오 검색(ISBN 포함, v2.5.120)·직접 추가 → 체크 → 창에서 한 권씩 단원 확인·등록.
 const endpoint=()=>HadaAdminAuth.config().url+'/functions/v1/textbook-api';
 const $=id=>document.getElementById(id);let adminKey='';
-const found=new Map(),picked=new Map(); // 추가: 키(알라딘은 isbn13, 직접 추가 "m:…") → 검색 결과 / 등록할 교재
+const found=new Map(),picked=new Map(); // 추가: 키(검색 결과는 isbn13, 직접 추가 "m:…") → 검색 결과 / 등록할 교재
 let seq=0; // 직접 추가 일련번호
 const keyOf=b=>b.key||b.isbn13;
 let library=null,sheet=null; // 열기: {books, seriesOrder} / 창 상태 {mode:'add'|'open', i, list, book}
@@ -147,7 +147,11 @@ const won=n=>n?n.toLocaleString('ko-KR')+'원':'';
 const notionUrl=id=>'https://app.notion.com/p/'+String(id).replaceAll('-','');
 const included=p=>p.units.filter(u=>u.include&&u.name.trim());
 // 표지: 이미지가 없으면 "표지 없음". 추가할 때는 북커버를 넣지 않는다(메뉴얼 7-6).
-function cover(url,onMissing){if(!url)return el('span','cover none','표지 없음');const img=el('img','cover');img.alt='';img.loading='lazy';img.referrerPolicy='no-referrer';img.src=url;img.onerror=()=>{img.replaceWith(el('span','cover none','표지 없음'));onMissing?.()};return img}
+// 표지: url이 안 열리면 alt(국립중앙도서관·카카오 표지, onAlt), 그것도 안 되면 "표지 없음"(onMissing)
+function cover(url,onMissing,alt,onAlt){const none=()=>el('span','cover none','표지 없음');if(!url&&!alt)return none();const img=el('img','cover');img.alt='';img.loading='lazy';img.referrerPolicy='no-referrer';let usingAlt=!url;if(usingAlt)onAlt?.();img.src=url||alt;img.onerror=()=>{if(!usingAlt&&alt){usingAlt=true;onAlt?.();img.src=alt;return}img.replaceWith(none());onMissing?.()};return img}
+// 검색 결과 표지: 화면에 보인 표지를 북커버로(kyobo | alt | none)
+function bookCover(b,p){const c=p?.coverPick||b.coverPick||'kyobo',set=v=>{b.coverPick=v;const q=p||picked.get(keyOf(b));if(q&&!q.custom)q.coverPick=v};return cover(c==='kyobo'?b.cover:'',()=>set('none'),c==='none'?'':b.altCover,()=>set('alt'))}
+const COVER_TEXT={kyobo:'북커버 교보문고 표지',alt:'북커버 국립중앙도서관·카카오 표지',none:'북커버 없음'};
 
 // ---------- 로그인·보기 전환 ----------
 async function openWorkspace(){await loadLibrary();$('login').hidden=true;$('workspace').hidden=false;$('logout').hidden=false;$('key').value=''}
@@ -176,8 +180,8 @@ function drawShelves(){
 $('filter').addEventListener('input',()=>library&&drawShelves());
 
 // ---------- 라이브러리 추가: 검색·체크 ----------
-// 검색: 알라딘 국내도서·외국도서를 함께(서버), ISBN13이면 그 책 한 권
-$('searchForm').addEventListener('submit',async e=>{e.preventDefault();busy(e.target,true);status('알라딘에서 검색 중…');try{
+// 검색: 국립중앙도서관·카카오를 함께(서버), ISBN13이면 그 책 한 권
+$('searchForm').addEventListener('submit',async e=>{e.preventDefault();busy(e.target,true);status('책을 찾는 중…');try{
  const data=await api({action:'search',query:$('query').value});found.clear();data.books.forEach(b=>found.set(b.isbn13,b));drawResults();
  status(data.books.length?`${data.books.length}권을 찾았어요. 출판사를 확인하고 추가할 교재를 체크하세요.`:'검색 결과가 없어요. 교재명을 줄이거나 시리즈 이름으로 찾아 보세요.');
 }catch(e){status(e.message,'error')}finally{busy(e.target,false)}});
@@ -188,14 +192,14 @@ function drawResults(){
   const info=el('div','result-info');const t=el('strong',null,b.title);t.onclick=()=>{if(!cb.disabled)cb.click()};
   const more=el('details','more');more.append(el('summary',null,'자세히'),el('p',null,[b.pubDate&&'출간일 '+b.pubDate,b.price&&'정가 '+won(b.price),'ISBN13 '+b.isbn13].filter(Boolean).join(' · ')));
   info.append(t,el('p',null,b.publisher||'출판사 정보 없음'),more);
-  row.append(box,cover(b.cover,()=>{b.noCover=true;const p=picked.get(keyOf(b));if(p)p.noCover=true}),info);if(b.registered)row.append(el('span','done-tag','등록됨'));return row}));
+  row.append(box,bookCover(b),info);if(b.registered)row.append(el('span','done-tag','등록됨'));return row}));
 }
 // 체크할 때 목차를 미리 불러 둔다(창에서 넘길 때 기다리지 않게)
 // 직접 추가 교재: 목차가 없으니 창에서 교재명·ISBN·표지·출판사와 단원을 직접 넣는다
 function customPick(book){return {book,custom:true,units:[],title:book.title||'',isbnIn:book.isbn13||'',coverIn:book.cover||'',publisherIn:book.publisher||'',priceIn:book.price??null,done:null,loading:false}}
 async function toggle(book,on){
  if(!on){picked.delete(keyOf(book));drawPickBar();return}
- const p={book,detail:null,units:[],title:book.title,noCover:!!book.noCover,done:null,loading:true};picked.set(book.isbn13,p);drawPickBar();
+ const p={book,detail:null,units:[],title:book.title,coverPick:book.coverPick||'kyobo',done:null,loading:true};picked.set(book.isbn13,p);drawPickBar();
  try{p.detail=await api({action:'detail',isbn13:book.isbn13});p.title=p.detail.book.title;p.units=p.detail.toc.units}catch(e){p.error=e.message}finally{p.loading=false}
  if(sheet?.mode==='add'&&sheet.list[sheet.i]===p)drawSheet();
 }
@@ -241,7 +245,7 @@ function drawSheet(){
   const p=sheet.list[sheet.i],n=sheet.list.length;
   $('sheet-title').textContent=`${sheet.i+1} / ${n}`;$('sheet-tag').replaceChildren(...(p.done?.ok?[el('span','done-tag','등록됨')]:[]));
   $('dots').hidden=n<2;$('dots').replaceChildren(...sheet.list.map((q,k)=>el('i',[k===sheet.i?'on':'',q.done?.ok?'ok':''].join(' ').trim())));
-  const top=el('div','sheet-book');top.append(cover(p.custom?p.coverIn:p.book.cover,()=>{p.noCover=true}));const col=el('div');
+  const top=el('div','sheet-book');top.append(p.custom?cover(p.coverIn,()=>{p.noCover=true}):bookCover(p.book,p));const col=el('div');
   if(p.done?.ok){col.append(el('strong',null,p.done.name),el('p','book-meta',`등록했어요 · 단원 ${p.done.units}개`));const a=el('a','link-chip icon-ext','Notion에서 열기');a.href=notionUrl(p.done.pageId);a.target='_blank';a.rel='noopener noreferrer';col.append(a)}
   else if(p.custom){
    // 직접 추가: 교재명(필수)과 ISBN13·표지 주소·출판사(선택)
@@ -252,11 +256,12 @@ function drawSheet(){
    field('sheet-pub','출판사 · 선택',p.publisherIn,{type:'text',maxLength:60},v=>{p.publisherIn=v});
    col.append(box,el('p','book-meta','출판사·시리즈는 라이브러리 선택지와 같을 때만 넣어요. 표지 주소는 메뉴얼 7-6 북커버 규칙의 주소를 쓰세요.'))}
   else{const lab=el('label',null,'교재명');lab.htmlFor='sheet-name';const t=el('input');t.id='sheet-name';t.type='text';t.value=p.title;t.maxLength=200;t.oninput=()=>{p.title=t.value};
-   const d=p.detail;col.append(lab,t,el('p','book-meta',[d?.publisher?'출판사 '+d.publisher:'출판사 선택지 없음(비워 둠)',d?.series?'시리즈 '+d.series:'시리즈 선택지 없음(비워 둠)',d?.book.pages?'전체 '+d.book.pages+'쪽':'',p.noCover?'북커버 없음':'북커버 교보문고 표지'].filter(Boolean).join(' · ')))}
+   const d=p.detail;col.append(lab,t,el('p','book-meta',[d?.publisher?'출판사 '+d.publisher:'출판사 선택지 없음(비워 둠)',d?.series?'시리즈 '+d.series:'시리즈 선택지 없음(비워 둠)',d?.book.pages?'전체 '+d.book.pages+'쪽':'',COVER_TEXT[p.coverPick]].filter(Boolean).join(' · ')))}
   top.append(col);const parts=[top];
   if(!p.done?.ok){
    if(p.loading)parts.push(el('p','empty-units','목차를 불러오는 중…'));
-   else{if(p.error)parts.push(el('p','empty-units','목차를 불러오지 못했어요: '+p.error));else if(!p.units.length)parts.push(el('p','empty-units',p.custom?'목차를 붙여넣거나 [단원 추가]로 단원을 넣으세요. 단원 없이 교재만 추가해도 돼요.':p.detail?.tocEmpty?'알라딘에 이 책의 목차가 없어요. 목차를 붙여넣거나 [단원 추가]로 직접 넣으세요.':'목차에서 단원을 찾지 못했어요. 목차를 붙여넣거나 직접 넣으세요.'));
+   else{if(p.error)parts.push(el('p','empty-units','목차를 불러오지 못했어요: '+p.error));else if(!p.units.length)parts.push(el('p','empty-units',p.custom?'목차를 붙여넣거나 [단원 추가]로 단원을 넣으세요. 단원 없이 교재만 추가해도 돼요.':p.detail?.tocEmpty?'이 책의 목차를 가져오지 못했어요. 교보문고에서 목차를 복사해 붙여넣거나 [단원 추가]로 직접 넣으세요.':'목차에서 단원을 찾지 못했어요. 목차를 붙여넣거나 직접 넣으세요.'));
+    if(!p.custom&&!p.units.length){const a=el('a','link-chip icon-ext','교보문고에서 보기');a.id='kyobo-link';a.href='https://search.kyobobook.co.kr/search?keyword='+encodeURIComponent(p.book.isbn13);a.target='_blank';a.rel='noopener noreferrer';parts.push(a)}
     parts.push(unitEditor(p.units,{onChange:drawFoot}),pasteBox(p.units,!p.units.length))}
    if(p.done&&!p.done.ok)parts.push(el('p','empty-units',p.done.error));
   }
@@ -291,7 +296,7 @@ async function register(p,b){
  if(!p.title.trim()){status('교재명을 입력하세요.','error');$('sheet-name')?.focus();return}
  busy(b,true);status(`"${p.title}" 추가 중…`);
  const units=included(p).map(u=>({name:u.name,page:u.page}));
- try{p.done=await api(p.custom?{action:'register-custom',title:p.title,isbn13:p.isbnIn,cover:p.noCover?'':p.coverIn,price:p.priceIn,publisher:p.publisherIn,units}:{action:'register',isbn13:p.book.isbn13,title:p.title,noCover:p.noCover,units});
+ try{p.done=await api(p.custom?{action:'register-custom',title:p.title,isbn13:p.isbnIn,cover:p.noCover?'':p.coverIn,price:p.priceIn,publisher:p.publisherIn,units}:{action:'register',isbn13:p.book.isbn13,title:p.title,cover:p.coverPick||'kyobo',units});
   if(p.done.ok){p.book.registered=true;library=null;status(`"${p.done.name}"을(를) 라이브러리에 추가했어요 · 단원 ${p.done.units}개`,'success');if(sheet.i<sheet.list.length-1&&!sheet.list[sheet.i+1].done?.ok){go(1);return}}
   else status(p.done.error,'error');
  }catch(e){status(`"${p.title}" 추가 실패: ${e.message}`,'error')}

@@ -1,10 +1,12 @@
 // _shared/textbookSearch.ts
 //
-// 라이브러리(library.html → textbook-api, v2.5.118). 알라딘 Open API로 책을 찾고, 고른 책을 Notion 라이브러리(학원) DB에
+// 라이브러리(library.html → textbook-api, v2.5.118). 책을 찾고, 고른 책을 Notion 라이브러리(학원) DB에
 // 한 권 만들고 목차에서 고친 단원을 단원목록 DB에 만든다.
-//   - 알라딘 키: 함수 Secret ALADIN_TTB_KEY(값은 로그·응답에 쓰지 않는다). 출처 표시는 화면 아래.
+//   - 책 정보(v2.5.120): 국립중앙도서관 ISBN 서지정보(NL_CERT_KEY) + 카카오 책 검색(KAKAO_REST_KEY). _shared/bookSources.ts.
+//     알라딘 OpenAPI는 2026-10-30 종료로 쓰지 않는다.
 //   - DB 위치: 진도교재 DB의 "라이브러리"(옛 이름 "정규교재") 관계 → 라이브러리 DB, 그 "단원목록" 관계 → 단원목록 DB(새 Notion ID 설정 없음).
-//   - 북커버: 메뉴얼 7-6 규칙대로 ISBN13으로 만든 교보문고 이미지 주소(화면에서 이미지가 안 열리면 넣지 않음).
+//   - 북커버: 메뉴얼 7-6 규칙대로 ISBN13으로 만든 교보문고 이미지 주소. 화면에서 열리지 않으면 국립중앙도서관·카카오 표지,
+//     그것도 없으면 넣지 않는다(화면이 고른 결과를 cover: "kyobo" | "alt" | "none"으로 보낸다).
 //   - 출판사·시리즈: 이미 있는 선택지와 맞을 때만 넣는다(DB 선택지를 새로 만들지 않는다).
 //   - 같은 ISBN13이 라이브러리에 있으면 "등록됨"으로 보여 주고 다시 만들지 않는다.
 
@@ -12,48 +14,20 @@ import { NOTION_API, DS_PROGRESS_BOOK } from "./constants.ts"
 import { fetchWithRetry, notionHeaders, queryAllPages } from "./notionClient.ts"
 import { cleanUnits, parseToc } from "./textbookToc.ts"
 import { libraryKey, libraryProp } from "./libraryProp.ts"
+import { type Book, BookSourceError, isIsbn13, lookupIsbn, searchTitle } from "./bookSources.ts"
 
+export { isIsbn13 }
 export class TextbookError extends Error {
 	constructor(public status: number, message: string) { super(message) }
 }
 
-const ALADIN = "https://www.aladin.co.kr/ttb/api/"
-export const isIsbn13 = (v: unknown): v is string => typeof v === "string" && /^97[89]\d{10}$/.test(v)
 export const coverUrl = (isbn: string) => `https://contents.kyobobook.co.kr/sih/fit-in/458x0/pdt/${isbn}.jpg`
-
-async function aladin(path: string, params: Record<string, string>): Promise<any> {
-	const key = Deno.env.get("ALADIN_TTB_KEY") ?? ""
-	if (!key) throw new TextbookError(503, "알라딘 키(ALADIN_TTB_KEY)가 설정되지 않았습니다. Supabase Secrets에 넣어 주세요.")
-	const q = new URLSearchParams({ ttbkey: key, output: "js", Version: "20131101", ...params })
-	let res: Response
-	try { res = await fetch(`${ALADIN}${path}?${q}`, { signal: AbortSignal.timeout(10000) }) }
-	catch { throw new TextbookError(502, "알라딘에 연결하지 못했습니다. 잠시 후 다시 시도하세요.") }
-	if (!res.ok) throw new TextbookError(502, `알라딘 응답 오류(${res.status})`)
-	// 알라딘 js 응답은 끝에 ";"가 붙거나 \' 같은 JSON 밖 이스케이프가 섞일 수 있다
-	const text = (await res.text()).trim().replace(/;\s*$/, "")
-	let data: any
-	try { data = JSON.parse(text) } catch { try { data = JSON.parse(text.replace(/\\'/g, "'")) } catch { throw new TextbookError(502, "알라딘 응답을 읽지 못했습니다.") } }
-	if (data?.errorCode) throw new TextbookError(502, `알라딘 오류: ${String(data.errorMessage ?? data.errorCode).slice(0, 120)}`)
-	return data
+// 출처 오류는 그대로 화면에 보여 준다(키 없음 503, 연결·응답 오류 502).
+async function fromSource<T>(job: () => Promise<T>): Promise<T> {
+	try { return await job() } catch (err) { if (err instanceof BookSourceError) throw new TextbookError(err.status, err.message); throw err }
 }
-
-export type Book = { isbn13: string; title: string; author: string; publisher: string; pubDate: string; price: number | null; cover: string; series: string; pages: number | null }
-function toBook(it: any): Book | null {
-	const isbn13 = String(it?.isbn13 ?? "")
-	if (!isIsbn13(isbn13)) return null
-	const price = Number(it.priceStandard), pages = Number(it.subInfo?.itemPage)
-	return {
-		isbn13,
-		title: String(it.title ?? "").trim(),
-		author: String(it.author ?? "").trim(),
-		publisher: String(it.publisher ?? "").trim(),
-		pubDate: String(it.pubDate ?? "").slice(0, 10),
-		price: price > 0 ? price : null,
-		cover: coverUrl(isbn13),
-		series: String(it.seriesInfo?.seriesName ?? "").trim(),
-		pages: pages > 0 ? pages : null,
-	}
-}
+// 화면에 보내는 책: 교보문고 표지(cover)와 대신 쓸 표지(altCover). 목차 원문은 detail에서만.
+const forScreen = ({ toc: _toc, ...b }: Book) => ({ ...b, cover: coverUrl(b.isbn13) })
 
 // ---------- Notion DB 위치·선택지 ----------
 type Sources = { books: string; units: string; unitsLink: string; publishers: string[]; series: string[] }
@@ -88,7 +62,7 @@ export function matchPublisher(name: string, options: string[]): string | null {
 	const part = options.filter((o) => norm(o).includes(n) || n.includes(norm(o)))
 	return part.length === 1 ? part[0] : null
 }
-// 시리즈: 교재명(또는 알라딘 시리즈명)이 선택지 이름으로 시작하면 가장 긴 선택지
+// 시리즈: 교재명(또는 출처의 총서명)이 선택지 이름으로 시작하면 가장 긴 선택지
 export function matchSeries(title: string, seriesName: string, options: string[]): string | null {
 	const t = norm(title), s = norm(seriesName)
 	return [...options].sort((a, b) => norm(b).length - norm(a).length).find((o) => norm(o) && (t.startsWith(norm(o)) || s.startsWith(norm(o)))) ?? null
@@ -102,39 +76,30 @@ async function registeredIsbns(isbns: string[]): Promise<Set<string>> {
 }
 
 // ---------- 동작 ----------
-// 검색(v2.5.119): ISBN13(하이픈·띄어쓰기 허용)이면 그 책 한 권, 아니면 알라딘 국내도서와 외국도서를 함께 찾아
-// 하나의 목록으로(국내 먼저, 같은 ISBN13은 한 번만).
-export const isbnQuery = (q: string) => { const d = q.replace(/[-\s]/g, ""); return isIsbn13(d) ? d : null }
+// 검색: ISBN13(하이픈·띄어쓰기 허용)이면 그 책 한 권, 아니면 교재명으로 국립중앙도서관·카카오를 함께 찾아
+// 하나의 목록으로(같은 ISBN13은 한 번만, 국립중앙도서관 값 우선).
+export const isbnQuery = (q: string) => { const d = q.replace(/[-s]/g, ""); return isIsbn13(d) ? d : null }
 export async function searchBooks(query: unknown) {
 	const q = String(query ?? "").trim()
 	if (q.length < 2 || q.length > 80) throw new TextbookError(400, "교재명은 2~80자로 입력하세요.")
-	let books: Book[]
 	const isbn = isbnQuery(q)
-	if (isbn) {
-		try { books = [(await lookup(isbn)).book] } catch (err) { if (err instanceof TextbookError && err.status === 404) books = []; else throw err }
-	} else {
-		const search = (target: string) => aladin("ItemSearch.aspx", { Query: q, QueryType: "Keyword", SearchTarget: target, MaxResults: "20", start: "1", Cover: "Big" })
-		const [domestic, foreign] = await Promise.all([search("Book"), search("Foreign")])
-		const seen = new Set<string>()
-		books = ([...(domestic.item ?? []), ...(foreign.item ?? [])].map(toBook).filter(Boolean) as Book[]).filter((b) => !seen.has(b.isbn13) && seen.add(b.isbn13))
-	}
+	const books = await fromSource(async () => isbn ? [await lookupIsbn(isbn)].filter(Boolean) as Book[] : await searchTitle(q))
 	const done = await registeredIsbns(books.map((b) => b.isbn13))
-	return { books: books.map((b) => ({ ...b, registered: done.has(b.isbn13) })) }
+	return { books: books.map((b) => ({ ...forScreen(b), registered: done.has(b.isbn13) })) }
 }
 
-async function lookup(isbn13: string): Promise<{ book: Book; toc: string }> {
+async function lookup(isbn13: string): Promise<Book> {
 	if (!isIsbn13(isbn13)) throw new TextbookError(400, "ISBN13 형식이 올바르지 않습니다.")
-	const data = await aladin("ItemLookUp.aspx", { ItemId: isbn13, ItemIdType: "ISBN13", OptResult: "Toc", Cover: "Big" })
-	const it = data.item?.[0]
-	const book = toBook(it)
-	if (!book || book.isbn13 !== isbn13) throw new TextbookError(404, "알라딘에서 이 교재를 찾지 못했습니다.")
-	return { book, toc: String(it.subInfo?.toc ?? "") }
+	const book = await fromSource(() => lookupIsbn(isbn13))
+	if (!book) throw new TextbookError(404, "국립중앙도서관·카카오에서 이 교재를 찾지 못했습니다.")
+	return book
 }
 
+// 목차: 국립중앙도서관에 목차가 있으면 나눠서 단원 후보로. 없으면 tocEmpty(화면이 교보문고 링크와 붙여넣기를 보여 줌).
 export async function bookDetail(isbn13: unknown) {
-	const { book, toc } = await lookup(String(isbn13 ?? ""))
+	const book = await lookup(String(isbn13 ?? ""))
 	const { publishers, series } = await textbookSources()
-	return { book, publisher: matchPublisher(book.publisher, publishers), series: matchSeries(book.title, book.series, series), toc: parseToc(toc), tocEmpty: !toc.trim() }
+	return { book: forScreen(book), publisher: matchPublisher(book.publisher, publishers), series: matchSeries(book.title, book.series, series), toc: parseToc(book.toc), tocEmpty: !book.toc.trim() }
 }
 
 export function parsePasted(text: unknown) {
@@ -156,9 +121,12 @@ const title = (s: string) => ({ title: [{ text: { content: s.slice(0, 2000) } }]
 
 export async function registerBook(body: any) {
 	const isbn13 = String(body?.isbn13 ?? "")
-	const { book } = await lookup(isbn13)
+	const book = await lookup(isbn13)
 	const name = String(body?.title ?? "").replace(/\s+/g, " ").trim().slice(0, 200) || book.title
-	return await createLibraryBook({ name, isbn13, price: book.price, pages: book.pages, cover: body?.noCover ? "" : coverUrl(isbn13), publisher: book.publisher, seriesHint: book.series, units: body?.units })
+	// cover: "kyobo"(기본) | "alt"(국립중앙도서관·카카오 표지) | "none". 옛 화면의 noCover도 받는다.
+	const choice = body?.noCover ? "none" : String(body?.cover ?? "kyobo")
+	const cover = choice === "none" ? "" : choice === "alt" ? book.altCover : coverUrl(isbn13)
+	return await createLibraryBook({ name, isbn13, price: book.price, pages: book.pages, cover, publisher: book.publisher, seriesHint: book.series, units: body?.units })
 }
 
 type NewBook = { name: string; isbn13?: string; price?: number | null; pages?: number | null; cover?: string; publisher?: string; seriesHint?: string; units: unknown }
@@ -195,7 +163,7 @@ async function createLibraryBook(b: NewBook) {
 }
 
 // ---------- 직접 추가(v2.5.119) ----------
-// 알라딘에 없는 교재(학원 자체 교재 등). ISBN·표지·가격은 있을 때만. 표지는 https 주소만.
+// 검색에 없는 교재(학원 자체 교재 등). ISBN·표지·가격은 있을 때만. 표지는 https 주소만.
 export async function registerCustom(body: any) {
 	const name = String(body?.title ?? "").replace(/\s+/g, " ").trim().slice(0, 200)
 	if (!name) throw new TextbookError(400, "교재명을 입력하세요.")
