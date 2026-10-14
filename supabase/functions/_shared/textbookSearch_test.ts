@@ -16,9 +16,9 @@ const LIB = [
 	{ id: "11111111-1111-4111-8111-111111111111", properties: { "교재명": { title: tt("개념원리 수학 1-1") }, "시리즈": { select: null }, "북커버": { files: [] }, "사용중": { checkbox: false }, "단원목록": { relation: [], has_more: false } } },
 ]
 const UNITS = [{ id: "u2", book: "22222222-2222-4222-8222-222222222222", name: "1-2. 일차부등식", page: 30 }, { id: "u1", book: "22222222-2222-4222-8222-222222222222", name: "1-1. 다항식", page: 8 }, { id: "u3", book: "22222222-2222-4222-8222-222222222222", name: "부록", page: null, exams: 1 }]
-function mock(opts: { existing?: string[]; failUnitAt?: number; nlFail?: boolean; kakaoFail?: boolean; schemaFail?: boolean } = {}) {
+function mock(opts: { existing?: string[]; failUnitAt?: number; nlFail?: boolean; kakaoFail?: boolean; schemaFail?: boolean; seriesOpts?: any[] } = {}) {
 	const created: any[] = [], calls: string[] = [], headers: Record<string, string>[] = [], patched: any[] = [], schema: any[] = []
-	let seriesOpts: any[] = [{ id: "s1", name: "쎈", color: "red" }, { id: "s2", name: "라이트쎈", color: "blue" }]
+	let seriesOpts: any[] = opts.seriesOpts ?? [{ id: "s1", name: "쎈", color: "red" }, { id: "s2", name: "라이트쎈", color: "blue" }]
 	const reply = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status })
 	const fetch = async (input: any, init: any = {}) => {
 		const url = String(input); calls.push(url); headers.push({ ...(init.headers ?? {}) })
@@ -37,7 +37,7 @@ function mock(opts: { existing?: string[]; failUnitAt?: number; nlFail?: boolean
 		if (url.endsWith("/data_sources/progress")) return reply({ properties: { "라이브러리": { relation: { data_source_id: "books" } } } })
 		if (url.endsWith("/data_sources/units")) return reply({ properties: { "단원명": { title: {} }, "라이브러리": { relation: { data_source_id: "books" } } } })
 		if (url.endsWith("/data_sources/books") && init.method === "PATCH") {
-			if (opts.schemaFail) return reply({ message: "no" }, 400)
+			if (opts.schemaFail) return reply({ object: "error", code: "validation_error", message: "Invalid select option, duplicates not allowed: X" }, 400)
 			const next = JSON.parse(init.body).properties["시리즈"].select.options; schema.push(next)
 			seriesOpts = next.map((o: any, k: number) => ({ id: o.id ?? "new" + k, name: o.name, color: o.color })); return reply({})
 		}
@@ -335,5 +335,21 @@ Deno.test("edit-series: add, rename, order and remove keep option ids; used or d
 		await rejects(() => tb.editSeries({ op: "remove", id: "zzz" }), 404)
 		await rejects(() => tb.editSeries({ op: "drop" }), 400)
 	})
-	await withMock(mock({ schemaFail: true }), () => rejects(() => tb.editSeries({ op: "add", name: "새 시리즈" }), 502, /직접 고쳐/))
+	await withMock(mock({ schemaFail: true }), () => rejects(() => tb.editSeries({ op: "add", name: "새 시리즈" }), 502, /duplicates not allowed: X\)\. Notion/))
+})
+
+// ---------- v2.5.123: id가 겹친 시리즈 선택지 ----------
+Deno.test("edit-series: options sharing an id are left out (unused) so Notion accepts the list; used ones stop with a clear message", async () => {
+	const dup = [{ id: "s1", name: "쎈" }, { id: "s2", name: "완자" }, { id: "s3", name: "디딤돌" }, { id: "s2", name: "EBS 수능특강" }]
+	const m = mock({ seriesOpts: dup })
+	await withMock(m, async () => {
+		const list = await tb.seriesList()
+		assert(list.series.map((x) => x.name).join() === "쎈,완자,디딤돌" && list.duplicates.join() === "EBS 수능특강", JSON.stringify(list))
+		const r = await tb.editSeries({ op: "remove", id: "s3" })
+		assert(JSON.stringify(m.schema[0]) === JSON.stringify([{ id: "s1", name: "쎈" }, { id: "s2", name: "완자" }]), JSON.stringify(m.schema[0]))
+		assert(r.cleaned.join() === "EBS 수능특강" && r.series.map((x) => x.name).join() === "쎈,완자" && r.duplicates.length === 0, JSON.stringify(r))
+	})
+	const used = mock({ seriesOpts: [{ id: "s9", name: "개념" }, { id: "s9", name: "쎈" }] })
+	await withMock(used, () => rejects(() => tb.editSeries({ op: "add", name: "새것" }), 409, /"쎈".*교재 1권/))
+	assert(used.schema.length === 0, "nothing sent when a duplicate is in use")
 })

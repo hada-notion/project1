@@ -341,16 +341,23 @@ export async function updateBook(body: any) {
 }
 
 type SeriesOption = { id: string; name: string; color?: string }
-async function seriesSchema(): Promise<{ src: Sources; options: SeriesOption[] }> {
+// Notion 선택지 중 같은 id가 두 번 나오는 것(원본에서 "완자"와 "EBS 수능특강"이 같은 id, v2.5.123)이 있으면
+// 목록 전체를 보내는 변경이 "duplicates not allowed"로 거부된다. 첫 번째만 선택지로 쓰고 나머지는 duplicates로 따로 돌려준다.
+async function seriesSchema(): Promise<{ src: Sources; options: SeriesOption[]; duplicates: SeriesOption[] }> {
 	const src = await textbookSources()
 	const prop = (await dataSource(src.books)).properties?.["시리즈"]
 	if (prop?.type !== "select") throw new TextbookError(503, '라이브러리 DB의 "시리즈"가 선택 속성이 아닙니다.')
-	return { src, options: (prop.select?.options ?? []).map((o: any) => ({ id: String(o.id), name: String(o.name), color: o.color })) }
+	const seen = new Set<string>(), options: SeriesOption[] = [], duplicates: SeriesOption[] = []
+	for (const o of prop.select?.options ?? []) {
+		const opt = { id: String(o.id), name: String(o.name), color: o.color }
+		if (seen.has(opt.id)) duplicates.push(opt); else { seen.add(opt.id); options.push(opt) }
+	}
+	return { src, options, duplicates }
 }
 // 시리즈 선택지 목록(Notion 선택지 순서 = 라이브러리 묶음 순서)
 export async function seriesList() {
-	const { options } = await seriesSchema()
-	return { series: options.map((o) => ({ id: o.id, name: o.name })) }
+	const { options, duplicates } = await seriesSchema()
+	return { series: options.map((o) => ({ id: o.id, name: o.name })), duplicates: duplicates.map((o) => o.name) }
 }
 const seriesName = (v: unknown) => {
 	const s = String(v ?? "").replace(/\s+/g, " ").trim()
@@ -361,7 +368,12 @@ const seriesName = (v: unknown) => {
 // 시리즈 선택지 바꾸기: op add { name } · rename { id, name } · order { order: [id…] } · remove { id }(교재가 0권일 때만).
 // Notion은 선택지 전체 목록을 받으므로 매번 지금 목록을 새로 읽어 고친 뒤 보낸다(기존 선택지는 id로 유지 → 교재의 값도 유지).
 export async function editSeries(body: any) {
-	const { src, options } = await seriesSchema()
+	const { src, options, duplicates } = await seriesSchema()
+	// id가 겹친 선택지는 이번 변경에서 뺀다(그 이름은 Notion 선택지에서 사라진다). 그 이름을 쓰는 교재가 있으면 멈춘다.
+	for (const d of duplicates) {
+		const used = await queryAllPages(src.books, { property: "시리즈", select: { equals: d.name } })
+		if (used.length) throw new TextbookError(409, `Notion 시리즈 선택지 "${d.name}"가 다른 선택지와 같은 id를 쓰고 있습니다. Notion에서 "${d.name}" 선택지를 지우고 다시 만든 뒤 교재 ${used.length}권에 다시 지정해 주세요.`)
+	}
 	const keep = (o: SeriesOption) => ({ id: o.id, name: o.name })
 	const find = (id: unknown) => { const o = options.find((x) => x.id === String(id ?? "")); if (!o) throw new TextbookError(404, "시리즈를 찾지 못했습니다. 새로고침 후 다시 하세요."); return o }
 	const taken = (name: string, except = "") => options.some((o) => o.id !== except && norm(o.name) === norm(name))
@@ -399,9 +411,12 @@ export async function editSeries(body: any) {
 		method: "PATCH", headers: notionHeaders(), body: JSON.stringify({ properties: { "시리즈": { select: { options: next } } } }),
 	}, 2)
 	if (!res.ok) {
-		console.error("[textbook-api] 시리즈 변경 거부:", res.status, (await res.text()).slice(0, 300))
-		throw new TextbookError(502, `Notion이 시리즈 변경을 받지 않았습니다(${res.status}). Notion 라이브러리 DB의 "시리즈" 속성에서 직접 고쳐 주세요.`)
+		const text = await res.text()
+		console.error("[textbook-api] 시리즈 변경 거부:", res.status, text.slice(0, 300))
+		let why = ""
+		try { why = String(JSON.parse(text)?.message ?? "").slice(0, 160) } catch { /* 본문 없음 */ }
+		throw new TextbookError(502, `Notion이 시리즈 변경을 받지 않았습니다(${res.status}${why ? ": " + why : ""}). Notion 라이브러리 DB의 "시리즈" 속성에서 직접 고쳐 주세요.`)
 	}
 	sourcesCache = null
-	return { ok: true, ...(await seriesList()) }
+	return { ok: true, cleaned: duplicates.map((o) => o.name), ...(await seriesList()) }
 }
