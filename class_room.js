@@ -409,7 +409,7 @@ function paneHome(el){
  <h2 class="sec-title">${icon('sun')}${today?'오늘 ':''}${esc(longDate(state.date).replace(/^\d+년 /,''))}</h2>
  <div class="card"><div class="home-stats">${statBtn('att',`${arrived}/${d.students.length}`,'등원',d.students.length&&arrived===d.students.length?'good':'')}${statBtn('rec',items.length?`${sub}/${items.length}`:'–','과제 제출',items.length?(sub===items.length?'good':'bad'):'')}${stat(next?whenLabel(next.date,next.time):'–','다음 수업')}</div></div>
  <h2 class="sec-title">${icon('과제')}${today?'오늘':'이날'} 마감 과제 <span class="cnt">${d.homeworkDue.length}</span></h2>
- ${d.homeworkDue.length?`<div class="list">${d.homeworkDue.map(h=>{const n=h.items.filter(x=>x.submitted).length;return `<button class="row" type="button" data-hwgo="${esc(h.recordId)}"><span class="kind-icon k-과제">${icon('과제')}</span><span class="meta"><span class="t">${esc(h.range||h.title)}</span><span class="d">${esc(h.title)}</span></span><span class="pill ${n===h.items.length?'done':'miss'}">제출 ${n}/${h.items.length}</span></button>`;}).join('')}</div>`:`<div class="list"><p class="empty">${today?'오늘':'이날'}이 마감인 과제가 없어요.</p></div>`}
+ ${d.homeworkDue.length?`<div class="list">${d.homeworkDue.map(h=>{const n=h.items.filter(x=>x.submitted).length;return `<button class="row" type="button" data-hwgo="${esc(h.recordId)}"><span class="kind-icon k-과제">${icon('과제')}</span><span class="meta"><span class="t">${esc(h.range||h.title)}</span><span class="d">${esc(h.title)}</span></span><span class="pill ${pillTone(n,h.items.length)}">제출 ${n}/${h.items.length}</span></button>`;}).join('')}</div>`:`<div class="list"><p class="empty">${today?'오늘':'이날'}이 마감인 과제가 없어요.</p></div>`}
  <h2 class="sec-title">${icon('book')}교재 진도</h2>${homeBooks()}
  <h2 class="sec-title">${icon('학습')}이 수업 학습기록 <span class="cnt">${d.records.length}</span></h2>
  ${d.records.map(recCard).join('')||'<div class="list"><p class="empty">아직 기록이 없어요. 학습기록 탭의 + 로 만들어요.</p></div>'}`;
@@ -618,6 +618,8 @@ function paneRoster(el){
 // [분류 아이콘 칸(아이콘 + 구분 글자)] [교재 · 범위](교재 없으면 주제) [알약: 과제 "제출 n/전체", 평가 "평균 n점", 보강],
 // 아래 줄은 펼치지 않아도 보인다: 단원("• 1-1. …", 단원 번호마다 한 줄) → 내용(선생님이 적은 글, 줄마다 앞뒤 공백 정리) → 과제는 "• 마감: 날짜"(출제일은 묶음 날짜라 뺌, v2.5.98).
 // 펼치기(⌄)는 Notion 페이지 본문(글·목록·사진·파일·표)이 있을 때만이고, 펼치면 본문만 연한 베이지 칸에 보인다. 카드를 누르면 기록 화면.
+// 반 전체 제출 알약 색(DESIGN.md 1부 3장): 모두 제출 초록 · 50% 이상 노랑 · 50% 미만 빨강
+const pillTone=(n,t)=>n>=t?'done':n*2>=t?'mid':'miss';
 const withDow=ymd=>ymd?`${ymd} (${'일월화수목금토'[new Date(ymd+'T00:00:00Z').getUTCDay()]})`:'';
 function recCard(r){
  const subject=r.subject||'',title=[subject,r.range].filter(Boolean).join(' · ')||r.topic||r.title;
@@ -626,7 +628,7 @@ function recCard(r){
  // 기록 카드는 늘 날짜·수업으로 묶인 곳에 보이므로(학습기록 탭·홈·캘린더·교재 상세) 출제일은 묶음 날짜와 겹쳐 빼고 마감만(v2.5.98)
  const extras=r.kind==='과제'&&r.homework?.due?[`마감: ${withDow(r.homework.due)}`]:[];
  const hw=r.homework,sc=r.score;
- const pill=hw?`<span class="pill ${hw.submitted===hw.total?'done':'miss'}">제출 ${hw.submitted}/${hw.total}</span>`:sc?`<span class="pill k-평가">평균 ${sc.avg}점</span>`:'';
+ const pill=hw?`<span class="pill ${pillTone(hw.submitted,hw.total)}">제출 ${hw.submitted}/${hw.total}</span>`:sc?`<span class="pill k-평가">평균 ${sc.avg}점</span>`:'';
  const body=bodyHtml(r.body),meta=units.map(u=>`<span class="log-context">• ${esc(u)}</span>`).join('')+(note?`<span class="log-note">${esc(note)}</span>`:'')+extras.map(x=>`<span class="log-context">• ${esc(x)}</span>`).join('');
  return `<div class="rec log-card ${body?'has-extra':''}"><div class="log-head"><button class="log-main" type="button" data-rec="${esc(r.id)}"><span class="log-top"><span class="log-icon k-${esc(r.kind||'학습')}">${icon(r.kind||'학습')}<small>${esc(r.kind||'학습')}</small></span><span class="log-title">${esc(title)}</span>${pill}${r.makeup?'<span class="pill s-보강">보강</span>':''}</span>
  ${meta?`<span class="log-meta">${meta}</span>`:''}</button>
