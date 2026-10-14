@@ -86,7 +86,7 @@ button.row{cursor:pointer}
 .seg{display:inline-flex;background:var(--brand-soft);border-radius:var(--radius-md);padding:var(--space-1);gap:var(--space-1);flex:none}
 .seg button{min-height:var(--hit-min);min-width:var(--hit-min);padding:0 var(--space-2);border:0;border-radius:var(--radius-sm);background:transparent;color:var(--text-muted);font-weight:700;font-size:var(--text-label);cursor:pointer}
 .seg button.on{background:var(--surface);box-shadow:var(--shadow-card)}
-.seg button.on.v-출석{color:var(--success-ink)}.seg button.on.v-결석,.seg button.on.v-미제출{color:var(--danger-ink)}.seg button.on.v-보강,.seg button.on.v-제출{color:var(--info-ink)}
+.seg button.on.v-출석{color:var(--success-ink)}.seg button.on.v-결석,.seg button.on.v-미제출{color:var(--danger-ink)}.seg button.on.v-보강,.seg button.on.v-제출{color:var(--info-ink)}.seg button.on.v-일부제출{color:var(--warning-ink)}
 .toolrow{display:flex;align-items:center;gap:var(--space-2);margin:0 0 var(--space-3)}
 .toolrow .sum{flex:1;color:var(--text-muted);font-size:var(--text-label)}
 .center-tabs{display:flex;justify-content:center;margin:0 0 var(--space-4)}
@@ -141,6 +141,19 @@ button.row{cursor:pointer}
 .log-extra .lb-table{border-collapse:collapse;margin:0 0 var(--space-2);font-size:var(--text-caption)}
 .log-extra .lb-table td{border:1px solid var(--divider);padding:var(--space-1) var(--space-2)}
 .log-extra>:last-child{margin-bottom:0}
+/* 기록 카드 펼치기 안 학습활동(v2.6.9): 머리 [요약 … 편집 | 취소 저장] / 학생 줄 / 아래 본문 */
+.acts-head{display:flex;align-items:center;gap:var(--space-1);min-height:var(--hit-min)}
+.acts-sum{flex:1;min-width:0;font-weight:700;font-size:var(--text-label);color:var(--text-ink)}
+.act.save span{background:var(--brand-primary);color:var(--brand-on-primary)}
+.act:disabled{cursor:default;opacity:.55}
+.log-extra .acts-list{margin-top:var(--space-1)}
+.acts-make{display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-1)}
+.acts-make .help{margin:0}
+.body-box:not(:empty){margin-top:var(--space-3)}
+/* 학습활동 학생 줄: 편집 중에는 첫 글자 동그라미 없이(이름 자리 확보), 메모 칸은 아래 줄 전체, 보기 모드 메모는 줄바꿈 */
+.act-row{flex-wrap:wrap}
+.act-row .act-memo{flex:1 0 100%;min-height:var(--hit-min)}
+.act-row .act-memo-v{white-space:normal;overflow-wrap:anywhere}
 .form label{margin-top:var(--space-4)}
 /* 범위 아래 단원 안내(v2.5.125): 고른 교재의 단원 시작쪽으로 범위에 걸친 단원 */
 .unit-hint{margin:var(--space-2) 0 0;font-size:var(--text-caption);color:var(--text-muted)}
@@ -405,7 +418,6 @@ body.snap-on .cr-main{max-width:none;padding:0}
 /* 메모 창 [메모 | 선생님 한마디]: 전환 탭 기준 아래 16(.center-tabs.left의 margin:0보다 우선) */
 .center-tabs.note-tabs{margin:0 0 var(--space-4)}
 /* 학생 명부(v2.5.93): [이름 학교 · 학년] / 연락처(누르면 전화, 44px) / ↗ 학생 보고서 */
-.icon-btn.rep{flex:none;margin-left:auto;color:var(--brand-deep)} /* ⌄ 칸(오른쪽 여백) 바로 왼쪽: 알약 없는 짧은 줄에서 ⌄와 겹치지 않게 */
 /* 반 요약(v2.5.94, v2.5.96): 요약 3칸(리포트 .home-stats: 출석률·과제이행률·최근 평가 평균) + 리포트 "최근 평가 추이"와 같은 꺾은선 그래프
    (student_report.html .chart-wrap: 폭 최대 480, 400:220, 선·점 --brand-deep, 눈금선 --divider, 눈금 숫자 --text-subtle) */
 .cls-sum{margin-bottom:var(--space-4)}
@@ -422,12 +434,19 @@ body.snap-on .cr-main{max-width:none;padding:0}
 .roster .r1+.r1{border-top:1px solid var(--divider)}
 .r-body{padding:var(--space-2) var(--space-12) var(--space-3) var(--space-4);min-height:calc(var(--hit-min) + var(--space-4))}
 .r-top{display:flex;align-items:center;gap:var(--space-2);min-height:var(--hit-min)}
-.r-name{flex:0 1 auto;min-width:0;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.r-name{flex:0 1 auto;min-width:0;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:inherit;text-decoration:none}
+a.r-name{display:inline-flex;align-items:center;min-height:var(--hit-min)}
+a.r-name:hover{text-decoration:underline}
+/* 오른쪽 끝 한 열: 위 ↗(학생정보 Notion) · 아래 ⌄(v2.6.9) */
+.r-body>.nl{position:absolute;right:var(--space-1);top:0}
+.r-body.has-nl{min-height:calc(var(--hit-min) * 2)}
 .r-name small{font-weight:400;font-size:var(--text-label);color:var(--text-subtle);margin-left:var(--space-1)}
 .r-stats{display:flex;flex-wrap:wrap;gap:var(--space-1)}
 .r-extra .phones{display:flex;flex-wrap:wrap;column-gap:var(--space-4)}
 .r-extra .tel{display:inline-flex;align-items:center;min-height:var(--hit-min);color:var(--brand-deep);font-size:var(--text-label);font-weight:600;text-decoration:none;font-variant-numeric:tabular-nums}
 .r-extra .no-tel{display:inline-flex;align-items:center;min-height:var(--hit-min);font-size:var(--text-label);color:var(--text-subtle)}
+.r-extra .phones{flex-direction:column}
+.r-extra .tel small{margin-left:var(--space-1);font-weight:400;color:var(--text-subtle)}
 .r-extra .no-rep{margin:0;font-size:var(--text-caption);color:var(--text-subtle)}
 .home-stat b{display:block;line-height:var(--space-5);font-size:var(--text-section);font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .home-stat small{display:block;margin-top:var(--space-1);line-height:var(--space-4);font-size:var(--text-micro);color:var(--text-muted)}
@@ -514,6 +533,6 @@ body.snap-on .cr-main{max-width:none;padding:0}
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <script src="hada_config.js"></script>
 <script src="admin_auth.js?v=4ffde89c"></script>
-<script src="class_room.js?v=10bbf0ed"></script>
+<script src="class_room.js?v=5970c20e"></script>
 </body>
 </html>

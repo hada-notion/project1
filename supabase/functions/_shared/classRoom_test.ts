@@ -147,13 +147,18 @@ Deno.test("class-stats: month attendance rate (makeup counts as present), homewo
 
 Deno.test("roster: school, grade and phones from the student page, priority phone and report token from the registration", () => withMock(async (f) => {
  const rollup = (s: string) => ({ type: "rollup", rollup: { type: "array", array: [{ type: "phone_number", phone_number: s }] } })
- f.pages.stA = { id: "stA", db: "students", properties: { "학생이름": title("김하늘"), "학교(설문)": text("하다중"), "학년(설문)": { type: "select", select: { name: "중1" } }, "학생 연락처": { type: "phone_number", phone_number: "010-0000-0001" } } }
+ const phone = (s: string) => ({ type: "phone_number", phone_number: s })
+ f.pages.stA = { id: "stA", db: "students", properties: { "학생이름": title("김하늘"), "학교(설문)": text("하다중"), "학년(설문)": { type: "select", select: { name: "중1" } }, "학생 연락처": phone("010-0000-0001"),
+  "우선 연락 대상": { type: "select", select: { name: "기타 보호자" } }, "어머니 연락처": phone("010-0000-0004"), "아버지 연락처": phone(""), "기타 보호자 연락처": phone("010-0000-0002"), "학생과의 관계": text("할아버지") } }
  Object.assign(f.pages.ra.properties, { "학생정보": rel("stA"), "학부모 연락처": rollup("010-0000-0002"), "토큰": text("tok-a") })
  Object.assign(f.pages.rb.properties, { "토큰": text("disabled:tok-b") })
  const r = await room.loadRoster("s1")
  assert(r.students.map((s: any) => s.name).join() === "김하늘,박서준")
  const [a, b] = r.students
  assert(a.school === "하다중" && a.grade === "중1" && a.studentPhone === "010-0000-0001" && a.parentPhone === "010-0000-0002" && a.reportToken === "tok-a" && !a.reportOff, JSON.stringify(a))
+ // v2.6.9: 학생정보 페이지(↗)와 연락처 전체
+ assert(a.studentId === "stA" && a.primary === "기타 보호자" && a.motherPhone === "010-0000-0004" && a.fatherPhone === "" && a.guardianPhone === "010-0000-0002" && a.guardianRelation === "할아버지", JSON.stringify(a))
+ assert(b.studentId === null && b.primary === "" && b.motherPhone === "", "no student page: " + JSON.stringify(b))
  assert(b.reportToken === null && b.reportOff && b.school === "" && b.parentPhone === "", "disabled report link gives no token: " + JSON.stringify(b))
  await rejects(() => room.loadRoster("../x"), 400)
 }))
@@ -278,6 +283,20 @@ Deno.test("save attendance and activities: validated, stamped for the report syn
  assert(f.writes.some((w) => w.id === "hw2" && w.body.properties["과제상태"].select.name === "🔵 제출"))
  assert(f.writes.some((w) => w.id === "hw1" && w.body.properties["정답 문항"].number === 18 && w.body.properties["전체 문항"].number === 20))
  await rejects(() => room.saveActivities([{ activityId: "hw1", correct: 21, total: 20 }]), 400)
+ // v2.6.9: 과제상태 3단계와 내부용 메모. status가 submitted보다 우선, 빈 status는 선택 해제
+ await room.saveActivities([{ activityId: "hw2", status: "일부 제출", memo: "  절반만  " }, { activityId: "hw1", status: "", submitted: true }])
+ const w2 = f.writes.filter((w) => w.id === "hw2").at(-1)!.body.properties, w1 = f.writes.filter((w) => w.id === "hw1").at(-1)!.body.properties
+ assert(w2["과제상태"].select.name === "🟡 일부 제출" && w2["메모"].rich_text[0].text.content === "절반만" && w1["과제상태"].select === null && w1["메모"] === undefined, JSON.stringify([w2, w1]))
+ await room.saveActivities([{ activityId: "hw2", status: "미제출", memo: "" }])
+ { const w = f.writes.at(-1)!.body.properties; assert(w["과제상태"].select.name === "🔴 미제출" && w["메모"].rich_text.length === 0) }
+ await rejects(() => room.saveActivities([{ activityId: "hw2", status: "🟡 일부 제출" }]), 400)
+ await rejects(() => room.saveActivities([{ activityId: "hw2", memo: 3 }]), 400)
+ f.pages.hw2.properties["과제상태"] = { select: { name: "🟡 일부 제출" } }
+ f.pages.hw2.properties["메모"] = text("절반만"); f.pages.hw1.properties["과제상태"] = { select: { name: "🔵 제출" } }; f.pages.hw1.properties["메모"] = text("")
+ const acts = (await room.loadActivities("rec0")).activities
+ const h1 = acts.find((a: any) => a.id === "hw1")!, h2 = acts.find((a: any) => a.id === "hw2")!
+ assert(h1.status === "제출" && h1.submitted && h1.memo === "" && h2.status === "일부 제출" && !h2.submitted && h2.memo === "절반만", JSON.stringify(acts))
+ assert(room.homeworkState("🔴 미제출") === "미제출" && room.homeworkState(null) === "" && room.homeworkState("일부 제출") === "일부 제출")
 }))
 Deno.test("makeup: create a session, unlink, and delete without touching attendance pages", () => withMock(async (f) => {
  const m = await room.createMakeupSession({ attendanceIds: ["wait1"], teacherId: "t1", start: "2026-10-13T06:00:00.000Z" })

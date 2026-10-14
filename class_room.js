@@ -661,18 +661,31 @@ function trendChart(points){
 function ensureRoster(){const id=state.sessionId;if(state.rosterCache[id])return state.rosterCache[id];
  if(ensureRoster.busy!==id){ensureRoster.busy=id;whenLoaded(api('roster',{sessionId:id}).then(r=>{state.rosterCache[id]=r.students;}).finally(()=>{ensureRoster.busy=null;}));}return null;}
 const telHref=p=>'tel:'+String(p).replace(/[^0-9+]/g,'');
+// 펼친 연락처(v2.6.9): 학생 → 우선 연락 대상(실제 관계 + "(우선)") → 어머니 → 아버지 → 기타 보호자(학생과의 관계 + "(기타보호자)").
+// 같은 번호는 한 번만(우선 연락처가 위에 오므로 아래에서 빠진다). 우선 연락 대상이 비어 있으면 등록의 "학부모 연락처"를 "우선"으로.
+function contactsHtml(s){
+ const seen=new Set(),out=[],gName=String(s.guardianRelation||'').trim()||'기타 보호자';
+ const add=(label,p,tag)=>{const n=String(p||'').replace(/[^0-9]/g,'');if(!n||seen.has(n))return;seen.add(n);
+  out.push(`<a class="tel" href="${esc(telHref(p))}" aria-label="${esc(label)} ${esc(p)} 전화 걸기">${esc(label)} ${esc(p)}${tag?`<small>(${esc(tag)})</small>`:''}</a>`);};
+ const people={'어머니':['어머니',s.motherPhone,''],'아버지':['아버지',s.fatherPhone,''],'기타 보호자':[gName,s.guardianPhone,gName==='기타 보호자'?'':'기타보호자']};
+ const pr=people[String(s.primary||'').trim()];
+ add('학생',s.studentPhone,'');
+ if(pr)add(pr[0],s.parentPhone||pr[1],[pr[2],'우선'].filter(Boolean).join('·'));else add('우선',s.parentPhone,'');
+ for(const p of Object.values(people))add(...p);
+ return out.join('');}
 function paneRoster(el){
  const list=ensureRoster(),st=ensureStats(),head=h=>paneHead(`<p class="page-title">${icon('users')}학생</p>${nlink(state.detail.session.id,'수업')}`,h);
  if(!list){el.innerHTML=head('학생 정보를 불러오는 중…')+`<div class="pbody">${classSummary(st)}</div>`;return;}
  const per=s=>st?.students?.[s.registrationId],pill=(txt,v)=>`<span class="pill b-${['good','fair','low','poor'][scoreBand(v)]}">${txt}</span>`;
- const tel=(label,p)=>p?`<a class="tel" href="${esc(telHref(p))}" aria-label="${label} ${esc(p)} 전화 걸기">${label} ${esc(p)}</a>`:'';
- el.innerHTML=head(`학생 <b>${list.length}</b>명 · 출석률은 ${st?monthName(st.month.ym):'이번 달'}, 점수는 최근 평가 · ↗ 학생 보고서(새 탭) · 펼치면 연락처`)+`<div class="pbody">${classSummary(st)}${list.length?`<div class="list roster">${list.map(s=>{const x=per(s),
+ el.innerHTML=head(`학생 <b>${list.length}</b>명 · 출석률은 ${st?monthName(st.month.ym):'이번 달'}, 점수는 최근 평가 · 이름은 학생 보고서(새 탭) · 펼치면 연락처`)+`<div class="pbody">${classSummary(st)}${list.length?`<div class="list roster">${list.map(s=>{const x=per(s),
   a=x&&x.rate!==null&&x.rate!==undefined?pill(`출석 ${x.rate}%`,x.rate):'',b=x&&x.score!==null&&x.score!==undefined?pill(`평가 ${x.score}점`,x.score):'';
-  return `<div class="r1 log-card"><div class="log-head r-body"><div class="r-top"><span class="r-name">${esc(s.name)}${s.school||s.grade?`<small>${esc([s.school,s.grade].filter(Boolean).join(' · '))}</small>`:''}</span>
-  ${s.reportToken?`<a class="icon-btn rep" href="student_report.html?token=${encodeURIComponent(s.reportToken)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(s.name)} 학생 보고서 새 탭에서 열기" title="학생 보고서">${icon('ext')}</a>`:''}</div>
+  // 이름 = 학생 보고서(새 탭), ↗ = 학생정보 Notion 페이지(↗는 늘 Notion 링크, v2.6.9). ↗와 ⌄는 오른쪽 끝 같은 세로선.
+  const sub=s.school||s.grade?`<small>${esc([s.school,s.grade].filter(Boolean).join(' · '))}</small>`:'',phones=contactsHtml(s);
+  return `<div class="r1 log-card"><div class="log-head r-body ${s.studentId?'has-nl':''}"><div class="r-top">${s.reportToken?`<a class="r-name" href="student_report.html?token=${encodeURIComponent(s.reportToken)}" target="_blank" rel="noopener noreferrer" title="학생 보고서 새 탭에서 열기">${esc(s.name)}${sub}</a>`:`<span class="r-name">${esc(s.name)}${sub}</span>`}</div>
   ${a||b?`<div class="r-stats">${a}${b}</div>`:''}
+  ${nlink(s.studentId,s.name+' 학생정보')}
   <button class="log-chev" type="button" data-chev="연락처" aria-expanded="false" aria-label="${esc(s.name)} 연락처 펼치기"><span>${CHEVRON_DOWN}</span></button></div>
-  <div class="log-extra r-extra" hidden><div class="phones">${tel('학생',s.studentPhone)}${tel('우선',s.parentPhone)}${s.studentPhone||s.parentPhone?'':'<span class="no-tel">연락처 없음</span>'}</div>
+  <div class="log-extra r-extra" hidden><div class="phones">${phones||'<span class="no-tel">연락처 없음</span>'}</div>
   ${s.reportToken?'':`<p class="no-rep">${s.reportOff?'학생 보고서 링크가 꺼져 있어요.':'학생 보고서 링크가 없어요.'}</p>`}</div></div>`;}).join('')}</div>`:'<div class="list"><p class="empty">이 수업에 연결된 학생이 없어요.</p></div>'}</div>`;
 }
 
@@ -691,14 +704,14 @@ function recCard(r){
  // 기록 카드는 늘 날짜·수업으로 묶인 곳에 보이므로(학습기록 탭·홈·캘린더·교재 상세) 출제일은 묶음 날짜와 겹쳐 빼고 마감만(v2.5.98)
  const extras=r.kind==='과제'&&r.homework?.due?[`마감: ${withDow(r.homework.due)}`]:[];
  const hw=r.homework,sc=r.score;
- const pill=hw?`<span class="pill ${pillTone(hw.submitted,hw.total)}">제출 ${hw.submitted}/${hw.total}</span>`:sc?`<span class="pill b-${["good","fair","low","poor"][scoreBand(sc.avg)]}">평균 ${sc.avg}점</span>`:'';
+ const pill=hw?`<span class="pill hw ${pillTone(hw.submitted,hw.total)}">제출 ${hw.submitted}/${hw.total}</span>`:sc?`<span class="pill b-${["good","fair","low","poor"][scoreBand(sc.avg)]}">평균 ${sc.avg}점</span>`:'';
  const body=bodyHtml(r.body),meta=units.map(u=>`<span class="log-context">• ${esc(u)}</span>`).join('')+(note?`<span class="log-note">${esc(note)}</span>`:'')+extras.map(x=>`<span class="log-context">• ${esc(x)}</span>`).join('');
  // 펼치기(v2.5.111): 본문을 미리 읽지 않으므로 늘 둔다. 펼칠 때 record-body로 그 기록 본문만 읽는다(이미 받은 본문이 있으면 그대로).
  if(body)state.bodyCache[r.id]=r.body;
  return `<div class="rec log-card has-extra"><div class="log-head"><button class="log-main" type="button" data-rec="${esc(r.id)}"><span class="log-top"><span class="log-icon k-${esc(r.kind||'학습')}">${icon(r.kind||'학습')}<small>${esc(r.kind||'학습')}</small></span><span class="log-title">${esc(title)}</span>${pill}${r.makeup?'<span class="pill s-보강">보강</span>':''}</span>
  ${meta?`<span class="log-meta">${meta}</span>`:''}</button>
- <button class="log-chev" type="button" data-chev data-body="${esc(r.id)}" aria-expanded="false" aria-label="본문 펼치기"><span>${CHEVRON_DOWN}</span></button></div>
- <div class="log-extra" hidden>${body}</div></div>`;}
+ <button class="log-chev" type="button" data-chev="학습활동·본문" data-body="${esc(r.id)}" aria-expanded="false" aria-label="학습활동·본문 펼치기"><span>${CHEVRON_DOWN}</span></button></div>
+ <div class="log-extra" hidden><div class="acts-box"></div><div class="body-box"></div></div></div>`;}
 // Notion 페이지 본문(feedBody.ts가 내려주는 블록 목록) → HTML. 글은 굵게·기울임·코드·링크만 살리고, 사진·동영상·파일은 새 탭으로 연다.
 function spansHtml(b){const sp=Array.isArray(b.spans)&&b.spans.length?b.spans:[{text:b.text||''}];
  return sp.map(s=>{let h=esc(s.text??'');if(s.code)h=`<code>${h}</code>`;if(s.bold)h=`<b>${h}</b>`;if(s.italic)h=`<i>${h}</i>`;if(s.strikethrough)h=`<s>${h}</s>`;
@@ -717,12 +730,61 @@ function bodyHtml(body){if(!Array.isArray(body)||!body.length)return '';const ou
 // 내용 펼치기·접기(모든 화면 공용, 화면을 다시 그리지 않는다)
 $('app').addEventListener('click',e=>{const b=e.target.closest('[data-chev]');if(!b)return;const x=b.closest('.log-card').querySelector('.log-extra'),open=x.hidden;x.hidden=!open;b.setAttribute('aria-expanded',open);const what=b.dataset.chev||'본문';b.setAttribute('aria-label',open?`${what} 접기`:`${what} 펼치기`);
  if(open&&b.dataset.body&&!x.dataset.loaded)fillBody(b.dataset.body,x);});
-// 기록 본문 펼치기(v2.5.111): 처음 펼칠 때 그 기록 본문만 읽고, 받은 본문은 ⟳ 새로고침 전까지 다시 쓴다.
-async function fillBody(id,x){const show=list=>{x.dataset.loaded='1';x.innerHTML=bodyHtml(list)||'<p class="empty body-empty">본문이 없어요.</p>';};
- if(state.bodyCache[id])return show(state.bodyCache[id]);
- x.innerHTML='<p class="empty body-empty">본문을 불러오는 중…</p>';
- try{const r=await api('record-body',{recordId:id});state.bodyCache[id]=r.body||[];show(state.bodyCache[id]);}
- catch(err){x.innerHTML='<p class="empty body-empty">본문을 불러오지 못했어요. 다시 펼쳐 주세요.</p>';if(err.message!=='silent')toast(err.message);}}
+// 기록 펼치기(v2.5.111, v2.6.9): 처음 펼칠 때 학습활동과 본문을 함께 읽는다. 본문은 ⟳ 새로고침 전까지 다시 쓰고, 없으면 칸을 비운다.
+// 둘 중 하나라도 못 읽으면 다음에 펼칠 때 다시 읽는다.
+async function fillBody(id,x){x.dataset.loaded='1';const bx=x.querySelector('.body-box');
+ const body=(async()=>{if(state.bodyCache[id]){bx.innerHTML=bodyHtml(state.bodyCache[id]);return true;}
+  try{const r=await api('record-body',{recordId:id});state.bodyCache[id]=r.body||[];bx.innerHTML=bodyHtml(state.bodyCache[id]);return true;}
+  catch(err){bx.innerHTML='<p class="empty body-empty">본문을 불러오지 못했어요. 다시 펼쳐 주세요.</p>';if(err.message!=='silent')toast(err.message);return false;}})();
+ const ok=await Promise.all([fillActs(id,x.querySelector('.acts-box')),body]);if(ok.includes(false))delete x.dataset.loaded;}
+// ---------- 학습활동(v2.6.9): 기록 화면과 기록 카드 펼치기가 같은 학생 줄을 쓴다 ----------
+// 과제상태 3단계 🔵 제출 · 🟡 일부 제출 · 🔴 미제출(제출 수는 "제출"만). 메모는 모든 구분에 있고 내부용(학부모 리포트에 안 보임).
+const HW_STATES=['제출','일부 제출','미제출'],HW_TONE={'제출':'sub','일부 제출':'mid','미제출':'miss'},HW_SHORT={'제출':'제출','일부 제출':'일부','미제출':'미제출'};
+const hwOf=a=>a.status||(a.submitted?'제출':'미제출');
+const actPct=(c,t)=>Math.round((c||0)/t*100);
+function actSummary(kind,acts){const n=acts.length,parts=[`학습활동 ${n}명`];
+ if(kind==='과제'){const c=st=>acts.filter(a=>hwOf(a)===st).length;parts.push(`제출 ${c('제출')}/${n}`);if(c('일부 제출'))parts.push(`일부 ${c('일부 제출')}`);}
+ if(kind==='평가'){const sc=acts.filter(a=>a.total);parts.push(sc.length?`평균 ${Math.round(sc.reduce((t,a)=>t+actPct(a.correct,a.total),0)/sc.length)}점`:'점수 없음');}
+ return parts.join(' · ');}
+function actRowsHtml(acts,kind,{ed,draft,notion}){const checking=kind==='과제',scoring=kind==='평가';
+ return acts.map(a=>{const ch=draft['a:'+a.id],v=k=>ch&&k in ch?ch[k]:a[k],st=v('status')||hwOf(a),cor=v('correct'),tot=v('total'),memo=v('memo')||'';
+  const ctl=checking?(ed?`<span class="seg" role="group" aria-label="${esc(a.name)} 과제 상태">${HW_STATES.map(x=>`<button type="button" class="v-${x.replace(' ','')} ${st===x?'on':''}" data-st="${esc(a.id)}" data-v="${x}" aria-pressed="${st===x}">${HW_SHORT[x]}</button>`).join('')}</span>`:`<span class="pill ${HW_TONE[st]}">${st}</span>`)
+   :scoring?(ed?`<span class="score"><input inputmode="numeric" data-cor="${esc(a.id)}" value="${cor??''}" aria-label="${esc(a.name)} 맞힌 문항"> / <input inputmode="numeric" data-tot="${esc(a.id)}" value="${tot??''}" aria-label="${esc(a.name)} 전체 문항"></span>`:`<span class="pill k-평가">${cor??'–'} / ${tot??'–'}</span>`):'';
+  return `<div class="row act-row ${ch?'changed':''}" data-row="${esc(a.id)}">${ed?'':`<span class="av">${esc(a.name.slice(0,1))}</span>`}<span class="meta"><span class="t">${esc(a.name)}</span>${scoring&&tot?`<span class="d">${actPct(cor,tot)}점</span>`:''}${!ed&&memo?`<span class="d act-memo-v">${esc(memo)}</span>`:''}</span>
+  ${ctl}${notion?nlink(a.id,a.name+' 학습활동'):''}${ed?`<input class="act-memo" data-memo="${esc(a.id)}" maxlength="2000" value="${esc(memo)}" placeholder="메모(내부용 · 리포트에 안 보여요)" aria-label="${esc(a.name)} 메모">`:''}</div>`;}).join('');}
+// 학생 줄 입력을 draft에 모은다. 원래 값과 같아지면 그 학생은 변경에서 뺀다. redraw(true)는 다시 그리기(상태 버튼), false는 표시만.
+function bindActs(root,acts,draft,redraw){
+ const set=(id,patch)=>{const a=acts.find(x=>x.id===id),cur={...(draft['a:'+id]||{}),...patch};
+  if(Object.entries(cur).every(([k,val])=>(k==='memo'?(a.memo||''):k==='status'?hwOf(a):a[k])===val))delete draft['a:'+id];else draft['a:'+id]=cur;
+  root.querySelector(`[data-row="${CSS.escape(id)}"]`)?.classList.toggle('changed',!!draft['a:'+id]);};
+ root.querySelectorAll('[data-st]').forEach(b=>b.onclick=()=>{set(b.dataset.st,{status:b.dataset.v});redraw(true);});
+ const num=v=>v.trim()===''?null:Number(v);
+ root.querySelectorAll('[data-cor]').forEach(i=>i.onchange=()=>{set(i.dataset.cor,{correct:num(i.value)});redraw(false);});
+ root.querySelectorAll('[data-tot]').forEach(i=>i.onchange=()=>{set(i.dataset.tot,{total:num(i.value)});root.querySelectorAll('[data-tot]').forEach(o=>{if(!o.value){o.value=i.value;set(o.dataset.tot,{total:num(i.value)});}});redraw(false);});
+ root.querySelectorAll('[data-memo]').forEach(i=>i.oninput=()=>{set(i.dataset.memo,{memo:i.value});redraw(false);});}
+const actItems=draft=>Object.entries(draft).filter(([k])=>k.startsWith('a:')).map(([k,v])=>({activityId:k.slice(2),...v}));
+// 기록 카드 펼치기 안 학습활동(v2.6.9): 요약 + 학생 줄 + [편집] → 그 자리에서 고치고 머리 [저장]. 없으면 [학습활동 만들기].
+async function fillActs(id,box){box.innerHTML='<p class="empty body-empty">학습활동을 불러오는 중…</p>';
+ try{drawCardActs(box,{data:await api('activities',{recordId:id}),ed:false,draft:{}});return true;}
+ catch(err){box.innerHTML='<p class="empty body-empty">학습활동을 불러오지 못했어요. 다시 펼쳐 주세요.</p>';if(err.message!=='silent')toast(err.message);return false;}}
+function drawCardActs(box,cs){const {record:r,activities:acts}=cs.data,n=actItems(cs.draft).length,busy=r.activityStatus==='🔄 작업중';
+ if(!acts.length){box.innerHTML=`<div class="acts-head"><span class="acts-sum">학습활동이 아직 없어요</span></div><div class="acts-make"><button class="primary" type="button" data-mk ${busy?'disabled':''}>${esc(ACT_LABEL[r.kind]||'학습활동 만들기')} · ${r.registrationIds.length}명</button>${busy?'<p class="help">만드는 중이에요. 잠시 뒤 다시 펼쳐 주세요.</p>':''}</div>`;
+  box.querySelector('[data-mk]').onclick=e=>run(async()=>{const res=await api('create-activities',{recordId:r.id});toast(res.status==='already_processing'?'이미 만드는 중이에요.':`학습활동을 만들고 있어요 · ${res.students}명`);
+   cs.data={...cs.data,record:{...r,activityStatus:'🔄 작업중'}};drawCardActs(box,cs);
+   setTimeout(()=>run(async()=>{cs.data=await api('activities',{recordId:r.id});if(box.isConnected)drawCardActs(box,cs);}),4000);},e.currentTarget);return;}
+ box.innerHTML=`<div class="acts-head"><span class="acts-sum">${esc(actSummary(r.kind,acts))}</span>${cs.ed?`<button class="act" type="button" data-cx><span>취소</span></button><button class="act save" type="button" data-sv ${n?'':'disabled'}><span>저장${n?' '+n:''}</span></button>`:'<button class="act" type="button" data-ed><span>편집</span></button>'}</div>
+ <div class="list acts-list">${actRowsHtml(acts,r.kind,{ed:cs.ed,draft:cs.draft})}</div>`;
+ const q=x=>box.querySelector(x);
+ if(!cs.ed){q('[data-ed]').onclick=()=>{cs.ed=true;cs.draft={};drawCardActs(box,cs);};return;}
+ q('[data-cx]').onclick=()=>{if(actItems(cs.draft).length&&!confirm('고친 내용을 버릴까요?'))return;cs.ed=false;cs.draft={};drawCardActs(box,cs);};
+ const sv=()=>{const m=actItems(cs.draft).length,b=q('[data-sv]');b.disabled=!m;b.querySelector('span').textContent='저장'+(m?' '+m:'');};
+ bindActs(box,acts,cs.draft,full=>full?drawCardActs(box,cs):sv());
+ q('[data-sv]').onclick=e=>run(async()=>{const items=actItems(cs.draft);if(!items.length)return;
+  await api('save-activities',{items});cs.data=await api('activities',{recordId:r.id});cs.ed=false;cs.draft={};drawCardActs(box,cs);
+  // 카드 알약 "제출 n/전체"도 바로 바꾼다(목록 캐시는 ⟳ 새로고침 때 다시 읽음)
+  const pill=box.closest('.log-card')?.querySelector('.log-top .pill.hw');const all=cs.data.activities;
+  if(pill&&r.kind==='과제'){const c=all.filter(a=>hwOf(a)==='제출').length;pill.className='pill hw '+pillTone(c,all.length);pill.textContent=`제출 ${c}/${all.length}`;}
+  toast(`저장했어요 · ${items.length}명`);},e.currentTarget);}
 // 기록을 날짜별로(v2.5.103 타임라인): 오늘이 맨 위("날짜 · 오늘", 오늘 카드는 테두리) → 지난 날짜 최근부터 → 앞으로 날짜는 가까운 날부터 맨 아래.
 // 보고 있는 수업 날짜는 글자색으로 표시한다.
 function recTimeline(recs,empty){const t=seoulDate(),all=[...new Set(recs.map(r=>r.date||''))];
@@ -750,19 +812,15 @@ function paneRecord(el){
  const re=state.recEdit,v=k=>re[k]??'';
  // 이 수업 학생들의 교재 목록에 없는 교재가 연결돼 있으면(학생이 바뀐 경우 등) 이름 없이 그 사실만 보여 준다.
  const item=bookChoices(state.books,{single:true,include:re.book}).flatMap(g=>g.items).find(x=>x.value===re.book)||(re.book?{value:re.book,title:'연결된 교재',sub:'이 수업 학생들의 교재 목록에 없어요 · 눌러서 바꾸기',cover:'',progress:null,recent:''}:null);
- const scoring=r.kind==='평가',checking=r.kind==='과제';
- el.innerHTML=paneHead(`<p class="page-title"><span class="kind-icon k-${esc(r.kind)}" title="${esc(r.kind)}">${icon(r.kind||'학습')}</span>${esc(r.title)}</p>`,`학생 <b>${r.registrationIds.length}명</b>에게 연결된 기록이에요${r.makeup?' · 보강 기록이라 진도율에서 빠져요':''}`,'',acts.length&&(scoring||checking)?editButton('record'):'')+`<div class="pbody">
+ el.innerHTML=paneHead(`<p class="page-title"><span class="kind-icon k-${esc(r.kind)}" title="${esc(r.kind)}">${icon(r.kind||'학습')}</span>${esc(r.title)}</p>`,`학생 <b>${r.registrationIds.length}명</b>에게 연결된 기록이에요${r.makeup?' · 보강 기록이라 진도율에서 빠져요':''}`,'','')+`<div class="pbody">
  <form class="card form" id="rec-form"><label>교재 <span class="muted">이 수업 학생들의 교재</span></label>
  ${item?bookRow(item,{attr:'id="rec-book" aria-label="교재 바꾸기"',chev:true}):emptyBookRow('id="rec-book"','교재 없음','눌러서 교재 고르기')}
  <label for="rec-topic">주제 ${item?'<span class="muted">(선택)</span>':''}</label><input id="rec-topic" maxlength="200" value="${esc(v('topic'))}" placeholder="교재 없는 기록은 리포트에 주제가 보여요">
  <label for="rec-range">범위</label><input id="rec-range" maxlength="200" value="${esc(v('range'))}" placeholder="예: p.31-35"><div class="unit-box" id="rec-u" hidden></div>
  <label for="rec-content">내용</label><textarea id="rec-content">${esc(v('content'))}</textarea>
  <div class="actions"><button class="secondary" type="submit" id="rec-save">기록 저장</button></div></form>
- <h2 class="sec-title">${icon(r.kind||'학습')}학습활동 <span class="cnt">${acts.length}명</span></h2>
- ${acts.length?`<div class="list">${acts.map(a=>{const ch=state.draft['a:'+a.id];const sub=ch?.submitted??a.submitted,cor=ch?.correct??a.correct,tot=ch?.total??a.total;
-  return `<div class="row ${ch?'changed':''}"><span class="av">${esc(a.name.slice(0,1))}</span><span class="meta"><span class="t">${esc(a.name)}</span>${scoring&&tot?`<span class="d">${Math.round((cor||0)/tot*100)}점</span>`:''}</span>
-  ${checking?(ed?`<span class="seg"><button type="button" class="v-제출 ${sub?'on':''}" data-sub="${esc(a.id)}" data-v="1">제출</button><button type="button" class="v-미제출 ${sub?'':'on'}" data-sub="${esc(a.id)}" data-v="0">미제출</button></span>`:`<span class="pill ${sub?'sub':'miss'}">${sub?'제출':'미제출'}</span>`):''}
-  ${scoring?(ed?`<span class="score"><input inputmode="numeric" data-cor="${esc(a.id)}" value="${cor??''}" aria-label="${esc(a.name)} 맞힌 문항"> / <input inputmode="numeric" data-tot="${esc(a.id)}" value="${tot??''}" aria-label="${esc(a.name)} 전체 문항"></span>`:`<span class="pill k-평가">${cor??'–'} / ${tot??'–'}</span>`):''}${nlink(a.id,a.name+' 학습활동')}</div>`;}).join('')}</div>`
+ <h2 class="sec-title">${icon(r.kind||'학습')}학습활동 <span class="cnt">${acts.length?esc(actSummary(r.kind,acts).replace(/^학습활동 /,'')):'0명'}</span><span class="grow"></span>${acts.length?editButton('record'):''}</h2>
+ ${acts.length?`<div class="list acts-list">${actRowsHtml(acts,r.kind,{ed,draft:state.draft,notion:true})}</div>`
  :`<div class="list"><p class="empty">아직 학습활동이 없어요.</p></div>`}
  ${acts.length?'':`<div class="actions"><button class="primary" type="button" id="make-acts" ${r.activityStatus==='🔄 작업중'?'disabled':''}>${esc(ACT_LABEL[r.kind]||'학습활동 만들기')} · ${r.registrationIds.length}명</button></div>${r.activityStatus==='🔄 작업중'?'<p class="help">만드는 중이에요. 잠시 뒤 새로고침해 주세요.</p>':''}`}</div>`;
  const q=s=>el.querySelector(s);bindCovers(el);
@@ -776,12 +834,8 @@ function paneRecord(el){
   run(async()=>{const u=await api('update-record',body);if(u.unitsSaved===false)toast('학습기록 DB에 "선택 단원" 속성이 없어 고른 단원은 저장하지 않았어요.');state.acts=await api('activities',{recordId:r.id});recEditFrom(state.acts.record);await reloadSession();toast('기록을 저장했어요.');render();},e.submitter);};
  if(q('#make-acts'))q('#make-acts').onclick=e=>run(async()=>{const res=await api('create-activities',{recordId:r.id});toast(res.status==='already_processing'?'이미 만드는 중이에요.':`학습활동을 만들고 있어요 · ${res.students}명`);setTimeout(()=>run(async()=>{const fresh=await api('activities',{recordId:r.id});if(state.view==='record'&&state.recordId===r.id){state.acts=fresh;render();}}),4000);},e.currentTarget);
  bindEdit(el);
- const setDraft=(id,patch)=>{const a=acts.find(x=>x.id===id),cur={...(state.draft['a:'+id]||{}),...patch};const same=Object.entries(cur).every(([k,val])=>a[k]===val);if(same)delete state.draft['a:'+id];else state.draft['a:'+id]=cur;updateSavebar();};
- el.querySelectorAll('[data-sub]').forEach(b=>b.onclick=()=>{setDraft(b.dataset.sub,{submitted:b.dataset.v==='1'});render();});
- const num=v=>v.trim()===''?null:Number(v);
- el.querySelectorAll('[data-cor]').forEach(i=>i.onchange=()=>setDraft(i.dataset.cor,{correct:num(i.value)}));
- el.querySelectorAll('[data-tot]').forEach(i=>i.onchange=()=>{setDraft(i.dataset.tot,{total:num(i.value)});el.querySelectorAll('[data-tot]').forEach(o=>{if(!o.value){o.value=i.value;setDraft(o.dataset.tot,{total:num(i.value)});}});});
- if(ed)state.saver=async()=>{const items=Object.entries(state.draft).filter(([k])=>k.startsWith('a:')).map(([k,v])=>({activityId:k.slice(2),...v}));
+ if(ed&&el.querySelector('.acts-list'))bindActs(el.querySelector('.acts-list'),acts,state.draft,full=>{updateSavebar();if(full)render();});
+ if(ed)state.saver=async()=>{const items=actItems(state.draft);
   await api('save-activities',{items});state.edit=false;state.draft={};updateSavebar();state.acts=await api('activities',{recordId:r.id});toast(`저장했어요 · ${items.length}명`);render();};
 }
 

@@ -59,6 +59,7 @@ function homeworkPillTone(status) {
   const s = String(status || "").trim()
   if (s === "제출") return "tone-submit"
   if (s === "미제출") return "tone-late"
+  if (s === "일부 제출") return "tone-yellow"
   return ""
 }
 // 평가 정답률에 따른 배지 색상 톤 (60미만 빨강 / 70미만 주황 / 80미만 노랑 / 90미만 초록 / 100미만 파란 / 100 파란+이모지)
