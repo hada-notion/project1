@@ -1,8 +1,8 @@
 // _shared/classRoomCopy.ts
 //
 // 수업 관리 복사본(v2.5.113, 설계 docs/설계-수업관리-복사본.md 2단계): Notion 수업·출석·학습기록·학습활동을
-// Supabase cr_sessions·cr_attendance·cr_records·cr_activities에 맞춘다. 이 단계에서는 채우기만 하고,
-// 수업 관리(class-room)는 아직 이 표를 읽지 않는다(5단계에서 전환).
+// Supabase cr_sessions·cr_attendance·cr_records·cr_activities에 맞춘다. 수업 관리(class-room)가 이 표를 읽는지는
+// 함수 설정값 CLASS_ROOM_SOURCE가 정한다(v2.5.116, classRoomRead.ts).
 //
 // 맞추는 방법
 //   - reconcile: 기간 안 전체를 Notion에서 다시 읽어 upsert하고, 기간 안인데 Notion에 없는 행은 지운다.
@@ -28,6 +28,8 @@ const DAY = 86_400_000
 const prop = (p: Page, name: string) => p?.properties?.[name]
 const rel = (p: Page, name: string) => relationIds(prop(p, name))
 const str = (p: Page, name: string) => text(prop(p, name)).trim()
+// 수업 관리가 Notion에서 앞뒤 공백을 그대로 돌려주는 글 값(메모·주제·범위·내용 등)은 그대로 저장한다(v2.5.116, 읽기 전환 비교).
+const raw = (p: Page, name: string) => text(prop(p, name))
 const iso = (v: string | null | undefined) => (v ? new Date(v).toISOString() : null)
 
 // 서울 날짜(YYYY-MM-DD). 날짜만 있는 값은 그대로.
@@ -65,13 +67,15 @@ export function attendanceRow(p: Page): Row {
 		id: p.id,
 		session_ids: rel(p, "수업"),
 		registration_id: rel(p, "등록")[0] ?? null,
-		student_name: formulaString(p, "학생이름(보고서)") || str(p, "출석"),
+		student_name: formulaString(p, "학생이름(보고서)") || raw(p, "출석"),
 		status: selectName(p, "출석 상태") ?? "",
 		class_at: iso(dateStartOf(prop(p, "수업일시"))),
+		class_start_text: prop(p, "수업일시")?.date?.start ?? null,
+		class_label: formulaString(p, "클래스(보고서)") ?? "",
 		arrived_at: iso(dateStartOf(prop(p, "등원스템프"))),
 		left_at: iso(dateStartOf(prop(p, "하원스템프"))),
-		memo: str(p, "메모"),
-		comment: str(p, "선생님 한마디"),
+		memo: raw(p, "메모"),
+		comment: raw(p, "선생님 한마디"),
 		due_activity_ids: rel(p, "과제"),
 		notion_edited_at: p.last_edited_time,
 	}
@@ -87,11 +91,11 @@ export function recordRow(p: Page, bookNames: Map<string, string>): Row {
 		session_ids: rel(p, "수업"),
 		book_id: rel(p, "교재")[0] ?? null,
 		progress_book_id: rel(p, "진도교재")[0] ?? null,
-		subject: regular || (progress ?? "").replace(/\(.*\)$/, "").trim() || str(p, "주제"),
-		topic: str(p, "주제"),
-		range: str(p, "범위"),
+		subject: regular || (progress ?? "").replace(/\(.*\)$/, "").trim() || raw(p, "주제"),
+		topic: raw(p, "주제"),
+		range: raw(p, "범위"),
 		unit: str(p, "단원"),
-		content: str(p, "내용"),
+		content: raw(p, "내용"),
 		is_makeup: checkboxValue(p, "보강"),
 		registration_ids: rel(p, "등록"),
 		activity_ids: rel(p, "학습활동"),
@@ -173,6 +177,30 @@ export async function deleteCopyRows(table: CopyTable, ids: string[]): Promise<v
 		if (!res.ok) throw new Error(`${table} 삭제 실패: ${res.status} ${await res.text()}`)
 	}
 }
+// ---------- 읽기(v2.5.116, 5단계: 수업 관리가 복사본을 읽는다) ----------
+// query = PostgREST 조건과 order(예: class_ids=cs.{id}&starts_at=gte.…&order=starts_at,id). 1000행씩 끝까지 읽는다.
+export async function selectCopy(table: CopyTable, query: string): Promise<Page[]> {
+	const rows: Page[] = []
+	for (let offset = 0; ; offset += 1000) {
+		const res = await fetchSupabaseWithRetry(`${SB_URL()}/rest/v1/${table}?select=*&${query}&limit=1000&offset=${offset}`, { headers: sbHeaders() })
+		if (!res.ok) throw new Error(`${table} 읽기 실패: ${res.status} ${await res.text()}`)
+		const part: Page[] = await res.json()
+		rows.push(...part)
+		if (part.length < 1000) return rows
+	}
+}
+// id 목록의 행(100개씩). 돌려주는 순서는 ids 순서, 복사본에 없는 id는 빠진다.
+export async function selectCopyByIds(table: CopyTable, ids: string[]): Promise<Page[]> {
+	const uniq = [...new Set(ids.filter(Boolean))]
+	const found = new Map<string, Page>()
+	for (let i = 0; i < uniq.length; i += 100) {
+		const list = uniq.slice(i, i + 100).map((id) => `"${id}"`).join(",")
+		for (const r of await selectCopy(table, `id=in.(${list})&order=id`)) found.set(r.id as string, r)
+	}
+	return uniq.map((id) => found.get(id)).filter(Boolean) as Page[]
+}
+export const copyTime = (v: string) => encodeURIComponent(v)
+
 async function getCursor(table: CopyTable): Promise<string | null> {
 	const res = await fetchSupabaseWithRetry(`${SB_URL()}/rest/v1/sync_cursors?source=eq.${table}&select=last_synced_at`, { headers: sbHeaders() })
 	if (!res.ok) throw new Error(`sync_cursors 조회 실패: ${res.status}`)
@@ -312,6 +340,36 @@ export function removeLater(ids: string[]): void {
 			try { await deleteCopyRows(table, uniq) } catch (err) { logMirror(`${table} 삭제`, err) }
 		}
 	})
+}
+
+// 수업 관리 읽기 출처(v2.5.116): notion(기본) / shadow(Notion을 보여 주고 뒤에서 복사본과 비교) / copy(복사본).
+export function classRoomSource(): "notion" | "shadow" | "copy" {
+	const v = Deno.env.get("CLASS_ROOM_SOURCE")
+	return v === "copy" || v === "shadow" ? v : "notion"
+}
+// copy일 때는 수업 관리가 저장 직후 다시 읽으므로 복사본을 맞춘 뒤 응답한다(실패해도 저장은 그대로, 로그만). 아니면 뒤에서.
+export async function mirrorJobs(jobs: [CopyTable, string[]][]): Promise<void> {
+	if (writeOff()) return
+	if (classRoomSource() !== "copy") return mirrorLater(jobs)
+	for (const [table, ids] of jobs) {
+		try { await mirrorPageIds(table, ids) } catch (err) { logMirror(table, err) }
+	}
+}
+export async function removePages(ids: string[]): Promise<void> {
+	const uniq = [...new Set(ids.filter(Boolean))]
+	if (!uniq.length || writeOff()) return
+	if (classRoomSource() !== "copy") return removeLater(uniq)
+	for (const table of COPY_TABLES) {
+		try { await deleteCopyRows(table, uniq) } catch (err) { logMirror(`${table} 삭제`, err) }
+	}
+}
+// Notion 수정 응답(바뀐 페이지 전체)을 그대로 복사본에 넣는다 — 다시 읽지 않는다.
+export async function mirrorSaved(table: CopyTable, pages: Page[]): Promise<void> {
+	const live = pages.filter((p) => p?.id && !p.archived && !p.in_trash)
+	if (!live.length || writeOff()) return
+	const job = async () => { try { await upsertCopyRows(table, await toRows(table, live)) } catch (err) { logMirror(table, err) } }
+	if (classRoomSource() === "copy") await job()
+	else runInBackground(job)
 }
 
 // 키오스크 등원·하원: Notion을 다시 읽지 않고 그 출석 행의 시각·상태만 고친다(행이 아직 없으면 아무 일도 없음).

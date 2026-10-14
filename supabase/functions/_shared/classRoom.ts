@@ -44,7 +44,7 @@ import { isRunning } from "./statusTracking.ts"
 import { text as propText, numberOf as propNumber, fileUrlOf, dateStartOf } from "./reportCacheShared.ts"
 import { readPageBodyBlocks } from "./feedBody.ts"
 import { runInBackground } from "./backgroundTask.ts"
-import { mirrorLater, mirrorPageIds, removeLater } from "./classRoomCopy.ts"
+import { mirrorJobs, mirrorPageIds, mirrorSaved, removePages } from "./classRoomCopy.ts"
 
 type Page = Record<string, any>
 
@@ -56,7 +56,7 @@ export class ClassRoomError extends Error {
 
 export const KINDS = ["학습", "과제", "평가"] as const
 export const ATTENDANCE_STATUSES = ["🟢 출석", "🔴 결석", "🔵 보강"] as const
-const HOMEWORK_SUBMITTED = "🔵 제출"
+export const HOMEWORK_SUBMITTED = "🔵 제출"
 const HOMEWORK_MISSING = "🔴 미제출"
 const GROUP_PROGRESS = "그룹 진도"
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"]
@@ -79,7 +79,7 @@ const touched = () => ({ "학습정보 수정일": nowStamp() })
 function dedupe(ids: string[]): string[] {
 	return Array.from(new Set(ids.filter(Boolean)))
 }
-function isId(v: unknown): v is string {
+export function isId(v: unknown): v is string {
 	return typeof v === "string" && /^[0-9a-z-]{1,64}$/i.test(v) // Notion 페이지 id(하이픈 있는/없는 hex). 경로 문자는 막는다
 }
 function ids(v: unknown, max = MAX_ITEMS): string[] {
@@ -101,7 +101,7 @@ export function seoulLabel(iso: string | null): string {
 	const dd = String(d.getUTCDate()).padStart(2, "0")
 	return `${mm}.${dd}(${WEEKDAYS[d.getUTCDay()]})`
 }
-function seoulTime(iso: string | null): string {
+export function seoulTime(iso: string | null): string {
 	if (!iso || !iso.includes("T")) return ""
 	const d = new Date(new Date(iso).getTime() + 9 * 3_600_000)
 	return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`
@@ -158,12 +158,12 @@ function sessionSummary(p: Page) {
 }
 
 // 서울 날짜(YYYY-MM-DD). 날짜만 있는 값은 그대로.
-function seoulDate(iso: string | null): string {
+export function seoulDate(iso: string | null): string {
 	if (!iso) return ""
 	if (!iso.includes("T")) return iso.slice(0, 10)
 	return new Date(new Date(iso).getTime() + 9 * 3_600_000).toISOString().slice(0, 10)
 }
-function teacherFilter(teacherId?: string) {
+export function teacherFilter(teacherId?: string) {
 	if (teacherId !== undefined && teacherId !== "" && !isId(teacherId)) throw new ClassRoomError(400, "강사 형식이 올바르지 않습니다.")
 	return teacherId ? [{ property: "담당강사", relation: { contains: teacherId } }] : []
 }
@@ -659,8 +659,8 @@ export async function saveAttendance(items: unknown) {
 		if (it.comment !== undefined) props["선생님 한마디"] = richText(String(it.comment))
 		return { id: it.attendanceId as string, props }
 	})
-	await mapWithConcurrency(updates, 3, (u) => updatePageProperties(u.id, u.props))
-	mirrorLater([["cr_attendance", updates.map((u) => u.id)]]) // 복사본 함께 쓰기(v2.5.115)
+	const saved = await mapWithConcurrency(updates, 3, (u) => updatePageProperties(u.id, u.props)) as Page[]
+	await mirrorSaved("cr_attendance", saved) // 복사본 함께 쓰기(v2.5.115, v2.5.116부터 Notion 수정 응답을 그대로)
 	return { saved: updates.length }
 }
 
@@ -679,8 +679,8 @@ export async function saveActivities(items: unknown) {
 		if (typeof it.correct === "number" && typeof it.total === "number" && it.correct > it.total) throw new ClassRoomError(400, "맞힌 문항이 전체 문항보다 많습니다.")
 		return { id: it.activityId as string, props }
 	})
-	await mapWithConcurrency(updates, 3, (u) => updatePageProperties(u.id, u.props))
-	mirrorLater([["cr_activities", updates.map((u) => u.id)]]) // 복사본 함께 쓰기(v2.5.115)
+	const saved = await mapWithConcurrency(updates, 3, (u) => updatePageProperties(u.id, u.props)) as Page[]
+	await mirrorSaved("cr_activities", saved) // 복사본 함께 쓰기(v2.5.115, v2.5.116부터 Notion 수정 응답을 그대로)
 	return { saved: updates.length }
 }
 
@@ -760,7 +760,7 @@ export async function createRecords(body: any) {
 		results.push({ id: page.id as string, title: anyTitleText(page) || String((props["학습"] as any).title[0].text.content), created: true })
 	}
 	// 복사본 함께 쓰기(v2.5.115): 새 기록과, "학습기록" 관계가 바뀐 수업
-	mirrorLater([["cr_records", results.map((r) => r.id)], ["cr_sessions", [ctx.session.id as string]]])
+	await mirrorJobs([["cr_records", results.map((r) => r.id)], ["cr_sessions", [ctx.session.id as string]]])
 	return { records: results }
 }
 
@@ -802,8 +802,7 @@ export async function updateRecord(body: any) {
 		const kind = selectName(record, "구분") ?? "학습"
 		props["학습"] = { title: [{ text: { content: recordTitle(kind, subject, session ? await className(session) : "", session ? dateStart(session, "수업일시") : null) } }] }
 	}
-	await updatePageProperties(record.id, props)
-	mirrorLater([["cr_records", [record.id as string]]]) // 복사본 함께 쓰기(v2.5.115)
+	await mirrorSaved("cr_records", [await updatePageProperties(record.id, props) as Page]) // 복사본 함께 쓰기(v2.5.115)
 	return { ok: true }
 }
 
@@ -860,7 +859,7 @@ export async function createMakeupSession(body: any) {
 	}) as Page
 	await mapWithConcurrency(attendanceIds, 3, (id) =>
 		updatePageProperties(id, { "수업": relation([session.id]), "담당강사": relation([body.teacherId]), ...touched() }))
-	mirrorLater([["cr_sessions", [session.id as string]], ["cr_attendance", attendanceIds]]) // 복사본 함께 쓰기(v2.5.115)
+	await mirrorJobs([["cr_sessions", [session.id as string]], ["cr_attendance", attendanceIds]]) // 복사본 함께 쓰기(v2.5.115)
 	return { sessionId: session.id as string }
 }
 
@@ -878,7 +877,7 @@ export async function unlinkMakeup(attendanceId: string) {
 		"출석": relation(rel(session, "출석").filter((id) => id !== attendanceId)),
 		"등록": relation(rel(session, "등록").filter((id) => !regs.includes(id))),
 	})
-	mirrorLater([["cr_attendance", [attendanceId]], ["cr_sessions", [sessionId]]]) // 복사본 함께 쓰기(v2.5.115)
+	await mirrorJobs([["cr_attendance", [attendanceId]], ["cr_sessions", [sessionId]]]) // 복사본 함께 쓰기(v2.5.115)
 	return { ok: true }
 }
 
@@ -892,8 +891,8 @@ export async function deleteMakeupSession(sessionId: string) {
 	const attendanceIds = rel(session, "출석")
 	await mapWithConcurrency(attendanceIds, 3, (id) => updatePageProperties(id, { "수업": relation([]), "담당강사": relation([]), ...touched() }))
 	await archivePage(sessionId)
-	removeLater([sessionId]) // 복사본 함께 쓰기(v2.5.115)
-	mirrorLater([["cr_attendance", attendanceIds]])
+	await removePages([sessionId]) // 복사본 함께 쓰기(v2.5.115)
+	await mirrorJobs([["cr_attendance", attendanceIds]])
 	return { ok: true, released: attendanceIds.length }
 }
 
