@@ -447,6 +447,8 @@ body {
 .log-note { font-size: 12px; color: var(--text-muted); line-height: 1.5; margin-bottom: 6px; white-space: pre-wrap; }
 .log-photo { width: 100%; border-radius: 10px; aspect-ratio: 4 / 3; object-fit: cover; display: block; margin-top: 8px; }
 .log-date-group { margin-bottom: 6px; }
+/* 학습기록 탭 오늘 묶음(v2.5.103): 맨 위 "날짜 · 오늘", 오늘 카드는 테두리 */
+.log-date-group.today .log-card { box-shadow: inset 0 0 0 1.5px var(--brand-border), 0 1px 4px rgba(0,0,0,0.06); }
 .log-date-label { font-size: 13px; font-weight: 600; color: var(--text-subtle); margin: 0 0 10px; display: flex; align-items: center; gap: 6px; }
 
 .day-detail-item { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; border-bottom: 1px solid #f5f5f7; }
@@ -808,16 +810,17 @@ body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
 .day-summary .val { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--text-subtle); }
 /* 수업 칸 막대 (캘린더) */
 .session-bar-card { background: #fff; border-radius: 14px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); margin-bottom: 12px; }
-.session-bar { display: flex; align-items: center; gap: 10px; }
+/* 막대 카드 B안(v2.5.103, 수업 관리와 같은 규칙): 첫 줄 "n월 수업 ··· 지난/전체회", 둘째 줄 막대 한 줄 */
+.session-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .session-bar .lbl { font-size: 13px; color: var(--text-muted); font-weight: 600; white-space: nowrap; }
-.session-bar .cells { flex: 1; display: flex; gap: 3px; min-width: 0; }
+.session-bar .cells { order: 3; flex: 1 1 100%; display: flex; gap: 3px; min-width: 0; margin-top: -2px; }
 .session-bar .cells i { flex: 1; height: 10px; border-radius: 3px; background: var(--brand-soft); }
 .session-bar .cells i.출석, .session-bar .cells i.완료 { background: var(--bar-present); }
 .session-bar .cells i.결석, .session-bar .cells i.미완료 { background: var(--bar-absent); }
 .session-bar .cells i.보강 { background: var(--bar-makeup); }
 .session-bar .cells i.부분완료 { background: var(--bar-partial); }
 .session-bar .cells i.지남 { background: repeating-linear-gradient(135deg, var(--brand-soft) 0 3px, var(--brand-light) 3px 6px); }
-.session-bar b { font-size: 15px; color: var(--brand-deep); white-space: nowrap; }
+.session-bar b { margin-left: auto; font-size: 15px; color: var(--brand-deep); white-space: nowrap; }
 .session-chips { display: flex; gap: 6px; margin-top: 10px; }
 .session-chips div { flex: 1; border-radius: 10px; padding: 8px 4px; text-align: center; font-size: 11px; color: var(--text-muted); background: var(--brand-tint); font-weight: 600; }
 .session-chips div b { display: block; font-size: 16px; font-weight: 800; color: var(--text-primary); }
@@ -926,6 +929,6 @@ body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
 
 <script src="hada_config.js"></script>
 <script src="student_report_part1.js?v=48c8ebc8"></script>
-<script src="student_report_part2.js?v=04553072"></script>
+<script src="student_report_part2.js?v=4f625933"></script>
 </body>
 </html>

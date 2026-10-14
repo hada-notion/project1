@@ -1071,15 +1071,17 @@ function renderDetail() {
         homework.forEach((h) => items.push(logItemOfHomework(h)))
         tests.forEach((t) => items.push(logItemOfTest(t)))
         const filtered = studyLogFilter === "전체" ? items : items.filter((it) => it.type === studyLogFilter)
-        const sorted = filtered.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+        // (v2.5.103) 오늘이 맨 위 → 지난 날짜 최근부터 → 앞으로 날짜는 가까운 날부터 맨 아래
+        const rank = (d) => (d === MOCK_TODAY ? 0 : d < MOCK_TODAY ? 1 : 2)
+        const sorted = filtered.slice().sort((a, b) => rank(a.date) - rank(b.date) || (rank(a.date) === 2 ? (a.date < b.date ? -1 : a.date > b.date ? 1 : 0) : (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)))
         const groups = []
         sorted.forEach((l) => {
           const last = groups[groups.length - 1]
           if (last && last.date === l.date) { last.items.push(l) } else { groups.push({ date: l.date, items: [l] }) }
         })
         return groups.length ? groups.map((g) => `
-          <div class="log-date-group">
-            <div class="log-date-label">${esc(withDow(g.date))}</div>
+          <div class="log-date-group ${g.date === MOCK_TODAY ? "today" : ""}">
+            <div class="log-date-label">${esc(withDow(g.date))}${g.date === MOCK_TODAY ? " · 오늘" : ""}</div>
             ${g.items.map((l) => logCardHtml(l)).join("")}
           </div>
         `).join("") : `<div class="empty">기록이 없습니다.</div>`

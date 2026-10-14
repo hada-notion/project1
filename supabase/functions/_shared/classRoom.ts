@@ -385,6 +385,20 @@ export async function loadClassSessions(sessionId: string, around?: string) {
 	const { sessions, range } = await classSessionPages(session, around)
 	if (!sessions.length) return { sessions: [] }
 	const attendances = await sessionAttendances(sessions, range)
+	// 과제 현황(v2.5.103): 같은 범위 과제 학습기록의 학습활동을 "과제 마감일"(서울 날짜)로 모아, 수업 날짜마다 그날 마감 과제의 제출 수/전체.
+	const homeworkRecords = (await sessionRecords(sessions)).filter((r) => selectName(r, "구분") === "과제")
+	const dueByDate = new Map<string, { done: number; total: number }>()
+	for (let i = 0; i < homeworkRecords.length; i += 90) {
+		const part = homeworkRecords.slice(i, i + 90)
+		for (const a of await queryAllPages(DS_STUDY_ACTIVITY, { or: part.map((r) => ({ property: "학습기록", relation: { contains: r.id } })) })) {
+			const due = seoulDate(dateStartOf(a.properties?.["과제 마감일"]) ?? null)
+			if (!due) continue
+			const d = dueByDate.get(due) ?? { done: 0, total: 0 }
+			d.total++
+			if (selectName(a, "과제상태") === HOMEWORK_SUBMITTED) d.done++
+			dueByDate.set(due, d)
+		}
+	}
 	return {
 		sessions: sessions.map((p: Page) => {
 			const mine = attendances.filter((a) => rel(a, "수업").includes(p.id as string))
@@ -398,6 +412,8 @@ export async function loadClassSessions(sessionId: string, around?: string) {
 				present: mine.filter((a) => status(a) === "🟢 출석" || (!status(a) && dateStart(a, "등원스템프"))).length,
 				absent: mine.filter((a) => status(a) === "🔴 결석" || status(a) === "🔵 보강").length,
 				missing: mine.filter((a) => !status(a) && !dateStart(a, "등원스템프")).length,
+				hwDone: dueByDate.get(seoulDate(start))?.done ?? 0,
+				hwTotal: dueByDate.get(seoulDate(start))?.total ?? 0,
 			}
 		}),
 	}
