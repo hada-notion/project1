@@ -14,6 +14,10 @@
  /* 그림(점·막대·도넛·칸 테두리)용 경고색: --warning(#F59F00)은 흰 바탕 대비 2.1:1이라 그림 기준(3:1)에 못 미친다. 흰 바탕 3.34:1, 연한 카드 바탕(--brand-tint) 3.16:1.
     다른 의미색(--success 3.36, --danger 3.91, --info 4.07)은 그림에 그대로 쓴다. 글자는 -ink(DESIGN.md 1부 3장) */
  --warning-graphic:#C27E00;
+ /* 점수·비율 4구간(DESIGN.md 1부 3장): 50 이상 70 미만 = 주황. 연한 바탕 위 글자 4.89:1 */
+ --orange-soft:#FFF1E0;--orange-ink:#B54708;
+ /* 도넛처럼 가운데 숫자로 값을 읽는 넓은 면적 그림의 중간 톤(90 이상·70 이상·50 이상·50 미만) */
+ --chart-good:#5DBB8A;--chart-fair:#F3C15A;--chart-low:#F2A06B;--chart-poor:#EC8A85;
  /* 반별 색(v2.5.90): 학부모 리포트 통합 시간표의 반 색(student_report_part1.js CLASS_COLOR_PALETTE)과 같은 8쌍, 순서는 반 이모지 🟣🔵🟢🟠🔴🟡🟤⚪와 같다.
     반 이름 해시(h=h*31+글자)를 8로 나눈 나머지 +1번을 쓴다. 바탕 -bg, 글자 -fg */
  --class-1-bg:#F3E8FD;--class-1-fg:#7C3AED;--class-2-bg:#DBEAFE;--class-2-fg:#1D4ED8;--class-3-bg:#DCFCE7;--class-3-fg:#15803D;--class-4-bg:#FFEDD5;--class-4-fg:#C2410C;

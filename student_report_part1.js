@@ -65,11 +65,10 @@ function homeworkPillTone(status) {
 function scorePillTone(correct, total) {
   if (!total) return ""
   const pct = Math.round((correct / total) * 100)
-  if (pct >= 100) return "tone-perfect"
-  if (pct >= 90) return "tone-blue"
-  if (pct >= 80) return "tone-green"
+  // 점수 4구간(docs/DESIGN.md 1부 3장): 90 이상 초록 · 70 이상 노랑 · 50 이상 주황 · 50 미만 빨강
+  if (pct >= 90) return "tone-green"
   if (pct >= 70) return "tone-yellow"
-  if (pct >= 60) return "tone-orange"
+  if (pct >= 50) return "tone-orange"
   return "tone-red"
 }
 // 실제 점수(정답률)를 "N점 (correct/total)" 형식으로 표기한다. (100점이라고 별도 아이콘을 붙이지 않는다.)

@@ -284,6 +284,11 @@ function buildHomeworkBarHtml(r, y, m, withChips) {
     </div>
   `
 }
+// 도넛 색(docs/DESIGN.md 1부 3장): 비율·점수 4구간을 중간 톤으로. 가운데 숫자로 값을 읽으므로 그림 대비 3:1 대상이 아니다.
+function bandChartColor(v) {
+  const n = Number(v) || 0
+  return n >= 90 ? "var(--chart-good)" : n >= 70 ? "var(--chart-fair)" : n >= 50 ? "var(--chart-low)" : "var(--chart-poor)"
+}
 function buildSessionBarHtml(r, y, m, mode, withChips) {
   if (mode !== "attendance") return buildHomeworkBarHtml(r, y, m, withChips)
   const sessions = monthSessions(r, y, m)
@@ -872,17 +877,17 @@ function buildReportTabHtml(r) {
     <div class="report-donut-row three">
       <div class="donut-card">
         <div class="donut-title"><span class="inline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg></span>출석률</div>
-        <div class="donut" style="background: conic-gradient(var(--success) 0% ${attRate}%, #eee ${attRate}% 100%)"><div class="donut-hole">${attRate}%</div></div>
+        <div class="donut" style="background: conic-gradient(${bandChartColor(attRate)} 0% ${attRate}%, var(--brand-soft) ${attRate}% 100%)"><div class="donut-hole">${attRate}%</div></div>
         <div class="donut-count-below">(${presentCount}/${countedAttendanceRows.length})</div>
       </div>
       <div class="donut-card clickable" onclick="showHomeworkPeriodModal('${rangeStart}','${rangeEnd}','${esc(periodLabel)} 과제이행률')">
         <div class="donut-title"><span class="inline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg></span>과제이행률</div>
-        <div class="donut" style="background: conic-gradient(var(--success) 0% ${hwRate}%, #eee ${hwRate}% 100%)"><div class="donut-hole">${hwRate}%</div></div>
+        <div class="donut" style="background: conic-gradient(${bandChartColor(hwRate)} 0% ${hwRate}%, var(--brand-soft) ${hwRate}% 100%)"><div class="donut-hole">${hwRate}%</div></div>
         <div class="donut-count-below">(${doneHomework}/${homeworkItems.length})</div>
       </div>
       <div class="donut-card${testItems.length ? " clickable" : ""}"${testItems.length ? ` onclick="showTestPeriodModal('${rangeStart}','${rangeEnd}','${esc(periodLabel)} 평가')"` : ""}>
         <div class="donut-title"><span class="inline-icon">${KIND_ICONS["평가"]}</span>평가 평균</div>
-        <div class="donut" style="background: conic-gradient(#6b5d4d 0% ${testAvg ?? 0}%, #eee ${testAvg ?? 0}% 100%)"><div class="donut-hole">${testAvg !== null ? testAvg.toFixed(1) + "점" : "–"}</div></div>
+        <div class="donut" style="background: conic-gradient(${bandChartColor(testAvg ?? 0)} 0% ${testAvg ?? 0}%, var(--brand-soft) ${testAvg ?? 0}% 100%)"><div class="donut-hole">${testAvg !== null ? testAvg.toFixed(1) + "점" : "–"}</div></div>
         <div class="donut-count-below">${scoredTests.length ? `(평가 ${scoredTests.length}개)` : "(평가 없음)"}</div>
       </div>
     </div>

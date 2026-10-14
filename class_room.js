@@ -580,12 +580,14 @@ function openMemo(id,key='memo'){
 // 학생 탭을 열 때만 읽는다(roster, class-stats). 보고서 링크가 꺼져 있거나 토큰이 없으면 ↗ 대신 안내 글자.
 function ensureStats(){const id=state.sessionId;if(state.statsCache[id])return state.statsCache[id];
  if(ensureStats.busy!==id){ensureStats.busy=id;whenLoaded(api('class-stats',{sessionId:id}).then(r=>{state.statsCache[id]=r;}).finally(()=>{ensureStats.busy=null;}));}return null;}
+// 비율·점수 4구간(docs/DESIGN.md 1부 3장): 0 = 90 이상, 1 = 70 이상, 2 = 50 이상, 3 = 50 미만
+const scoreBand=v=>v>=90?0:v>=70?1:v>=50?2:3;
 const monthName=ym=>Number(ym.slice(5))+'월';
 function classSummary(st){
  if(!st)return '<div class="card cls-sum"><p class="empty">반 요약을 불러오는 중…</p></div>';
  const pct=r=>r===null||r===undefined?'–':r+'%',t=st.tests,avg=t.length?Math.round(t.reduce((n,x)=>n+x.avg,0)/t.length*10)/10:null;
- const tone=(v,lo)=>v===null||v===undefined?'':v>=90?'good':v<lo?'bad':'';
- return `<div class="card cls-sum"><div class="home-stats">${stat(pct(st.month.rate),`${monthName(st.month.ym)} 출석률`,tone(st.month.rate,80))}${stat(pct(st.homework.rate),`${monthName(st.homework.ym)} 과제이행률`,tone(st.homework.rate,80))}${stat(avg===null?'–':avg.toFixed(1)+'점','최근 평가 평균',tone(avg,60))}</div>
+ const tone=v=>v===null||v===undefined?'':['good','fair','low','bad'][scoreBand(v)];
+ return `<div class="card cls-sum"><div class="home-stats">${stat(pct(st.month.rate),`${monthName(st.month.ym)} 출석률`,tone(st.month.rate))}${stat(pct(st.homework.rate),`${monthName(st.homework.ym)} 과제이행률`,tone(st.homework.rate))}${stat(avg===null?'–':avg.toFixed(1)+'점','최근 평가 평균',tone(avg))}</div>
  <p class="group-label">최근 평가 추이 · 반 평균</p>${trendChart(t)}</div>`;}
 // 최근 평가 추이(v2.5.96): 학부모 리포트 buildTestTrendChartHtml과 같은 그림(400×200, 0~100 눈금 20 간격, 선·점, 점 위 "n.n점", 아래 "MM.DD"). 색은 토큰(CSS .trend).
 function trendChart(points){
@@ -601,10 +603,10 @@ const telHref=p=>'tel:'+String(p).replace(/[^0-9+]/g,'');
 function paneRoster(el){
  const list=ensureRoster(),st=ensureStats(),head=h=>paneHead(`<p class="page-title">${icon('users')}학생</p>${nlink(state.detail.session.id,'수업')}`,h);
  if(!list){el.innerHTML=head('학생 정보를 불러오는 중…')+`<div class="pbody">${classSummary(st)}</div>`;return;}
- const per=s=>st?.students?.[s.registrationId],pill=(txt,low)=>`<span class="pill ${low?'miss':''}">${txt}</span>`;
+ const per=s=>st?.students?.[s.registrationId],pill=(txt,v)=>`<span class="pill b-${['good','fair','low','poor'][scoreBand(v)]}">${txt}</span>`;
  const tel=(label,p)=>p?`<a class="tel" href="${esc(telHref(p))}" aria-label="${label} ${esc(p)} 전화 걸기">${label} ${esc(p)}</a>`:'';
  el.innerHTML=head(`학생 <b>${list.length}</b>명 · 출석률은 ${st?monthName(st.month.ym):'이번 달'}, 점수는 최근 평가 · ↗ 학생 보고서(새 탭) · 펼치면 연락처`)+`<div class="pbody">${classSummary(st)}${list.length?`<div class="list roster">${list.map(s=>{const x=per(s),
-  a=x&&x.rate!==null&&x.rate!==undefined?pill(`출석 ${x.rate}%`,x.rate<80):'',b=x&&x.score!==null&&x.score!==undefined?pill(`평가 ${x.score}점`,x.score<60):'';
+  a=x&&x.rate!==null&&x.rate!==undefined?pill(`출석 ${x.rate}%`,x.rate):'',b=x&&x.score!==null&&x.score!==undefined?pill(`평가 ${x.score}점`,x.score):'';
   return `<div class="r1 log-card"><div class="log-head r-body"><div class="r-top"><span class="r-name">${esc(s.name)}${s.school||s.grade?`<small>${esc([s.school,s.grade].filter(Boolean).join(' · '))}</small>`:''}</span>
   ${s.reportToken?`<a class="icon-btn rep" href="student_report.html?token=${encodeURIComponent(s.reportToken)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(s.name)} 학생 보고서 새 탭에서 열기" title="학생 보고서">${icon('ext')}</a>`:''}</div>
   ${a||b?`<div class="r-stats">${a}${b}</div>`:''}
@@ -628,7 +630,7 @@ function recCard(r){
  // 기록 카드는 늘 날짜·수업으로 묶인 곳에 보이므로(학습기록 탭·홈·캘린더·교재 상세) 출제일은 묶음 날짜와 겹쳐 빼고 마감만(v2.5.98)
  const extras=r.kind==='과제'&&r.homework?.due?[`마감: ${withDow(r.homework.due)}`]:[];
  const hw=r.homework,sc=r.score;
- const pill=hw?`<span class="pill ${pillTone(hw.submitted,hw.total)}">제출 ${hw.submitted}/${hw.total}</span>`:sc?`<span class="pill k-평가">평균 ${sc.avg}점</span>`:'';
+ const pill=hw?`<span class="pill ${pillTone(hw.submitted,hw.total)}">제출 ${hw.submitted}/${hw.total}</span>`:sc?`<span class="pill b-${["good","fair","low","poor"][scoreBand(sc.avg)]}">평균 ${sc.avg}점</span>`:'';
  const body=bodyHtml(r.body),meta=units.map(u=>`<span class="log-context">• ${esc(u)}</span>`).join('')+(note?`<span class="log-note">${esc(note)}</span>`:'')+extras.map(x=>`<span class="log-context">• ${esc(x)}</span>`).join('');
  return `<div class="rec log-card ${body?'has-extra':''}"><div class="log-head"><button class="log-main" type="button" data-rec="${esc(r.id)}"><span class="log-top"><span class="log-icon k-${esc(r.kind||'학습')}">${icon(r.kind||'학습')}<small>${esc(r.kind||'학습')}</small></span><span class="log-title">${esc(title)}</span>${pill}${r.makeup?'<span class="pill s-보강">보강</span>':''}</span>
  ${meta?`<span class="log-meta">${meta}</span>`:''}</button>
@@ -689,7 +691,7 @@ function paneRecord(el){
  <h2 class="sec-title">${icon(r.kind||'학습')}학습활동 <span class="cnt">${acts.length}명</span></h2>
  ${acts.length?`<div class="list">${acts.map(a=>{const ch=state.draft['a:'+a.id];const sub=ch?.submitted??a.submitted,cor=ch?.correct??a.correct,tot=ch?.total??a.total;
   return `<div class="row ${ch?'changed':''}"><span class="av">${esc(a.name.slice(0,1))}</span><span class="meta"><span class="t">${esc(a.name)}</span>${scoring&&tot?`<span class="d">${Math.round((cor||0)/tot*100)}점</span>`:''}</span>
-  ${checking?(ed?`<span class="seg"><button type="button" class="v-제출 ${sub?'on':''}" data-sub="${esc(a.id)}" data-v="1">제출</button><button type="button" class="v-미제출 ${sub?'':'on'}" data-sub="${esc(a.id)}" data-v="0">미제출</button></span>`:`<span class="pill ${sub?'done':'miss'}">${sub?'제출':'미제출'}</span>`):''}
+  ${checking?(ed?`<span class="seg"><button type="button" class="v-제출 ${sub?'on':''}" data-sub="${esc(a.id)}" data-v="1">제출</button><button type="button" class="v-미제출 ${sub?'':'on'}" data-sub="${esc(a.id)}" data-v="0">미제출</button></span>`:`<span class="pill ${sub?'sub':'miss'}">${sub?'제출':'미제출'}</span>`):''}
   ${scoring?(ed?`<span class="score"><input inputmode="numeric" data-cor="${esc(a.id)}" value="${cor??''}" aria-label="${esc(a.name)} 맞힌 문항"> / <input inputmode="numeric" data-tot="${esc(a.id)}" value="${tot??''}" aria-label="${esc(a.name)} 전체 문항"></span>`:`<span class="pill k-평가">${cor??'–'} / ${tot??'–'}</span>`):''}${nlink(a.id,a.name+' 학습활동')}</div>`;}).join('')}</div>`
  :`<div class="list"><p class="empty">아직 학습활동이 없어요.</p></div>`}
  ${acts.length?'':`<div class="actions"><button class="primary" type="button" id="make-acts" ${r.activityStatus==='🔄 작업중'?'disabled':''}>${esc(ACT_LABEL[r.kind]||'학습활동 만들기')} · ${r.registrationIds.length}명</button></div>${r.activityStatus==='🔄 작업중'?'<p class="help">만드는 중이에요. 잠시 뒤 새로고침해 주세요.</p>':''}`}</div>`;
