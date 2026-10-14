@@ -1,10 +1,10 @@
 // POST /functions/v1/textbook-api
 // 라이브러리(library.html, v2.5.118, Notion 라이브러리 DB). 관리자 로그인 세션만 통과한다(adminSecurity.ts의 브라우저 경로).
-//   search   { query }                       알라딘 검색(국내·외국도서 함께, ISBN13이면 그 책) + 라이브러리에 이미 있는지(ISBN13)
+//   search   { query }                       국립중앙도서관·카카오 검색(ISBN13이면 그 책) + 라이브러리에 이미 있는지(ISBN13)
 //   register-custom { title, isbn13?, cover?, price?, publisher?, units }  직접 추가 등록(v2.5.119)
-//   detail   { isbn13 }                      한 권의 정보·목차 → 단원 후보
+//   detail   { isbn13 }                      한 권의 정보·목차(국립중앙도서관에 있을 때) → 단원 후보
 //   parse    { text }                        붙여넣은 목차 → 단원 후보
-//   register { isbn13, title?, units, noCover? }  라이브러리 교재 1권 + 단원목록 만들기
+//   register { isbn13, title?, units, cover? }   cover: kyobo | alt | none ·  라이브러리 교재 1권 + 단원목록 만들기
 //   library  {}                              라이브러리 전체(시리즈별로 묶을 정보)
 //   units    { bookId }                      한 교재의 단원목록
 //   add-units { bookId, units }              이미 있는 교재에 단원 추가(같은 이름은 건너뜀)
