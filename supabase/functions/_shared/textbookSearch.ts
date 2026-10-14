@@ -110,6 +110,37 @@ export function parsePasted(text: unknown) {
 	return { toc: parseToc(t) }
 }
 
+// ---------- 교보문고 검색 목록에서 가져오기(v2.6.8) ----------
+// 즐겨찾기 [교재 가져오기]는 교보문고 검색 목록에서 체크한 책의 상품번호만 넘긴다(목록 페이지는 상품 쪽 정보를 브라우저가 막는다).
+// 여기서 교보문고 상품 화면이 쓰는 상품 정보 요청 한 곳만 불러 교재명·정가·출판사·목차를 채운다. 사람이 고른 책을 한 권씩만 부른다.
+// 교보문고 내부 요청이라 바뀌거나 막힐 수 있다. 실패하면 502를 돌려주고 화면은 그 책을 목차 없이 둔다.
+const KYOBO_PRODUCT = "https://product.kyobobook.co.kr/api/gw/pdt/v2/product/"
+export async function kyoboBook(body: any) {
+	const pid = String(body?.pid ?? "").trim()
+	if (!/^S\d{9,15}$/.test(pid)) throw new TextbookError(400, "교보문고 상품번호가 아닙니다.")
+	let j: any
+	try {
+		const res = await fetch(KYOBO_PRODUCT + pid, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(8000) })
+		if (!res.ok) throw new Error(`HTTP ${res.status}`)
+		j = await res.json()
+	} catch (err) {
+		console.error("[textbook-api] 교보문고 상품 정보 실패:", pid, (err as Error).message)
+		throw new TextbookError(502, "교보문고에서 책 정보를 받지 못했어요. 책 상세 페이지에서 [교재 가져오기]로 한 권씩 가져오세요.")
+	}
+	const d = j?.data ?? {}
+	const isbn = String(d.info?.cmdtCode ?? "")
+	const price = Number(d.top?.order?.price?.price ?? d.top?.order?.price?.discountPrice ?? 0)
+	const toc = String(d.middle?.contentTableList ?? "").replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").slice(0, 20000)
+	return {
+		pid,
+		title: String(d.top?.title?.main?.value ?? "").trim().slice(0, 200),
+		isbn13: isIsbn13(isbn) ? isbn : "",
+		price: price > 0 && price < 10_000_000 ? Math.round(price) : null,
+		publisher: String(d.top?.info?.publisher?.label?.text ?? "").trim(),
+		toc: parseToc(toc),
+	}
+}
+
 // 생성 POST는 응답이 끊겨도 중복 페이지가 생기지 않도록 자동 재시도하지 않는다(schoolNotion.ts와 같은 원칙).
 async function createOnce(dataSourceId: string, properties: Record<string, unknown>): Promise<string> {
 	const res = await fetch(`${NOTION_API}/pages`, {
