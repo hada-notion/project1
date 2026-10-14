@@ -2,6 +2,7 @@
 function assert(value: unknown, message = "assertion failed") { if (!value) throw new Error(message) }
 for (const [key, value] of Object.entries({ NOTION_TOKEN: "test-only", CLASS_ROOM_COPY_WRITE: "off", SB_URL: "https://mock.supabase", DATA_SOURCE_CLASS_SESSION_ID: "sessions", DATA_SOURCE_ATTENDANCE_ID: "attendance", DATA_SOURCE_LEARNING_RECORD_ID: "records", DATA_SOURCE_STUDY_ACTIVITY_ID: "activities", DATA_SOURCE_PROGRESS_BOOK_ID: "books", DATA_SOURCE_REGISTRATION_ID: "registrations" })) Deno.env.set(key, value)
 const room = await import("./classRoom.ts")
+const sel = await import("./selectedUnits.ts")
 const rel = (...ids: string[]) => ({ relation: ids.map((id) => ({ id })) })
 const title = (s: string) => ({ type: "title", title: [{ plain_text: s, text: { content: s } }] })
 const text = (s: string) => ({ type: "rich_text", rich_text: s ? [{ plain_text: s, text: { content: s } }] : [] })
@@ -52,6 +53,7 @@ function fixture() {
  const fetch = async (input: any, init: any = {}) => {
   const url = String(input), body = init.body ? JSON.parse(init.body) : {}
   if (url.endsWith("/data_sources/sessions")) return reply({ properties: { "담당강사": { relation: { data_source_id: "teachers" } } } })
+  if (url.endsWith("/data_sources/records")) return reply({ properties: pages.__noUnitsProp ? {} : { "선택 단원": { type: "relation" } } })
   const blk = url.match(/\/blocks\/([^/]+)\/children/)?.[1]
   if (blk) return reply({ results: pages[blk]?.blocks ?? [], has_more: false })
   const db = url.match(/\/data_sources\/([^/]+)\/query/)?.[1]
@@ -303,4 +305,34 @@ Deno.test("student space: recent homework, scored tests and past memos for the r
  assert(s.homework.length === 1 && s.homework[0].submitted && s.homework[0].due === "2026-10-13" && s.homework[0].range === "p.31-35")
  assert(s.tests.length === 1 && s.tests[0].correct === 18 && s.tests[0].total === 20)
  assert(s.memos.map((m) => m.memo).sort().join() === "지각 15분,집중 좋음")
+}))
+
+// v2.5.126: 학습기록 "선택 단원"
+const U1 = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", U2 = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2"
+Deno.test("records: picked units go to 선택 단원 for the same library book, can be changed or cleared, and become the unit text", () => withMock(async (f) => {
+ sel.resetSelectedUnitsEnabled()
+ f.pages[U1] = { id: U1, db: "units", properties: { "단원명": title("1-1. 소인수분해") } }
+ f.pages[U2] = { id: U2, db: "units", properties: { "단원명": title("1-2. 정수") } }
+ const r = await room.createRecords({ sessionId: "s1", kind: "학습", bookIds: ["group"], unitIds: [U1, U2, "not-an-id", U1], unitBookId: "regular" })
+ const rec = f.created[0]
+ assert(r.unitsSaved === true && ids(rec, "선택 단원") === U1 + "," + U2, JSON.stringify(rec.properties["선택 단원"]))
+ await room.createRecords({ sessionId: "s1", kind: "과제", bookIds: ["group"], unitIds: [U1], unitBookId: "another-book" })
+ assert(f.created[1].properties["선택 단원"] === undefined, "units of another library book are not linked")
+ const plain = await room.createRecords({ sessionId: "s1", kind: "평가", bookIds: ["group"] })
+ assert(plain.unitsSaved === undefined && f.created[2].properties["선택 단원"] === undefined)
+ f.pages[rec.id].properties["단원"] = formula("수식 단원")
+ const a = await room.loadActivities(rec.id)
+ assert(a.record.unit === "1-1. 소인수분해 1-2. 정수" && a.record.unitIds.join() === U1 + "," + U2, JSON.stringify(a.record))
+ const u = await room.updateRecord({ recordId: rec.id, unitIds: [U2] })
+ assert(u.unitsSaved === true && ids(f.pages[rec.id], "선택 단원") === U2)
+ await room.updateRecord({ recordId: rec.id, unitIds: [] })
+ assert(ids(f.pages[rec.id], "선택 단원") === "" && (await room.loadActivities(rec.id)).record.unit === "수식 단원", "cleared: falls back to the 단원 formula")
+ await room.updateRecord({ recordId: rec.id, range: "p.2" })
+ assert(!f.writes.at(-1).body.properties["선택 단원"], "no unitIds: 선택 단원 untouched")
+}))
+Deno.test("records: academies without 선택 단원 keep working and say units were not saved", () => withMock(async (f) => {
+ sel.resetSelectedUnitsEnabled(); f.pages.__noUnitsProp = true
+ const r = await room.createRecords({ sessionId: "s1", kind: "학습", bookIds: ["group"], unitIds: [U1], unitBookId: "regular" })
+ assert(r.unitsSaved === false && f.created[0].properties["선택 단원"] === undefined)
+ sel.resetSelectedUnitsEnabled()
 }))

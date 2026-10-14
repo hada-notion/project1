@@ -74,6 +74,7 @@ function recordSummary(r: Row) {
 		topic: r.topic as string,
 		range: r.range as string,
 		unit: r.unit as string,
+		unitIds: (r.unit_ids as string[] | null) ?? [],
 		content: r.content as string,
 		makeup: !!r.is_makeup,
 		registrationIds: arr(r.registration_ids),

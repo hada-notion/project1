@@ -39,7 +39,7 @@ function mock(opts: { existing?: string[]; failUnitAt?: number; nlFail?: boolean
 		if (url.endsWith("/data_sources/books") && init.method === "PATCH") {
 			if (opts.schemaFail) return reply({ object: "error", code: "validation_error", message: "Invalid select option, duplicates not allowed: X" }, 400)
 			const next = JSON.parse(init.body).properties["시리즈"].select.options; schema.push(next)
-			seriesOpts = next.map((o: any, k: number) => ({ id: o.id ?? "new" + k, name: o.name, color: o.color })); return reply({})
+			seriesOpts = next.map((o: any, k: number) => ({ id: o.id ?? "new" + k, name: o.name, color: o.color })); return reply({ properties: { "시리즈": { type: "select", select: { options: seriesOpts } } } })
 		}
 		if (url.endsWith("/data_sources/books")) return reply({ properties: { "단원목록": { relation: { data_source_id: "units" } }, "출판사": { type: "select", select: { options: [{ name: "좋은책신사고" }, { name: "천재교육" }] } }, "시리즈": { type: "select", select: { options: seriesOpts } } } })
 		if (url.endsWith("/data_sources/books/query")) {
@@ -352,4 +352,18 @@ Deno.test("edit-series: options sharing an id are left out (unused) so Notion ac
 	const used = mock({ seriesOpts: [{ id: "s9", name: "개념" }, { id: "s9", name: "쎈" }] })
 	await withMock(used, () => rejects(() => tb.editSeries({ op: "add", name: "새것" }), 409, /"쎈".*교재 1권/))
 	assert(used.schema.length === 0, "nothing sent when a duplicate is in use")
+})
+
+// ---------- v2.5.124: 변경 뒤 목록을 다시 읽지 않는다 ----------
+Deno.test("edit-series: uses the options Notion returns instead of reading the list again", async () => {
+	const m = mock()
+	await withMock(m, async () => {
+		await tb.seriesList()
+		const before = m.calls.filter((c) => c.endsWith("/data_sources/books")).length
+		const r = await tb.editSeries({ op: "add", name: "개념원리" })
+		assert(r.series.map((x) => x.name).join() === "쎈,라이트쎈,개념원리" && r.series[2].id === "new2", JSON.stringify(r))
+		assert(m.calls.filter((c) => c.endsWith("/data_sources/books")).length - before === 2, "one read before and the PATCH only")
+		const lib = await tb.libraryBooks()
+		assert(lib.seriesOrder.join() === "쎈,라이트쎈,개념원리", "cached series names updated: " + lib.seriesOrder.join())
+	})
 })

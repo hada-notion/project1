@@ -291,21 +291,50 @@ function drawCreate(){
  <label>교재 <span class="muted">이 반 학생들의 교재</span></label>${picked?bookRow(picked,{attr:'id="cf-b" aria-label="교재 바꾸기"',chev:true}):f.book===''?emptyBookRow('id="cf-b"','교재 없이 기록','주제로 기록해요 · 눌러서 바꾸기',icon('plus')):emptyBookRow('id="cf-b"','교재 비어 있음','눌러서 이 반 학생들의 교재 고르기')}
  <label>구분</label><div class="center-tabs left kind-tabs"><div class="tabs" role="tablist">${KINDS.map(k=>`<button type="button" role="tab" aria-selected="${k===f.kind}" class="${k===f.kind?'active':''}" data-ck="${k}"><span>${icon(k,'kind-ic')}${k}</span></button>`).join('')}</div></div>
  <label for="cf-t">주제 <span class="muted">${f.book===''?'(필수)':'(선택)'}</span></label><input id="cf-t" maxlength="200" placeholder="교재 없는 기록은 리포트에 주제가 보여요" value="${esc(f.topic)}">
- <label for="cf-r">범위</label><input id="cf-r" maxlength="200" placeholder="예: p.31-35" value="${esc(f.range)}">
+ <label for="cf-r">범위</label><input id="cf-r" maxlength="200" placeholder="예: p.31-35" value="${esc(f.range)}"><div class="unit-box" id="cf-u" hidden></div>
  <label for="cf-c">내용</label><textarea id="cf-c" maxlength="2000">${esc(f.content)}</textarea>
  <p class="error" id="cf-err" hidden></p><div class="actions"><button class="primary" type="submit">기록 만들기</button></div></form>`;
  const sh=$('sheet'),q=s=>sh.querySelector(s),keep=()=>{f.topic=q('#cf-t').value;f.range=q('#cf-r').value;f.content=q('#cf-c').value;};
  $('sh-x').onclick=navBack;bindCovers(sh);bulletize(q('#cf-c'));
+ f.unitSel=f.unitSel||{ids:null};const ub=unitBox(q('#cf-u'),{data:()=>state.bookCache[f.sessionId],value:()=>f.book,range:()=>q('#cf-r').value,sel:f.unitSel});q('#cf-r').addEventListener('input',ub.draw);ub.draw();
  sh.querySelectorAll('[data-ck]').forEach(b=>b.onclick=()=>{f.kind=b.dataset.ck;sh.querySelectorAll('[data-ck]').forEach(x=>{const on=x===b;x.classList.toggle('active',on);x.setAttribute('aria-selected',on);});});
- q('#cf-s').onchange=e=>run(async()=>{keep();f.sessionId=e.target.value;f.book=null;await booksFor(f.sessionId);drawCreate();});
- q('#cf-b').onclick=()=>{keep();pushLayer(drawCreate);drawBookPicker(bookChoices(state.bookCache[f.sessionId]),f.book,v=>{f.book=v;navBack();},navBack,'교재 없이 기록','주제로 기록해요(주제 필수)');};
+ q('#cf-s').onchange=e=>run(async()=>{keep();f.sessionId=e.target.value;f.book=null;f.unitSel={ids:null};await booksFor(f.sessionId);drawCreate();});
+ q('#cf-b').onclick=()=>{keep();pushLayer(drawCreate);drawBookPicker(bookChoices(state.bookCache[f.sessionId]),f.book,v=>{if(v!==f.book)f.unitSel={ids:null};f.book=v;navBack();},navBack,'교재 없이 기록','주제로 기록해요(주제 필수)');};
  q('#cf').onsubmit=e=>{e.preventDefault();keep();const topic=f.topic.trim(),err=q('#cf-err');err.hidden=true;
   if(f.book===null){err.hidden=false;err.textContent='교재를 골라 주세요. 교재 없이 만들려면 교재 고르기에서 "교재 없이 기록"을 골라요.';return;}
   if(!f.book&&!topic){err.hidden=false;err.textContent='교재 없이 만들 때는 주제를 적어 주세요.';q('#cf-t').focus();return;}
-  run(async()=>{const r=await api('create-records',{sessionId:f.sessionId,kind:f.kind,...(f.book?{bookIds:f.book.split(',')}:{}),...(topic?{topic}:{}),range:f.range,content:f.content});
+  const unitIds=f.book?ub.picked():null,unitBook=unitsLibraryId(state.bookCache[f.sessionId],f.book);
+  run(async()=>{const r=await api('create-records',{sessionId:f.sessionId,kind:f.kind,...(f.book?{bookIds:f.book.split(',')}:{}),...(topic?{topic}:{}),range:f.range,content:f.content,...(unitIds&&unitIds.length&&unitBook?{unitIds,unitBookId:unitBook}:{})});
+   if(r.unitsSaved===false)toast('학습기록 DB에 "선택 단원" 속성이 없어 고른 단원은 저장하지 않았어요.');
    if(f.sessionId!==state.sessionId)await openSessionNow(f.sessionId);else await reloadSession();
    const made=r.records.filter(x=>x.created).length;toast(made?`기록 ${made}개를 만들었어요.`:'이미 있는 기록이에요. 기록 화면에서 고쳐 주세요.');
    if(r.records.length===1)await openRecordNow(r.records[0].id);else{state.view='session';state.tab='records';render();}closeLayers();},e.submitter);};
+}
+// 범위 → 단원(v2.5.125): 고른 교재(진도교재 id, 여럿이면 첫 번째)의 라이브러리 단원(books 응답의 units, 시작쪽 순)에서
+// 범위 글자 속 숫자의 처음~끝 쪽에 걸친 단원을 찾는다. 단원 i는 그 시작쪽부터 다음 단원 시작쪽 앞까지.
+function unitsLibraryId(data,value){const id=String(value||'').split(',')[0];return (data?.books||[]).find(b=>b.id===id)?.libraryId||null;}
+function unitsOfBook(data,value){const id=String(value||'').split(',')[0];return (data?.books||[]).find(b=>b.id===id)?.units||[];}
+// 쉼표로 여러 구간(v2.5.127): "12-24, 31-35" → 구간마다 숫자의 처음~끝. 서버 _shared/unitRange.ts와 같은 규칙.
+function unitsInRange(units,range){
+ const segs=String(range||'').split(/[,，]/).map(p=>{const n=(p.match(/\d+/g)||[]).map(Number).filter(x=>x>0&&x<=5000);return n.length?{a:Math.min(...n),b:Math.max(...n)}:null;}).filter(Boolean);
+ if(!units.length||!segs.length)return null;
+ const paged=units.filter(u=>u.page!==null&&u.page!==undefined);if(!paged.length)return {none:'이 교재 단원에는 시작쪽이 없어 범위로 찾을 수 없어요.'};
+ const hit=paged.filter((u,i)=>{const next=paged[i+1]?.page,end=next===undefined||next===null?Infinity:next-1;return segs.some(s=>u.page<=s.b&&end>=s.a);});
+ return hit.length?{units:hit}:{none:'범위에 맞는 단원이 없어요.'};
+}
+// 단원 칸(v2.5.126): 안내 한 줄 + [단원 고르기] 체크 목록. sel.ids가 null이면 범위로 자동, 배열이면 직접 고른 것.
+// 돌려주는 함수 draw()를 범위·교재가 바뀔 때 부른다. picked()는 지금 고른 단원 id(교재에 단원이 없으면 null).
+function unitBox(box,{data,value,range,sel}){
+ const units=()=>unitsOfBook(data(),value()),auto=()=>unitsInRange(units(),range());
+ const picked=()=>{const u=units();if(!u.length)return null;return sel.ids!==null?sel.ids.filter(id=>u.some(x=>x.id===id)):(auto()?.units||[]).map(x=>x.id);};
+ const draw=()=>{if(!box)return;const u=units();if(!u.length){box.hidden=true;box.innerHTML='';return;}
+  const ids=picked(),chosen=u.filter(x=>ids.includes(x.id)),a=auto(),open=box.querySelector('details')?.open;
+  const hint=chosen.length?'단원 '+chosen.map(x=>x.name).join(' · '):sel.ids!==null?'고른 단원이 없어요.':a?.none||'범위를 넣으면 단원을 찾아 줘요.';
+  box.hidden=false;
+  box.innerHTML=`<p class="unit-hint" aria-live="polite">${esc(hint)}</p><details class="unit-pick"${open?' open':''}><summary>단원 고르기${sel.ids!==null?' · 직접 고름':''}</summary><div class="unit-checks">${u.map(x=>`<label><input type="checkbox" value="${esc(x.id)}" ${ids.includes(x.id)?'checked':''}><span class="nm">${esc(x.name)}</span>${x.page!==null&&x.page!==undefined?`<span class="pg">p.${esc(x.page)}</span>`:''}</label>`).join('')}${sel.ids!==null?'<button type="button" class="ghost" data-unit-auto>범위로 다시 고르기</button>':''}</div></details>`;
+  box.querySelectorAll('.unit-checks input').forEach(c=>c.onchange=()=>{sel.ids=[...box.querySelectorAll('.unit-checks input:checked')].map(x=>x.value);draw();});
+  const re=box.querySelector('[data-unit-auto]');if(re)re.onclick=()=>{sel.ids=null;draw();};};
+ return {draw,picked};
 }
 // 교재 고르기(기록 만들기·기록 카드 공용): 창 안을 카드 목록으로 바꿔 보여 주고, 고르면 onPick(값), 돌아가기는 onBack.
 function drawBookPicker(choices,cur,onPick,onBack,noneTitle,noneSub){
@@ -721,7 +750,7 @@ function paneRecord(el){
  <form class="card form" id="rec-form"><label>교재 <span class="muted">이 수업 학생들의 교재</span></label>
  ${item?bookRow(item,{attr:'id="rec-book" aria-label="교재 바꾸기"',chev:true}):emptyBookRow('id="rec-book"','교재 없음','눌러서 교재 고르기')}
  <label for="rec-topic">주제 ${item?'<span class="muted">(선택)</span>':''}</label><input id="rec-topic" maxlength="200" value="${esc(v('topic'))}" placeholder="교재 없는 기록은 리포트에 주제가 보여요">
- <label for="rec-range">범위</label><input id="rec-range" maxlength="200" value="${esc(v('range'))}" placeholder="예: p.31-35">
+ <label for="rec-range">범위</label><input id="rec-range" maxlength="200" value="${esc(v('range'))}" placeholder="예: p.31-35"><div class="unit-box" id="rec-u" hidden></div>
  <label for="rec-content">내용</label><textarea id="rec-content">${esc(v('content'))}</textarea>
  <div class="actions"><button class="secondary" type="submit" id="rec-save">기록 저장</button></div></form>
  <h2 class="sec-title">${icon(r.kind||'학습')}학습활동 <span class="cnt">${acts.length}명</span></h2>
@@ -734,9 +763,12 @@ function paneRecord(el){
  const q=s=>el.querySelector(s);bindCovers(el);
  [['#rec-topic','topic'],['#rec-range','range'],['#rec-content','content']].forEach(([s,k])=>q(s).oninput=e=>{re[k]=e.target.value;});
  bulletize(q('#rec-content'),()=>{re.content=q('#rec-content').value;});
- q('#rec-book').onclick=()=>{drawBookPicker(bookChoices(state.books,{single:true,include:re.book}),re.book,val=>{re.book=val;closeLayers(render);},navBack,'교재 없음','교재 없이 주제로 기록해요');showLayer($('sheet'));};
+ if(!re.unitSel)re.unitSel={ids:re.book===(r.bookId||'')&&r.unitIds?.length?[...r.unitIds]:null};
+ const rub=unitBox(q('#rec-u'),{data:()=>state.books,value:()=>re.book,range:()=>q('#rec-range').value,sel:re.unitSel});q('#rec-range').addEventListener('input',rub.draw);rub.draw();
+ q('#rec-book').onclick=()=>{drawBookPicker(bookChoices(state.books,{single:true,include:re.book}),re.book,val=>{if(val!==re.book)re.unitSel={ids:null};re.book=val;closeLayers(render);},navBack,'교재 없음','교재 없이 주제로 기록해요');showLayer($('sheet'));};
  q('#rec-form').onsubmit=e=>{e.preventDefault();const body={recordId:r.id,topic:re.topic,range:re.range,content:re.content};if((re.book||null)!==r.bookId)body.bookId=re.book||null;
-  run(async()=>{await api('update-record',body);state.acts=await api('activities',{recordId:r.id});recEditFrom(state.acts.record);await reloadSession();toast('기록을 저장했어요.');render();},e.submitter);};
+  const unitIds=rub.picked();if(unitIds&&(unitIds.join()!==(r.unitIds||[]).join()))body.unitIds=unitIds;
+  run(async()=>{const u=await api('update-record',body);if(u.unitsSaved===false)toast('학습기록 DB에 "선택 단원" 속성이 없어 고른 단원은 저장하지 않았어요.');state.acts=await api('activities',{recordId:r.id});recEditFrom(state.acts.record);await reloadSession();toast('기록을 저장했어요.');render();},e.submitter);};
  if(q('#make-acts'))q('#make-acts').onclick=e=>run(async()=>{const res=await api('create-activities',{recordId:r.id});toast(res.status==='already_processing'?'이미 만드는 중이에요.':`학습활동을 만들고 있어요 · ${res.students}명`);setTimeout(()=>run(async()=>{const fresh=await api('activities',{recordId:r.id});if(state.view==='record'&&state.recordId===r.id){state.acts=fresh;render();}}),4000);},e.currentTarget);
  bindEdit(el);
  const setDraft=(id,patch)=>{const a=acts.find(x=>x.id===id),cur={...(state.draft['a:'+id]||{}),...patch};const same=Object.entries(cur).every(([k,val])=>a[k]===val);if(same)delete state.draft['a:'+id];else state.draft['a:'+id]=cur;updateSavebar();};

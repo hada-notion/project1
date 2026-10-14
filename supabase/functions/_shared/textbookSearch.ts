@@ -15,6 +15,7 @@ import { archivePage, fetchWithRetry, notionHeaders, queryAllPages, updatePagePr
 import { cleanUnits, parseToc } from "./textbookToc.ts"
 import { libraryKey, libraryProp } from "./libraryProp.ts"
 import { type Book, BookSourceError, isIsbn13, lookupIsbn, searchTitle } from "./bookSources.ts"
+import { libraryCopyReady, readBooks, readUnits, renameSeriesCopy, syncBookCopy, unitUses } from "./libraryCopy.ts"
 
 export { isIsbn13 }
 export class TextbookError extends Error {
@@ -159,8 +160,10 @@ async function createLibraryBook(b: NewBook) {
 		}
 	} catch (err) {
 		console.error("[textbook-api] 단원 만들기 중단:", (err as Error).message)
+		await syncBookCopy(src, pageId)
 		return { ok: false, pageId, name, units: created, failed: units.length - created, error: `단원 ${units.length}개 중 ${created}개만 만들었습니다. 나머지는 Notion에서 직접 추가하세요.` }
 	}
+	await syncBookCopy(src, pageId) // 복사본도 바로 맞춘다(v2.5.125)
 	return { ok: true, pageId, name, units: created, publisher, series, cover: !!b.cover }
 }
 
@@ -191,6 +194,15 @@ const compact = (id: string) => String(id).replaceAll("-", "").toLowerCase()
 // 라이브러리 전체. 시리즈 선택지 순서를 함께 준다(화면이 시리즈별로 묶는다).
 export async function libraryBooks() {
 	const src = await textbookSources()
+	// 복사본(v2.5.125): 처음 대조가 끝났으면 Supabase에서 읽는다(Notion 교재 전체 읽기를 하지 않음).
+	if (await libraryCopyReady()) {
+		const [rows, units] = await Promise.all([readBooks(), readUnits()])
+		const count = new Map<string, number>()
+		for (const u of units) if (u.book_id) count.set(u.book_id, (count.get(u.book_id) ?? 0) + 1)
+		const books = rows.map((b) => ({ id: b.id, title: b.title, series: b.series, publisher: b.publisher, cover: b.cover, used: b.used, isbn13: b.isbn13, units: count.get(b.id) ?? 0, unitsMore: false }))
+			.sort((a, b) => a.title.localeCompare(b.title, "ko", { numeric: true }))
+		return { books, seriesOrder: src.series, publishers: src.publishers }
+	}
 	const pages = await queryAllPages(src.books)
 	const books = pages.map((p: any) => {
 		const units = p.properties?.["단원목록"]
@@ -222,6 +234,14 @@ async function bookPageOf(bookId: unknown) {
 
 // 한 교재의 단원목록(시작쪽 순, 쪽이 없으면 이름 순으로 뒤에). uses: 다른 곳(시험범위 등)에 연결된 수(v2.5.121)
 export async function bookUnits(bookId: unknown) {
+	// 복사본(v2.5.125): 그 교재가 복사본에 있으면 단원도 복사본에서. 지울 때의 연결 확인은 editUnits가 Notion에서 다시 한다.
+	if (/^[0-9a-f-]{32,36}$/i.test(String(bookId ?? "")) && await libraryCopyReady()) {
+		const id = String(bookId)
+		if ((await readBooks([id])).length) {
+			const units = (await readUnits([id])).map((u) => ({ id: u.id, name: u.name, page: u.start_page, uses: u.link_count }))
+			return { bookId: id, units }
+		}
+	}
 	const { id, src } = await bookPageOf(bookId)
 	const pages = await queryAllPages(src.units, { property: src.unitsLink, relation: { contains: id } })
 	const units = pages.map((p: any) => {
@@ -246,18 +266,15 @@ export async function addUnits(body: any) {
 		}
 	} catch (err) {
 		console.error("[textbook-api] 단원 추가 중단:", (err as Error).message)
+		await syncBookCopy(src, id)
 		return { ok: false, created, skipped: units.length - fresh.length, error: `단원 ${fresh.length}개 중 ${created}개만 추가했습니다. 다시 시도하면 이미 만든 단원은 건너뜁니다.` }
 	}
+	await syncBookCopy(src, id)
 	return { ok: true, created, skipped: units.length - fresh.length }
 }
 
 // ---------- 단원 편집·북커버 수정(v2.5.121) ----------
-// 단원 페이지에서 라이브러리 관계 말고 다른 관계(예: 시험정보 DB의 시험범위)에 연결된 수. 0이 아니면 지우지 않는다.
-function unitUses(p: any, unitsLink: string): number {
-	let n = 0
-	for (const [k, v] of Object.entries(p?.properties ?? {}) as [string, any][]) if (k !== unitsLink && v?.type === "relation") n += (v.relation ?? []).length + (v.has_more ? 1 : 0)
-	return n
-}
+// 단원이 다른 곳(예: 시험정보 DB의 시험범위)에 연결된 수는 unitUses(libraryCopy.ts). 0이 아니면 지우지 않는다.
 const unitPageNum = (v: unknown) => { const n = Number(v); return v === null || v === "" || v === undefined ? null : Number.isInteger(n) && n >= 1 && n <= 2000 ? n : NaN }
 
 // 한 교재의 단원을 한 번에 고친다: update [{ id, name, page }] · remove [id] · add [{ name, page }].
@@ -301,8 +318,10 @@ export async function editUnits(body: any) {
 		}
 	} catch (err) {
 		console.error("[textbook-api] 단원 편집 중단:", (err as Error).message)
+		await syncBookCopy(src, id)
 		return { ok: false, ...done, blocked, skipped: add.length - fresh.length, error: `저장하다 멈췄습니다(수정 ${done.updated} · 삭제 ${done.removed} · 추가 ${done.added}). 다시 열어 확인해 주세요.` }
 	}
+	await syncBookCopy(src, id)
 	return { ok: true, ...done, blocked, skipped: add.length - fresh.length }
 }
 
@@ -337,6 +356,7 @@ export async function updateBook(body: any) {
 	if (publisher !== undefined) props["출판사"] = { select: publisher ? { name: publisher } : null }
 	if (!Object.keys(props).length) throw new TextbookError(400, "바꿀 내용이 없습니다.")
 	await updatePageProperties(id, props)
+	await syncBookCopy(await textbookSources(), id)
 	return { ok: true, cover: body?.cover !== undefined ? String(body.cover ?? "").trim() : undefined, series, publisher }
 }
 
@@ -377,7 +397,7 @@ export async function editSeries(body: any) {
 	const keep = (o: SeriesOption) => ({ id: o.id, name: o.name })
 	const find = (id: unknown) => { const o = options.find((x) => x.id === String(id ?? "")); if (!o) throw new TextbookError(404, "시리즈를 찾지 못했습니다. 새로고침 후 다시 하세요."); return o }
 	const taken = (name: string, except = "") => options.some((o) => o.id !== except && norm(o.name) === norm(name))
-	let next: Record<string, unknown>[]
+	let next: Record<string, unknown>[], renamed: [string, string] | null = null
 	switch (String(body?.op ?? "")) {
 		case "add": {
 			const name = seriesName(body?.name)
@@ -389,6 +409,7 @@ export async function editSeries(body: any) {
 			const o = find(body?.id), name = seriesName(body?.name)
 			if (taken(name, o.id)) throw new TextbookError(409, "이미 있는 시리즈 이름입니다.")
 			next = options.map((x) => x.id === o.id ? { id: x.id, name } : keep(x))
+			renamed = [o.name, name]
 			break
 		}
 		case "order": {
@@ -417,6 +438,13 @@ export async function editSeries(body: any) {
 		try { why = String(JSON.parse(text)?.message ?? "").slice(0, 160) } catch { /* 본문 없음 */ }
 		throw new TextbookError(502, `Notion이 시리즈 변경을 받지 않았습니다(${res.status}${why ? ": " + why : ""}). Notion 라이브러리 DB의 "시리즈" 속성에서 직접 고쳐 주세요.`)
 	}
-	sourcesCache = null
-	return { ok: true, cleaned: duplicates.map((o) => o.name), ...(await seriesList()) }
+	// Notion이 돌려준 새 선택지(새 id 포함)를 그대로 쓴다 — 목록을 다시 읽지 않는다(v2.5.124). 응답에 없으면 다시 읽는다.
+	const saved = (await res.json().catch(() => null))?.properties?.["시리즈"]?.select?.options
+	const seen = new Set<string>()
+	const series = Array.isArray(saved)
+		? saved.map((o: any) => ({ id: String(o.id), name: String(o.name) })).filter((o: SeriesOption) => !seen.has(o.id) && !!seen.add(o.id))
+		: (await seriesList()).series
+	if (sourcesCache) sourcesCache = { ...sourcesCache, series: series.map((o: SeriesOption) => o.name) }
+	if (renamed) await renameSeriesCopy(...renamed)
+	return { ok: true, cleaned: duplicates.map((o) => o.name), series, duplicates: [] as string[] }
 }

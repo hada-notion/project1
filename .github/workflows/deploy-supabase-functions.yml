@@ -48,7 +48,7 @@ jobs:
         run: deno test --allow-env supabase/functions/sync-attendance/index_test.ts supabase/functions/_shared/attendanceSyncShared_test.ts
 
       - name: Test textbook search and table-of-contents units
-        run: deno test --allow-env supabase/functions/_shared/textbookToc_test.ts supabase/functions/_shared/textbookSearch_test.ts supabase/functions/_shared/libraryProp_test.ts
+        run: deno test --allow-env supabase/functions/_shared/textbookToc_test.ts supabase/functions/_shared/textbookSearch_test.ts supabase/functions/_shared/libraryProp_test.ts supabase/functions/_shared/libraryCopy_test.ts supabase/functions/_shared/selectedUnits_test.ts
 
       - name: Test schedule visibility and NEIS defaults
         run: deno test --allow-env supabase/functions/_shared/neisSchool_test.ts supabase/functions/_shared/neisManual_test.ts supabase/functions/_shared/scheduleVisibility_test.ts

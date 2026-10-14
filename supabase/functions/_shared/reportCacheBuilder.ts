@@ -21,6 +21,8 @@ import { isParentPublicEvent, NOTICE_VISIBILITY_POLICY } from "./scheduleVisibil
 import { selectAttendanceByRegistrationId } from "./attendanceSyncShared.ts"
 import { DS_STUDY_ACTIVITY, DS_REPORT } from "./constants.ts"
 import { libraryIds } from "./libraryProp.ts"
+import { libraryCopyReady, readUnits } from "./libraryCopy.ts"
+import { unitNamesOf, unitTextOf } from "./selectedUnits.ts"
 // (2026-09-21, 이식성 리팩토링) 위 2개도 constants.ts로 이동함 — 그 파일 상단 주석 참고.
 
 const DETAIL_LOOKBACK_MONTHS = 6
@@ -218,9 +220,14 @@ async function buildRegistrationOverview(reg: any, accessToken: string, cachedGe
           series = text(rp["시리즈"])
           pages = numberOf(rp["전체 페이지"])
           cover = fileUrlOf(rp["북커버"])
-          const unitIds = relationIds(rp["단원목록"])
-          const unitPages = await Promise.all(unitIds.map((id: string) => cachedGetPage(id)))
-          units = unitPages.map((up: any) => anyTitle(up)).filter(Boolean)
+          // v2.5.125: 라이브러리 복사본이 있으면 단원 이름을 Supabase에서 한 번에(단원마다 Notion을 읽지 않음, 시작쪽 순).
+          const copied = (await libraryCopyReady()) ? await readUnits([regularId]).catch(() => null) : null
+          if (copied && copied.length) units = copied.map((u) => u.name).filter(Boolean)
+          else {
+            const unitIds = relationIds(rp["단원목록"])
+            const unitPages = await Promise.all(unitIds.map((id: string) => cachedGetPage(id)))
+            units = unitPages.map((up: any) => anyTitle(up)).filter(Boolean)
+          }
         }
         return { title, series, pages, status: statusText, progress, range, cover, units }
       }),
@@ -322,13 +329,14 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
   attendanceRows.forEach((r) => r.study_log_ids.forEach((id: string) => logIdSet.add(id)))
   const logIds = Array.from(logIdSet)
   const logPages = await Promise.all(logIds.map((id) => cachedGetPage(id)))
+  const logUnitNames = await unitNamesOf(logPages) // 학습기록 "선택 단원" 이름(v2.5.126)
   const readLogDetail = async (lp: any) => {
     const lprops = lp.properties
     const category = text(lprops["구분"])
     const iso = dateStartOf(lprops["수업일"])
     const content = text(lprops["내용"])
     const range = text(lprops["범위"])
-    const unit = text(lprops["단원"])
+    const unit = unitTextOf(lp, logUnitNames)
     const bookId = firstRelationId(lprops["교재"])
     let bookTitle = ""
     if (bookId) {

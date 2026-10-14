@@ -16,6 +16,7 @@ import { queryAllPages, getPage, mapWithConcurrency, selectName, formulaString, 
 import { text, dateStartOf, relationIds, numberOf, fetchSupabaseWithRetry } from "./reportCacheShared.ts"
 import { DS_CLASS_SESSION, DS_ATTENDANCE, DS_LEARNING_RECORD, DS_STUDY_ACTIVITY } from "./constants.ts"
 import { runInBackground } from "./backgroundTask.ts"
+import { unitNamesOf, unitTextOf, unitIdsOf } from "./selectedUnits.ts"
 
 type Page = Record<string, any>
 type Row = Record<string, unknown>
@@ -82,7 +83,8 @@ export function attendanceRow(p: Page): Row {
 }
 
 // subject = 라이브러리 교재 이름 → 진도교재 이름(괄호 앞) → 주제 (수업 관리 기록 카드 제목 규칙과 같다)
-export function recordRow(p: Page, bookNames: Map<string, string>): Row {
+// unitNames(v2.5.126): "선택 단원" 이름. 고른 단원이 있으면 unit은 그 이름들, 없으면 "단원" 수식.
+export function recordRow(p: Page, bookNames: Map<string, string>, unitNames: Map<string, string> = new Map()): Row {
 	const regular = bookNames.get(rel(p, "교재")[0] ?? ""), progress = bookNames.get(rel(p, "진도교재")[0] ?? "")
 	return {
 		id: p.id,
@@ -94,7 +96,8 @@ export function recordRow(p: Page, bookNames: Map<string, string>): Row {
 		subject: regular || (progress ?? "").replace(/\(.*\)$/, "").trim() || raw(p, "주제"),
 		topic: raw(p, "주제"),
 		range: raw(p, "범위"),
-		unit: str(p, "단원"),
+		unit: unitTextOf(p, unitNames),
+		unit_ids: unitIdsOf(p),
 		content: raw(p, "내용"),
 		is_makeup: checkboxValue(p, "보강"),
 		registration_ids: rel(p, "등록"),
@@ -138,7 +141,8 @@ export async function toSessionRows(pages: Page[]) {
 }
 export async function toRecordRows(pages: Page[]) {
 	const names = await pageMap(pages.flatMap((p) => [rel(p, "교재")[0], rel(p, "진도교재")[0]]), (b) => anyTitleText(b))
-	return pages.map((p) => recordRow(p, names))
+	const unitNames = await unitNamesOf(pages)
+	return pages.map((p) => recordRow(p, names, unitNames))
 }
 
 // ---------- Supabase ----------
