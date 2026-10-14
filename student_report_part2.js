@@ -336,7 +336,7 @@ function buildRegCalendarHtml(r, mode) {
   const dowHeader = ["월", "화", "수", "목", "금", "토", "일"].map((l, i) => `<div class="cal-dow${i === 5 ? " sat" : i === 6 ? " sun" : ""}">${l}</div>`).join("")
   const legend = mode === "attendance"
     ? `<div class="cal-legend"><span><span class="dot" style="background:var(--success)"></span>출석</span><span><span class="dot" style="background:var(--danger)"></span>결석</span><span><span class="dot" style="background:var(--info)"></span>보강</span></div>`
-    : `<div class="cal-legend"><span><span class="dot" style="background:var(--success)"></span>제출</span><span><span class="dot" style="background:var(--warning)"></span>일부 제출</span><span><span class="dot" style="background:var(--danger)"></span>미제출</span></div>`
+    : `<div class="cal-legend"><span><span class="dot" style="background:var(--success)"></span>제출</span><span><span class="dot" style="background:var(--warning-graphic)"></span>일부 제출</span><span><span class="dot" style="background:var(--danger)"></span>미제출</span></div>`
 
   // 날짜를 고른 상태: 그 주 한 줄 + 아래에 그날 기록
   if (selectedCalDate) {
@@ -872,12 +872,12 @@ function buildReportTabHtml(r) {
     <div class="report-donut-row three">
       <div class="donut-card">
         <div class="donut-title"><span class="inline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg></span>출석률</div>
-        <div class="donut" style="background: conic-gradient(#1e9e5c 0% ${attRate}%, #eee ${attRate}% 100%)"><div class="donut-hole">${attRate}%</div></div>
+        <div class="donut" style="background: conic-gradient(var(--success) 0% ${attRate}%, #eee ${attRate}% 100%)"><div class="donut-hole">${attRate}%</div></div>
         <div class="donut-count-below">(${presentCount}/${countedAttendanceRows.length})</div>
       </div>
       <div class="donut-card clickable" onclick="showHomeworkPeriodModal('${rangeStart}','${rangeEnd}','${esc(periodLabel)} 과제이행률')">
         <div class="donut-title"><span class="inline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg></span>과제이행률</div>
-        <div class="donut" style="background: conic-gradient(#3478f6 0% ${hwRate}%, #eee ${hwRate}% 100%)"><div class="donut-hole">${hwRate}%</div></div>
+        <div class="donut" style="background: conic-gradient(var(--success) 0% ${hwRate}%, #eee ${hwRate}% 100%)"><div class="donut-hole">${hwRate}%</div></div>
         <div class="donut-count-below">(${doneHomework}/${homeworkItems.length})</div>
       </div>
       <div class="donut-card${testItems.length ? " clickable" : ""}"${testItems.length ? ` onclick="showTestPeriodModal('${rangeStart}','${rangeEnd}','${esc(periodLabel)} 평가')"` : ""}>
