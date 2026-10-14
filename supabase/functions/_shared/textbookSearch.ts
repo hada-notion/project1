@@ -417,6 +417,12 @@ export async function editSeries(body: any) {
 		try { why = String(JSON.parse(text)?.message ?? "").slice(0, 160) } catch { /* 본문 없음 */ }
 		throw new TextbookError(502, `Notion이 시리즈 변경을 받지 않았습니다(${res.status}${why ? ": " + why : ""}). Notion 라이브러리 DB의 "시리즈" 속성에서 직접 고쳐 주세요.`)
 	}
-	sourcesCache = null
-	return { ok: true, cleaned: duplicates.map((o) => o.name), ...(await seriesList()) }
+	// Notion이 돌려준 새 선택지(새 id 포함)를 그대로 쓴다 — 목록을 다시 읽지 않는다(v2.5.124). 응답에 없으면 다시 읽는다.
+	const saved = (await res.json().catch(() => null))?.properties?.["시리즈"]?.select?.options
+	const seen = new Set<string>()
+	const series = Array.isArray(saved)
+		? saved.map((o: any) => ({ id: String(o.id), name: String(o.name) })).filter((o: SeriesOption) => !seen.has(o.id) && !!seen.add(o.id))
+		: (await seriesList()).series
+	if (sourcesCache) sourcesCache = { ...sourcesCache, series: series.map((o: SeriesOption) => o.name) }
+	return { ok: true, cleaned: duplicates.map((o) => o.name), series, duplicates: [] as string[] }
 }

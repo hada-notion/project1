@@ -255,15 +255,15 @@ function drawSeries(){
   if(renaming===s.id){
    const i=el('input');i.type='text';i.id='rename-input';i.value=s.name;i.maxLength=100;i.setAttribute('aria-label',`"${s.name}"의 새 이름`);
    const wrap=el('div','series-name');wrap.append(i);
-   const save=btn('ghost','저장',()=>seriesOp({op:'rename',id:s.id,name:i.value},'시리즈 이름을 바꿨어요'),'rename-save');
+   const save=btn('ghost','저장',()=>seriesOp({op:'rename',id:s.id,name:i.value},'시리즈 이름을 바꿨어요',false,save),'rename-save');
    i.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();save.click()}if(e.key==='Escape'){e.preventDefault();renaming=null;drawSeries()}};
    const acts=el('div','series-acts');acts.append(save,btn('ghost','취소',()=>{renaming=null;drawSeries()},'rename-cancel'));row.append(g,wrap,acts);box.append(row);return}
-  const del=iconBtn('del',`삭제: ${s.name}`,()=>{if(confirm(`"${s.name}" 시리즈를 지울까요?`))seriesOp({op:'remove',id:s.id},'시리즈를 지웠어요')});
+  const del=iconBtn('del',`삭제: ${s.name}`,()=>{if(confirm(`"${s.name}" 시리즈를 지울까요?`))seriesOp({op:'remove',id:s.id},'시리즈를 지웠어요',false,del)});
   if(n){del.disabled=true;del.title='교재가 있는 시리즈는 지울 수 없어요'}
   const acts=el('div','series-acts');acts.append(btn('ghost','이름 바꾸기',()=>{renaming=s.id;drawSeries();$('rename-input').focus()}),del);row.append(g,info,acts);box.append(row)});
  parts.push(box);
  // 아래: [편집 끝내기] [순서 저장](순서를 옮겼을 때만). 이름 바꾸기·삭제는 누르는 즉시 저장된다.
- if(ordering){const same=ordering.join()===seriesOpts.map(s=>s.id).join(),f=el('div','series-foot');const save=btn('primary','순서 저장',()=>seriesOp({op:'order',order:ordering},'순서를 바꿨어요',true),'order-save');save.disabled=same;
+ if(ordering){const same=ordering.join()===seriesOpts.map(s=>s.id).join(),f=el('div','series-foot');const save=btn('primary','순서 저장',()=>seriesOp({op:'order',order:ordering},'순서를 바꿨어요',true,save),'order-save');save.disabled=same;
   f.append(btn('secondary','편집 끝내기',()=>{if(!same&&!confirm('옮긴 순서를 저장하지 않고 끝낼까요?'))return;ordering=null;renaming=null;drawSeries()},'order-cancel'),save);parts.push(f)}
  $('series-list').replaceChildren(...parts);
 }
@@ -281,14 +281,18 @@ function dragRow(e,row){
 function keyMove(e,row,g){const d=e.key==='ArrowUp'?-1:e.key==='ArrowDown'?1:0;if(!d)return;e.preventDefault();const k=ordering.indexOf(row.dataset.id),j=k+d;if(j<0||j>=ordering.length)return;[ordering[k],ordering[j]]=[ordering[j],ordering[k]];drawSeries();$('series-rows').querySelector(`[data-id="${row.dataset.id}"] .grip`)?.focus()}
 // 바꾼 뒤 라이브러리를 다시 읽는다(교재 수·묶음 순서·고르기 선택지)
 // 편집 중 이름 바꾸기·삭제는 편집을 끝내지 않는다(옮기던 순서는 남긴다). [순서 저장](done)이면 편집을 끝낸다.
-async function seriesOp(body,msg,done=false){
- busy($('series'),true);let ok=false;
+// 누른 버튼만 돌고 나머지는 조용히 잠깐 끈다. 라이브러리를 다시 읽지 않고 교재의 시리즈 이름·묶음 순서·고르기 선택지를 그 자리에서 고친다(v2.5.124).
+async function seriesOp(body,msg,done=false,by=null){
+ const card=$('series');card.querySelectorAll('button,input').forEach(b=>{b.disabled=true});if(by)busy(by,true);let ok=false;
+ const oldName=body.op==='rename'?seriesOpts.find(x=>x.id===body.id)?.name:null;
  try{const r=await api({action:'edit-series',...body});seriesOpts=r.series;seriesDup=r.duplicates||[];renaming=null;
-  ordering=ordering&&!done?[...ordering.filter(id=>r.series.some(x=>x.id===id)),...r.series.map(x=>x.id).filter(id=>!ordering.includes(id))]:null;await loadLibrary(false);status(msg+(r.cleaned?.length?` · 겹쳐 있던 선택지 ${r.cleaned.map(n=>`"${n}"`).join(', ')}은(는) 정리했어요`:''),'success');ok=true}
+  ordering=ordering&&!done?[...ordering.filter(id=>r.series.some(x=>x.id===id)),...r.series.map(x=>x.id).filter(id=>!ordering.includes(id))]:null;
+  const names=r.series.map(x=>x.name);lists={...lists,series:names};
+  if(library){library.seriesOrder=names;if(oldName){const nn=r.series.find(x=>x.id===body.id)?.name;for(const b of library.books)if(b.series===oldName)b.series=nn}drawShelves()}status(msg+(r.cleaned?.length?` · 겹쳐 있던 선택지 ${r.cleaned.map(n=>`"${n}"`).join(', ')}은(는) 정리했어요`:''),'success');ok=true}
  catch(e){status(e.message,'error')}
- busy($('series'),false);drawSeries();return ok;
+ busy($('seriesForm'),false);drawSeries();return ok;
 }
-$('seriesForm').addEventListener('submit',async e=>{e.preventDefault();if(await seriesOp({op:'add',name:$('series-name').value},'시리즈를 추가했어요'))$('series-name').value=''});
+$('seriesForm').addEventListener('submit',async e=>{e.preventDefault();if(await seriesOp({op:'add',name:$('series-name').value},'시리즈를 추가했어요',false,e.target.querySelector('button')))$('series-name').value=''});
 
 
 // ---------- 라이브러리 추가: 검색·체크 ----------
