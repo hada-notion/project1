@@ -261,7 +261,7 @@ if grep -lE 'https://[a-z0-9]+.supabase.co|eyJhbGciOi' $web_files 2>/dev/null | 
   grep -lE 'https://[a-z0-9]+.supabase.co|eyJhbGciOi' $web_files
   fail=1
 fi
-for page in student_report.html attendance_kiosk.html legal_documents.html school_search.html admin_settings.html; do
+for page in student_report.html attendance_kiosk.html legal_documents.html school_search.html textbook_search.html admin_settings.html; do
   if ! grep -q '<script src="hada_config.js"></script>' "$page"; then
     echo "❌ $page 가 hada_config.js를 불러오지 않습니다."
     fail=1
