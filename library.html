@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>라이브러리 · 하다 학원관리</title><link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236B5D4D%22%20stroke-width%3D%222.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cstyle%3E%40media(prefers-color-scheme%3Adark)%7Bsvg%7Bstroke%3A%23E6D7C4%7D%7D%3C%2Fstyle%3E%3Cpath%20d%3D%22M2%203h6a4%204%200%200%201%204%204v14a3%203%200%200%200-3-3H2z%22%2F%3E%3Cpath%20d%3D%22M22%203h-6a4%204%200%200%200-4%204v14a3%203%200%200%201%203-3h7z%22%2F%3E%3C%2Fsvg%3E">
-<link rel="stylesheet" href="assets/hada-ui.css?v=305fe078">
+<link rel="stylesheet" href="assets/hada-ui.css?v=dff0726c">
 <style>
 /* 라이브러리 화면 전용. 값은 assets/hada-ui.css 토큰만 쓴다(docs/DESIGN.md "라이브러리 규칙"). */
 .view-tabs{margin:0 0 var(--space-6)}
@@ -32,9 +32,21 @@
 .book-btn>span:not(.cover){flex:1;min-width:0}
 .empty{margin:var(--space-5) 0 0;color:var(--text-muted)}
 /* 라이브러리 추가: 검색 → [선택 n권 | 라이브러리에 추가] → 결과 */
-.other-ways{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);margin-top:var(--space-3)}
-.other-ways .help{margin:0}
-.other-ways .secondary{width:auto;flex-shrink:0}
+#searchForm .help{margin:var(--space-2) 0 0}
+/* [라이브러리 추가] 두 번째 카드 "직접 추가", 카드 사이 24 */
+#manual{margin-top:var(--space-6)}
+#manual .help{margin:var(--space-3) 0 var(--space-4)}
+#manual-add{width:auto}
+/* 시리즈 관리 */
+.series-row{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) 0;border-top:1px solid var(--divider)}
+#series-list{margin-top:var(--space-5)}
+.series-name{flex:1;min-width:0}
+.series-name strong{display:block;font-size:var(--text-lead);overflow-wrap:anywhere}
+.series-name .meta{display:block;margin-top:var(--space-1);font-size:var(--text-small);color:var(--text-muted)}
+.series-acts{display:flex;align-items:center;gap:var(--space-1);flex:none}
+/* 추가 창·편집: 시리즈·출판사 고르기 */
+.pick-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-3);margin-top:var(--space-3)}
+.pick-fields label{margin:0 0 var(--space-2)}
 .sheet-fields label{margin:var(--space-4) 0 var(--space-2)}
 .sheet-fields label:first-child{margin-top:0}
 .pick-bar{display:flex;gap:var(--space-4);align-items:center;justify-content:space-between;margin-top:var(--space-5);padding:var(--space-3) var(--space-4);border-radius:var(--radius-md);background:var(--brand-soft)}
@@ -84,7 +96,9 @@ dialog.sheet[open]{display:flex}
 .icon-btn.ext{--ic:var(--icon-arrow-up-right);margin:calc(-1*var(--space-3)) calc(-1*var(--space-3)) 0 0}
 .icon-btn.del{--ic:var(--icon-trash-2)}
 .icon-btn.del[aria-pressed=true]{background:var(--danger-soft);color:var(--danger-ink)}
-.icon-btn.del:disabled{color:var(--brand-border)}
+.icon-btn.up{--ic:var(--icon-arrow-up)}
+.icon-btn.down{--ic:var(--icon-arrow-down)}
+.icon-btn:disabled{color:var(--brand-border)}
 /* 단원 머리 [단원 n개 | 편집]: [편집]은 수업 관리 칸 머리 버튼(.act)과 같다 */
 .units-bar{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);margin-top:var(--space-5)}
 .units-bar>span{font-size:var(--text-caption);font-weight:700;color:var(--text-muted)}
@@ -108,7 +122,9 @@ dialog.sheet[open]{display:flex}
  .topright .badge{display:none}
  .field-row{flex-direction:column;align-items:stretch}.field-row button{width:100%}
  .pick-bar{flex-direction:column;align-items:stretch}.pick-bar .primary{width:100%}
- .other-ways{flex-direction:column}.other-ways .secondary{width:100%}
+ #manual-add{width:100%}
+ .series-row{flex-wrap:wrap}.series-acts{width:100%;justify-content:flex-end}
+ .pick-fields{grid-template-columns:minmax(0,1fr)}
  .result{align-items:flex-start;gap:var(--space-3)}
  .shelf{grid-template-columns:minmax(0,1fr)}
  dialog.sheet{width:100%;max-width:100%;height:92vh;max-height:92vh;margin:auto 0 0;border-radius:var(--radius-lg);border-bottom-left-radius:0;border-bottom-right-radius:0}
@@ -123,7 +139,7 @@ dialog.sheet[open]{display:flex}
 <main>
 <section class="card" id="login"><div class="narrow"><h2>관리자 확인</h2><form id="loginForm"><label for="key">관리자 비밀번호</label><input id="key" type="password" autocomplete="current-password" required autofocus><p class="help">관리자 설정과 같은 비밀번호입니다. 로그인은 관리자 설정·법정 서류·학교 검색과 함께 쓰이고, 이 탭을 닫거나 로그아웃하면 해제됩니다.</p><button class="primary">확인</button></form></div></section>
 <div id="workspace" hidden>
-<div class="tabs view-tabs" role="tablist" aria-label="라이브러리 보기"><button type="button" role="tab" id="tab-open" class="active" aria-selected="true">라이브러리 열기</button><button type="button" role="tab" id="tab-add" aria-selected="false">라이브러리 추가</button></div>
+<div class="tabs view-tabs" role="tablist" aria-label="라이브러리 보기"><button type="button" role="tab" id="tab-open" class="active" aria-selected="true">라이브러리 열기</button><button type="button" role="tab" id="tab-add" aria-selected="false">라이브러리 추가</button><button type="button" role="tab" id="tab-series" aria-selected="false">시리즈 관리</button></div>
 <section class="card" id="open">
 <h2>라이브러리</h2>
 <div class="field-row"><div><label for="filter">교재명으로 찾기</label><input id="filter" type="search" placeholder="예: 쎈" maxlength="80"></div></div>
@@ -131,12 +147,23 @@ dialog.sheet[open]{display:flex}
 <div id="shelves"></div>
 </section>
 <section class="card" id="add" hidden>
-<h2>교재 찾기</h2>
-<form id="searchForm"><div class="field-row"><div><label for="query">교재명 · 시리즈 · ISBN</label><input id="query" type="search" placeholder="예: 쎈 중등 수학 1-1 또는 ISBN 13자리" required minlength="2" maxlength="80"></div><button class="secondary">검색</button></div></form>
-<div class="other-ways"><p class="help">국내 도서와 수입 원서를 함께 찾아요. 서점에서 본 책은 ISBN으로 찾고, 검색에 없는 교재는 직접 추가하세요.</p><button class="secondary" type="button" id="manual-add">직접 추가</button></div>
+<h2>검색해서 추가</h2>
+<form id="searchForm"><div class="field-row"><div><label for="query">교재명 · 시리즈 · ISBN</label><input id="query" type="search" placeholder="예: 쎈 중1, 쎈 중등 수학 1-1 또는 ISBN 13자리" required maxlength="80"></div><button class="secondary">검색</button></div><p class="help">국내 도서와 수입 원서를 함께 찾아요. 한 글자도 되지만 “쎈 중1”처럼 좁히면 더 정확해요. 서점에서 본 책은 ISBN으로 찾으세요.</p></form>
 <div class="pick-bar" id="pick-bar" hidden><p id="pick-count"></p><button class="primary" id="open-sheet" type="button">라이브러리에 추가</button></div>
 <div id="results"></div>
 <p class="help source-note">도서 정보 출처: 국립중앙도서관 ISBN 서지정보 · 카카오 책 검색 · 표지: 교보문고(없으면 국립중앙도서관·카카오)</p>
+</section>
+<section class="card" id="manual" hidden>
+<h2>직접 추가</h2>
+<p class="help">검색에 없는 교재(학원 자체 교재 등)는 교재명과 단원을 직접 넣어요.</p>
+<button class="secondary" type="button" id="manual-add">직접 추가</button>
+</section>
+<section class="card" id="series" hidden>
+<h2>시리즈 관리</h2>
+<p class="help">라이브러리에서 교재를 묶는 이름이에요. 이 순서대로 [라이브러리 열기]에 보이고, 교재를 추가하거나 편집할 때 고를 수 있어요.</p>
+<form id="seriesForm"><div class="field-row"><div><label for="series-name">새 시리즈</label><input id="series-name" type="text" placeholder="예: 쎈" required maxlength="100"></div><button class="secondary">추가</button></div></form>
+<div id="series-list"></div>
+<p class="help source-note">시리즈는 Notion 라이브러리 DB의 "시리즈" 선택지예요. 교재가 있는 시리즈는 지울 수 없고, 이름을 바꾸면 그 시리즈 교재에 모두 반영돼요.</p>
 </section>
 </div>
 </main>
@@ -151,13 +178,13 @@ dialog.sheet[open]{display:flex}
 <script src="assets/hada-shortcuts.js?v=c5c40163"></script><script src="hada_config.js"></script><script src="admin_auth.js?v=4ffde89c"></script>
 <script>
 'use strict';
-// 라이브러리(v2.5.118, Notion 라이브러리 DB): [열기] 시리즈별 교재 → 단원 창([편집]: 단원 추가·수정·삭제, 표지, v2.5.121) / [추가] 국립중앙도서관·카카오 검색(ISBN 포함, v2.5.120)·직접 추가 → 체크 → 창에서 한 권씩 단원 확인·등록.
+// 라이브러리(v2.5.118, Notion 라이브러리 DB): [열기] 시리즈별 교재 → 단원 창([편집]: 단원 추가·수정·삭제, 표지·시리즈·출판사) / [시리즈 관리] 선택지 추가·이름·순서(v2.5.122) / [추가] 국립중앙도서관·카카오 검색(ISBN 포함, v2.5.120)·직접 추가 → 체크 → 창에서 한 권씩 단원 확인·등록.
 const endpoint=()=>HadaAdminAuth.config().url+'/functions/v1/textbook-api';
 const $=id=>document.getElementById(id);let adminKey='';
 const found=new Map(),picked=new Map(); // 추가: 키(검색 결과는 isbn13, 직접 추가 "m:…") → 검색 결과 / 등록할 교재
 let seq=0; // 직접 추가 일련번호
 const keyOf=b=>b.key||b.isbn13;
-let library=null,sheet=null; // 열기: {books, seriesOrder} / 창 상태 {mode:'add'|'open', i, list, book}
+let library=null,sheet=null,current='open',lists={series:[],publishers:[]}; // 열기: {books, seriesOrder, publishers} / 지금 화면 / 고르기 선택지 / 창 상태 {mode:'add'|'open', i, list, book}
 function status(text,kind='info'){const el=$('status');el.textContent=text;['info','success','error'].forEach(k=>el.classList.toggle(k,k===kind))}
 async function api(body){const r=await fetch(endpoint(),{method:'POST',headers:{'Content-Type':'application/json','x-admin-key':adminKey},body:JSON.stringify(body)});let data;try{data=await r.json()}catch{throw new Error('서버 응답을 읽지 못했습니다. 배포 상태를 확인하세요.')}if(r.status===401){HadaAdminAuth.saveSession('')}if(!r.ok)throw new Error(data.error||'인증 또는 연결 실패');return data}
 function busy(el,on){(el.matches('button')?[el]:el.querySelectorAll('button')).forEach(b=>{b.disabled=on;b.classList.toggle('loading',on);b.toggleAttribute('aria-busy',on)})}
@@ -177,14 +204,16 @@ async function openWorkspace(){await loadLibrary();$('login').hidden=true;$('wor
 $('loginForm').addEventListener('submit',async e=>{e.preventDefault();busy(e.target,true);status('관리자 확인 중…');adminKey=$('key').value;try{adminKey=await HadaAdminAuth.login(HadaAdminAuth.config().url,adminKey);await openWorkspace();HadaAdminAuth.saveSession(adminKey)}catch(e){adminKey='';status(e.message,'error')}finally{busy(e.target,false)}});
 (async()=>{const saved=HadaAdminAuth.savedSession();if(!saved)return;adminKey=saved;$('login').hidden=true;status('로그인 정보를 확인하는 중…');try{await openWorkspace()}catch(e){adminKey='';HadaAdminAuth.saveSession('');$('login').hidden=false;$('key').focus();status('다시 로그인해 주세요. ('+e.message+')','error')}})();
 $('logout').onclick=()=>{adminKey='';HadaAdminAuth.saveSession('');found.clear();picked.clear();library=null;$('results').replaceChildren();$('shelves').replaceChildren();drawPickBar();$('workspace').hidden=true;$('logout').hidden=true;$('login').hidden=false;status('로그아웃했습니다.');$('key').focus()};
-function view(name){const add=name==='add';$('open').hidden=add;$('add').hidden=!add;[['tab-open',!add],['tab-add',add]].forEach(([id,on])=>{$(id).classList.toggle('active',on);$(id).setAttribute('aria-selected',on)});
- status(add?'교재명이나 시리즈로 찾아 체크하고 [라이브러리에 추가]를 누르세요.':library?`교재 ${library.books.length}권이 있어요. 교재를 누르면 단원목록을 보고 단원을 추가할 수 있어요.`:'라이브러리를 불러오는 중…');
- (add?$('query'):$('filter')).focus()}
+function view(name){current=name;$('open').hidden=name!=='open';$('add').hidden=$('manual').hidden=name!=='add';$('series').hidden=name!=='series';
+ [['tab-open','open'],['tab-add','add'],['tab-series','series']].forEach(([id,v])=>{$(id).classList.toggle('active',v===name);$(id).setAttribute('aria-selected',v===name)});
+ status(name==='add'?'교재명이나 시리즈로 찾아 체크하고 [라이브러리에 추가]를 누르세요. 검색에 없는 교재는 [직접 추가].':name==='series'?'시리즈를 추가하거나 이름·순서를 바꿀 수 있어요.':library?`교재 ${library.books.length}권이 있어요. 교재를 누르면 단원목록을 보고 [편집]할 수 있어요.`:'라이브러리를 불러오는 중…');
+ ({open:$('filter'),add:$('query'),series:$('series-name')})[name].focus()}
 $('tab-open').onclick=async()=>{view('open');if(!library)await loadLibrary().catch(e=>status(e.message,'error'))};
 $('tab-add').onclick=()=>view('add');
+$('tab-series').onclick=async()=>{view('series');try{if(!library)await loadLibrary();await loadSeries()}catch(e){status(e.message,'error')}};
 
 // ---------- 라이브러리 열기 ----------
-async function loadLibrary(){status('라이브러리를 불러오는 중…');library=await api({action:'library'});drawShelves();view($('add').hidden?'open':'add')}
+async function loadLibrary(show=true){if(show)status('라이브러리를 불러오는 중…');library=await api({action:'library'});lists={series:library.seriesOrder||[],publishers:library.publishers||[]};drawShelves();if(show)view(current)}
 function drawShelves(){
  const q=$('filter').value.trim().toLowerCase(),books=library.books.filter(b=>!q||b.title.toLowerCase().includes(q));
  const groups=new Map();for(const b of books){const k=b.series||'';groups.set(k,[...(groups.get(k)||[]),b])}
@@ -197,6 +226,38 @@ function drawShelves(){
   d.append(list);return d}));
 }
 $('filter').addEventListener('input',()=>library&&drawShelves());
+// ---------- 시리즈 관리(v2.5.122): Notion 라이브러리 DB "시리즈" 선택지 추가·이름·순서·삭제(교재 0권만) ----------
+let seriesOpts=[],renaming=null;
+async function loadSeries(){seriesOpts=(await api({action:'series'})).series;drawSeries()}
+function iconBtn(kind,label,fn){const b=el('button','icon-btn '+kind);b.type='button';b.setAttribute('aria-label',label);b.title=label;b.onclick=fn;return b}
+function drawSeries(){
+ const counts=new Map();for(const b of library?.books||[])if(b.series)counts.set(b.series,(counts.get(b.series)||0)+1);
+ if(!seriesOpts.length){$('series-list').replaceChildren(el('p','empty','아직 시리즈가 없어요. 위에서 추가하세요.'));return}
+ $('series-list').replaceChildren(...seriesOpts.map((s,k)=>{
+  const row=el('div','series-row');
+  if(renaming===s.id){
+   const i=el('input');i.type='text';i.id='rename-input';i.value=s.name;i.maxLength=100;i.setAttribute('aria-label',`"${s.name}"의 새 이름`);
+   const wrap=el('div','series-name');wrap.append(i);
+   const save=btn('ghost','저장',()=>seriesOp({op:'rename',id:s.id,name:i.value},'시리즈 이름을 바꿨어요'),'rename-save');
+   i.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();save.click()}if(e.key==='Escape'){e.preventDefault();renaming=null;drawSeries()}};
+   const acts=el('div','series-acts');acts.append(save,btn('ghost','취소',()=>{renaming=null;drawSeries()},'rename-cancel'));row.append(wrap,acts);return row}
+  const n=counts.get(s.name)||0,info=el('div','series-name');info.append(el('strong',null,s.name),el('span','meta',`교재 ${n}권`));
+  const up=iconBtn('up',`위로: ${s.name}`,()=>move(k,-1));up.disabled=k===0;
+  const down=iconBtn('down',`아래로: ${s.name}`,()=>move(k,1));down.disabled=k===seriesOpts.length-1;
+  const del=iconBtn('del',`삭제: ${s.name}`,()=>{if(confirm(`"${s.name}" 시리즈를 지울까요?`))seriesOp({op:'remove',id:s.id},'시리즈를 지웠어요')});
+  if(n){del.disabled=true;del.title='교재가 있는 시리즈는 지울 수 없어요'}
+  const acts=el('div','series-acts');acts.append(up,down,btn('ghost','이름 바꾸기',()=>{renaming=s.id;drawSeries();$('rename-input').focus()}),del);row.append(info,acts);return row}));
+}
+function move(k,d){const order=seriesOpts.map(s=>s.id);[order[k],order[k+d]]=[order[k+d],order[k]];seriesOp({op:'order',order},'순서를 바꿨어요')}
+// 바꾼 뒤 라이브러리를 다시 읽는다(교재 수·묶음 순서·고르기 선택지)
+async function seriesOp(body,msg){
+ busy($('series'),true);let ok=false;
+ try{const r=await api({action:'edit-series',...body});seriesOpts=r.series;renaming=null;await loadLibrary(false);status(msg,'success');ok=true}
+ catch(e){status(e.message,'error')}
+ busy($('series'),false);drawSeries();return ok;
+}
+$('seriesForm').addEventListener('submit',async e=>{e.preventDefault();if(await seriesOp({op:'add',name:$('series-name').value},'시리즈를 추가했어요'))$('series-name').value=''});
+
 
 // ---------- 라이브러리 추가: 검색·체크 ----------
 // 검색: 국립중앙도서관·카카오를 함께(서버), ISBN13이면 그 책 한 권
@@ -215,11 +276,11 @@ function drawResults(){
 }
 // 체크할 때 목차를 미리 불러 둔다(창에서 넘길 때 기다리지 않게)
 // 직접 추가 교재: 목차가 없으니 창에서 교재명·ISBN·표지·출판사와 단원을 직접 넣는다
-function customPick(book){return {book,custom:true,units:[],title:book.title||'',isbnIn:book.isbn13||'',coverIn:book.cover||'',publisherIn:book.publisher||'',priceIn:book.price??null,done:null,loading:false}}
+function customPick(book){return {book,custom:true,units:[],title:book.title||'',isbnIn:book.isbn13||'',coverIn:book.cover||'',series:'',publisher:'',priceIn:book.price??null,done:null,loading:false}}
 async function toggle(book,on){
  if(!on){picked.delete(keyOf(book));drawPickBar();return}
  const p={book,detail:null,units:[],title:book.title,coverPick:book.coverPick||'kyobo',done:null,loading:true};picked.set(book.isbn13,p);drawPickBar();
- try{p.detail=await api({action:'detail',isbn13:book.isbn13});p.title=p.detail.book.title;p.units=p.detail.toc.units}catch(e){p.error=e.message}finally{p.loading=false}
+ try{p.detail=await api({action:'detail',isbn13:book.isbn13});p.title=p.detail.book.title;p.units=p.detail.toc.units;p.series??=p.detail.series||'';p.publisher??=p.detail.publisher||''}catch(e){p.error=e.message}finally{p.loading=false}
  if(sheet?.mode==='add'&&sheet.list[sheet.i]===p)drawSheet();
 }
 function todo(){return [...picked.values()].filter(p=>!p.done?.ok)}
@@ -273,10 +334,9 @@ function drawSheet(){
    field('sheet-name','교재명',p.title,{type:'text',maxLength:200,required:true},v=>{p.title=v});
    field('sheet-isbn','ISBN13 · 선택',p.isbnIn,{type:'text',maxLength:17,inputMode:'numeric',placeholder:'979…'},v=>{p.isbnIn=v});
    field('sheet-cover','표지 이미지 주소 · 선택',p.coverIn,{type:'url',maxLength:1000,placeholder:'https://…/big/….jpg'},v=>{p.coverIn=v},()=>{const old=$('sheet-body').querySelector('.sheet-book>.cover');if(old)old.replaceWith(cover(p.coverIn))});
-   field('sheet-pub','출판사 · 선택',p.publisherIn,{type:'text',maxLength:60},v=>{p.publisherIn=v});
-   col.append(box,el('p','book-meta','출판사·시리즈는 라이브러리 선택지와 같을 때만 넣어요. 표지 주소는 메뉴얼 7-6 북커버 규칙의 주소를 쓰세요.'))}
+   col.append(box,pickFields(p),el('p','book-meta','표지 주소는 메뉴얼 7-6 북커버 규칙의 주소를 쓰세요. 새 시리즈는 [시리즈 관리]에서 만들어요.'))}
   else{const lab=el('label',null,'교재명');lab.htmlFor='sheet-name';const t=el('input');t.id='sheet-name';t.type='text';t.value=p.title;t.maxLength=200;t.oninput=()=>{p.title=t.value};
-   const d=p.detail;col.append(lab,t,el('p','book-meta',[d?.publisher?'출판사 '+d.publisher:'출판사 선택지 없음(비워 둠)',d?.series?'시리즈 '+d.series:'시리즈 선택지 없음(비워 둠)',d?.book.pages?'전체 '+d.book.pages+'쪽':'',COVER_TEXT[p.coverPick]].filter(Boolean).join(' · ')))}
+   const d=p.detail;col.append(lab,t,pickFields(p),el('p','book-meta',[d?.book.pages?'전체 '+d.book.pages+'쪽':'',COVER_TEXT[p.coverPick]].filter(Boolean).join(' · ')))}
   top.append(col);const parts=[top];
   if(!p.done?.ok){
    if(p.loading)parts.push(el('p','empty-units','목차를 불러오는 중…'));
@@ -291,7 +351,7 @@ function drawSheet(){
   const b=sheet.book,ed=sheet.edit;$('sheet-title').textContent='단원목록';$('sheet-tag').replaceChildren();$('dots').hidden=true;
   const top=el('div','sheet-book');top.append(cover(ed?ed.cover:b.cover));const col=el('div');
   col.append(titleRow(b.title,b.id),el('p','book-meta',[b.series||'시리즈 없음',b.publisher,b.used?'사용 중':'사용 안 함'].filter(Boolean).join(' · ')));
-  if(ed)col.append(coverEditor(b,ed));
+  if(ed)col.append(pickFields(ed,drawFoot),coverEditor(b,ed));
   top.append(col);const parts=[top];
   if(!sheet.saved)parts.push(el('p','empty-units','단원목록을 불러오는 중…'));
   else{
@@ -307,10 +367,13 @@ function drawSheet(){
 }
 // 교재명 + 오른쪽 끝 Notion 링크(↗ 아이콘만)
 function titleRow(text,pageId){const r=el('div','title-row');r.append(el('strong',null,text));const a=el('a','icon-btn ext');a.href=notionUrl(pageId);a.target='_blank';a.rel='noopener noreferrer';a.setAttribute('aria-label','Notion에서 열기');a.title='Notion에서 열기';r.append(a);return r}
+// 시리즈·출판사 고르기: Notion 선택지 그대로 + 맨 위 "없음". 지금 값이 선택지에 없으면 "없음"으로 보인다.
+function optionSelect(id,label,options,value,set){const w=el('div'),l=el('label',null,label);l.htmlFor=id;const s=el('select');s.id=id;s.append(new Option('없음',''),...options.map(o=>new Option(o,o)));s.value=options.includes(value)?value:'';s.onchange=()=>set(s.value);w.append(l,s);return w}
+function pickFields(o,onChange){const box=el('div','pick-fields');box.append(optionSelect('sheet-series','시리즈',lists.series,o.series,v=>{o.series=v;onChange?.()}),optionSelect('sheet-publisher','출판사',lists.publishers,o.publisher,v=>{o.publisher=v;onChange?.()}));return box}
 function unitHead(){const h=el('div','unit-head');h.append(el('span'),el('span',null,'단원명'),el('span',null,'시작쪽'));return h}
 function savedList(saved){const box=el('div','units');box.append(unitHead());for(const s of saved){const row=el('div','unit saved');row.append(el('span'),el('span',null,s.name),el('span',null,s.page??'–'));box.append(row)}return box}
 const kyoboCover=isbn=>`https://contents.kyobobook.co.kr/sih/fit-in/458x0/pdt/${isbn}.jpg`;
-function startEdit(){sheet.edit={cover:sheet.book.cover||'',rows:new Map(sheet.saved.map(s=>[s.id,{name:s.name,page:s.page,del:false}])),add:[]};drawSheet();$('sheet-body').querySelector('.unit input[type=text]')?.focus()}
+function startEdit(){sheet.edit={cover:sheet.book.cover||'',series:sheet.book.series||'',publisher:sheet.book.publisher||'',rows:new Map(sheet.saved.map(s=>[s.id,{name:s.name,page:s.page,del:false}])),add:[]};drawSheet();$('sheet-body').querySelector('.unit input[type=text]')?.focus()}
 // 표지: 주소 입력 + [교보문고 표지] [다른 표지(국립중앙도서관·카카오)] [표지 지우기]. 왼쪽 표지만 바꾼다(창을 다시 그리지 않음).
 function coverEditor(b,ed){
  const box=el('div','cover-edit');const l=el('label',null,'표지 이미지 주소');l.htmlFor='cover-url';const i=el('input');i.id='cover-url';i.type='url';i.maxLength=1000;i.placeholder='https://…/….jpg';i.value=ed.cover;
@@ -341,8 +404,10 @@ function changes(ed){
  const update=[],remove=[];
  for(const s of sheet.saved){const v=ed.rows.get(s.id);if(v.del){remove.push(s.id);continue}const name=v.name.replace(/\s+/g,' ').trim(),page=Number.isFinite(v.page)?v.page:null;if(name!==s.name||page!==(s.page??null))update.push({id:s.id,name,page})}
  const add=ed.add.filter(u=>u.include!==false&&u.name.trim()).map(u=>({name:u.name.trim(),page:Number.isFinite(u.page)?u.page:null}));
- const c=ed.cover.trim(),cover=c!==(sheet.book.cover||'')?c:null;
- return {update,remove,add,cover,n:update.length+remove.length+add.length+(cover!==null?1:0)};
+ const c=ed.cover.trim(),cover=c!==(sheet.book.cover||'')?c:null,meta={};
+ if(ed.series!==(sheet.book.series||''))meta.series=ed.series;
+ if(ed.publisher!==(sheet.book.publisher||''))meta.publisher=ed.publisher;
+ return {update,remove,add,cover,meta,n:update.length+remove.length+add.length+(cover!==null?1:0)+Object.keys(meta).length};
 }
 const dirty=()=>sheet?.mode==='open'&&!!sheet.edit&&changes(sheet.edit).n>0;
 function cancelEdit(){if(dirty()&&!confirm('고친 내용을 버릴까요?'))return;sheet.edit=null;drawSheet()}
@@ -365,7 +430,7 @@ async function register(p,b){
  if(!p.title.trim()){status('교재명을 입력하세요.','error');$('sheet-name')?.focus();return}
  busy(b,true);status(`"${p.title}" 추가 중…`);
  const units=included(p).map(u=>({name:u.name,page:u.page}));
- try{p.done=await api(p.custom?{action:'register-custom',title:p.title,isbn13:p.isbnIn,cover:p.noCover?'':p.coverIn,price:p.priceIn,publisher:p.publisherIn,units}:{action:'register',isbn13:p.book.isbn13,title:p.title,cover:p.coverPick||'kyobo',units});
+ try{p.done=await api(p.custom?{action:'register-custom',title:p.title,isbn13:p.isbnIn,cover:p.noCover?'':p.coverIn,price:p.priceIn,series:p.series,publisher:p.publisher,units}:{action:'register',isbn13:p.book.isbn13,title:p.title,cover:p.coverPick||'kyobo',series:p.series,publisher:p.publisher,units});
   if(p.done.ok){p.book.registered=true;library=null;status(`"${p.done.name}"을(를) 라이브러리에 추가했어요 · 단원 ${p.done.units}개`,'success');if(sheet.i<sheet.list.length-1&&!sheet.list[sheet.i+1].done?.ok){go(1);return}}
   else status(p.done.error,'error');
  }catch(e){status(`"${p.title}" 추가 실패: ${e.message}`,'error')}
@@ -374,7 +439,7 @@ async function register(p,b){
 }
 async function openBook(b){sheet={mode:'open',book:b,saved:null,edit:null};drawSheet();$('sheet').showModal();
  try{const r=await api({action:'units',bookId:b.id});if(sheet?.book===b){sheet.saved=r.units;drawSheet()}}catch(e){status(e.message,'error');if(sheet?.book===b){sheet.saved=[];drawSheet()}}}
-// 편집 저장: 단원(수정·삭제·추가)은 edit-units 한 번, 표지는 set-cover. 지운 단원은 Notion 휴지통.
+// 편집 저장: 단원(수정·삭제·추가)은 edit-units 한 번, 표지·시리즈·출판사는 set-book(v2.5.122). 지운 단원은 Notion 휴지통.
 async function saveEdit(b){
  const c=changes(sheet.edit),book=sheet.book;
  if(c.update.some(u=>!u.name)){status('단원명이 비어 있는 줄이 있어요.','error');return}
@@ -387,7 +452,12 @@ async function saveEdit(b){
    if(r.blocked?.length){ok=false;msgs.push(`시험범위에 쓰인 단원 ${r.blocked.length}개는 지우지 않았어요`)}
    if(r.skipped)msgs.push(`같은 이름 ${r.skipped}개는 건너뜀`);
   }
-  if(c.cover!==null){await api({action:'set-cover',bookId:book.id,cover:c.cover});book.cover=c.cover;msgs.push(c.cover?'표지를 바꿨어요':'표지를 지웠어요')}
+  if(c.cover!==null||Object.keys(c.meta).length){
+   await api({action:'set-book',bookId:book.id,...(c.cover!==null?{cover:c.cover}:{}),...c.meta});
+   if(c.cover!==null){book.cover=c.cover;msgs.push(c.cover?'표지를 바꿨어요':'표지를 지웠어요')}
+   if('series' in c.meta){book.series=c.meta.series;msgs.push(c.meta.series?`시리즈 ${c.meta.series}`:'시리즈 없음')}
+   if('publisher' in c.meta){book.publisher=c.meta.publisher;msgs.push(c.meta.publisher?`출판사 ${c.meta.publisher}`:'출판사 없음')}
+  }
   const u=await api({action:'units',bookId:book.id});sheet.saved=u.units;book.units=u.units.length;sheet.edit=null;
   status('저장했어요 · '+msgs.join(' · '),ok?'success':'error');drawSheet();
  }catch(e){status(e.message,'error');busy(b,false)}
