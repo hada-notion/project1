@@ -1,7 +1,7 @@
 // POST /functions/v1/textbook-api
 // 라이브러리(library.html, v2.5.118, Notion 라이브러리 DB). 관리자 로그인 세션만 통과한다(adminSecurity.ts의 브라우저 경로).
 //   search   { query }                       국립중앙도서관·카카오 검색(ISBN13이면 그 책) + 라이브러리에 이미 있는지(ISBN13)
-//   register-custom { title, isbn13?, cover?, price?, publisher?, units }  직접 추가 등록(v2.5.119)
+//   register-custom { title, isbn13?, cover?, price?, pages?, series?, publisher?, units }  직접 추가 등록(v2.5.119, 교보문고에서 가져오기 v2.6.6)
 //   detail   { isbn13 }                      한 권의 정보·목차(국립중앙도서관에 있을 때) → 단원 후보
 //   parse    { text }                        붙여넣은 목차 → 단원 후보
 //   register { isbn13, title?, units, cover?, series?, publisher? }   cover: kyobo | alt | none ·  라이브러리 교재 1권 + 단원목록 만들기
