@@ -3,6 +3,10 @@
 버전별 변경 기록입니다. 최신 버전이 맨 위에 옵니다. 상세 실행 지침은 `docs/updates/vX.Y.md`에 있습니다.
 패치를 올릴 때마다 한 줄 이상 추가하고, 해당 버전의 지침 파일을 함께 만듭니다. (템플릿: `docs/updates/_TEMPLATE.md`)
 
+## v2.5.114 — 2026-10-14
+
+- 수업 관리 복사본 3단계: Supabase 예약 실행(pg_cron)으로 복사본을 채우고 맞춘다 — 처음 채우기(3분마다 커서 없는 표부터 하나씩, 끝나면 스스로 지움) → 5분마다 바뀐 것만 → 매일 밤(한국 03:00~03:15) 표마다 전체 대조. 관리자 키는 다른 예약 작업처럼 Vault `sync_queue_admin_key`(GitHub 시크릿 불필요). 시크릿이 없어 동작하지 않던 수동 워크플로 `Class room copy sync (manual)`은 지운다. 마이그레이션 — `main` 병합 시 운영 DB에 적용되고 처음 채우기가 자동으로 돈다. 수업 관리는 아직 복사본을 읽지 않는다. 지침: `docs/updates/v2.5.114.md`
+
 ## v2.5.113 — 2026-10-14
 
 - 수업 관리 복사본 2단계: 새 함수 `sync-class-room-copy`(관리자 키)가 Notion 수업·출석·학습기록·학습활동을 Supabase 복사본 표에 맞춘다 — `reconcile`(기간 전체 대조, 표 하나씩), `incremental`(마지막 동기화 이후 바뀐 것만), `class`(한 반만). Notion은 읽기만 한다. 처음 채우기용 수동 워크플로 `Class room copy sync (manual)` 추가. 수업 관리는 아직 복사본을 읽지 않는다. 함수 추가 — `main` 병합 시 자동 배포. 지침: `docs/updates/v2.5.113.md`

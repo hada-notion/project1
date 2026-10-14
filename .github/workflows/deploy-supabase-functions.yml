@@ -9,6 +9,7 @@ on:
       - 'supabase/migrations/**'
       - 'tests/admin-security-sql.cjs'
       - 'tests/class-room-copy-sql.cjs'
+      - 'tests/class-room-copy-cron-sql.cjs'
   workflow_dispatch: {}
 
 jobs:
@@ -57,6 +58,7 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/hada-security-tests" @electric-sql/pglite@0.5.8 --no-audit --no-fund
           PGLITE_MODULE="$RUNNER_TEMP/hada-security-tests/node_modules/@electric-sql/pglite" node tests/admin-security-sql.cjs
           PGLITE_MODULE="$RUNNER_TEMP/hada-security-tests/node_modules/@electric-sql/pglite" node tests/class-room-copy-sql.cjs
+          PGLITE_MODULE="$RUNNER_TEMP/hada-security-tests/node_modules/@electric-sql/pglite" node tests/class-room-copy-cron-sql.cjs
 
       - name: Run regression guard checks
         run: bash scripts/check-known-regressions.sh
