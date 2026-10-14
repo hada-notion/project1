@@ -16,8 +16,9 @@ const LIB = [
 	{ id: "11111111-1111-4111-8111-111111111111", properties: { "교재명": { title: tt("개념원리 수학 1-1") }, "시리즈": { select: null }, "북커버": { files: [] }, "사용중": { checkbox: false }, "단원목록": { relation: [], has_more: false } } },
 ]
 const UNITS = [{ id: "u2", book: "22222222-2222-4222-8222-222222222222", name: "1-2. 일차부등식", page: 30 }, { id: "u1", book: "22222222-2222-4222-8222-222222222222", name: "1-1. 다항식", page: 8 }, { id: "u3", book: "22222222-2222-4222-8222-222222222222", name: "부록", page: null, exams: 1 }]
-function mock(opts: { existing?: string[]; failUnitAt?: number; nlFail?: boolean; kakaoFail?: boolean } = {}) {
-	const created: any[] = [], calls: string[] = [], headers: Record<string, string>[] = [], patched: any[] = []
+function mock(opts: { existing?: string[]; failUnitAt?: number; nlFail?: boolean; kakaoFail?: boolean; schemaFail?: boolean } = {}) {
+	const created: any[] = [], calls: string[] = [], headers: Record<string, string>[] = [], patched: any[] = [], schema: any[] = []
+	let seriesOpts: any[] = [{ id: "s1", name: "쎈", color: "red" }, { id: "s2", name: "라이트쎈", color: "blue" }]
 	const reply = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status })
 	const fetch = async (input: any, init: any = {}) => {
 		const url = String(input); calls.push(url); headers.push({ ...(init.headers ?? {}) })
@@ -35,10 +36,16 @@ function mock(opts: { existing?: string[]; failUnitAt?: number; nlFail?: boolean
 		}
 		if (url.endsWith("/data_sources/progress")) return reply({ properties: { "라이브러리": { relation: { data_source_id: "books" } } } })
 		if (url.endsWith("/data_sources/units")) return reply({ properties: { "단원명": { title: {} }, "라이브러리": { relation: { data_source_id: "books" } } } })
-		if (url.endsWith("/data_sources/books")) return reply({ properties: { "단원목록": { relation: { data_source_id: "units" } }, "출판사": { select: { options: [{ name: "좋은책신사고" }, { name: "천재교육" }] } }, "시리즈": { select: { options: [{ name: "쎈" }, { name: "라이트쎈" }] } } } })
+		if (url.endsWith("/data_sources/books") && init.method === "PATCH") {
+			if (opts.schemaFail) return reply({ message: "no" }, 400)
+			const next = JSON.parse(init.body).properties["시리즈"].select.options; schema.push(next)
+			seriesOpts = next.map((o: any, k: number) => ({ id: o.id ?? "new" + k, name: o.name, color: o.color })); return reply({})
+		}
+		if (url.endsWith("/data_sources/books")) return reply({ properties: { "단원목록": { relation: { data_source_id: "units" } }, "출판사": { type: "select", select: { options: [{ name: "좋은책신사고" }, { name: "천재교육" }] } }, "시리즈": { type: "select", select: { options: seriesOpts } } } })
 		if (url.endsWith("/data_sources/books/query")) {
 			const filter = JSON.parse(init.body).filter
 			if (!filter) return reply({ results: LIB, has_more: false })
+			if (filter.property === "시리즈") return reply({ results: LIB.filter((p: any) => p.properties["시리즈"].select?.name === filter.select.equals), has_more: false })
 			const isbns = (filter.or ?? []).map((f: any) => f.rich_text.equals)
 			return reply({ results: (opts.existing ?? []).filter((i) => isbns.includes(i)).map((i) => ({ id: "p" + i, properties: { ISBN13: { rich_text: [{ plain_text: i }] } } })), has_more: false })
 		}
@@ -56,7 +63,7 @@ function mock(opts: { existing?: string[]; failUnitAt?: number; nlFail?: boolean
 		}
 		throw new Error("unmocked " + url)
 	}
-	return { fetch, created, calls, headers, patched }
+	return { fetch, created, calls, headers, patched, schema }
 }
 async function withMock(m: ReturnType<typeof mock>, run: () => Promise<void>) {
 	const original = globalThis.fetch; globalThis.fetch = m.fetch as typeof fetch
@@ -88,7 +95,7 @@ Deno.test("search: NL and Kakao merged by ISBN13 (NL first), kyobo cover plus al
 		assert(!("toc" in a), "toc only in detail")
 		assert(b.registered === true && !a.registered)
 		assert(c.title === "Phonics Monster 1" && c.publisher === "AList" && c.pages === null && c.altCover === "https://t1.daumcdn.net/lbook/image/123" && c.sources.join() === "카카오", "Kakao-only book with original cover: " + JSON.stringify(c))
-		await rejects(() => tb.searchBooks("쎈"), 400)
+		await rejects(() => tb.searchBooks(" "), 400)
 	})
 	const nl = new URL(m.calls.find((c) => c.includes("nl.go.kr"))!).searchParams
 	assert(nl.get("title") === "쎈 중등 수학" && nl.get("result_style") === "json" && nl.get("cert_key") === "test-only-nl")
@@ -223,10 +230,11 @@ Deno.test("register-custom: title required, optional ISBN/cover/price, https cov
 		const r: any = await tb.registerCustom({ title: " 학원 자체 교재 ", units: [{ name: "1. 소개" }] })
 		const p = m.created[0].properties
 		assert(r.ok && r.units === 1 && p["교재명"].title[0].text.content === "학원 자체 교재" && !("ISBN13" in p) && !("북커버" in p) && !("가격" in p), JSON.stringify(p))
-		await tb.registerCustom({ title: "Phonics Monster 1 WB", isbn13: "979-11-6951-337-1", cover: "https://ecimg.cafe24img.com/a/big/1/abc.jpg", price: 5400, publisher: "AList", units: [] })
+		await tb.registerCustom({ title: "Phonics Monster 1 WB", isbn13: "979-11-6951-337-1", cover: "https://ecimg.cafe24img.com/a/big/1/abc.jpg", price: 5400, publisher: "", units: [] })
 		const q = m.created[2].properties
 		assert(q.ISBN13.rich_text[0].text.content === "9791169513371" && q["북커버"].files[0].external.url.endsWith("abc.jpg") && q["가격"].number === 5400 && !("출판사" in q), JSON.stringify(q))
 		await rejects(() => tb.registerCustom({ title: "", units: [] }), 400)
+		await rejects(() => tb.registerCustom({ title: "x", publisher: "AList", units: [] }), 400, /출판사 선택지에 없는/)
 		await rejects(() => tb.registerCustom({ title: "x", isbn13: "123", units: [] }), 400)
 		await rejects(() => tb.registerCustom({ title: "x", cover: "http://a/b.jpg", units: [] }), 400)
 		await rejects(() => tb.registerCustom({ title: "x", cover: "javascript:alert(1)", units: [] }), 400)
@@ -278,4 +286,54 @@ Deno.test("set-cover: https image or empty, only on library books", async () => 
 		await rejects(() => tb.setCover({ bookId: BOOK, cover: "javascript:alert(1)" }), 400)
 		await rejects(() => tb.setCover({ bookId: "33333333-3333-4333-8333-333333333333", cover: "" }), 403)
 	})
+})
+
+// ---------- v2.5.122: 시리즈·출판사 고르기, 교재 정보 고치기, 시리즈 관리 ----------
+Deno.test("register: series and publisher picked on screen override the automatic match", async () => {
+	const m = mock()
+	await withMock(m, async () => {
+		await tb.registerBook({ isbn13: "9788928334858", series: "라이트쎈", publisher: "천재교육", units: [] })
+		await tb.registerBook({ isbn13: "9788928334858", series: "", publisher: "", units: [] })
+		await tb.registerBook({ isbn13: "9788928334858", units: [] })
+		const [a, b, c] = m.created.map((x) => x.properties)
+		assert(a["시리즈"].select.name === "라이트쎈" && a["출판사"].select.name === "천재교육", JSON.stringify(a))
+		assert(!("시리즈" in b) && !("출판사" in b), "empty pick leaves them blank")
+		assert(c["시리즈"].select.name === "쎈" && c["출판사"].select.name === "좋은책신사고", "no pick keeps the automatic match")
+		await rejects(() => tb.registerBook({ isbn13: "9788928334858", series: "없는 시리즈", units: [] }), 400, /시리즈 선택지에 없는/)
+	})
+})
+
+Deno.test("set-book: cover, series and publisher only when sent; empty clears", async () => {
+	const m = mock()
+	await withMock(m, async () => {
+		await tb.updateBook({ bookId: BOOK, series: "라이트쎈", publisher: "" })
+		const p = m.patched[0].body.properties
+		assert(p["시리즈"].select.name === "라이트쎈" && p["출판사"].select === null && !("북커버" in p), JSON.stringify(p))
+		await rejects(() => tb.updateBook({ bookId: BOOK }), 400)
+		await rejects(() => tb.updateBook({ bookId: BOOK, publisher: "새 출판사" }), 400)
+	})
+})
+
+Deno.test("edit-series: add, rename, order and remove keep option ids; used or duplicate refused", async () => {
+	const m = mock()
+	await withMock(m, async () => {
+		assert((await tb.seriesList()).series.map((x) => x.name).join() === "쎈,라이트쎈")
+		const added = await tb.editSeries({ op: "add", name: " 개념원리 " })
+		assert(added.series.map((x) => x.name).join() === "쎈,라이트쎈,개념원리", JSON.stringify(added))
+		assert(JSON.stringify(m.schema[0]) === JSON.stringify([{ id: "s1", name: "쎈" }, { id: "s2", name: "라이트쎈" }, { name: "개념원리", color: "default" }]), JSON.stringify(m.schema[0]))
+		await rejects(() => tb.editSeries({ op: "add", name: "쎈 " }), 409)
+		await rejects(() => tb.editSeries({ op: "add", name: "a,b" }), 400)
+		await tb.editSeries({ op: "rename", id: "s2", name: "라이트 쎈" })
+		assert(m.schema[1][1].id === "s2" && m.schema[1][1].name === "라이트 쎈")
+		await rejects(() => tb.editSeries({ op: "rename", id: "s2", name: "쎈" }), 409)
+		await tb.editSeries({ op: "order", order: ["new2", "s1", "s2"] })
+		assert(m.schema[2].map((o: any) => o.id).join() === "new2,s1,s2")
+		await rejects(() => tb.editSeries({ op: "order", order: ["s1"] }), 409)
+		await rejects(() => tb.editSeries({ op: "remove", id: "s1" }), 409, /교재 1권/)
+		const removed = await tb.editSeries({ op: "remove", id: "s2" })
+		assert(removed.series.map((x) => x.name).join() === "개념원리,쎈", JSON.stringify(removed))
+		await rejects(() => tb.editSeries({ op: "remove", id: "zzz" }), 404)
+		await rejects(() => tb.editSeries({ op: "drop" }), 400)
+	})
+	await withMock(mock({ schemaFail: true }), () => rejects(() => tb.editSeries({ op: "add", name: "새 시리즈" }), 502, /직접 고쳐/))
 })

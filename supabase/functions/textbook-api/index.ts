@@ -4,15 +4,18 @@
 //   register-custom { title, isbn13?, cover?, price?, publisher?, units }  직접 추가 등록(v2.5.119)
 //   detail   { isbn13 }                      한 권의 정보·목차(국립중앙도서관에 있을 때) → 단원 후보
 //   parse    { text }                        붙여넣은 목차 → 단원 후보
-//   register { isbn13, title?, units, cover? }   cover: kyobo | alt | none ·  라이브러리 교재 1권 + 단원목록 만들기
+//   register { isbn13, title?, units, cover?, series?, publisher? }   cover: kyobo | alt | none ·  라이브러리 교재 1권 + 단원목록 만들기
 //   library  {}                              라이브러리 전체(시리즈별로 묶을 정보)
 //   units    { bookId }                      한 교재의 단원목록
 //   add-units { bookId, units }              이미 있는 교재에 단원 추가(같은 이름은 건너뜀)
 //   edit-units { bookId, update, remove, add } 단원 수정·삭제(휴지통, 다른 곳에 연결된 단원은 막음)·추가(v2.5.121)
 //   set-cover { bookId, cover }              북커버 바꾸기(https 주소, 빈 값이면 지움, v2.5.121)
+//   set-book { bookId, cover?, series?, publisher? }  교재 표지·시리즈·출판사 고치기(v2.5.122)
+//   series   {}                              시리즈 선택지 목록(v2.5.122)
+//   edit-series { op: add|rename|order|remove, … }  시리즈 선택지 추가·이름·순서·삭제(교재 0권만, v2.5.122)
 // 실제 로직은 _shared/textbookSearch.ts, 목차 규칙은 _shared/textbookToc.ts.
 import { CORS_HEADERS, requireAdminKey } from "../_shared/adminShared.ts"
-import { TextbookError, addUnits, bookDetail, bookUnits, editUnits, libraryBooks, parsePasted, registerBook, registerCustom, searchBooks, setCover } from "../_shared/textbookSearch.ts"
+import { TextbookError, addUnits, bookDetail, bookUnits, editUnits, libraryBooks, parsePasted, registerBook, registerCustom, searchBooks, seriesList, editSeries, setCover, updateBook } from "../_shared/textbookSearch.ts"
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { ...CORS_HEADERS, "Content-Type": "application/json", "Cache-Control": "no-store" } })
 
@@ -37,6 +40,9 @@ Deno.serve(async (req: Request) => {
       case "add-units": return json(await addUnits(body))
       case "edit-units": return json(await editUnits(body))
       case "set-cover": return json(await setCover(body))
+      case "set-book": return json(await updateBook(body))
+      case "series": return json(await seriesList())
+      case "edit-series": return json(await editSeries(body))
       default: return json({ error: "지원하지 않는 작업입니다." }, 400)
     }
   } catch (err) {

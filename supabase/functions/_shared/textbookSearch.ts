@@ -37,8 +37,9 @@ async function dataSource(id: string): Promise<any> {
 	if (!res.ok) throw new Error(`Notion DB 정보를 읽지 못했습니다(${res.status})`)
 	return res.json()
 }
-export async function textbookSources(): Promise<Sources> {
-	if (sourcesCache) return sourcesCache
+// fresh: 캐시를 버리고 다시 읽는다(시리즈 선택지가 바뀌었을 때, v2.5.122)
+export async function textbookSources(fresh = false): Promise<Sources> {
+	if (sourcesCache && !fresh) return sourcesCache
 	if (!DS_PROGRESS_BOOK) throw new TextbookError(503, "DATA_SOURCE_PROGRESS_BOOK_ID 설정이 필요합니다.")
 	const books = libraryProp((await dataSource(DS_PROGRESS_BOOK)).properties)?.relation?.data_source_id
 	if (!books) throw new TextbookError(503, '진도교재 DB의 "라이브러리"(옛 이름 "정규교재") 관계를 찾지 못했습니다.')
@@ -81,7 +82,7 @@ async function registeredIsbns(isbns: string[]): Promise<Set<string>> {
 export const isbnQuery = (q: string) => { const d = q.replace(/[-s]/g, ""); return isIsbn13(d) ? d : null }
 export async function searchBooks(query: unknown) {
 	const q = String(query ?? "").trim()
-	if (q.length < 2 || q.length > 80) throw new TextbookError(400, "교재명은 2~80자로 입력하세요.")
+	if (q.length < 1 || q.length > 80) throw new TextbookError(400, "교재명은 1~80자로 입력하세요.") // "쎈"처럼 한 글자 시리즈(v2.5.122)
 	const isbn = isbnQuery(q)
 	const books = await fromSource(async () => isbn ? [await lookupIsbn(isbn)].filter(Boolean) as Book[] : await searchTitle(q))
 	const done = await registeredIsbns(books.map((b) => b.isbn13))
@@ -126,16 +127,17 @@ export async function registerBook(body: any) {
 	// cover: "kyobo"(기본) | "alt"(국립중앙도서관·카카오 표지) | "none". 옛 화면의 noCover도 받는다.
 	const choice = body?.noCover ? "none" : String(body?.cover ?? "kyobo")
 	const cover = choice === "none" ? "" : choice === "alt" ? book.altCover : coverUrl(isbn13)
-	return await createLibraryBook({ name, isbn13, price: book.price, pages: book.pages, cover, publisher: book.publisher, seriesHint: book.series, units: body?.units })
+	return await createLibraryBook({ name, isbn13, price: book.price, pages: book.pages, cover, publisher: book.publisher, seriesHint: book.series, units: body?.units, seriesPick: await pickOption(body?.series, "series"), publisherPick: await pickOption(body?.publisher, "publishers") })
 }
 
-type NewBook = { name: string; isbn13?: string; price?: number | null; pages?: number | null; cover?: string; publisher?: string; seriesHint?: string; units: unknown }
-// 라이브러리 교재 1권 + 단원목록. 같은 ISBN13이 있으면 409. 출판사·시리즈는 기존 선택지와 맞을 때만.
+type NewBook = { name: string; isbn13?: string; price?: number | null; pages?: number | null; cover?: string; publisher?: string; seriesHint?: string; units: unknown; seriesPick?: string | null; publisherPick?: string | null }
+// 라이브러리 교재 1권 + 단원목록. 같은 ISBN13이 있으면 409. 출판사·시리즈는 화면에서 고른 값(…Pick), 없으면 기존 선택지와 맞을 때만.
 async function createLibraryBook(b: NewBook) {
 	const units = cleanUnits(b.units)
 	const src = await textbookSources()
 	if (b.isbn13 && (await registeredIsbns([b.isbn13])).has(b.isbn13)) throw new TextbookError(409, "이미 라이브러리에 있는 교재입니다(같은 ISBN13).")
-	const publisher = matchPublisher(b.publisher ?? "", src.publishers), series = matchSeries(b.name, b.seriesHint ?? "", src.series)
+	const publisher = b.publisherPick !== undefined ? b.publisherPick : matchPublisher(b.publisher ?? "", src.publishers)
+	const series = b.seriesPick !== undefined ? b.seriesPick : matchSeries(b.name, b.seriesHint ?? "", src.series)
 	const fileName = (b.isbn13 || "cover") + (/\.(png|gif|webp)(\?|$)/i.exec(b.cover ?? "")?.[0]?.replace(/\?$/, "") ?? ".jpg")
 	const props: Record<string, unknown> = {
 		"교재명": title(b.name),
@@ -172,7 +174,7 @@ export async function registerCustom(body: any) {
 	const cover = String(body?.cover ?? "").trim()
 	if (cover && (!/^https:\/\/[^\s]+$/i.test(cover) || cover.length > 1000)) throw new TextbookError(400, "표지 주소는 https로 시작하는 이미지 주소여야 합니다.")
 	const price = Number(body?.price)
-	return await createLibraryBook({ name, isbn13: isbn13 || undefined, price: price > 0 && price < 10_000_000 ? Math.round(price) : null, cover, publisher: String(body?.publisher ?? "").slice(0, 60), units: body?.units })
+	return await createLibraryBook({ name, isbn13: isbn13 || undefined, price: price > 0 && price < 10_000_000 ? Math.round(price) : null, cover, units: body?.units, seriesPick: await pickOption(body?.series, "series"), publisherPick: await pickOption(body?.publisher, "publishers") })
 }
 
 // ---------- 라이브러리 열기(v2.5.118) ----------
@@ -204,7 +206,7 @@ export async function libraryBooks() {
 			unitsMore: units?.has_more === true,
 		}
 	}).sort((a: any, b: any) => a.title.localeCompare(b.title, "ko", { numeric: true }))
-	return { books, seriesOrder: src.series }
+	return { books, seriesOrder: src.series, publishers: src.publishers }
 }
 
 async function bookPageOf(bookId: unknown) {
@@ -304,12 +306,102 @@ export async function editUnits(body: any) {
 	return { ok: true, ...done, blocked, skipped: add.length - fresh.length }
 }
 
-// 북커버 바꾸기: https 이미지 주소, 빈 값이면 지운다.
-export async function setCover(body: any) {
+// 북커버 바꾸기(v2.5.121): https 이미지 주소, 빈 값이면 지운다. v2.5.122부터 updateBook으로.
+export const setCover = (body: any) => updateBook({ bookId: body?.bookId, cover: String(body?.cover ?? "") })
+
+// ---------- 시리즈·출판사 고르기, 시리즈 관리(v2.5.122) ----------
+// 화면에서 고른 값: undefined면 자동 맞춤(matchSeries·matchPublisher), ""면 비움, 이름이면 지금 선택지에 있어야 한다.
+// 선택지는 [시리즈 관리]에서 바뀔 수 있어 캐시에 없으면 한 번 새로 읽는다. 출판사 선택지는 새로 만들지 않는다.
+async function pickOption(v: unknown, kind: "series" | "publishers"): Promise<string | null | undefined> {
+	if (v === undefined || v === null) return undefined
+	const name = String(v).trim()
+	if (!name) return null
+	let src = await textbookSources()
+	if (!src[kind].includes(name)) src = await textbookSources(true)
+	if (!src[kind].includes(name)) throw new TextbookError(400, `${kind === "series" ? "시리즈" : "출판사"} 선택지에 없는 이름입니다: ${name.slice(0, 40)}`)
+	return name
+}
+
+// 교재 정보 고치기: cover(https 주소, ""면 지움)·series·publisher(""면 비움). 보낸 것만 바꾼다.
+export async function updateBook(body: any) {
 	const { id } = await bookPageOf(body?.bookId)
-	const cover = String(body?.cover ?? "").trim()
-	if (cover && (!/^https:\/\/[^\s]+$/i.test(cover) || cover.length > 1000)) throw new TextbookError(400, "표지 주소는 https로 시작하는 이미지 주소여야 합니다.")
-	const fileName = "cover" + (/\.(png|gif|webp)(\?|$)/i.exec(cover)?.[0]?.replace(/\?$/, "") ?? ".jpg")
-	await updatePageProperties(id, { "북커버": { files: cover ? [{ type: "external", name: fileName, external: { url: cover } }] : [] } })
-	return { ok: true, cover }
+	const props: Record<string, unknown> = {}
+	if (body?.cover !== undefined) {
+		const cover = String(body.cover ?? "").trim()
+		if (cover && (!/^https:\/\/[^\s]+$/i.test(cover) || cover.length > 1000)) throw new TextbookError(400, "표지 주소는 https로 시작하는 이미지 주소여야 합니다.")
+		const fileName = "cover" + (/\.(png|gif|webp)(\?|$)/i.exec(cover)?.[0]?.replace(/\?$/, "") ?? ".jpg")
+		props["북커버"] = { files: cover ? [{ type: "external", name: fileName, external: { url: cover } }] : [] }
+	}
+	const series = await pickOption(body?.series, "series"), publisher = await pickOption(body?.publisher, "publishers")
+	if (series !== undefined) props["시리즈"] = { select: series ? { name: series } : null }
+	if (publisher !== undefined) props["출판사"] = { select: publisher ? { name: publisher } : null }
+	if (!Object.keys(props).length) throw new TextbookError(400, "바꿀 내용이 없습니다.")
+	await updatePageProperties(id, props)
+	return { ok: true, cover: body?.cover !== undefined ? String(body.cover ?? "").trim() : undefined, series, publisher }
+}
+
+type SeriesOption = { id: string; name: string; color?: string }
+async function seriesSchema(): Promise<{ src: Sources; options: SeriesOption[] }> {
+	const src = await textbookSources()
+	const prop = (await dataSource(src.books)).properties?.["시리즈"]
+	if (prop?.type !== "select") throw new TextbookError(503, '라이브러리 DB의 "시리즈"가 선택 속성이 아닙니다.')
+	return { src, options: (prop.select?.options ?? []).map((o: any) => ({ id: String(o.id), name: String(o.name), color: o.color })) }
+}
+// 시리즈 선택지 목록(Notion 선택지 순서 = 라이브러리 묶음 순서)
+export async function seriesList() {
+	const { options } = await seriesSchema()
+	return { series: options.map((o) => ({ id: o.id, name: o.name })) }
+}
+const seriesName = (v: unknown) => {
+	const s = String(v ?? "").replace(/\s+/g, " ").trim()
+	if (!s || s.length > 100) throw new TextbookError(400, "시리즈 이름은 1~100자로 입력하세요.")
+	if (s.includes(",")) throw new TextbookError(400, "시리즈 이름에는 쉼표(,)를 쓸 수 없습니다.")
+	return s
+}
+// 시리즈 선택지 바꾸기: op add { name } · rename { id, name } · order { order: [id…] } · remove { id }(교재가 0권일 때만).
+// Notion은 선택지 전체 목록을 받으므로 매번 지금 목록을 새로 읽어 고친 뒤 보낸다(기존 선택지는 id로 유지 → 교재의 값도 유지).
+export async function editSeries(body: any) {
+	const { src, options } = await seriesSchema()
+	const keep = (o: SeriesOption) => ({ id: o.id, name: o.name })
+	const find = (id: unknown) => { const o = options.find((x) => x.id === String(id ?? "")); if (!o) throw new TextbookError(404, "시리즈를 찾지 못했습니다. 새로고침 후 다시 하세요."); return o }
+	const taken = (name: string, except = "") => options.some((o) => o.id !== except && norm(o.name) === norm(name))
+	let next: Record<string, unknown>[]
+	switch (String(body?.op ?? "")) {
+		case "add": {
+			const name = seriesName(body?.name)
+			if (taken(name)) throw new TextbookError(409, "이미 있는 시리즈입니다.")
+			next = [...options.map(keep), { name, color: "default" }]
+			break
+		}
+		case "rename": {
+			const o = find(body?.id), name = seriesName(body?.name)
+			if (taken(name, o.id)) throw new TextbookError(409, "이미 있는 시리즈 이름입니다.")
+			next = options.map((x) => x.id === o.id ? { id: x.id, name } : keep(x))
+			break
+		}
+		case "order": {
+			const order = Array.isArray(body?.order) ? body.order.map(String) : []
+			if (order.length !== options.length || new Set(order).size !== order.length || !order.every((i: string) => options.some((o) => o.id === i)))
+				throw new TextbookError(409, "시리즈 목록이 그사이 바뀌었습니다. 새로고침 후 다시 하세요.")
+			next = order.map((i: string) => keep(options.find((o) => o.id === i)!))
+			break
+		}
+		case "remove": {
+			const o = find(body?.id)
+			const used = await queryAllPages(src.books, { property: "시리즈", select: { equals: o.name } })
+			if (used.length) throw new TextbookError(409, `교재 ${used.length}권이 이 시리즈를 쓰고 있어 지울 수 없습니다.`)
+			next = options.filter((x) => x.id !== o.id).map(keep)
+			break
+		}
+		default: throw new TextbookError(400, "지원하지 않는 시리즈 작업입니다.")
+	}
+	const res = await fetchWithRetry(`${NOTION_API}/data_sources/${src.books}`, {
+		method: "PATCH", headers: notionHeaders(), body: JSON.stringify({ properties: { "시리즈": { select: { options: next } } } }),
+	}, 2)
+	if (!res.ok) {
+		console.error("[textbook-api] 시리즈 변경 거부:", res.status, (await res.text()).slice(0, 300))
+		throw new TextbookError(502, `Notion이 시리즈 변경을 받지 않았습니다(${res.status}). Notion 라이브러리 DB의 "시리즈" 속성에서 직접 고쳐 주세요.`)
+	}
+	sourcesCache = null
+	return { ok: true, ...(await seriesList()) }
 }
