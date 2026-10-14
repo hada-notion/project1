@@ -96,6 +96,7 @@ import {
 	mapWithConcurrency,
 } from "./notionClient.ts"
 import { type StatusSpec, markRunning, markDone, markError } from "./statusTracking.ts"
+import { LIBRARY_PROP, libraryIds, libraryKey } from "./libraryProp.ts"
 
 // (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) "교재 처리중" 체크박스(등록 DB, create-individual
 // 라우트 전용) → "교재 상태"(select) + "교재 처리 시작 시각"(date). 마스터플랜:
@@ -123,7 +124,6 @@ const PROP_BOOK_TITLE = "진도교재" // title
 const PROP_TEMPLATE_RELATION = "반별교재" // 인스턴스 -> 템플릿 (self-relation, limit 1)
 const PROP_PROGRESS_MODE = "진도방식" // 개별 진도 | 그룹 진도
 const PROP_PROGRESS_STATUS = "진행상태" // 다음 교재 | 진행 중 | 미사용 | 완료
-const PROP_REGULAR_BOOK = "정규교재" // relation
 const PROP_CLASS_ON_BOOK = "클래스" // relation (진도교재 DB 쪽)
 const PROP_REGISTRATION_ON_BOOK = "등록" // relation
 const PROP_LEARNING_RECORD = "학습기록" // relation
@@ -182,11 +182,11 @@ async function resolveInstanceForTemplate(registration: any, templatePage: any) 
 		if (already.results.length > 0) return { instanceId: already.results[0].id, linked: true }
 	}
 
-	const regularBookIds = relationIds(templatePage, PROP_REGULAR_BOOK)
+	const regularBookIds = libraryIds(templatePage)
 	// 개별교재의 주인은 등록이며, 반별교재는 복사 출처다. 기준 교재의 클래스/제목을
 	// 복사하지 않는다. 자동화 설정 전에도 새 교재는 같은 네이밍으로 생성한다.
 	const regularBookPage = regularBookIds[0] ? await getPage(regularBookIds[0]) : null
-	const bookName = regularBookPage ? (fullBookTitle(regularBookPage, "교재명") || "정규교재 연결 필요") : "정규교재 연결 필요"
+	const bookName = regularBookPage ? (fullBookTitle(regularBookPage, "교재명") || "라이브러리 연결 필요") : "라이브러리 연결 필요"
 	const registrationName = fullBookTitle(registration, "이름")
 	const individualTitle = `${bookName}(${registrationName})`
 
@@ -199,7 +199,8 @@ async function resolveInstanceForTemplate(registration: any, templatePage: any) 
 		[PROP_PROGRESS_STATUS]: { status: { name: STATUS_NEXT } },
 		[PROP_REGISTRATION_ON_BOOK]: { relation: [{ id: registrationId }] },
 	}
-	if (regularBookIds.length > 0) properties[PROP_REGULAR_BOOK] = { relation: [{ id: regularBookIds[0] }] }
+	// 라이브러리 관계 이름은 템플릿(같은 진도교재 DB)에 있는 이름을 그대로 쓴다(새 이름 "라이브러리", 옛 이름 "정규교재").
+	if (regularBookIds.length > 0) properties[libraryKey(templatePage) ?? LIBRARY_PROP] = { relation: [{ id: regularBookIds[0] }] }
 	// PROP_CLASS_ON_BOOK 는 새 개별교재에 설정하지 않는다. 기존 행의 클래스는 변경하지 않는다.
 
 	const page = await createPage(DATA_SOURCE_PROGRESS_BOOK, properties)

@@ -7,11 +7,11 @@
 // 하기 위함이다. sync-report-cache/index.ts의 awaitCompletion/mode:"all" 경로도 이 파일의
 // resolveRegistrationIds를 그대로 가져다 쓴다 (동작 변경 없음, 코드 위치만 이동).
 //
-// [정규교재(학원) DB 웹훅, 2026-09-18] 정규교재 페이지(예: "북커버")를 바꿔도, 그동안은 그 교재를
+// [라이브러리(학원) DB 웹훅(옛 이름 정규교재), 2026-09-18] 라이브러리 교재 페이지(예: "북커버")를 바꿔도, 그동안은 그 교재를
 // 쓰는 학생들의 리포트 캐시가 갱신될 방법이 전혀 없었다 (등록/학습기록/학습활동/보고서 DB만
-// 트리거였고, 정규교재는 대상이 아니었음). 정규교재 페이지에는 "등록" 관계가 없으므로(그 교재를 쓰는
+// 트리거였고, 라이브러리는 대상이 아니었음). 라이브러리 교재 페이지에는 "등록" 관계가 없으므로(그 교재를 쓰는
 // 진도교재 인스턴스들에 간접적으로만 연결되어 있음), resolveRegistrationId를
-// resolveRegistrationIds로 바꿔서 정규교재 페이지 id가 들어오면 그 교재를 쓰는 진도교재 인스턴스를
+// resolveRegistrationIds로 바꿔서 라이브러리 교재 페이지 id가 들어오면 그 교재를 쓰는 진도교재 인스턴스를
 // 전부 찾고, 각 인스턴스의 "등록" 관계를 모아(그룹 진도 인스턴스는 등록이 여러 건일 수 있음) 그
 // 등록들을 모두 재동기화한다.
 //
@@ -30,16 +30,17 @@ import { queryAllPages, mapWithConcurrency, relationIds } from "./notionClient.t
 import { firstRelationId } from "./reportCacheShared.ts"
 import { syncReportCacheForRegistration } from "./reportCacheBuilder.ts"
 import { DS_REGISTRATION, DS_STUDENT } from "./constants.ts"
+import { libraryPropOf } from "./libraryProp.ts"
 // (2026-09-21, 이식성 리팩토링) 위 2개도 constants.ts로 이동함 — 그 파일 상단 주석 참고.
 // sync-report-cache/index.ts가 DS_REGISTRATION을 이 파일에서 가져다 쓰고 있어서(re-export),
 // 그 파일은 건드리지 않고 여기서 계속 재수출한다.
 export { DS_REGISTRATION }
-// 진도교재(학원) DB. sync-registration-textbook/index.ts와 동일한 값 (정규교재 페이지 -> 그 교재를
+// 진도교재(학원) DB. sync-registration-textbook/index.ts와 동일한 값 (라이브러리 교재 페이지 -> 그 교재를
 // 쓰는 진도교재 인스턴스를 찾기 위해 필요).
 const DATA_SOURCE_PROGRESS_BOOK = Deno.env.get("DATA_SOURCE_PROGRESS_BOOK_ID")!
 
 // 일정(학원) 페이지 식별: "구분"(select)과 "날짜"(date) 조합은 일정(학원) DB에만 있다. 등록/학습기록/
-// 학습활동/보고서/정규교재는 모두 아래에서 "등록" 관계 또는 "북커버" 속성으로 먼저 걸러지므로, 이
+// 학습활동/보고서/라이브러리 교재는 모두 아래에서 "등록" 관계 또는 "북커버" 속성으로 먼저 걸러지므로, 이
 // 함수는 그 다음 단계에서만 호출된다.
 export function isNoticePage(page: any): boolean {
   const props = page?.properties ?? {}
@@ -103,12 +104,12 @@ export async function resolveRegistrationIdsForNotice(
   return Array.from(registrationIdSet)
 }
 
-// webhook body(등록/학습기록/학습활동/보고서/정규교재/일정 페이지 id)로부텀 실제 리포트 캐시 대상인
+// webhook body(등록/학습기록/학습활동/보고서/라이브러리/일정 페이지 id)로부텀 실제 리포트 캐시 대상인
 // "등록" 페이지 id들을 알아낸다.
 // - 등록 페이지 자신: "등록"/"북커버" 속성이 모두 없으므로(자기 자신이 등록이므로) 그대로 pageId
 //   하나를 반환한다.
 // - 학습기록/학습활동/보고서 페이지: "등록" 관계를 따라간다 (한 건).
-// - 정규교재 페이지: "등록" 관계가 없고 "북커버" 속성으로 식별한다. 이 정규교재를 쓰는 진도교재
+// - 라이브러리 교재 페이지: "등록" 관계가 없고 "북커버" 속성으로 식별한다. 이 교재를 쓰는 진도교재
 //   인스턴스를 전부 찾아 각 인스턴스의 "등록" 관계를 모두 모아 반환한다 (그룹 진도 인스턴스는 등록이
 //   여러 건일 수 있음).
 // - 일정 페이지: "등록"/"북커버" 속성이 모두 없고 "구분"(select)+"날짜"(date) 조합으로 식별한다.
@@ -122,7 +123,7 @@ export async function resolveRegistrationIds(pageId: string, cachedGetPage: (id:
 
   if (props["북커버"] !== undefined) {
     const instances = await queryAllPages(DATA_SOURCE_PROGRESS_BOOK, {
-      property: "정규교재",
+      property: await libraryPropOf(DATA_SOURCE_PROGRESS_BOOK),
       relation: { contains: pageId },
     })
     return Array.from(new Set(instances.flatMap((inst: any) => relationIds(inst, "등록"))))

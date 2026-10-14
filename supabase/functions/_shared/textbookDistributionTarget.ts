@@ -17,6 +17,7 @@
 // 명시적인 일괄 버튼이라 processFromClassCartsQueueItem은 그대로 두고 계속 큐를 쓴다.
 
 import { PROP_LAST_ERROR, PROP_SYNCED_AT, DS_REGISTRATION, PROP_CLASS, PROP_STATUS } from "./constants.ts"
+import { LIBRARY_PROP, libraryIds, libraryPropOf } from "./libraryProp.ts"
 import {
 	getPage,
 	createPage,
@@ -40,12 +41,10 @@ export const PROP_CART_REGISTRATION = "등록"
 
 const PROP_DIST_TITLE = "이름"
 const PROP_DIST_REGISTRATION = "등록"
-const PROP_DIST_REGULAR_BOOK = "정규교재"
 const PROP_DIST_DATE = "배부일"
 const PROP_DIST_CART = "교재비"
 
 const PROP_PROGRESS_STATUS = "진행상태"
-const PROP_REGULAR_BOOK_ON_PROGRESS = "정규교재"
 const STATUS_ELIGIBLE = "진행 중"
 
 const PROP_REGISTRATION_BOOKS = "진도교재"
@@ -96,7 +95,7 @@ export async function ensureCartForRegistration(
 	return { cartId: cart.id, cartCreated: true }
 }
 
-// 등록 하나에 대해 아직 담기지 않은 "진행 중" 진도교재를 모아, 정규교재별 교재배부를 개별 생성한다.
+// 등록 하나에 대해 아직 담기지 않은 "진행 중" 진도교재를 모아, 라이브러리 교재별 교재배부를 개별 생성한다.
 export async function distributeForRegistration(
 	registrationId: string,
 	preFetchedRegistration?: any,
@@ -116,7 +115,7 @@ export async function distributeForRegistration(
 	const eligibleBookIds = new Set<string>()
 	for (const book of progressBooks) {
 		if (statusName(book, PROP_PROGRESS_STATUS) !== STATUS_ELIGIBLE) continue
-		const regularBookIds = relationIds(book, PROP_REGULAR_BOOK_ON_PROGRESS)
+		const regularBookIds = libraryIds(book)
 		if (regularBookIds.length > 0) eligibleBookIds.add(regularBookIds[0])
 	}
 	if (eligibleBookIds.size === 0) return { status: "no_eligible_books" }
@@ -127,7 +126,7 @@ export async function distributeForRegistration(
 	})
 	const billedBookIds = new Set<string>()
 	for (const dist of existingDistributions) {
-		for (const id of relIds(dist.properties[PROP_DIST_REGULAR_BOOK])) billedBookIds.add(id)
+		for (const id of libraryIds(dist)) billedBookIds.add(id)
 	}
 
 	const newBookIds = [...eligibleBookIds].filter((id) => !billedBookIds.has(id))
@@ -140,13 +139,14 @@ export async function distributeForRegistration(
 		newBookPages.push(await getPage(id))
 	}
 	const distributions: any[] = []
+	const distLibraryProp = newBookIds.length ? await libraryPropOf(DATA_SOURCE_TEXTBOOK_DISTRIBUTION) : LIBRARY_PROP
 	for (let idx = 0; idx < newBookIds.length; idx++) {
 		const bookId = newBookIds[idx]
 		const bookTitle = anyTitleText(newBookPages[idx]) || `${todaySeoulDate()} 교재 배부`
 		const dist = await createPage(DATA_SOURCE_TEXTBOOK_DISTRIBUTION, {
 			[PROP_DIST_TITLE]: { title: [{ text: { content: bookTitle } }] },
 			[PROP_DIST_REGISTRATION]: { relation: [{ id: registrationId }] },
-			[PROP_DIST_REGULAR_BOOK]: { relation: [{ id: bookId }] },
+			[distLibraryProp]: { relation: [{ id: bookId }] },
 			[PROP_DIST_DATE]: { date: { start: todaySeoulDate() } },
 			[PROP_DIST_CART]: { relation: [{ id: cartId }] },
 		})

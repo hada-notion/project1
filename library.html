@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>라이브러리 · 하다 학원관리</title><link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236B5D4D%22%20stroke-width%3D%222.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cstyle%3E%40media(prefers-color-scheme%3Adark)%7Bsvg%7Bstroke%3A%23E6D7C4%7D%7D%3C%2Fstyle%3E%3Cpath%20d%3D%22M2%203h6a4%204%200%200%201%204%204v14a3%203%200%200%200-3-3H2z%22%2F%3E%3Cpath%20d%3D%22M22%203h-6a4%204%200%200%200-4%204v14a3%203%200%200%201%203-3h7z%22%2F%3E%3C%2Fsvg%3E">
+<link rel="stylesheet" href="assets/hada-ui.css?v=44721213">
+<style>
+/* 라이브러리 화면 전용. 값은 assets/hada-ui.css 토큰만 쓴다(docs/DESIGN.md "라이브러리 규칙"). */
+.view-tabs{margin:0 0 var(--space-6)}
+.card h2{margin-bottom:var(--space-2)}
+.field-row{display:flex;gap:var(--space-3);align-items:flex-end;margin-top:var(--space-4)}
+.field-row>div{flex:1;min-width:0}
+.field-row label{margin-top:0}
+.field-row button{flex-shrink:0;width:auto}
+#status{white-space:pre-wrap;overflow-wrap:anywhere}
+.source-note{margin:var(--space-5) 0 0}
+/* 표지: 폭 48, 3:4. 이미지가 없으면 같은 칸에 "표지 없음" */
+.cover{width:var(--space-12);aspect-ratio:3/4;object-fit:cover;flex-shrink:0;border-radius:var(--radius-xs);border:1px solid var(--divider);background:var(--brand-soft)}
+.cover.none{display:flex;align-items:center;justify-content:center;font-size:var(--text-micro);color:var(--text-subtle);text-align:center}
+.done-tag{flex-shrink:0;font-size:var(--text-caption);font-weight:700;color:var(--success-ink);background:var(--success-soft);padding:var(--space-1) var(--space-3);border-radius:var(--radius-pill);white-space:nowrap}
+.check{display:flex;align-items:center;justify-content:center;width:var(--hit-min);height:var(--hit-min);margin:0;flex-shrink:0;cursor:pointer}
+.check input{width:var(--icon-md);height:var(--icon-md);margin:0;padding:0;accent-color:var(--brand-deep);cursor:pointer}
+.check input:disabled{cursor:not-allowed}
+/* 라이브러리 열기: 시리즈마다 접기 → 교재 줄(누르면 단원 창) */
+.shelf-sum{margin:var(--space-3) 0 0;color:var(--text-muted);font-size:var(--text-small)}
+.series{border-top:1px solid var(--divider)}
+.series:first-of-type{margin-top:var(--space-5)}
+.series>summary{min-height:var(--hit-min);font-weight:700;font-size:var(--text-lead)}
+.series>summary .count{font-weight:400;font-size:var(--text-small);color:var(--text-muted)}
+.shelf{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:var(--space-3);padding:0 0 var(--space-4)}
+.book-btn{display:flex;gap:var(--space-3);align-items:center;width:100%;min-height:var(--hit-min);padding:var(--space-3);border:1px solid var(--divider);border-radius:var(--radius-md);background:var(--surface);text-align:left;color:var(--text-ink)}
+.book-btn:hover{border-color:var(--brand-border)}
+.book-btn strong{display:block;font-size:var(--text-body);overflow-wrap:anywhere}
+.book-btn span.meta{display:block;margin-top:var(--space-1);font-size:var(--text-small);color:var(--text-muted)}
+.book-btn>span:not(.cover){flex:1;min-width:0}
+.empty{margin:var(--space-5) 0 0;color:var(--text-muted)}
+/* 라이브러리 추가: 검색 → [선택 n권 | 라이브러리에 추가] → 결과 */
+.pick-bar{display:flex;gap:var(--space-4);align-items:center;justify-content:space-between;margin-top:var(--space-5);padding:var(--space-3) var(--space-4);border-radius:var(--radius-md);background:var(--brand-soft)}
+.pick-bar p{margin:0;font-weight:700;color:var(--text-ink)}
+.pick-bar .primary{width:auto;flex-shrink:0}
+.result{display:flex;gap:var(--space-4);align-items:center;padding:var(--space-4) 0;border-top:1px solid var(--divider)}
+.result:first-child{margin-top:var(--space-4)}
+.result-info{flex:1;min-width:0}
+.result-info strong{display:block;font-size:var(--text-lead);overflow-wrap:anywhere;cursor:pointer}
+.result.locked .result-info strong{cursor:default}
+.result-info>p{margin:var(--space-1) 0 0;color:var(--text-muted);font-size:var(--text-small);overflow-wrap:anywhere}
+.more{margin-top:var(--space-1)}
+.more summary{display:inline-flex;font-size:var(--text-small);color:var(--text-muted)}
+.more p{margin:var(--space-1) 0 0;color:var(--text-muted);font-size:var(--text-small);overflow-wrap:anywhere}
+/* 단원 창: 휴대폰은 아래에서 올라오는 전체 창, 넓은 화면은 가운데. [머리 | 본문(위아래 스크롤) | 아래 버튼] */
+dialog.sheet{display:none;flex-direction:column;width:min(100% - var(--space-8),var(--dialog-md));max-height:min(88vh,calc(100vh - var(--space-8)));padding:0;overflow:hidden}
+dialog.sheet[open]{display:flex}
+.sheet-head{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-5);border-bottom:1px solid var(--divider)}
+.sheet-head h2{margin:0;font-size:var(--text-lead);text-align:center}
+.sheet-head .ghost{justify-self:start}
+.sheet-head .done-tag{justify-self:end}
+.dots{display:flex;flex-wrap:wrap;justify-content:center;gap:var(--space-1);padding:var(--space-2) var(--space-5) 0}
+.dots i{display:block;width:var(--space-2);height:var(--space-2);border-radius:50%;background:var(--brand-border)}
+/* 지금 교재는 길쭉한 점, 등록한 교재는 초록 */
+.dots i.on{width:var(--space-4);border-radius:var(--radius-pill);background:var(--brand-deep)}.dots i.ok{background:var(--success)}
+.sheet-body{flex:1;min-height:0;overflow:auto;padding:var(--space-4) var(--space-5) var(--space-5);touch-action:pan-y}
+.sheet-book{display:flex;gap:var(--space-4);align-items:flex-start}
+.sheet-book>div{flex:1;min-width:0}
+.sheet-book label{margin:0 0 var(--space-2)}
+.sheet-book strong{display:block;font-size:var(--text-lead);overflow-wrap:anywhere}
+.book-meta{margin:var(--space-2) 0 0;color:var(--text-muted);font-size:var(--text-small);overflow-wrap:anywhere}
+.units{margin-top:var(--space-5)}
+.unit-head,.unit{display:grid;grid-template-columns:var(--hit-min) minmax(0,1fr) calc(var(--space-12)*2);gap:var(--space-2);align-items:center}
+.unit-head{font-size:var(--text-caption);color:var(--text-subtle);margin-bottom:var(--space-1)}
+.unit{padding:var(--space-1) 0}
+.unit input[type=text],.unit input[type=number]{height:var(--hit-area);padding:var(--space-2) var(--space-3)}
+.unit.off input[type=text]{color:var(--text-subtle);text-decoration:line-through}
+.unit.saved{min-height:var(--hit-min)}
+.unit.saved span{overflow-wrap:anywhere}
+.unit.saved span:last-child{color:var(--text-muted);font-variant-numeric:tabular-nums}
+.unit-big{margin:var(--space-3) 0 var(--space-1);font-size:var(--text-caption);font-weight:700;color:var(--text-muted)}
+.unit-add{margin-top:var(--space-3);width:auto}
+.empty-units{margin:var(--space-2) 0 0;color:var(--text-muted);font-size:var(--text-small)}
+.paste{margin-top:var(--space-4)}
+.paste summary{font-size:var(--text-small);color:var(--text-muted);min-height:var(--hit-min)}
+.paste textarea{display:block;width:100%;min-height:calc(var(--space-12)*3);margin-top:var(--space-2);padding:var(--space-3) var(--space-4);border:1px solid var(--control-border);border-radius:var(--radius-md);font:inherit;font-size:var(--text-small);color:var(--text-ink);background:var(--surface);resize:vertical}
+.paste .secondary{margin-top:var(--space-2);width:auto}
+.sheet-foot{display:flex;gap:var(--space-3);padding:var(--space-3) var(--space-5);border-top:1px solid var(--divider)}
+.sheet-foot button{flex:1;width:auto}
+.sheet-foot .primary{flex:1.6}
+@media(max-width:700px){
+ .topright .badge{display:none}
+ .field-row{flex-direction:column;align-items:stretch}.field-row button{width:100%}
+ .pick-bar{flex-direction:column;align-items:stretch}.pick-bar .primary{width:100%}
+ .result{align-items:flex-start;gap:var(--space-3)}
+ .shelf{grid-template-columns:minmax(0,1fr)}
+ dialog.sheet{width:100%;max-width:100%;height:92vh;max-height:92vh;margin:auto 0 0;border-radius:var(--radius-lg);border-bottom-left-radius:0;border-bottom-right-radius:0}
+ .sheet-head,.sheet-foot{padding-left:var(--space-4);padding-right:var(--space-4)}
+ .sheet-body{padding-left:var(--space-4);padding-right:var(--space-4)}
+ .unit,.unit-head{grid-template-columns:var(--hit-min) minmax(0,1fr) calc(var(--space-12)*1.5)}
+}
+</style></head><body><div class="shell">
+<nav class="top" aria-label="서비스 정보"><div class="brand"><img class="logo" src="assets/brand/hada-wordmark.png" alt="HADA" width="96" height="36"><div class="wordmark">하다<span>학원관리</span></div></div><div class="app-nav" id="app-nav"></div><div class="topright"><button class="ghost" id="logout" type="button" hidden>로그아웃</button><span class="badge">관리자 전용</span></div></nav>
+<header><h1>라이브러리</h1><p class="muted">학원에서 쓰는 교재(Notion 라이브러리 DB)를 시리즈별로 보고, 알라딘에서 찾아 새 교재와 단원목록을 추가합니다.</p></header>
+<p class="notice info" id="status" role="status" aria-live="polite">관리자 비밀번호로 로그인하세요.</p>
+<main>
+<section class="card" id="login"><div class="narrow"><h2>관리자 확인</h2><form id="loginForm"><label for="key">관리자 비밀번호</label><input id="key" type="password" autocomplete="current-password" required autofocus><p class="help">관리자 설정과 같은 비밀번호입니다. 로그인은 관리자 설정·법정 서류·학교 검색과 함께 쓰이고, 이 탭을 닫거나 로그아웃하면 해제됩니다.</p><button class="primary">확인</button></form></div></section>
+<div id="workspace" hidden>
+<div class="tabs view-tabs" role="tablist" aria-label="라이브러리 보기"><button type="button" role="tab" id="tab-open" class="active" aria-selected="true">라이브러리 열기</button><button type="button" role="tab" id="tab-add" aria-selected="false">라이브러리 추가</button></div>
+<section class="card" id="open">
+<h2>라이브러리</h2>
+<div class="field-row"><div><label for="filter">교재명으로 찾기</label><input id="filter" type="search" placeholder="예: 쎈" maxlength="80"></div></div>
+<p class="shelf-sum" id="shelf-sum"></p>
+<div id="shelves"></div>
+</section>
+<section class="card" id="add" hidden>
+<h2>교재 찾기</h2>
+<form id="searchForm"><div class="field-row"><div><label for="query">교재명 · 시리즈</label><input id="query" type="search" placeholder="예: 쎈 중등 수학 1-1" required minlength="2" maxlength="80"></div><button class="secondary">검색</button></div></form>
+<div class="pick-bar" id="pick-bar" hidden><p id="pick-count"></p><button class="primary" id="open-sheet" type="button">라이브러리에 추가</button></div>
+<div id="results"></div>
+<p class="help source-note">도서 정보 출처: 알라딘 인터넷서점(www.aladin.co.kr) · 표지: 교보문고</p>
+</section>
+</div>
+</main>
+<p class="foot"><strong>비밀번호는 타인에게 전달하지 마세요.</strong> 공용 기기에서는 사용 후 창을 닫으세요.</p>
+</div>
+<dialog class="card sheet" id="sheet" aria-labelledby="sheet-title">
+<div class="sheet-head"><button class="ghost" id="sheet-close" type="button">닫기</button><h2 id="sheet-title"></h2><span id="sheet-tag"></span></div>
+<div class="dots" id="dots"></div>
+<div class="sheet-body" id="sheet-body"></div>
+<div class="sheet-foot" id="sheet-foot"></div>
+</dialog>
+<script src="assets/hada-shortcuts.js?v=e2f17f5f"></script><script src="hada_config.js"></script><script src="admin_auth.js?v=4ffde89c"></script>
+<script>
+'use strict';
+// 라이브러리(v2.5.118, Notion 라이브러리 DB): [열기] 시리즈별 교재 → 단원 창(단원 추가) / [추가] 알라딘 검색 → 체크 → 창에서 한 권씩 단원 확인·등록.
+const endpoint=()=>HadaAdminAuth.config().url+'/functions/v1/textbook-api';
+const $=id=>document.getElementById(id);let adminKey='';
+const found=new Map(),picked=new Map(); // 추가: isbn13 → 검색 결과 / {book, detail, units, title, noCover, done, loading}
+let library=null,sheet=null; // 열기: {books, seriesOrder} / 창 상태 {mode:'add'|'open', i, list, book}
+function status(text,kind='info'){const el=$('status');el.textContent=text;['info','success','error'].forEach(k=>el.classList.toggle(k,k===kind))}
+async function api(body){const r=await fetch(endpoint(),{method:'POST',headers:{'Content-Type':'application/json','x-admin-key':adminKey},body:JSON.stringify(body)});let data;try{data=await r.json()}catch{throw new Error('서버 응답을 읽지 못했습니다. 배포 상태를 확인하세요.')}if(r.status===401){HadaAdminAuth.saveSession('')}if(!r.ok)throw new Error(data.error||'인증 또는 연결 실패');return data}
+function busy(el,on){(el.matches('button')?[el]:el.querySelectorAll('button')).forEach(b=>{b.disabled=on;b.classList.toggle('loading',on);b.toggleAttribute('aria-busy',on)})}
+function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e}
+const won=n=>n?n.toLocaleString('ko-KR')+'원':'';
+const notionUrl=id=>'https://app.notion.com/p/'+String(id).replaceAll('-','');
+const included=p=>p.units.filter(u=>u.include&&u.name.trim());
+// 표지: 이미지가 없으면 "표지 없음". 추가할 때는 북커버를 넣지 않는다(메뉴얼 7-6).
+function cover(url,onMissing){if(!url)return el('span','cover none','표지 없음');const img=el('img','cover');img.alt='';img.loading='lazy';img.referrerPolicy='no-referrer';img.src=url;img.onerror=()=>{img.replaceWith(el('span','cover none','표지 없음'));onMissing?.()};return img}
+
+// ---------- 로그인·보기 전환 ----------
+async function openWorkspace(){await loadLibrary();$('login').hidden=true;$('workspace').hidden=false;$('logout').hidden=false;$('key').value=''}
+$('loginForm').addEventListener('submit',async e=>{e.preventDefault();busy(e.target,true);status('관리자 확인 중…');adminKey=$('key').value;try{adminKey=await HadaAdminAuth.login(HadaAdminAuth.config().url,adminKey);await openWorkspace();HadaAdminAuth.saveSession(adminKey)}catch(e){adminKey='';status(e.message,'error')}finally{busy(e.target,false)}});
+(async()=>{const saved=HadaAdminAuth.savedSession();if(!saved)return;adminKey=saved;$('login').hidden=true;status('로그인 정보를 확인하는 중…');try{await openWorkspace()}catch(e){adminKey='';HadaAdminAuth.saveSession('');$('login').hidden=false;$('key').focus();status('다시 로그인해 주세요. ('+e.message+')','error')}})();
+$('logout').onclick=()=>{adminKey='';HadaAdminAuth.saveSession('');found.clear();picked.clear();library=null;$('results').replaceChildren();$('shelves').replaceChildren();drawPickBar();$('workspace').hidden=true;$('logout').hidden=true;$('login').hidden=false;status('로그아웃했습니다.');$('key').focus()};
+function view(name){const add=name==='add';$('open').hidden=add;$('add').hidden=!add;[['tab-open',!add],['tab-add',add]].forEach(([id,on])=>{$(id).classList.toggle('active',on);$(id).setAttribute('aria-selected',on)});
+ status(add?'교재명이나 시리즈로 찾아 체크하고 [라이브러리에 추가]를 누르세요.':library?`교재 ${library.books.length}권이 있어요. 교재를 누르면 단원목록을 보고 단원을 추가할 수 있어요.`:'라이브러리를 불러오는 중…');
+ (add?$('query'):$('filter')).focus()}
+$('tab-open').onclick=async()=>{view('open');if(!library)await loadLibrary().catch(e=>status(e.message,'error'))};
+$('tab-add').onclick=()=>view('add');
+
+// ---------- 라이브러리 열기 ----------
+async function loadLibrary(){status('라이브러리를 불러오는 중…');library=await api({action:'library'});drawShelves();view($('add').hidden?'open':'add')}
+function drawShelves(){
+ const q=$('filter').value.trim().toLowerCase(),books=library.books.filter(b=>!q||b.title.toLowerCase().includes(q));
+ const groups=new Map();for(const b of books){const k=b.series||'';groups.set(k,[...(groups.get(k)||[]),b])}
+ const order=[...library.seriesOrder.filter(s=>groups.has(s)),...[...groups.keys()].filter(s=>s&&!library.seriesOrder.includes(s)).sort((a,b)=>a.localeCompare(b,'ko')),...(groups.has('')?['']:[])];
+ $('shelf-sum').textContent=`교재 ${books.length}권 · 시리즈 ${order.filter(Boolean).length}개`+(q?` (‘${$('filter').value.trim()}’ 찾기)`:'');
+ if(!books.length){$('shelves').replaceChildren(el('p','empty',q?'찾는 교재가 없어요.':'아직 라이브러리에 교재가 없어요. [라이브러리 추가]에서 교재를 찾아 넣으세요.'));return}
+ $('shelves').replaceChildren(...order.map(s=>{
+  const d=el('details','series');d.open=true;const sum=el('summary',null,(s||'시리즈 없음')+' ');sum.append(el('span','count',`${groups.get(s).length}권`));d.append(sum);
+  const list=el('div','shelf');for(const b of groups.get(s)){const btn=el('button','book-btn');btn.type='button';btn.append(cover(b.cover));const t=el('span');t.append(el('strong',null,b.title),el('span','meta',[`단원 ${b.units}${b.unitsMore?'+':''}개`,b.used?'사용 중':'사용 안 함',b.publisher].filter(Boolean).join(' · ')));btn.append(t);btn.onclick=()=>openBook(b);list.append(btn)}
+  d.append(list);return d}));
+}
+$('filter').addEventListener('input',()=>library&&drawShelves());
+
+// ---------- 라이브러리 추가: 검색·체크 ----------
+$('searchForm').addEventListener('submit',async e=>{e.preventDefault();busy(e.target,true);status('알라딘에서 검색 중…');try{
+ const data=await api({action:'search',query:$('query').value});found.clear();data.books.forEach(b=>found.set(b.isbn13,b));drawResults();
+ status(data.books.length?`${data.books.length}권을 찾았어요. 출판사를 확인하고 추가할 교재를 체크하세요.`:'검색 결과가 없어요. 교재명을 줄이거나 시리즈 이름으로 찾아 보세요.');
+}catch(e){status(e.message,'error')}finally{busy(e.target,false)}});
+function drawResults(){
+ $('results').replaceChildren(...[...found.values()].map(b=>{
+  const row=el('article','result'+(b.registered?' locked':'')),id='b-'+b.isbn13;
+  const box=el('label','check');const cb=el('input');cb.type='checkbox';cb.id=id;cb.checked=picked.has(b.isbn13);cb.disabled=b.registered;cb.setAttribute('aria-label',b.title+' 선택');cb.onchange=()=>toggle(b,cb.checked);box.append(cb);
+  const info=el('div','result-info');const t=el('strong',null,b.title);t.onclick=()=>{if(!cb.disabled)cb.click()};
+  const more=el('details','more');more.append(el('summary',null,'자세히'),el('p',null,[b.pubDate&&'출간일 '+b.pubDate,b.price&&'정가 '+won(b.price),'ISBN13 '+b.isbn13].filter(Boolean).join(' · ')));
+  info.append(t,el('p',null,b.publisher||'출판사 정보 없음'),more);
+  row.append(box,cover(b.cover,()=>{b.noCover=true;const p=picked.get(b.isbn13);if(p)p.noCover=true}),info);if(b.registered)row.append(el('span','done-tag','등록됨'));return row}));
+}
+// 체크할 때 목차를 미리 불러 둔다(창에서 넘길 때 기다리지 않게)
+async function toggle(book,on){
+ if(!on){picked.delete(book.isbn13);drawPickBar();return}
+ const p={book,detail:null,units:[],title:book.title,noCover:!!book.noCover,done:null,loading:true};picked.set(book.isbn13,p);drawPickBar();
+ try{p.detail=await api({action:'detail',isbn13:book.isbn13});p.title=p.detail.book.title;p.units=p.detail.toc.units}catch(e){p.error=e.message}finally{p.loading=false}
+ if(sheet?.mode==='add'&&sheet.list[sheet.i]===p)drawSheet();
+}
+function todo(){return [...picked.values()].filter(p=>!p.done?.ok)}
+function drawPickBar(){const n=todo().length;$('pick-bar').hidden=!n;$('pick-count').textContent=`선택 ${n}권`}
+$('open-sheet').onclick=()=>{const list=todo();if(!list.length)return;sheet={mode:'add',i:0,list};drawSheet();$('sheet').showModal()};
+
+// ---------- 창 ----------
+$('sheet-close').onclick=()=>$('sheet').close();
+$('sheet').addEventListener('close',()=>{const m=sheet?.mode;sheet=null;if(m==='add'){drawResults();drawPickBar()}if(m==='open'&&library)drawShelves()});
+function nextName(units){const last=[...units].reverse().find(u=>u.name&&u.include!==false)?.name||'';let m=last.match(/^(\d+)-(\d+)\./);if(m)return `${m[1]}-${+m[2]+1}. `;m=last.match(/^(\d+)\./);if(m)return `${+m[1]+1}. `;return ''}
+function unitEditor(units,{onChange,saved=[]}={}){
+ const box=el('div','units');
+ const head=el('div','unit-head');head.append(el('span'),el('span',null,'단원명'),el('span',null,'시작쪽'));
+ if(saved.length||units.length)box.append(head);
+ for(const s of saved){const row=el('div','unit saved');row.append(el('span'),el('span',null,s.name),el('span',null,s.page??'–'));box.append(row)}
+ let lastBig=null;
+ units.forEach(u=>{
+  if(u.big&&u.big!==lastBig&&u.include){lastBig=u.big;box.append(el('p','unit-big',u.big))}
+  const row=el('div','unit'+(u.include?'':' off'));
+  const c=el('label','check');const cb=el('input');cb.type='checkbox';cb.checked=u.include;cb.setAttribute('aria-label',(u.name||'새 단원')+' 만들기');cb.onchange=()=>{u.include=cb.checked;row.classList.toggle('off',!cb.checked);onChange?.()};c.append(cb);
+  const name=el('input');name.type='text';name.value=u.name;name.maxLength=100;name.placeholder='단원명';name.setAttribute('aria-label','단원명');name.oninput=()=>{u.name=name.value;onChange?.()};
+  const page=el('input');page.type='number';page.min='1';page.max='2000';page.inputMode='numeric';page.value=u.page??'';page.placeholder='–';page.setAttribute('aria-label','시작쪽');page.oninput=()=>{u.page=page.value?Number(page.value):null};
+  row.append(c,name,page);box.append(row)});
+ const add=el('button','secondary unit-add','단원 추가');add.type='button';
+ add.onclick=()=>{units.push({name:nextName([...saved.map(s=>({...s,include:true})),...units]),page:null,include:true,big:''});drawSheet();const inputs=$('sheet-body').querySelectorAll('.unit:not(.saved) input[type=text]');inputs[inputs.length-1]?.focus()};
+ box.append(add);return box;
+}
+function pasteBox(units,open){
+ const d=el('details','paste');d.open=open;d.append(el('summary',null,'목차를 붙여넣어 단원 나누기'));
+ const ta=el('textarea');ta.placeholder='Ⅰ. 수와 연산\n1. 소인수분해 ··· 8\n2. 정수와 유리수 ··· 28';ta.setAttribute('aria-label','목차 붙여넣기');ta.maxLength=20000;
+ const b=el('button','secondary','목차 나누기');b.type='button';
+ b.onclick=async()=>{if(!ta.value.trim()){status('붙여넣은 목차가 없어요.','error');ta.focus();return}busy(b,true);try{const r=await api({action:'parse',text:ta.value});units.splice(0,units.length,...r.toc.units);drawSheet();status(`${r.toc.units.filter(u=>u.include).length}개 단원으로 나눴어요. 확인하고 고쳐 주세요.`)}catch(e){status(e.message,'error')}finally{busy(b,false)}};
+ d.append(ta,b);return d;
+}
+function foot(...buttons){$('sheet-foot').replaceChildren(...buttons)}
+function btn(cls,text,fn,id){const b=el('button',cls,text);b.type='button';if(id)b.id=id;b.onclick=fn;return b}
+function drawSheet(){
+ if(!sheet)return;const body=$('sheet-body');
+ if(sheet.mode==='add'){
+  const p=sheet.list[sheet.i],n=sheet.list.length;
+  $('sheet-title').textContent=`${sheet.i+1} / ${n}`;$('sheet-tag').replaceChildren(...(p.done?.ok?[el('span','done-tag','등록됨')]:[]));
+  $('dots').hidden=n<2;$('dots').replaceChildren(...sheet.list.map((q,k)=>el('i',[k===sheet.i?'on':'',q.done?.ok?'ok':''].join(' ').trim())));
+  const top=el('div','sheet-book');top.append(cover(p.book.cover,()=>{p.noCover=true}));const col=el('div');
+  if(p.done?.ok){col.append(el('strong',null,p.done.name),el('p','book-meta',`등록했어요 · 단원 ${p.done.units}개`));const a=el('a','link-chip icon-ext','Notion에서 열기');a.href=notionUrl(p.done.pageId);a.target='_blank';a.rel='noopener noreferrer';col.append(a)}
+  else{const lab=el('label',null,'교재명');lab.htmlFor='sheet-name';const t=el('input');t.id='sheet-name';t.type='text';t.value=p.title;t.maxLength=200;t.oninput=()=>{p.title=t.value};
+   const d=p.detail;col.append(lab,t,el('p','book-meta',[d?.publisher?'출판사 '+d.publisher:'출판사 선택지 없음(비워 둠)',d?.series?'시리즈 '+d.series:'시리즈 선택지 없음(비워 둠)',d?.book.pages?'전체 '+d.book.pages+'쪽':'',p.noCover?'북커버 없음':'북커버 교보문고 표지'].filter(Boolean).join(' · ')))}
+  top.append(col);const parts=[top];
+  if(!p.done?.ok){
+   if(p.loading)parts.push(el('p','empty-units','목차를 불러오는 중…'));
+   else{if(p.error)parts.push(el('p','empty-units','목차를 불러오지 못했어요: '+p.error));else if(!p.units.length)parts.push(el('p','empty-units',p.detail?.tocEmpty?'알라딘에 이 책의 목차가 없어요. 목차를 붙여넣거나 [단원 추가]로 직접 넣으세요.':'목차에서 단원을 찾지 못했어요. 목차를 붙여넣거나 직접 넣으세요.'));
+    parts.push(unitEditor(p.units,{onChange:drawFoot}),pasteBox(p.units,!p.units.length))}
+   if(p.done&&!p.done.ok)parts.push(el('p','empty-units',p.done.error));
+  }
+  body.replaceChildren(...parts);drawFoot();
+ }else{
+  const b=sheet.book;$('sheet-title').textContent='단원목록';$('sheet-tag').replaceChildren();$('dots').hidden=true;
+  const top=el('div','sheet-book');top.append(cover(b.cover));const col=el('div');col.append(el('strong',null,b.title),el('p','book-meta',[b.series||'시리즈 없음',b.publisher,b.used?'사용 중':'사용 안 함'].filter(Boolean).join(' · ')));
+  const a=el('a','link-chip icon-ext','Notion에서 열기');a.href=notionUrl(b.id);a.target='_blank';a.rel='noopener noreferrer';col.append(a);top.append(col);
+  const parts=[top];
+  if(!sheet.saved)parts.push(el('p','empty-units','단원목록을 불러오는 중…'));
+  else{if(!sheet.saved.length&&!sheet.units.length)parts.push(el('p','empty-units','아직 단원이 없어요. 목차를 붙여넣거나 [단원 추가]로 넣으세요.'));parts.push(unitEditor(sheet.units,{saved:sheet.saved,onChange:drawFoot}),pasteBox(sheet.units,false))}
+  body.replaceChildren(...parts);drawFoot();
+ }
+}
+function drawFoot(){
+ if(sheet.mode==='add'){
+  const p=sheet.list[sheet.i],last=sheet.i===sheet.list.length-1;
+  const prev=btn('secondary','이전',()=>go(-1),'sheet-prev');prev.disabled=sheet.i===0;
+  const next=btn('secondary','다음',()=>go(1),'sheet-next');next.disabled=last;
+  const reg=btn('primary',p.done?.ok?'등록됨':last?'등록하고 마치기':'등록하고 다음',()=>register(p,reg),'sheet-save');reg.disabled=!!p.done?.ok||p.loading;
+  foot(prev,next,reg);
+ }else{
+  const n=sheet.units.filter(u=>u.include&&u.name.trim()).length;
+  const save=btn('primary',n?`단원 ${n}개 추가`:'단원 추가',()=>saveUnits(save),'sheet-save');save.disabled=!n;
+  foot(btn('secondary','닫기',()=>$('sheet').close()),save);
+ }
+}
+function go(d){const i=sheet.i+d;if(i<0||i>=sheet.list.length)return;sheet.i=i;drawSheet();$('sheet-body').scrollTop=0}
+// 좌우로 밀면 이전·다음 교재(세로 스크롤과 헷갈리지 않게 가로 이동이 충분히 클 때만)
+(()=>{let x=0,y=0;const b=$('sheet-body');b.addEventListener('touchstart',e=>{x=e.touches[0].clientX;y=e.touches[0].clientY},{passive:true});b.addEventListener('touchend',e=>{if(sheet?.mode!=='add')return;const dx=e.changedTouches[0].clientX-x,dy=e.changedTouches[0].clientY-y;if(Math.abs(dx)>60&&Math.abs(dx)>Math.abs(dy)*1.5)go(dx<0?1:-1)},{passive:true})})();
+async function register(p,b){
+ if(!p.title.trim()){status('교재명을 입력하세요.','error');$('sheet-name')?.focus();return}
+ busy(b,true);status(`"${p.title}" 추가 중…`);
+ try{p.done=await api({action:'register',isbn13:p.book.isbn13,title:p.title,noCover:p.noCover,units:included(p).map(u=>({name:u.name,page:u.page}))});
+  if(p.done.ok){p.book.registered=true;library=null;status(`"${p.done.name}"을(를) 라이브러리에 추가했어요 · 단원 ${p.done.units}개`,'success');if(sheet.i<sheet.list.length-1&&!sheet.list[sheet.i+1].done?.ok){go(1);return}}
+  else status(p.done.error,'error');
+ }catch(e){status(`"${p.title}" 추가 실패: ${e.message}`,'error')}
+ drawSheet();
+ if(sheet.list.every(q=>q.done?.ok))status(`${sheet.list.length}권을 모두 라이브러리에 추가했어요.`,'success');
+}
+async function openBook(b){sheet={mode:'open',book:b,saved:null,units:[]};drawSheet();$('sheet').showModal();
+ try{const r=await api({action:'units',bookId:b.id});if(sheet?.book===b){sheet.saved=r.units;drawSheet()}}catch(e){status(e.message,'error');if(sheet?.book===b){sheet.saved=[];drawSheet()}}}
+async function saveUnits(b){
+ const list=sheet.units.filter(u=>u.include&&u.name.trim());if(!list.length)return;busy(b,true);
+ try{const r=await api({action:'add-units',bookId:sheet.book.id,units:list.map(u=>({name:u.name,page:u.page}))});
+  status(r.ok?`단원 ${r.created}개를 추가했어요`+(r.skipped?` · 같은 이름 ${r.skipped}개는 건너뜀`:''):r.error,r.ok?'success':'error');
+  const u=await api({action:'units',bookId:sheet.book.id});sheet.saved=u.units;sheet.units=[];sheet.book.units=u.units.length;drawSheet();
+ }catch(e){status(e.message,'error');busy(b,false)}
+}
+</script></body></html>
