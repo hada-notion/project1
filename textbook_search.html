@@ -27,9 +27,13 @@
 /* 등록할 교재: 교재마다 한 묶음(교재명 → 정보 한 줄 → 단원 줄) */
 .book{padding:var(--space-5) 0;border-top:1px solid var(--divider)}
 .book:first-of-type{border-top:0;padding-top:var(--space-2)}
-.book-head{display:flex;gap:var(--space-3);align-items:flex-start;justify-content:space-between}
-.book-head>div{flex:1;min-width:0}
-.book-head label{margin-top:0}
+/* [교재명 라벨 … 선택 해제] 한 줄, 아래에 교재명 입력이 카드 폭 가득 */
+.book-head{display:flex;gap:var(--space-3);align-items:center;justify-content:space-between;margin-bottom:var(--space-2)}
+.book-head label{margin:0}
+/* 결과의 출간일·정가·ISBN13은 기본으로 숨기고 [자세히]를 누르면 보인다(등록할 때는 그대로 쓴다) */
+.more{margin-top:var(--space-1)}
+.more summary{display:inline-flex;font-size:var(--text-small);color:var(--text-muted)}
+.more p{margin:var(--space-1) 0 0}
 .book-meta{margin:var(--space-2) 0 0;color:var(--text-muted);font-size:var(--text-small);overflow-wrap:anywhere}
 .units{margin-top:var(--space-4)}
 .unit-head,.unit{display:grid;grid-template-columns:var(--hit-min) minmax(0,1fr) calc(var(--space-12)*2);gap:var(--space-2);align-items:center}
@@ -109,7 +113,8 @@ function drawResults(){
   const row=el('article','result'),id='b-'+b.isbn13;
   const box=el('label','check');const cb=el('input');cb.type='checkbox';cb.id=id;cb.checked=picked.has(b.isbn13);cb.disabled=b.registered;cb.setAttribute('aria-label',b.title+' 선택');cb.onchange=()=>toggle(b,cb.checked);box.append(cb);
   const info=el('div','result-info');const t=el('strong',null,b.title);t.onclick=()=>{if(!cb.disabled)cb.click()};if(b.registered)row.classList.add('locked');
-  info.append(t,el('p',null,[b.publisher,b.pubDate,won(b.price),'ISBN '+b.isbn13].filter(Boolean).join(' · ')));
+  const more=el('details','more');more.append(el('summary',null,'자세히'),el('p',null,[b.pubDate&&'출간일 '+b.pubDate,b.price&&'정가 '+won(b.price),'ISBN13 '+b.isbn13].filter(Boolean).join(' · ')));
+  info.append(t,el('p',null,b.publisher||'출판사 정보 없음'),more);
   row.append(box,cover(b),info);if(b.registered)row.append(el('span','done-tag','등록됨'));return row}));
 }
 async function toggle(book,on){
@@ -154,9 +159,8 @@ function drawPicked(){
   const box=el('article','book'+(p.done?' done':''));p.node=box;
   const head=el('div','book-head');const lab=el('label');const id='t-'+p.book.isbn13;lab.htmlFor=id;lab.textContent='교재명';
   const t=el('input');t.id=id;t.type='text';t.value=p.title;t.maxLength=200;t.oninput=()=>{p.title=t.value};
-  const col=el('div');col.append(lab,t);
   const off=el('button','ghost','선택 해제');off.type='button';off.onclick=()=>{picked.delete(p.book.isbn13);drawResults();drawPicked()};
-  head.append(col,off);box.append(head,el('p','book-meta'));
+  head.append(lab,off);box.append(head,t,el('p','book-meta'));
   if(p.done){const r=el('p','book-meta',p.done.ok?`등록했어요 · 단원 ${p.done.units}개`:p.done.error);const a=el('a','link-chip icon-ext','Notion에서 열기');a.href=notionUrl(p.done.pageId);a.target='_blank';a.rel='noopener noreferrer';box.append(r,a)}
   else box.append(unitRows(p),pasteBox(p));
   return box}));
