@@ -1,7 +1,7 @@
 /* 하다 학원관리 공용 UI 스타일 (docs/DESIGN.md)
  * 값(토큰)은 assets/hada-tokens.css에만 있다. 각 화면 CSS는 var(--토큰)만 쓴다.
  * 이 파일을 쓰는 화면은 docs/DESIGN.md "적용 현황" 표를 본다. */
-@import url("hada-tokens.css?v=6d021531");
+@import url("hada-tokens.css?v=385456a2");
 
 /* 기본 */
 *{box-sizing:border-box}
