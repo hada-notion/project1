@@ -195,6 +195,12 @@ export async function readUnits(bookIds?: string[]): Promise<UnitCopy[]> {
 	else for (let i = 0; i < bookIds.length; i += 100) rows.push(...await select<UnitCopy>("lib_units", `select=*&book_id=in.${inList(bookIds.slice(i, i + 100))}`))
 	return sortUnits(rows)
 }
+// 단원 id로(학습기록 "선택 단원" 이름 찾기, v2.5.126). 순서는 보장하지 않는다.
+export async function readUnitsByIds(ids: string[]): Promise<UnitCopy[]> {
+	const rows: UnitCopy[] = []
+	for (let i = 0; i < ids.length; i += 100) rows.push(...await select<UnitCopy>("lib_units", `select=*&id=in.${inList(ids.slice(i, i + 100))}`))
+	return rows
+}
 export function sortUnits<T extends { name: string; start_page?: number | null }>(rows: T[]): T[] {
 	return [...rows].sort((a, b) => (a.start_page ?? Infinity) - (b.start_page ?? Infinity) || a.name.localeCompare(b.name, "ko", { numeric: true }))
 }

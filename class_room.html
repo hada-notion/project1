@@ -144,6 +144,14 @@ button.row{cursor:pointer}
 .form label{margin-top:var(--space-4)}
 /* 범위 아래 단원 안내(v2.5.125): 고른 교재의 단원 시작쪽으로 범위에 걸친 단원 */
 .unit-hint{margin:var(--space-2) 0 0;font-size:var(--text-caption);color:var(--text-muted)}
+/* 단원 고르기(v2.5.126): 접기 안 체크 줄 [체크 | 단원명 | p.시작쪽] */
+.unit-pick summary{font-size:var(--text-caption);font-weight:600;color:var(--text-muted)}
+.unit-checks{display:flex;flex-direction:column}
+.unit-checks label{display:flex;align-items:center;gap:var(--space-3);min-height:var(--hit-min);margin:0;font-weight:400;font-size:var(--text-small);color:var(--text-ink);cursor:pointer}
+.unit-checks input{width:var(--icon-md);height:var(--icon-md);flex:none;accent-color:var(--brand-deep)}
+.unit-checks .nm{flex:1;min-width:0;overflow-wrap:anywhere}
+.unit-checks .pg{flex:none;color:var(--text-subtle);font-size:var(--text-caption)}
+.unit-checks .ghost{align-self:flex-start;margin-top:var(--space-2)}
 .form textarea{width:100%;min-height:calc(var(--control-h) * 2);font:inherit;padding:var(--space-3);border:1px solid var(--control-border);border-radius:var(--radius-md);background:var(--surface);color:var(--text-ink);resize:vertical}
 .box{display:flex;align-items:center;gap:var(--space-3);min-height:var(--control-h);border:1px solid var(--control-border);border-radius:var(--radius-md);background:var(--surface);padding:var(--space-2) var(--space-3);width:100%;font:inherit;color:inherit;text-align:left;cursor:pointer}
 .box .grow{flex:1;min-width:0}
@@ -501,6 +509,6 @@ body.snap-on .cr-main{max-width:none;padding:0}
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <script src="hada_config.js"></script>
 <script src="admin_auth.js?v=4ffde89c"></script>
-<script src="class_room.js?v=60c8e6f6"></script>
+<script src="class_room.js?v=efedf974"></script>
 </body>
 </html>

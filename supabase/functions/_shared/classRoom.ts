@@ -45,6 +45,7 @@ import { text as propText, numberOf as propNumber, fileUrlOf, dateStartOf } from
 import { readPageBodyBlocks } from "./feedBody.ts"
 import { libraryCopyReady, readBooks, readUnits, sortUnits } from "./libraryCopy.ts"
 import { textbookSources } from "./textbookSearch.ts"
+import { SELECTED_UNITS, cleanUnitIds, selectedUnitsEnabled, unitNamesOf, unitTextOf, unitIdsOf } from "./selectedUnits.ts"
 import { runInBackground } from "./backgroundTask.ts"
 import { mirrorJobs, mirrorPageIds, mirrorSaved, removePages } from "./classRoomCopy.ts"
 import { libraryIds } from "./libraryProp.ts"
@@ -423,7 +424,8 @@ export async function loadClassSessions(sessionId: string, around?: string) {
 	}
 }
 
-function recordSummary(r: Page) {
+// unitNames(v2.5.126): 학습기록 "선택 단원" 이름 — 고른 단원이 있으면 unit은 그 이름들(unitTextOf).
+function recordSummary(r: Page, unitNames: Map<string, string> = new Map()) {
 	return {
 		id: r.id as string,
 		title: anyTitleText(r),
@@ -431,7 +433,8 @@ function recordSummary(r: Page) {
 		bookId: rel(r, "진도교재")[0] ?? null,
 		topic: plain(r, "주제"),
 		range: plain(r, "범위"),
-		unit: propText(r.properties?.["단원"]).trim(),
+		unit: unitTextOf(r, unitNames),
+		unitIds: unitIdsOf(r),
 		content: plain(r, "내용"),
 		makeup: checkboxValue(r, "보강"),
 		registrationIds: rel(r, "등록"),
@@ -469,9 +472,10 @@ async function cardExtras(records: Page[], bodyIds: string[]) {
 async function withSubjects(records: Page[]) {
 	const ids = dedupe(records.flatMap((r) => [rel(r, "교재")[0], rel(r, "진도교재")[0]].filter(Boolean) as string[]))
 	const names = new Map((await getPages(ids)).map((b) => [b.id as string, anyTitleText(b)]))
+	const unitNames = await unitNamesOf(records)
 	return records.map((r) => {
 		const regular = names.get(rel(r, "교재")[0] ?? ""), progress = names.get(rel(r, "진도교재")[0] ?? "")
-		return { ...recordSummary(r), subject: regular || (progress ?? "").replace(/\(.*\)$/, "").trim() || plain(r, "주제") }
+		return { ...recordSummary(r, unitNames), subject: regular || (progress ?? "").replace(/\(.*\)$/, "").trim() || plain(r, "주제") }
 	})
 }
 
@@ -627,7 +631,7 @@ export async function loadActivities(recordId: string) {
 	const attendances = await getPages(dedupe(activities.flatMap((a) => rel(a, "출석"))))
 	const nameByAttendance = new Map(attendances.map((a) => [a.id as string, studentName(a)]))
 	return {
-		record: recordSummary(record),
+		record: recordSummary(record, await unitNamesOf([record])),
 		activities: activities
 			.map((a) => {
 				const attendanceId = rel(a, "출석")[0] ?? null
@@ -754,6 +758,9 @@ export async function createRecords(body: any) {
 	for (const key of ["range", "content"]) if (body?.[key] !== undefined && typeof body[key] !== "string") throw new ClassRoomError(400, "입력 형식이 올바르지 않습니다.")
 	const range = typeof body?.range === "string" ? body.range.trim().slice(0, 200) : ""
 	const content = typeof body?.content === "string" ? body.content.trim().slice(0, 2000) : ""
+	// 고른 단원(v2.5.126): unitBookId(라이브러리 교재)가 같은 기록에만 넣는다. 학습기록 DB에 "선택 단원"이 없으면 넣지 않는다.
+	const unitIds = cleanUnitIds(body?.unitIds), unitBookId = typeof body?.unitBookId === "string" ? body.unitBookId : null
+	const unitsOn = !!(unitIds?.length && unitBookId) && await selectedUnitsEnabled()
 	const ctx = await sessionContext(body?.sessionId)
 	const registrations = await getPages(rel(ctx.session, "등록"))
 	const existing = await getPages(rel(ctx.session, "학습기록"))
@@ -786,13 +793,14 @@ export async function createRecords(body: any) {
 		if (range) props["범위"] = richText(range)
 		if (content) props["내용"] = richText(content)
 		if (ctx.makeup) props["보강"] = { checkbox: true }
+		if (unitsOn && regularBookId === unitBookId) props[SELECTED_UNITS] = relation(unitIds!)
 		const page = await createPage(DS_LEARNING_RECORD, props) as Page
 		existing.push(page)
 		results.push({ id: page.id as string, title: anyTitleText(page) || String((props["학습"] as any).title[0].text.content), created: true })
 	}
 	// 복사본 함께 쓰기(v2.5.115): 새 기록과, "학습기록" 관계가 바뀐 수업
 	await mirrorJobs([["cr_records", results.map((r) => r.id)], ["cr_sessions", [ctx.session.id as string]]])
-	return { records: results }
+	return { records: results, unitsSaved: unitIds?.length ? unitsOn : undefined }
 }
 
 export async function updateRecord(body: any) {
@@ -804,6 +812,10 @@ export async function updateRecord(body: any) {
 		if (typeof body[key] !== "string") throw new ClassRoomError(400, "입력 형식이 올바르지 않습니다.")
 		props[prop] = richText(body[key].trim())
 	}
+	// 고른 단원(v2.5.126): unitIds를 보내면(빈 배열이면 지움) "선택 단원"을 그대로 바꾼다. 속성이 없는 학원은 건너뛴다.
+	const unitIds = cleanUnitIds(body?.unitIds)
+	const unitsOn = unitIds !== null && await selectedUnitsEnabled()
+	if (unitsOn) props[SELECTED_UNITS] = relation(unitIds!)
 	let bookId = rel(record, "진도교재")[0] ?? null
 	let regularBook: Page | null = null
 	if (body.bookId !== undefined) {
@@ -834,7 +846,7 @@ export async function updateRecord(body: any) {
 		props["학습"] = { title: [{ text: { content: recordTitle(kind, subject, session ? await className(session) : "", session ? dateStart(session, "수업일시") : null) } }] }
 	}
 	await mirrorSaved("cr_records", [await updatePageProperties(record.id, props) as Page]) // 복사본 함께 쓰기(v2.5.115)
-	return { ok: true }
+	return { ok: true, unitsSaved: unitIds?.length ? unitsOn : undefined }
 }
 
 // 기존 [학습활동 생성] 버튼과 같은 처리. 같은 기록을 두 번 눌러도 처리 중이면 새로 만들지 않는다.

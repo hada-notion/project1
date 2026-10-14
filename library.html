@@ -429,12 +429,12 @@ function editRows(ed){
  let locked=0;
  for(const s of sheet.saved){const v=ed.rows.get(s.id);const row=el('div','unit'+(v.del?' gone':''));
   const d=el('button','icon-btn del');d.type='button';d.setAttribute('aria-pressed',String(v.del));d.setAttribute('aria-label',(v.del?'삭제 취소: ':'삭제: ')+s.name);
-  if(s.uses){d.disabled=true;d.title='시험범위 등에 쓰인 단원이라 지울 수 없어요';locked++}
+  if(s.uses){d.disabled=true;d.title='시험범위·학습기록에 쓰인 단원이라 지울 수 없어요';locked++}
   d.onclick=()=>{v.del=!v.del;drawSheet()};row.append(d,...inputs(v,drawFoot));box.append(row)}
  ed.add.forEach((u,k)=>{if(u.include===false)return;const row=el('div','unit');const d=el('button','icon-btn del');d.type='button';d.setAttribute('aria-label','새 단원 빼기');d.onclick=()=>{ed.add.splice(k,1);drawSheet()};row.append(d,...inputs(u,drawFoot));box.append(row)});
  const add=el('button','secondary unit-add','단원 추가');add.type='button';
  add.onclick=()=>{ed.add.push({name:nextName([...sheet.saved.map(s=>({name:ed.rows.get(s.id).name,include:true})),...ed.add]),page:null,include:true,big:''});drawSheet();const t=$('sheet-body').querySelectorAll('.unit input[type=text]');t[t.length-1]?.focus()};
- box.append(add);if(locked)box.append(el('p','empty-units',`시험범위에 쓰인 단원 ${locked}개는 지울 수 없어요(이름·쪽은 고칠 수 있어요).`));return box;
+ box.append(add);if(locked)box.append(el('p','empty-units',`시험범위·학습기록에 쓰인 단원 ${locked}개는 지울 수 없어요(이름·쪽은 고칠 수 있어요).`));return box;
 }
 function changes(ed){
  const update=[],remove=[];
@@ -485,7 +485,7 @@ async function saveEdit(b){
   if(c.update.length||c.remove.length||c.add.length){
    const r=await api({action:'edit-units',bookId:book.id,update:c.update,remove:c.remove,add:c.add});
    if(!r.ok){ok=false;msgs.push(r.error)}else msgs.push([r.updated&&'수정 '+r.updated,r.removed&&'삭제 '+r.removed,r.added&&'추가 '+r.added].filter(Boolean).join(' · ')||'바뀐 단원 없음');
-   if(r.blocked?.length){ok=false;msgs.push(`시험범위에 쓰인 단원 ${r.blocked.length}개는 지우지 않았어요`)}
+   if(r.blocked?.length){ok=false;msgs.push(`시험범위·학습기록에 쓰인 단원 ${r.blocked.length}개는 지우지 않았어요`)}
    if(r.skipped)msgs.push(`같은 이름 ${r.skipped}개는 건너뜀`);
   }
   if(c.cover!==null||Object.keys(c.meta).length){

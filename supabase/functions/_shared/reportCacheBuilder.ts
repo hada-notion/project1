@@ -22,6 +22,7 @@ import { selectAttendanceByRegistrationId } from "./attendanceSyncShared.ts"
 import { DS_STUDY_ACTIVITY, DS_REPORT } from "./constants.ts"
 import { libraryIds } from "./libraryProp.ts"
 import { libraryCopyReady, readUnits } from "./libraryCopy.ts"
+import { unitNamesOf, unitTextOf } from "./selectedUnits.ts"
 // (2026-09-21, 이식성 리팩토링) 위 2개도 constants.ts로 이동함 — 그 파일 상단 주석 참고.
 
 const DETAIL_LOOKBACK_MONTHS = 6
@@ -328,13 +329,14 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
   attendanceRows.forEach((r) => r.study_log_ids.forEach((id: string) => logIdSet.add(id)))
   const logIds = Array.from(logIdSet)
   const logPages = await Promise.all(logIds.map((id) => cachedGetPage(id)))
+  const logUnitNames = await unitNamesOf(logPages) // 학습기록 "선택 단원" 이름(v2.5.126)
   const readLogDetail = async (lp: any) => {
     const lprops = lp.properties
     const category = text(lprops["구분"])
     const iso = dateStartOf(lprops["수업일"])
     const content = text(lprops["내용"])
     const range = text(lprops["범위"])
-    const unit = text(lprops["단원"])
+    const unit = unitTextOf(lp, logUnitNames)
     const bookId = firstRelationId(lprops["교재"])
     let bookTitle = ""
     if (bookId) {
