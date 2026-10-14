@@ -208,7 +208,10 @@ svg.line.check,.row svg.line,.choose svg.line,.pill svg.line{width:var(--icon-md
 .cal-month-nav>.cal-nav-btn:first-child{justify-self:start}
 .cal-month-title{justify-self:center;text-align:center;font-size:var(--text-body);font-weight:700;white-space:nowrap}
 .cal-nav-right{justify-self:end;display:flex;align-items:center}
-.cal-week-row{display:flex;justify-content:flex-end;margin-top:var(--space-1)}
+.cal-foot{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;column-gap:var(--space-2);margin-top:var(--space-3)}
+.cal-foot>.cal-legend{margin-top:0}
+.cal-foot>.cal-collapse-btn{width:auto;padding:0 var(--space-2)}
+.cal-foot>.cal-week-btn{justify-self:end}
 .cal-week-btn span{white-space:nowrap}
 .cal-nav-btn,.cal-today-btn{min-width:var(--hit-min);min-height:var(--hit-min);padding:0;border:0;background:transparent;font:inherit;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
 .cal-nav-btn span{width:calc(var(--hit-min) - var(--space-3));height:calc(var(--hit-min) - var(--space-3));border-radius:var(--radius-pill);background:var(--brand-soft);color:var(--brand-deep);font-size:var(--text-body);font-weight:700;display:inline-flex;align-items:center;justify-content:center}
@@ -511,6 +514,6 @@ body.snap-on .cr-main{max-width:none;padding:0}
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <script src="hada_config.js"></script>
 <script src="admin_auth.js?v=4ffde89c"></script>
-<script src="class_room.js?v=e4341460"></script>
+<script src="class_room.js?v=10bbf0ed"></script>
 </body>
 </html>

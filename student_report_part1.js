@@ -925,7 +925,7 @@ function addDaysStr(dateStr, days) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 }
 
-// 캘린더 첫 요일(v2.5.130): 달력 카드 아래 오른쪽 [월–일]/[일–토] 버튼으로 바꾸고 이 기기에 저장한다(수업 관리와 같은 키).
+// 캘린더 첫 요일(v2.5.130): 달력 카드 안 오른쪽 아래(범례 줄) [월–일]/[일–토] 버튼으로 바꾸고 이 기기에 저장한다(수업 관리와 같은 키).
 // 주간 보고서 기간과 주간 선택 달력은 보고서 주(월~일)와 맞아야 해서 이 설정과 관계없이 월요일 시작이다.
 const WEEK_START_KEY = "hada_week_start"
 let weekStartSun = (() => { try { return localStorage.getItem(WEEK_START_KEY) === "sun" } catch (e) { return false } })()
@@ -1029,8 +1029,8 @@ function buildScheduleCalendarHtml() {
         </div>
         <div class="cal-weekdays">${calDowHtml("")}</div>
         <div class="cal-grid">${cells}</div>
+        <div class="cal-foot"><span></span><span></span>${weekStartToggleHtml()}</div>
       </div>
-      <div class="cal-week-row">${weekStartToggleHtml()}</div>
       ${hasSchoolSchedule ? '<div class="schedule-source">학사일정 출처: 나이스 교육정보 개방 포털</div>' : ""}
     </div>
   `
