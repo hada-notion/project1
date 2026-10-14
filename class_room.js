@@ -39,7 +39,7 @@ function shortDate(iso){if(!iso)return '';const d=new Date(new Date(iso).getTime
 
 const state={session:store.get(SESSION_KEY),teacherId:store.get(TEACHER_KEY),teachers:[],date:seoulDate(),view:'main',day:null,
  sessionId:'',detail:null,tab:'home',bookSeg:'진행 중',bookItem:null,classRecs:null,calOpen:false,calMode:'att',rosterCache:{},statsCache:{},seg:'att',recKind:'전체',hwRecord:'',edit:false,editOwner:'',saver:null,draft:{},recordId:'',acts:null,books:null,picked:new Set(),
- classWeek:[],cwMonth:'',cwFrom:'',cwTo:'',classes:null,form:null,bookCache:{}};
+ classWeek:[],cwMonth:'',cwFrom:'',cwTo:'',classes:null,form:null,bookCache:{},bookByRegs:{},cwStale:false};
 
 async function api(action,data={}){
  if(CFG.error)throw new Error(CFG.error);
@@ -248,7 +248,12 @@ async function openCreateSheet(book=null){
  state.form={kind:state.form?.kind||'학습',sessionId:sessions.some(s=>s.id===state.sessionId)?state.sessionId:sessions[0].id,sessions,book,topic:'',range:'',content:''};
  await run(async()=>{await booksFor(state.form.sessionId);});drawCreate();showLayer($('sheet'));
 }
-async function booksFor(id){state.bookCache=state.bookCache||{};if(!state.bookCache[id])state.bookCache[id]=await api('books',{sessionId:id});return state.bookCache[id];}
+// 교재(v2.5.109 속도): 수업별 결과(bookCache)에 더해 같은 학생 구성의 결과(bookByRegs)를 다시 쓴다 — 같은 반 다른 수업으로 가도 교재를 다시 읽지 않는다.
+// 같은 수업 교재를 동시에 두 번 요청하지 않게 진행 중인 요청을 기다린다. 새로고침(⟳)하면 둘 다 비운다.
+const regsKey=d=>[...new Set((d?.students||[]).map(s=>s.registrationId).filter(Boolean))].sort().join(',');
+async function booksFor(id){state.bookCache=state.bookCache||{};if(state.bookCache[id])return state.bookCache[id];
+ booksFor.pending=booksFor.pending||{};if(!booksFor.pending[id])booksFor.pending[id]=api('books',{sessionId:id}).finally(()=>{delete booksFor.pending[id];});
+ state.bookCache[id]=await booksFor.pending[id];return state.bookCache[id];}
 // 교재 카드 묶음: 반 교재 / 개별 교재 묶음("n명 모두"·학생 한 명) / 학생별 교재. 진행 중인 교재만(없으면 전체).
 // 묶음 카드의 진도는 평균, 최근 범위는 "첫 학생 범위 외 n명". 기록 카드에서 바꿀 때(single)는 교재 하나만 고르므로 묶음 카드를 빼고, 지금 교재(include)는 진행 중이 아니어도 보인다.
 function bookChoices(data,{single=false,include=''}={}){
@@ -341,16 +346,23 @@ function openMakeupSheet(){
 async function openSession(id,btn){await run(()=>openSessionNow(id),btn);}
 // keep=true: 같은 반의 다른 수업으로 옮길 때(홈 ‹ ›, 캘린더 날짜, 새로고침) 보던 탭·출석/과제 검사 전환을 그대로 둔다. tab은 처음 열 때의 탭.
 // 수업 날짜(서울)를 보고 있는 날짜로 삼고, 그날 내 수업 목록(state.day)을 함께 맞춘다(+ 기록 만들기의 클래스 목록).
+// 수업 열기(속도 v2.5.109): 같은 반의 받아 둔 수업 목록(classWeek)에 있는 수업이면 같은 반 수업 목록을 다시 읽지 않는다(저장·새로고침 뒤에는 다시 읽음).
+// 다른 반을 처음 열 때는 교재를 수업 상세와 동시에 요청한다.
 async function openSessionNow(id,keep=false,tab='home',open=false){
- const [detail,week]=await Promise.all([api('session',{sessionId:id}),api('class-sessions',{sessionId:id}).catch(()=>({sessions:[]}))]);
+ const sameClass=!state.cwStale&&(state.classWeek||[]).some(x=>x.id===id);
+ const booksP=sameClass?null:booksFor(id).catch(()=>null);
+ const [detail,week]=await Promise.all([api('session',{sessionId:id}),sameClass?null:api('class-sessions',{sessionId:id}).catch(()=>({sessions:[]}))]);
  const date=ymdOf(detail.session.start)||state.date;
  if(date!==state.day?.date)state.day=await fetchDay(date).then(d=>({...d,date})).catch(()=>({sessions:[],makeupWaiting:[],date}));
- state.date=date;state.sessionId=id;state.detail=detail;state.classWeek=week.sessions||[];state.cwFrom=addDays(date,-63);state.cwTo=addDays(date,35);state.view='session';state.books=null;
+ state.date=date;state.sessionId=id;state.detail=detail;state.view='session';state.books=null;
+ if(week){state.classWeek=week.sessions||[];state.cwFrom=addDays(date,-63);state.cwTo=addDays(date,35);state.cwStale=false;}
+ const rk=regsKey(detail);if(rk){if(state.bookCache[id])state.bookByRegs[rk]=state.bookCache[id];else if(state.bookByRegs[rk])state.bookCache[id]=state.bookByRegs[rk];}
+ if(booksP&&rk)booksP.then(b=>{if(b)state.bookByRegs[rk]=b;});
  if(!keep){state.tab=tab;state.seg='att';state.recKind='전체';state.calOpen=open;}
  if(!keep||state.tab!=='calendar')state.cwMonth=date.slice(0,7);
  state.edit=false;state.draft={};state.hwRecord=state.detail.homeworkDue[0]?.recordId||'';render();}
 function switchSession(id,btn){if(id===state.sessionId||!leaveEdit())return;run(async()=>{nav.replace=true;try{await openSessionNow(id,true);}finally{nav.replace=false;}},btn);}
-async function reloadSession(){state.detail=await api('session',{sessionId:state.sessionId});state.classRecs=null;}
+async function reloadSession(){state.detail=await api('session',{sessionId:state.sessionId});state.classRecs=null;state.cwStale=true;}
 function paneHead(title,hint,tabs='',acts=''){
  return `<div class="ph title-row">${title}</div><p class="page-hint ph">${hint}</p>`+(tabs||acts?`<div class="ph tab-row"><span></span>${tabs?`<div class="center-tabs"><div class="tabs" role="tablist">${tabs}</div></div>`:'<span></span>'}<span class="acts">${acts}</span></div>`:'');
 }
@@ -391,7 +403,7 @@ function heroHtml(){const s=state.detail.session,tname=teacherName(s.teacherIds?
 function classBar(){const s=state.detail.session;
  bar([crumbToMain(),state.tab==='home'?className(s):crumbToTab('home',className(s)),TAB_NAME[state.tab]||''],{back:()=>{if(nav.stack.length)return navBack();if(!leaveEdit())return;if(state.tab!=='home'){state.tab='home';nav.replace=true;render();}else run(()=>showMain());},
   right:`<button class="icon-btn" id="bar-refresh" type="button" aria-label="새로고침">${icon('refresh')}</button>`});
- $('bar-refresh').onclick=e=>{if(!leaveEdit())return;state.classRecs=null;if(state.bookCache)delete state.bookCache[state.sessionId];delete state.rosterCache[state.sessionId];delete state.statsCache[state.sessionId];run(()=>openSessionNow(state.sessionId,true),e.currentTarget);};}
+ $('bar-refresh').onclick=e=>{if(!leaveEdit())return;state.classRecs=null;state.cwStale=true;state.bookCache={};state.bookByRegs={};delete state.rosterCache[state.sessionId];delete state.statsCache[state.sessionId];run(()=>openSessionNow(state.sessionId,true),e.currentTarget);};}
 // 경로 글자 누르기(v2.5.98, 학부모 리포트 경로처럼): 강사 이름 → 첫 화면, 반 이름 → 그 반 홈, "교재" → 교재 탭. 마지막 글자(지금 화면)는 누르지 않는다.
 // 그 화면이 방문 기록에 있으면 뒤로가기를 여러 번 한 것처럼 돌아가고(기록이 꼬이지 않게), 없으면 그 화면을 바로 연다.
 function backTo(match,fallback){if(!leaveEdit())return;let i=nav.stack.length-1;while(i>=0&&!match(nav.stack[i]))i--;
