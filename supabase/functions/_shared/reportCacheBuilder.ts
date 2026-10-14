@@ -21,6 +21,7 @@ import { isParentPublicEvent, NOTICE_VISIBILITY_POLICY } from "./scheduleVisibil
 import { selectAttendanceByRegistrationId } from "./attendanceSyncShared.ts"
 import { DS_STUDY_ACTIVITY, DS_REPORT } from "./constants.ts"
 import { libraryIds } from "./libraryProp.ts"
+import { libraryCopyReady, readUnits } from "./libraryCopy.ts"
 // (2026-09-21, 이식성 리팩토링) 위 2개도 constants.ts로 이동함 — 그 파일 상단 주석 참고.
 
 const DETAIL_LOOKBACK_MONTHS = 6
@@ -218,9 +219,14 @@ async function buildRegistrationOverview(reg: any, accessToken: string, cachedGe
           series = text(rp["시리즈"])
           pages = numberOf(rp["전체 페이지"])
           cover = fileUrlOf(rp["북커버"])
-          const unitIds = relationIds(rp["단원목록"])
-          const unitPages = await Promise.all(unitIds.map((id: string) => cachedGetPage(id)))
-          units = unitPages.map((up: any) => anyTitle(up)).filter(Boolean)
+          // v2.5.125: 라이브러리 복사본이 있으면 단원 이름을 Supabase에서 한 번에(단원마다 Notion을 읽지 않음, 시작쪽 순).
+          const copied = (await libraryCopyReady()) ? await readUnits([regularId]).catch(() => null) : null
+          if (copied && copied.length) units = copied.map((u) => u.name).filter(Boolean)
+          else {
+            const unitIds = relationIds(rp["단원목록"])
+            const unitPages = await Promise.all(unitIds.map((id: string) => cachedGetPage(id)))
+            units = unitPages.map((up: any) => anyTitle(up)).filter(Boolean)
+          }
         }
         return { title, series, pages, status: statusText, progress, range, cover, units }
       }),

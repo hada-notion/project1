@@ -43,6 +43,8 @@ import {
 import { isRunning } from "./statusTracking.ts"
 import { text as propText, numberOf as propNumber, fileUrlOf, dateStartOf } from "./reportCacheShared.ts"
 import { readPageBodyBlocks } from "./feedBody.ts"
+import { libraryCopyReady, readBooks, readUnits, sortUnits } from "./libraryCopy.ts"
+import { textbookSources } from "./textbookSearch.ts"
 import { runInBackground } from "./backgroundTask.ts"
 import { mirrorJobs, mirrorPageIds, mirrorSaved, removePages } from "./classRoomCopy.ts"
 import { libraryIds } from "./libraryProp.ts"
@@ -563,7 +565,9 @@ export async function loadBooks(sessionId: string) {
 	for (const r of registrations) for (const b of rel(r, "진도교재")) owners.set(b, [...(owners.get(b) ?? []), r.id])
 	const books = await getPages(Array.from(owners.keys()))
 	// 교재 카드(v2.5.80): 리포트 교재 카드처럼 표지(라이브러리 "북커버")·쪽수·진행도·최근 학습 범위를 함께 준다.
-	const regulars = new Map((await getPages(dedupe(books.flatMap((b) => libraryIds(b))))).map((r) => [r.id as string, r]))
+	// v2.5.125: 라이브러리 교재의 단원(이름·시작쪽)도 함께 준다 — 기록 만들기에서 범위를 넣으면 화면이 바로 단원을 찾는다.
+	// 라이브러리 복사본이 준비됐으면 표지·쪽수·단원을 Supabase에서 읽는다.
+	const { regulars, unitsBy } = await libraryInfo(dedupe(books.flatMap((b) => libraryIds(b))))
 	return {
 		registrations: registrations.map((r) => ({ id: r.id as string, name: plain(r, "이름") || anyTitleText(r) })),
 		books: books
@@ -575,11 +579,13 @@ export async function loadBooks(sessionId: string) {
 				templateId: rel(b, "반별교재")[0] ?? null,
 				ownerIds: owners.get(b.id) ?? [],
 				...(() => {
-					const rp = regulars.get(libraryIds(b)[0])?.properties
+					const libId = libraryIds(b)[0] ?? null, rp = libId ? regulars.get(libId) : undefined
 					const progress = propNumber(b.properties?.["진행도"])
 					return {
-						cover: fileUrlOf(rp?.["북커버"]) ?? "",
-						pages: propNumber(rp?.["전체 페이지"]),
+						libraryId: libId,
+						units: (libId && unitsBy.get(libId)) || [],
+						cover: rp?.cover ?? "",
+						pages: rp?.pages ?? null,
 						progress: progress === null ? null : Math.round(progress * 100),
 						recent: propText(b.properties?.["최근 학습 범위"]),
 					}
@@ -587,6 +593,30 @@ export async function loadBooks(sessionId: string) {
 			}))
 			.sort((a, b) => a.name.localeCompare(b.name, "ko")),
 	}
+}
+
+// 라이브러리 교재들의 표지·쪽수와 단원(v2.5.125). 복사본이 없으면 Notion에서 읽는다(단원은 실패해도 빈 목록).
+type LibUnit = { id: string; name: string; page: number | null }
+async function libraryInfo(ids: string[]): Promise<{ regulars: Map<string, { cover: string; pages: number | null }>; unitsBy: Map<string, LibUnit[]> }> {
+	const regulars = new Map<string, { cover: string; pages: number | null }>(), unitsBy = new Map<string, LibUnit[]>()
+	if (!ids.length) return { regulars, unitsBy }
+	const push = (bookId: string | null, u: LibUnit) => { if (bookId) unitsBy.set(bookId, [...(unitsBy.get(bookId) ?? []), u]) }
+	if (await libraryCopyReady()) {
+		const [rows, units] = await Promise.all([readBooks(ids), readUnits(ids)])
+		for (const r of rows) regulars.set(r.id, { cover: r.cover, pages: r.pages })
+		for (const u of units) push(u.book_id, { id: u.id, name: u.name, page: u.start_page })
+		return { regulars, unitsBy }
+	}
+	for (const r of await getPages(ids)) regulars.set(r.id as string, { cover: fileUrlOf(r.properties?.["북커버"]) ?? "", pages: propNumber(r.properties?.["전체 페이지"]) })
+	try {
+		const src = await textbookSources()
+		const pages = await queryAllPages(src.units, { or: ids.map((id) => ({ property: src.unitsLink, relation: { contains: id } })) })
+		const rows = sortUnits(pages.map((p: Page) => ({ id: p.id as string, name: propText(p.properties?.["단원명"]).trim(), start_page: propNumber(p.properties?.["시작페이지"]), book: rel(p, src.unitsLink) })))
+		for (const u of rows) for (const b of u.book.filter((x: string) => ids.includes(x))) push(b, { id: u.id, name: u.name, page: u.start_page })
+	} catch (err) {
+		console.error("[class-room] 단원목록 읽기 실패(단원 미리 보기 없음):", (err as Error).message)
+	}
+	return { regulars, unitsBy }
 }
 
 // 한 학습기록의 학생별 학습활동(제출 상태·점수).
