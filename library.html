@@ -352,7 +352,7 @@ async function kyoboGrab(){
  const sa=(sec('이책의시리즈')||document.createElement('i')).querySelector('a');
  let toc=body(sec('목차'));
  if(!toc)try{const j=await (await fetch('/api/gw/pdt/v2/product/component/'+id+'/middle')).json();toc=clean(((j.data||{}).middle||{}).contentTableList)}catch(e){}
- const data={hada:'book',v:1,source:'kyobo',url:location.origin+location.pathname,title:String(ld.name||'').trim(),isbn13:String(ld.isbn||'').replace(/[^\d]/g,''),publisher:String((ld.publisher||{}).name||'').trim(),
+ const data={hada:'book',v:1,source:'kyobo',url:location.origin+location.pathname,title:String(ld.name||'').trim(),isbn13:(/97[89]\d{10}/.exec(String(ld.isbn||'')+' '+String(ld.image||''))||[''])[0],cover:String(ld.image||'').split('?')[0].replace(/\/fit-in\/\d+x\d+\//,'/fit-in/458x0/'),publisher:String((ld.publisher||{}).name||'').trim(),
   price:list&&(!sale||list>=sale&&list<=sale*3)?list:sale,pages,series:sa?sa.textContent.trim():'',toc};
  const json=JSON.stringify(data),n=toc?toc.split('\n').length:0;
  const done=()=>alert('교재 정보를 복사했어요.\n'+data.title+'\n목차 '+(n?n+'줄':'없음(교보문고에 목차가 없어요)')+'\n\n라이브러리 [직접 추가]에서 [가져온 정보 붙여넣기]를 누르세요.');
@@ -366,12 +366,12 @@ function matchOption(options,names){const ns=names.map(n=>String(n||'').replace(
  for(const n of ns){const hit=options.find(o=>o.replace(/\s+/g,'')===n);if(hit)return hit}
  for(const n of ns){const hit=options.filter(o=>o&&n.includes(o.replace(/\s+/g,''))).sort((a,b)=>b.length-a.length)[0];if(hit)return hit}
  return ''}
-// 붙여넣은 글이 [교재 가져오기]가 만든 정보면 직접 추가 창을 채워 연다. 목차가 있으면 지금의 목차 나누기로 단원을 만든다.
+// 붙여넣은 글이 [교재 가져오기]가 만든 정보면 직접 추가 창을 채워 연다. 표지는 ISBN의 교보문고 표지 규칙 주소, ISBN이 없으면 교보문고가 준 표지 주소(v2.6.7). 목차가 있으면 지금의 목차 나누기로 단원을 만든다.
 function grabbed(raw){
  let d=null;try{d=JSON.parse(String(raw||'').trim())}catch{}
  if(!d||d.hada!=='book'||!String(d.title||'').trim()){status('교보문고에서 가져온 정보가 아니에요. 교보문고 책 페이지에서 [교재 가져오기]를 다시 누른 뒤 붙여넣으세요.','error');return false}
  const isbn=/^97[89]\d{10}$/.test(String(d.isbn13))?String(d.isbn13):'',key='m:'+(++seq);
- const p=customPick({source:'kyobo',key,title:String(d.title).trim().slice(0,200),cover:isbn?kyoboCover(isbn):'',isbn13:isbn,price:+d.price>0?Math.round(+d.price):null});
+ const p=customPick({source:'kyobo',key,title:String(d.title).trim().slice(0,200),cover:isbn?kyoboCover(isbn):/^https:\/\/contents\.kyobobook\.co\.kr\//.test(String(d.cover||''))?String(d.cover):'',isbn13:isbn,price:+d.price>0?Math.round(+d.price):null});
  p.pagesIn=+d.pages>0?Math.round(+d.pages):null;p.series=matchOption(lists.series,[d.series,d.title]);p.publisher=matchOption(lists.publishers,[d.publisher]);
  p.from={series:String(d.series||''),publisher:String(d.publisher||''),pages:p.pagesIn,toc:!!d.toc};
  picked.set(key,p);drawPickBar();$('grab-text').hidden=true;
