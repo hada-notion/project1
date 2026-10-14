@@ -15,11 +15,11 @@ const ICONS={
  award:'<circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>',
  more:'<circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle>',
 };
-// [주소, 메뉴 이름, 아이콘, 설명(마우스를 올리면 보임), 휴대폰 폭(700px 이하)에서 보이는 짧은 이름, 화면 준비 여부(false면 숨김)]. 새 탭 메뉴는 넓은 화면에서 ↗와 이름, 폰 폭에서는 각자의 아이콘만 보인다.
+// [주소, 메뉴 이름, 아이콘, 설명(마우스를 올리면 보임), 휴대폰 폭(700px 이하)에서 보이는 짧은 이름, 화면 준비 여부(false면 흐린 탭으로 자리만 보이고 누르면 잠깐 "준비 중")]. 새 탭 메뉴는 넓은 화면에서 ↗와 이름, 폰 폭에서는 각자의 아이콘만 보인다.
 const PAGES=[
  ['admin_settings.html','관리자 설정','settings','관리자 비밀번호 변경과 Notion 웹훅 키 교체','설정'],
  ['library.html','라이브러리','book','교재를 시리즈별로 보고, 찾아서 추가','라이브러리'],
- ['exam.html','시험 관리','award','학교·학년별 시험 범위와 일정 관리','시험',false], // 화면을 만들면 false를 지운다
+ ['exam.html','시험 관리','award','학교·학년별 시험 범위와 일정 관리(준비 중)','시험',false], // 화면을 만들면 false를 지운다
  ['school_search.html','학교 검색','school','나이스에서 학교를 찾아 Notion 학교 페이지와 연결','학교'],
  ['legal_documents.html','법정 서류','legal','출석부·원부·영수증 서식을 기간별로 조회하고 출력','서류'],
 ];
@@ -29,11 +29,16 @@ const EXTERNAL=[
 ];
 const icon=name=>`<svg class="line nav-icon" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
 function link(href,label,iconName,title,cls){const a=document.createElement('a');a.href=href;a.className=cls;a.title=title;a.innerHTML=icon(iconName);const t=document.createElement('span');t.className='nav-label';t.textContent=label;a.append(t);a.setAttribute('aria-label',label);return a}
+// 아직 없는 화면: 이동하지 않고, 누르면 이름 자리에 1.5초 동안 "준비 중"
+function soon(a){a.removeAttribute('href');a.classList.add('nav-soon');a.setAttribute('role','link');a.setAttribute('aria-disabled','true');a.tabIndex=0;
+ const flash=e=>{e.preventDefault();const t=[...a.querySelectorAll('.nav-label,.nav-short')];if(a.dataset.flash)return;a.dataset.flash='1';const old=t.map(x=>x.textContent);t.forEach(x=>x.textContent='준비 중');
+  setTimeout(()=>{t.forEach((x,i)=>x.textContent=old[i]);delete a.dataset.flash},1500)};
+ a.addEventListener('click',flash);a.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' ')flash(e)});}
 function render(){
  const box=document.getElementById('app-nav');if(!box||box.childElementCount)return;
  const here=location.pathname.split('/').pop()||'index.html';
  const nav=document.createElement('nav');nav.className='nav-tabs';nav.setAttribute('aria-label','관리 화면');
- for(const [href,name,iconName,desc,short,ready=true] of PAGES){if(!ready)continue;const a=link(href,name,iconName,desc,'nav-tab');const s=document.createElement('span');s.className='nav-short';s.textContent=short;s.setAttribute('aria-hidden','true');a.append(s);if(href===here)a.setAttribute('aria-current','page');nav.append(a)}
+ for(const [href,name,iconName,desc,short,ready=true] of PAGES){const a=link(href,name,iconName,desc,'nav-tab');if(!ready)soon(a);const s=document.createElement('span');s.className='nav-short';s.textContent=short;s.setAttribute('aria-hidden','true');a.append(s);if(href===here)a.setAttribute('aria-current','page');nav.append(a)}
  const ext=EXTERNAL.map(([href,name,own,desc,aria])=>{const a=link(href,name,'external',desc,'nav-ext');a.firstChild.classList.add('nav-out');a.insertAdjacentHTML('afterbegin',icon(own).replace('nav-icon','nav-icon nav-own'));a.target='_blank';a.rel='noopener';a.setAttribute('aria-label',aria);return a;});
  box.replaceChildren(nav,...ext);
  moreMenu();

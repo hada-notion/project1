@@ -925,6 +925,36 @@ function addDaysStr(dateStr, days) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 }
 
+// 캘린더 첫 요일(v2.5.130): 달력 왼쪽 위 [월–일]/[일–토] 버튼으로 바꾸고 이 기기에 저장한다(수업 관리와 같은 키).
+// 주간 보고서 기간과 주간 선택 달력은 보고서 주(월~일)와 맞아야 해서 이 설정과 관계없이 월요일 시작이다.
+const WEEK_START_KEY = "hada_week_start"
+let weekStartSun = (() => { try { return localStorage.getItem(WEEK_START_KEY) === "sun" } catch (e) { return false } })()
+function calLeadingDays(y, m, mondayOnly) {
+  const dow = new Date(y, m - 1, 1).getDay()
+  return weekStartSun && !mondayOnly ? dow : (dow + 6) % 7
+}
+function calWeekStart(dateStr) {
+  const dow = new Date(dateStr + "T00:00:00").getDay()
+  return addDaysStr(dateStr, -(weekStartSun ? dow : (dow + 6) % 7))
+}
+function calDowHtml(cls, mondayOnly) {
+  const days = weekStartSun && !mondayOnly ? ["일", "월", "화", "수", "목", "금", "토"] : ["월", "화", "수", "목", "금", "토", "일"]
+  return days.map((w) => `<div class="${[cls, w === "토" ? "sat" : w === "일" ? "sun" : ""].filter(Boolean).join(" ")}">${w}</div>`).join("")
+}
+function weekStartToggleHtml() {
+  return `<button type="button" class="cal-today-btn cal-week-btn" onclick="toggleWeekStart()" aria-label="달력 첫 요일: ${weekStartSun ? "일요일" : "월요일"} 시작(누르면 바뀜)">${weekStartSun ? "일–토" : "월–일"}</button>`
+}
+function toggleWeekStart() {
+  weekStartSun = !weekStartSun
+  try { localStorage.setItem(WEEK_START_KEY, weekStartSun ? "sun" : "mon") } catch (e) {}
+  const reg = document.getElementById("reg-cal-area")
+  const sched = document.getElementById("schedule-cal-area")
+  if (reg) reg.innerHTML = buildRegCalendarHtml(currentReg(), calMode)
+  if (sched) sched.innerHTML = buildScheduleCalendarHtml()
+  if (!reg && !sched) renderApp()
+  document.querySelector(".cal-week-btn")?.focus()
+}
+
 // 주간 보고서는 항상 월요일~일요일로 고정한다. (요일에 관계없이 오늘이 속한 캘린더 주의 월요일을 기준으로 삼는다)
 function mondayOfWeek(dateStr) {
   const d = new Date(dateStr + "T00:00:00")
@@ -961,8 +991,8 @@ function buildScheduleCalendarHtml() {
   const y = base.getFullYear()
   const mo = base.getMonth() + 1
   const monthKey = `${y}-${String(mo).padStart(2, "0")}`
-  // 다른 캘린더들과 동일하게 월요일 시작으로 통일한다.
-  const leading = (new Date(y, mo - 1, 1).getDay() + 6) % 7
+  // 다른 캘린더들과 같은 첫 요일(calLeadingDays)
+  const leading = calLeadingDays(y, mo)
   const daysInMonth = new Date(y, mo, 0).getDate()
   const trailing = (7 - ((leading + daysInMonth) % 7)) % 7
   const firstCellDate = addDaysStr(`${y}-${String(mo).padStart(2, "0")}-01`, -leading)
@@ -990,14 +1020,14 @@ function buildScheduleCalendarHtml() {
     <div class="schedule-cal-wrap">
       <div class="cal-month">
         <div class="cal-month-nav">
-          <button class="cal-nav-btn" ${scheduleMonthIndex <= -MAX_LOOKBACK_MONTHS ? "disabled" : ""} onclick="navigateScheduleMonth(-1)">‹</button>
+          <div class="cal-nav-left"><button class="cal-nav-btn" ${scheduleMonthIndex <= -MAX_LOOKBACK_MONTHS ? "disabled" : ""} onclick="navigateScheduleMonth(-1)">‹</button>${weekStartToggleHtml()}</div>
           <div class="cal-month-title">${y}년 ${mo}월</div>
           <div class="cal-nav-right">
             <button class="cal-today-btn" onclick="goScheduleToday()">오늘</button>
             <button class="cal-nav-btn" onclick="navigateScheduleMonth(1)">›</button>
           </div>
         </div>
-        <div class="cal-weekdays">${["월", "화", "수", "목", "금", "토", "일"].map((w, i) => `<div class="${i === 5 ? "sat" : i === 6 ? "sun" : ""}">${w}</div>`).join("")}</div>
+        <div class="cal-weekdays">${calDowHtml("")}</div>
         <div class="cal-grid">${cells}</div>
       </div>
       ${hasSchoolSchedule ? '<div class="schedule-source">학사일정 출처: 나이스 교육정보 개방 포털</div>' : ""}

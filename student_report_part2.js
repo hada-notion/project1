@@ -338,14 +338,14 @@ function calDayCellHtml(r, dateStr, mode, maps) {
 function buildRegCalendarHtml(r, mode) {
   if (!r) return '<div class="empty">등록 정보가 없습니다.</div>'
   const maps = { att: attendanceByDate(r), due: homeworkDueMap(r), closed: closedDateSet() }
-  const dowHeader = ["월", "화", "수", "목", "금", "토", "일"].map((l, i) => `<div class="cal-dow${i === 5 ? " sat" : i === 6 ? " sun" : ""}">${l}</div>`).join("")
+  const dowHeader = calDowHtml("cal-dow")
   const legend = mode === "attendance"
     ? `<div class="cal-legend"><span><span class="dot" style="background:var(--success)"></span>출석</span><span><span class="dot" style="background:var(--danger)"></span>결석</span><span><span class="dot" style="background:var(--info)"></span>보강</span></div>`
     : `<div class="cal-legend"><span><span class="dot" style="background:var(--success)"></span>제출</span><span><span class="dot" style="background:var(--warning-graphic)"></span>일부 제출</span><span><span class="dot" style="background:var(--danger)"></span>미제출</span></div>`
 
   // 날짜를 고른 상태: 그 주 한 줄 + 아래에 그날 기록
   if (selectedCalDate) {
-    const weekStart = addDaysStr(selectedCalDate, -((new Date(selectedCalDate + "T00:00:00").getDay() + 6) % 7))
+    const weekStart = calWeekStart(selectedCalDate)
     const weekEnd = addDaysStr(weekStart, 6)
     const [sy, sm] = selectedCalDate.split("-").map(Number)
     const cells = Array.from({ length: 7 }, (_, i) => calDayCellHtml(r, addDaysStr(weekStart, i), mode, maps)).join("")
@@ -353,7 +353,7 @@ function buildRegCalendarHtml(r, mode) {
       ${buildSessionBarHtml(r, sy, sm, mode, false)}
       <div class="attendance-calendar">
         <div class="cal-month-nav">
-          <button class="cal-nav-btn" onclick="moveCalDayWeek(-7)" aria-label="이전 주">‹</button>
+          <div class="cal-nav-left"><button class="cal-nav-btn" onclick="moveCalDayWeek(-7)" aria-label="이전 주">‹</button>${weekStartToggleHtml()}</div>
           <div class="cal-month-title">${shortDateDow(weekStart).split(" ")[0]} ~ ${shortDateDow(weekEnd).split(" ")[0]}</div>
           <div class="cal-nav-right"><button class="cal-nav-btn" onclick="moveCalDayWeek(7)" aria-label="다음 주">›</button></div>
         </div>
@@ -368,7 +368,7 @@ function buildRegCalendarHtml(r, mode) {
   const y = base.getFullYear()
   const m = base.getMonth() + 1
   const monthKey = `${y}-${String(m).padStart(2, "0")}`
-  const leading = (new Date(y, m - 1, 1).getDay() + 6) % 7
+  const leading = calLeadingDays(y, m)
   const daysInMonth = new Date(y, m, 0).getDate()
   const cells = []
   for (let i = 0; i < leading; i++) cells.push('<div class="cal-day empty"></div>')
@@ -377,7 +377,7 @@ function buildRegCalendarHtml(r, mode) {
     ${buildSessionBarHtml(r, y, m, mode, true)}
     <div class="attendance-calendar">
       <div class="cal-month-nav">
-        <button class="cal-nav-btn" ${regCalMonthIndex <= -MAX_LOOKBACK_MONTHS ? "disabled" : ""} onclick="navigateRegCalMonth(-1)">‹</button>
+        <div class="cal-nav-left"><button class="cal-nav-btn" ${regCalMonthIndex <= -MAX_LOOKBACK_MONTHS ? "disabled" : ""} onclick="navigateRegCalMonth(-1)">‹</button>${weekStartToggleHtml()}</div>
         <div class="cal-month-title">${y}년 ${m}월</div>
         <div class="cal-nav-right">
           <button class="cal-today-btn" onclick="goRegCalToday()">오늘</button>
@@ -629,9 +629,9 @@ function weekendClassForDow(dow) {
 }
 function buildReportCalendarPicker() {
   const { y, m } = reportMonthValue(reportPickerMonthOffset)
-  const first = new Date(y, m - 1, 1)
+  const mondayOnly = reportPeriod === "week" // 주 단위로 고르는 달력은 보고서 주(월~일)와 줄을 맞춘다
   const lastDay = new Date(y, m, 0).getDate()
-  const leading = (first.getDay() + 6) % 7
+  const leading = calLeadingDays(y, m, mondayOnly)
   const trailing = (7 - ((leading + lastDay) % 7)) % 7
   const firstCellDate = addDaysStr(`${y}-${String(m).padStart(2, "0")}-01`, -leading)
   const currentMonday = mondayOfWeek(MOCK_TODAY)
@@ -663,7 +663,7 @@ function buildReportCalendarPicker() {
       <button class="cal-nav-btn" ${reportPickerMonthOffset <= 0 ? "disabled" : ""} onclick="navigateReportPickerMonth(-1)">›</button>
     </div>
     <div class="report-picker-grid">
-      ${["월", "화", "수", "목", "금", "토", "일"].map((v, i) => `<div class="report-picker-dow ${i === 5 ? "sat" : i === 6 ? "sun" : ""}">${v}</div>`).join("")}
+      ${calDowHtml("report-picker-dow", mondayOnly)}
       ${cells.join("")}
     </div>
     <div class="report-picker-help">${esc(selectedRange)}</div>
@@ -673,9 +673,8 @@ function buildReportCalendarPicker() {
 // 다만 특정 날짜를 고를 필요가 없으므로 날짜 칸은 클릭 불가로 두고, 헤더의 ‹ › 로만 이전/다음 달로 이동한다(이동 즉시 선택 반영).
 function buildReportMonthPicker() {
   const { y, m } = reportMonthValue(reportOffset)
-  const first = new Date(y, m - 1, 1)
   const lastDay = new Date(y, m, 0).getDate()
-  const leading = (first.getDay() + 6) % 7
+  const leading = calLeadingDays(y, m)
   const trailing = (7 - ((leading + lastDay) % 7)) % 7
   const firstCellDate = addDaysStr(`${y}-${String(m).padStart(2, "0")}-01`, -leading)
   const isCurrentMonthView = reportOffset === 0 // 실제 "이번달"을 보고 있는 경우에만 연한색 배경을 깐다
@@ -696,7 +695,7 @@ function buildReportMonthPicker() {
       <button class="cal-nav-btn" ${reportOffset <= 0 ? "disabled" : ""} onclick="navigateReportMonthPicker(-1)">›</button>
     </div>
     <div class="report-picker-grid">
-      ${["월", "화", "수", "목", "금", "토", "일"].map((v, i) => `<div class="report-picker-dow ${i === 5 ? "sat" : i === 6 ? "sun" : ""}">${v}</div>`).join("")}
+      ${calDowHtml("report-picker-dow")}
       ${cells.join("")}
     </div>
     <div class="report-picker-help">${esc(`${y}년 ${m}월`)}</div>

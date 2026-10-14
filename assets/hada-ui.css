@@ -148,6 +148,8 @@ dialog::backdrop{background:var(--overlay)}
 .nav-tab{padding:var(--space-2) var(--space-4);border-radius:var(--radius-pill);color:var(--text-muted)}
 .nav-tab:hover{color:var(--text-ink)}
 .nav-tab[aria-current=page]{background:var(--surface);color:var(--text-ink);box-shadow:var(--shadow-card)}
+.nav-tab.nav-soon{opacity:.55;cursor:default}
+.nav-tab.nav-soon:hover{color:var(--text-muted)}
 .nav-ext{padding:var(--space-2) var(--space-3);border:1px solid var(--brand-border);border-radius:var(--radius-md);color:var(--brand-deep)}
 .nav-ext:hover{border-color:var(--brand-deep)}
 svg.nav-icon{width:var(--icon-sm);height:var(--icon-sm);flex-shrink:0}
@@ -177,9 +179,15 @@ dd{margin:0;font-weight:600}
 .flow li{margin:var(--space-1) 0}
 
 /* 상단 메뉴가 로고·오른쪽 버튼과 한 줄에 들어가지 않는 폭: 메뉴를 상단 바 아래 줄로 */
-@media(max-width:1080px){
+@media(max-width:1180px){
  .top{flex-wrap:wrap}
  .app-nav{order:3;flex-basis:100%;margin-right:0}
+}
+/* 태블릿 폭: 탭 아이콘을 빼고, 새 탭 링크는 각자의 아이콘만 */
+@media(max-width:900px){
+ .nav-tab svg.nav-icon{display:none}
+ .nav-ext .nav-label,.nav-ext svg.nav-out{display:none}.nav-ext svg.nav-own{display:block}
+ .nav-ext svg.nav-icon{width:var(--icon-md);height:var(--icon-md)}
 }
 @media(max-width:700px){
  .shell{padding:var(--space-6) var(--space-5) var(--space-8)}
@@ -199,3 +207,10 @@ dd{margin:0;font-weight:600}
  .foot{margin-top:var(--space-5)}
 }
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}.loading::before{animation:none}::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none!important}}
+/* 좁은 휴대폰(탭 5개 + 새 탭 링크 2개): 탭 좌우 여백과 링크 간격을 줄인다. 누르는 영역은 그대로 44 */
+@media(max-width:420px){
+ .nav-tab{padding:var(--space-2) var(--space-1)}
+ .app-nav{gap:var(--space-1)}
+}
+/* 아주 좁은 폭: 아직 없는 화면 자리(.nav-soon)는 숨기고 새 탭 링크 좌우 여백을 줄인다 */
+@media(max-width:380px){.nav-tab.nav-soon{display:none}.nav-ext{padding:var(--space-3) var(--space-1)}}
