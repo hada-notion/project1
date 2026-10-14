@@ -20,6 +20,7 @@ import {
 import { isParentPublicEvent, NOTICE_VISIBILITY_POLICY } from "./scheduleVisibility.ts"
 import { selectAttendanceByRegistrationId } from "./attendanceSyncShared.ts"
 import { DS_STUDY_ACTIVITY, DS_REPORT } from "./constants.ts"
+import { libraryIds } from "./libraryProp.ts"
 // (2026-09-21, 이식성 리팩토링) 위 2개도 constants.ts로 이동함 — 그 파일 상단 주석 참고.
 
 const DETAIL_LOOKBACK_MONTHS = 6
@@ -204,7 +205,7 @@ async function buildRegistrationOverview(reg: any, accessToken: string, cachedGe
         const progressRaw = numberOf(bp["진행도"])
         const progress = progressRaw != null ? Math.round(progressRaw * 100) : null
         const range = text(bp["최근 학습 범위"])
-        const regularId = firstRelationId(bp["정규교재"])
+        const regularId = libraryIds(bp)[0]
         let title = "",
           series = "",
           pages: number | null = null,

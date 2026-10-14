@@ -11,7 +11,7 @@ await import("../sync-registration-textbook/index.ts")
 const rel = (...ids: string[]) => ({ relation: ids.map(id => ({ id })) })
 const title = (s: string) => ({ type: "title", title: [{ plain_text: s, text: { content: s } }] })
 function book(id: string, mode = "개별 진도", cls: string[] = ["class"], regs: string[] = [], template: string[] = []) {
- return { id, db: "books", properties: { "진도교재": title("기준 교재(반)"), "진도방식": { select: { name: mode } }, "클래스": rel(...cls), "등록": rel(...regs), "반별교재": rel(...template), "정규교재": rel("regular"), "진행상태": { status: { name: "다음 교재" } }, "학습기록": rel() } }
+ return { id, db: "books", properties: { "진도교재": title("기준 교재(반)"), "진도방식": { select: { name: mode } }, "클래스": rel(...cls), "등록": rel(...regs), "반별교재": rel(...template), "라이브러리": rel("regular"), "진행상태": { status: { name: "다음 교재" } }, "학습기록": rel() } }
 }
 function fixture() {
  const pages: Record<string, any> = {
@@ -75,9 +75,9 @@ function useUuidIds(f: ReturnType<typeof fixture>) {
  }
 }
 const request = (route: string, id: string, authorized = true) => new Request("https://mock.supabase/functions/v1/sync-registration-textbook/" + route, { method: "POST", headers: authorized ? { "x-admin-key": "test-only" } : {}, body: JSON.stringify({ pageId: mockIds[id] ?? id }) })
-Deno.test("등록 생성: 개별교재 클래스 미복사·등록/출처/정규교재·초기 이름", () => withMock(async f => {
+Deno.test("등록 생성: 개별교재 클래스 미복사·등록/출처/라이브러리·초기 이름", () => withMock(async f => {
  await target.createIndividualBooksForRegistration("a"); assert(f.created.length === 1); const p = f.created[0]
- assert(!("클래스" in p.properties)); assert(ids(p,"등록") === "a" && ids(p,"반별교재") === "template" && ids(p,"정규교재") === "regular")
+ assert(!("클래스" in p.properties)); assert(ids(p,"등록") === "a" && ids(p,"반별교재") === "template" && ids(p,"라이브러리") === "regular")
  assert(p.properties["진도교재"].title[0].text.content === "쎈 중등 수학 3-2(김철수 중3 A)"); assert(p.properties["진행상태"].status.name === "다음 교재")
 }))
 Deno.test("등록 버튼 반복 실행: 같은 등록+기준은 중복 생성하지 않음", () => withMock(async f => {
@@ -142,8 +142,13 @@ Deno.test("기준 51개: 출처 필터를 50개씩 나누고 클래스 없이 �
  await target.getPendingClassTextbookRegistrations("class"); const q=f.calls.filter(c=>c.body.filter?.or); assert(q.length===2 && q[0].body.filter.or.length===50 && q[1].body.filter.or.length===1)
  assert(q.every(c=>c.body.filter.or.every((x:any)=>x.property==="반별교재")))
 }))
-Deno.test("정규교재 미연결이면 새 제목에 연결 필요 표시", () => withMock(async f => {
- f.pages.template.properties["정규교재"]=rel(); await target.createIndividualBooksForRegistration("a"); assert(f.created[0].properties["진도교재"].title[0].text.content==="정규교재 연결 필요(김철수 중3 A)")
+Deno.test("라이브러리 미연결이면 새 제목에 연결 필요 표시", () => withMock(async f => {
+ f.pages.template.properties["라이브러리"]=rel(); await target.createIndividualBooksForRegistration("a"); assert(f.created[0].properties["진도교재"].title[0].text.content==="라이브러리 연결 필요(김철수 중3 A)")
+}))
+Deno.test("옛 속성 이름 정규교재도 읽고 같은 이름으로 쓴다(Notion 이름을 아직 안 바꾼 학원)", () => withMock(async f => {
+ const t=f.pages.template.properties;t["정규교재"]=t["라이브러리"];delete t["라이브러리"]
+ await target.createIndividualBooksForRegistration("a"); const p=f.created[0]
+ assert(ids(p,"정규교재")==="regular" && !("라이브러리" in p.properties)); assert(p.properties["진도교재"].title[0].text.content==="쎈 중등 수학 3-2(김철수 중3 A)")
 }))
 Deno.test("등록 버튼 핸들러: 인증 유지·202·처리 상태 완료", () => withMock(async f => {
  useUuidIds(f)

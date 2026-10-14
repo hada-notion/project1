@@ -27,6 +27,7 @@ import {
 // DS_ATTENDANCE는 create-learning-record/index.ts가 여기서 다시 가져다 쓰고 있었는데, 그쪽도
 // constants.ts에서 바로 가져오도록 함께 고쳤다 (아래 참고).
 import { markQueued, markRunning, markDone, markError, type StatusSpec } from "./statusTracking.ts"
+import { libraryIds } from "./libraryProp.ts"
 
 const PROP_SESSION_REGISTRATION = "등록"
 const PROP_SESSION_ATTENDANCE = "출석"
@@ -43,7 +44,6 @@ const PROP_REGISTRATION_BOOKS = "진도교재"
 
 const PROP_BOOK_TODAY = "오늘 학습"
 const PROP_BOOK_PROGRESS_TYPE = "진도방식"
-const PROP_BOOK_REGULAR_BOOK = "정규교재"
 
 const PROP_REGULAR_BOOK_SUBJECT = "과목"
 
@@ -241,7 +241,7 @@ export async function finishCreateLearningRecord(sessionId: string): Promise<unk
 			await setBookGenRunning(bookId, true)
 			try {
 				const progressType = selectValue(bookPage, PROP_BOOK_PROGRESS_TYPE)
-				const regularBookIds = relIds(bookPage, PROP_BOOK_REGULAR_BOOK)
+				const regularBookIds = libraryIds(bookPage)
 				const regularBookId = regularBookIds[0] ?? null
 
 				const regularBookPage = regularBookId ? await getPage(regularBookId) : null
@@ -352,7 +352,7 @@ export async function finishCreateLearningRecordForAttendance(attendanceId: stri
 		const bookId = bookPage.id as string
 		await setBookGenRunning(bookId, true)
 		try {
-			const regularBookIds = relIds(bookPage, PROP_BOOK_REGULAR_BOOK)
+			const regularBookIds = libraryIds(bookPage)
 			const regularBookId = regularBookIds[0] ?? null
 
 			const regularBookPage = regularBookId ? await getPage(regularBookId) : null

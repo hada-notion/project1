@@ -81,7 +81,7 @@ export function attendanceRow(p: Page): Row {
 	}
 }
 
-// subject = 정규교재 이름 → 진도교재 이름(괄호 앞) → 주제 (수업 관리 기록 카드 제목 규칙과 같다)
+// subject = 라이브러리 교재 이름 → 진도교재 이름(괄호 앞) → 주제 (수업 관리 기록 카드 제목 규칙과 같다)
 export function recordRow(p: Page, bookNames: Map<string, string>): Row {
 	const regular = bookNames.get(rel(p, "교재")[0] ?? ""), progress = bookNames.get(rel(p, "진도교재")[0] ?? "")
 	return {

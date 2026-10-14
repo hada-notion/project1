@@ -20,7 +20,8 @@ function mock(opts: { existing?: string[]; failUnitAt?: number; toc?: string } =
 			const isbn = new URL(url).searchParams.get("ItemId")
 			return reply({ item: [{ ...ITEM(isbn!), subInfo: { itemPage: 264, toc: opts.toc ?? "<p>Ⅰ. 수와 연산</p><p>1. 소인수분해 ··· 8</p><p>2. 정수와 유리수 ··· 28</p><p>정답과 해설</p>" } }] })
 		}
-		if (url.endsWith("/data_sources/progress")) return reply({ properties: { "정규교재": { relation: { data_source_id: "books" } } } })
+		if (url.endsWith("/data_sources/progress")) return reply({ properties: { "라이브러리": { relation: { data_source_id: "books" } } } })
+		if (url.endsWith("/data_sources/units")) return reply({ properties: { "단원명": { title: {} }, "라이브러리": { relation: { data_source_id: "books" } } } })
 		if (url.endsWith("/data_sources/books")) return reply({ properties: { "단원목록": { relation: { data_source_id: "units" } }, "출판사": { select: { options: [{ name: "좋은책신사고" }, { name: "천재교육" }] } }, "시리즈": { select: { options: [{ name: "쎈" }, { name: "라이트쎈" }] } } } })
 		if (url.endsWith("/data_sources/books/query")) {
 			const filter = JSON.parse(init.body).filter
@@ -93,7 +94,7 @@ Deno.test("register: one textbook page with manual cover rule and units linked t
 		assert(book.parent.data_source_id === "books" && p["교재명"].title[0].text.content === "쎈 중등 수학 1-1" && p.ISBN13.rich_text[0].text.content === "9788928334858")
 		assert(p["북커버"].files[0].external.url.endsWith("/9788928334858.jpg") && p["가격"].number === 19000 && p["전체 페이지"].number === 264 && p["사용중"].checkbox === true)
 		assert(p["출판사"].select.name === "좋은책신사고" && p["시리즈"].select.name === "쎈")
-		assert(u1.parent.data_source_id === "units" && u1.properties["단원명"].title[0].text.content === "1-1. 소인수분해" && u1.properties["시작페이지"].number === 8 && u1.properties["정규교재"].relation[0].id === "new1")
+		assert(u1.parent.data_source_id === "units" && u1.properties["단원명"].title[0].text.content === "1-1. 소인수분해" && u1.properties["시작페이지"].number === 8 && u1.properties["라이브러리"].relation[0].id === "new1")
 		assert(!("시작페이지" in u2.properties), "no page when empty")
 		assert(!m.calls.some((c) => c.includes("/pages") && c.includes("test-only-ttb")), "key only goes to Aladin")
 	})
@@ -146,7 +147,7 @@ Deno.test("add-units: new names only, linked to the book, existing units untouch
 	await withMock(m, async () => {
 		const r = await tb.addUnits({ bookId: "22222222-2222-4222-8222-222222222222", units: [{ name: "1-1. 다항식", page: 8 }, { name: "1-3. 연립방정식", page: 44 }, { name: "" }] })
 		assert(r.ok && r.created === 1 && r.skipped === 1, JSON.stringify(r))
-		assert(m.created.length === 1 && m.created[0].properties["단원명"].title[0].text.content === "1-3. 연립방정식" && m.created[0].properties["정규교재"].relation[0].id === "22222222-2222-4222-8222-222222222222")
+		assert(m.created.length === 1 && m.created[0].properties["단원명"].title[0].text.content === "1-3. 연립방정식" && m.created[0].properties["라이브러리"].relation[0].id === "22222222-2222-4222-8222-222222222222")
 		assert(!m.calls.some((c) => /\/pages\/u\d/.test(c)), "existing unit pages are not touched")
 		await rejects(() => tb.addUnits({ bookId: "22222222-2222-4222-8222-222222222222", units: [] }), 400)
 		await rejects(() => tb.addUnits({ bookId: "33333333-3333-4333-8333-333333333333", units: [{ name: "x" }] }), 403)

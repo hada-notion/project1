@@ -1,15 +1,15 @@
 // POST /functions/v1/sync-report-cache
 // body: { registrationId: string } 또는 { pageId: string }
-//   -- 등록 페이지의 수동 "학생 페이지 동기화" 버튼과 유지 중인 정규교재·일정 자동화가 호출한다.
+//   -- 등록 페이지의 수동 "학생 페이지 동기화" 버튼과 유지 중인 라이브러리·일정 자동화가 호출한다.
 //   -- 등록 페이지 자체가 대상이면 토큰 보장 -> 출석 원본 -> 학습기록/학습활동 포함 완성 캐시까지
-//      전체 최신화한다. 정규교재·일정 자동화는 영향 등록의 캐시만 재계산해 불필요한 출석 전체 조회를 막는다.
+//      전체 최신화한다. 라이브러리·일정 자동화는 영향 등록의 캐시만 재계산해 불필요한 출석 전체 조회를 막는다.
 // body: { registrationId, awaitCompletion: true }  (x-admin-key 필요)
 //   -- 보고서 발송 직전(send-report)과 야간 점검(nightly-report-sync-audit)이 사용하는 내부 경로다.
 // body: { mode: "all" }  (x-admin-key 필요)
 //   -- 토큰이 있는 모든 등록을 다시 계산하는 수동 점검용 경로다. 정기 cron에서는 호출하지 않는다.
 //
 // [현재 상태, 2026-09-25] 등록·학습기록·학습활동·보고서 DB의 실시간 캐시 웹훅은 수업 생성 중
-// Notion API 호출량을 줄이기 위해 제거했다. 정규교재는 변경 시 여러 학생에게 영향을 주고 편집 시점이
+// Notion API 호출량을 줄이기 위해 제거했다. 라이브러리 교재는 변경 시 여러 학생에게 영향을 주고 편집 시점이
 // 일정하지 않아 자동화를 유지하며, 일정 자동화도 유지한다. 시간당 출석 증분 동기화, 보고서 발송 직전
 // 강제 재계산, 야간 점검, 수동 동기화가 나머지 안전망이다.
 // 실제 캐시 조립 로직은 _shared/reportCacheBuilder.ts에 있다.
@@ -113,7 +113,7 @@ Deno.serve(async (req: Request) => {
       return respondAccepted({ registrationIds: [rawId], fullRefresh: true, sharedFanOut: true })
     }
 
-    // 정규교재·일정 자동화는 기존처럼 영향받는 등록의 완성 캐시만 다시 만든다. 여기까지 전체 출석
+    // 라이브러리·일정 자동화는 기존처럼 영향받는 등록의 완성 캐시만 다시 만든다. 여기까지 전체 출석
     // 동기화를 확대하면 편집 한 건이 여러 학생의 누적 출석 조회로 fan-out되므로 의도적으로 분리한다.
     const rows = await mapWithConcurrency(registrationIds, 4, (id) => syncReportCacheForRegistration(id, cachedGetPage))
     const synced = rows.filter((r): r is ReportCacheRow => r !== null).length

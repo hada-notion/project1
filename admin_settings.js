@@ -105,7 +105,7 @@ const CHECKLIST=[
  ['학교(학원)',[['school-calendar','학사일정 가져오기',BUTTON,route('sync-school-calendar')]]],
  ['대시보드(학원)',[['dashboard-link','날짜 변경 연결',AUTO,route('sync-dashboard-link'),{trigger:{when:'날짜 속성 편집'}}],
   ['dashboard-link-new','새 대시보드 연결',AUTO,route('sync-dashboard-link'),{trigger:{when:'페이지 추가'}}]]],
- ['정규교재(학원)',[['book-report-sync','교재 수정 반영',AUTO,route('sync-report-cache'),{trigger:{when:'속성 편집'}}],
+ ['라이브러리(학원)',[['book-report-sync','교재 수정 반영',AUTO,route('sync-report-cache'),{trigger:{when:'속성 편집'}}],
   ['book-report-sync-new','새 교재 반영',AUTO,route('sync-report-cache'),{trigger:{when:'페이지 추가'}}]]],
  ['일정(학원)',[['schedule-report-sync','일정 수정 반영',AUTO,route('sync-report-cache'),{trigger:{when:'속성 편집'}}],
   ['schedule-report-sync-new','새 일정 반영',AUTO,route('sync-report-cache'),{trigger:{when:'페이지 추가'}}]]],

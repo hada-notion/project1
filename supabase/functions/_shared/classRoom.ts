@@ -45,6 +45,7 @@ import { text as propText, numberOf as propNumber, fileUrlOf, dateStartOf } from
 import { readPageBodyBlocks } from "./feedBody.ts"
 import { runInBackground } from "./backgroundTask.ts"
 import { mirrorJobs, mirrorPageIds, mirrorSaved, removePages } from "./classRoomCopy.ts"
+import { libraryIds } from "./libraryProp.ts"
 
 type Page = Record<string, any>
 
@@ -462,7 +463,7 @@ async function cardExtras(records: Page[], bodyIds: string[]) {
 	}
 }
 
-// 기록 카드 제목용 교재 이름(v2.5.89, 리포트 학습기록 카드 "교재 · 범위"): 정규교재(교재) 이름 → 진도교재 이름(괄호 앞) → 주제.
+// 기록 카드 제목용 교재 이름(v2.5.89, 리포트 학습기록 카드 "교재 · 범위"): 라이브러리(교재) 이름 → 진도교재 이름(괄호 앞) → 주제.
 async function withSubjects(records: Page[]) {
 	const ids = dedupe(records.flatMap((r) => [rel(r, "교재")[0], rel(r, "진도교재")[0]].filter(Boolean) as string[]))
 	const names = new Map((await getPages(ids)).map((b) => [b.id as string, anyTitleText(b)]))
@@ -561,8 +562,8 @@ export async function loadBooks(sessionId: string) {
 	const owners = new Map<string, string[]>()
 	for (const r of registrations) for (const b of rel(r, "진도교재")) owners.set(b, [...(owners.get(b) ?? []), r.id])
 	const books = await getPages(Array.from(owners.keys()))
-	// 교재 카드(v2.5.80): 리포트 교재 카드처럼 표지(정규교재 "북커버")·쪽수·진행도·최근 학습 범위를 함께 준다.
-	const regulars = new Map((await getPages(dedupe(books.flatMap((b) => rel(b, "정규교재"))))).map((r) => [r.id as string, r]))
+	// 교재 카드(v2.5.80): 리포트 교재 카드처럼 표지(라이브러리 "북커버")·쪽수·진행도·최근 학습 범위를 함께 준다.
+	const regulars = new Map((await getPages(dedupe(books.flatMap((b) => libraryIds(b))))).map((r) => [r.id as string, r]))
 	return {
 		registrations: registrations.map((r) => ({ id: r.id as string, name: plain(r, "이름") || anyTitleText(r) })),
 		books: books
@@ -574,7 +575,7 @@ export async function loadBooks(sessionId: string) {
 				templateId: rel(b, "반별교재")[0] ?? null,
 				ownerIds: owners.get(b.id) ?? [],
 				...(() => {
-					const rp = regulars.get(rel(b, "정규교재")[0])?.properties
+					const rp = regulars.get(libraryIds(b)[0])?.properties
 					const progress = propNumber(b.properties?.["진행도"])
 					return {
 						cover: fileUrlOf(rp?.["북커버"]) ?? "",
@@ -736,7 +737,7 @@ export async function createRecords(body: any) {
 		}
 		const regs = targetRegistrations(ctx, book, chosen, registrations)
 		const attendanceIds = dedupe(regs.flatMap((r) => ctx.regToAttendance.get(r) ?? []))
-		const regularBookId = book ? rel(book, "정규교재")[0] ?? null : null
+		const regularBookId = book ? libraryIds(book)[0] ?? null : null
 		const regularBook = regularBookId ? await getPage(regularBookId) as Page : null
 		const subjectIds = regularBook ? rel(regularBook, "과목") : []
 		const subject = book ? (regularBook ? anyTitleText(regularBook) : anyTitleText(book)) : topic || kind
@@ -780,7 +781,7 @@ export async function updateRecord(body: any) {
 		bookId = body.bookId
 		props["진도교재"] = relation(bookId ? [bookId] : [])
 		const book = bookId ? await getPage(bookId) as Page : null
-		const regularBookId = book ? rel(book, "정규교재")[0] ?? null : null
+		const regularBookId = book ? libraryIds(book)[0] ?? null : null
 		regularBook = regularBookId ? await getPage(regularBookId) as Page : null
 		props["교재"] = relation(regularBookId ? [regularBookId] : [])
 		props["과목"] = relation(regularBook ? rel(regularBook, "과목") : [])
@@ -794,7 +795,7 @@ export async function updateRecord(body: any) {
 		if (bookId) {
 			if (!regularBook && body.bookId === undefined) {
 				const book = await getPage(bookId) as Page
-				const rb = rel(book, "정규교재")[0]
+				const rb = libraryIds(book)[0]
 				regularBook = rb ? await getPage(rb) as Page : null
 				subject = regularBook ? anyTitleText(regularBook) : anyTitleText(book)
 			} else subject = regularBook ? anyTitleText(regularBook) : anyTitleText(await getPage(bookId) as Page)

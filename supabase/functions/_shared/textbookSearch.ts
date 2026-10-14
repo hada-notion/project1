@@ -1,16 +1,17 @@
 // _shared/textbookSearch.ts
 //
-// 라이브러리(library.html → textbook-api, v2.5.118). 알라딘 Open API로 책을 찾고, 고른 책을 Notion 정규교재 DB(라이브러리)에
+// 라이브러리(library.html → textbook-api, v2.5.118). 알라딘 Open API로 책을 찾고, 고른 책을 Notion 라이브러리(학원) DB에
 // 한 권 만들고 목차에서 고친 단원을 단원목록 DB에 만든다.
 //   - 알라딘 키: 함수 Secret ALADIN_TTB_KEY(값은 로그·응답에 쓰지 않는다). 출처 표시는 화면 아래.
-//   - DB 위치: 진도교재 DB의 "정규교재" 관계 → 정규교재 DB, 그 "단원목록" 관계 → 단원목록 DB(새 Notion ID 설정 없음).
+//   - DB 위치: 진도교재 DB의 "라이브러리"(옛 이름 "정규교재") 관계 → 라이브러리 DB, 그 "단원목록" 관계 → 단원목록 DB(새 Notion ID 설정 없음).
 //   - 북커버: 메뉴얼 7-6 규칙대로 ISBN13으로 만든 교보문고 이미지 주소(화면에서 이미지가 안 열리면 넣지 않음).
 //   - 출판사·시리즈: 이미 있는 선택지와 맞을 때만 넣는다(DB 선택지를 새로 만들지 않는다).
-//   - 같은 ISBN13이 정규교재 DB에 있으면 "등록됨"으로 보여 주고 다시 만들지 않는다.
+//   - 같은 ISBN13이 라이브러리에 있으면 "등록됨"으로 보여 주고 다시 만들지 않는다.
 
 import { NOTION_API, DS_PROGRESS_BOOK } from "./constants.ts"
 import { fetchWithRetry, notionHeaders, queryAllPages } from "./notionClient.ts"
 import { cleanUnits, parseToc } from "./textbookToc.ts"
+import { libraryKey, libraryProp } from "./libraryProp.ts"
 
 export class TextbookError extends Error {
 	constructor(public status: number, message: string) { super(message) }
@@ -55,7 +56,7 @@ function toBook(it: any): Book | null {
 }
 
 // ---------- Notion DB 위치·선택지 ----------
-type Sources = { books: string; units: string; publishers: string[]; series: string[] }
+type Sources = { books: string; units: string; unitsLink: string; publishers: string[]; series: string[] }
 let sourcesCache: Sources | null = null
 async function dataSource(id: string): Promise<any> {
 	const res = await fetchWithRetry(`${NOTION_API}/data_sources/${id}`, { headers: notionHeaders() }, 2)
@@ -65,13 +66,15 @@ async function dataSource(id: string): Promise<any> {
 export async function textbookSources(): Promise<Sources> {
 	if (sourcesCache) return sourcesCache
 	if (!DS_PROGRESS_BOOK) throw new TextbookError(503, "DATA_SOURCE_PROGRESS_BOOK_ID 설정이 필요합니다.")
-	const books = (await dataSource(DS_PROGRESS_BOOK)).properties?.["정규교재"]?.relation?.data_source_id
-	if (!books) throw new TextbookError(503, '진도교재 DB의 "정규교재" 관계를 찾지 못했습니다.')
+	const books = libraryProp((await dataSource(DS_PROGRESS_BOOK)).properties)?.relation?.data_source_id
+	if (!books) throw new TextbookError(503, '진도교재 DB의 "라이브러리"(옛 이름 "정규교재") 관계를 찾지 못했습니다.')
 	const schema = (await dataSource(books)).properties ?? {}
 	const units = schema["단원목록"]?.relation?.data_source_id
-	if (!units) throw new TextbookError(503, '정규교재 DB의 "단원목록" 관계를 찾지 못했습니다.')
+	if (!units) throw new TextbookError(503, '라이브러리 DB의 "단원목록" 관계를 찾지 못했습니다.')
+	const unitsLink = libraryKey((await dataSource(units)).properties)
+	if (!unitsLink) throw new TextbookError(503, '단원목록 DB의 "라이브러리"(옛 이름 "정규교재") 관계를 찾지 못했습니다.')
 	const names = (p: any) => (p?.select?.options ?? []).map((o: any) => String(o.name))
-	sourcesCache = { books, units, publishers: names(schema["출판사"]), series: names(schema["시리즈"]) }
+	sourcesCache = { books, units, unitsLink, publishers: names(schema["출판사"]), series: names(schema["시리즈"]) }
 	return sourcesCache
 }
 
@@ -146,7 +149,7 @@ export async function registerBook(body: any) {
 	const { book } = await lookup(isbn13)
 	const name = String(body?.title ?? "").replace(/\s+/g, " ").trim().slice(0, 200) || book.title
 	const src = await textbookSources()
-	if ((await registeredIsbns([isbn13])).has(isbn13)) throw new TextbookError(409, "이미 정규교재 DB에 있는 교재입니다(같은 ISBN13).")
+	if ((await registeredIsbns([isbn13])).has(isbn13)) throw new TextbookError(409, "이미 라이브러리에 있는 교재입니다(같은 ISBN13).")
 	const publisher = matchPublisher(book.publisher, src.publishers), series = matchSeries(name, book.series, src.series)
 	const props: Record<string, unknown> = {
 		"교재명": title(name),
@@ -162,7 +165,7 @@ export async function registerBook(body: any) {
 	let created = 0
 	try {
 		for (const u of units) {
-			await createOnce(src.units, { "단원명": title(u.name), "정규교재": { relation: [{ id: pageId }] }, ...(u.page ? { "시작페이지": { number: u.page } } : {}) })
+			await createOnce(src.units, { "단원명": title(u.name), [src.unitsLink]: { relation: [{ id: pageId }] }, ...(u.page ? { "시작페이지": { number: u.page } } : {}) })
 			created++
 		}
 	} catch (err) {
@@ -183,7 +186,7 @@ const fileUrlOf = (p: any, name: string) => {
 }
 const compact = (id: string) => String(id).replaceAll("-", "").toLowerCase()
 
-// 라이브러리(정규교재 DB) 전체. 시리즈 선택지 순서를 함께 준다(화면이 시리즈별로 묶는다).
+// 라이브러리 전체. 시리즈 선택지 순서를 함께 준다(화면이 시리즈별로 묶는다).
 export async function libraryBooks() {
 	const src = await textbookSources()
 	const pages = await queryAllPages(src.books)
@@ -218,7 +221,7 @@ async function bookPageOf(bookId: unknown) {
 // 한 교재의 단원목록(시작쪽 순, 쪽이 없으면 이름 순으로 뒤에)
 export async function bookUnits(bookId: unknown) {
 	const { id, src } = await bookPageOf(bookId)
-	const pages = await queryAllPages(src.units, { property: "정규교재", relation: { contains: id } })
+	const pages = await queryAllPages(src.units, { property: src.unitsLink, relation: { contains: id } })
 	const units = pages.map((p: any) => {
 		const n = p.properties?.["시작페이지"]?.number
 		return { id: p.id as string, name: plainOf(p, "단원명"), page: typeof n === "number" ? n : null }
@@ -231,12 +234,12 @@ export async function addUnits(body: any) {
 	const { id, src } = await bookPageOf(body?.bookId)
 	const units = cleanUnits(body?.units)
 	if (!units.length) throw new TextbookError(400, "추가할 단원이 없습니다.")
-	const existing = new Set((await queryAllPages(src.units, { property: "정규교재", relation: { contains: id } })).map((p: any) => plainOf(p, "단원명")))
+	const existing = new Set((await queryAllPages(src.units, { property: src.unitsLink, relation: { contains: id } })).map((p: any) => plainOf(p, "단원명")))
 	const fresh = units.filter((u) => !existing.has(u.name))
 	let created = 0
 	try {
 		for (const u of fresh) {
-			await createOnce(src.units, { "단원명": title(u.name), "정규교재": { relation: [{ id }] }, ...(u.page ? { "시작페이지": { number: u.page } } : {}) })
+			await createOnce(src.units, { "단원명": title(u.name), [src.unitsLink]: { relation: [{ id }] }, ...(u.page ? { "시작페이지": { number: u.page } } : {}) })
 			created++
 		}
 	} catch (err) {

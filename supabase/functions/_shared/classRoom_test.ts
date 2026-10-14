@@ -23,7 +23,7 @@ function fixture() {
   ra: { id: "ra", db: "registrations", properties: { "이름": title("김하늘 중1 B"), "진도교재": rel("group", "indA") } },
   rb: { id: "rb", db: "registrations", properties: { "이름": title("박서준 중1 B"), "진도교재": rel("group", "indB") } },
   rc: { id: "rc", db: "registrations", properties: { "이름": title("이도윤 중2 A"), "진도교재": rel("other") } },
-  group: { id: "group", db: "books", properties: { "진도교재": title("개념원리(중1 B)"), "진도방식": { select: { name: "그룹 진도" } }, "진행상태": { status: { name: "진행 중" } }, "정규교재": rel("regular"), "반별교재": rel(), "진행도": { type: "formula", formula: { type: "number", number: 0.344 } }, "최근 학습 범위": text("p.78-83") } },
+  group: { id: "group", db: "books", properties: { "진도교재": title("개념원리(중1 B)"), "진도방식": { select: { name: "그룹 진도" } }, "진행상태": { status: { name: "진행 중" } }, "라이브러리": rel("regular"), "반별교재": rel(), "진행도": { type: "formula", formula: { type: "number", number: 0.344 } }, "최근 학습 범위": text("p.78-83") } },
   indA: { id: "indA", db: "books", properties: { "진도교재": title("RPM(김하늘)"), "진도방식": { select: { name: "개별 진도" } }, "진행상태": { status: { name: "진행 중" } }, "정규교재": rel(), "반별교재": rel("tpl") } },
   indB: { id: "indB", db: "books", properties: { "진도교재": title("RPM(박서준)"), "진도방식": { select: { name: "개별 진도" } }, "진행상태": { status: { name: "진행 중" } }, "정규교재": rel(), "반별교재": rel("tpl") } },
   aa: { id: "aa", db: "attendance", properties: { "출석": title("aa"), "학생이름(보고서)": formula("김하늘"), "등록": rel("ra"), "수업": rel("s1"), "수업일시": { date: { start: D } }, "출석 상태": { select: { name: "🟢 출석" } }, "등원스템프": { date: { start: "2026-10-13T07:52:00.000Z" } }, "메모": text("집중 좋음"), "선생님 한마디": text(""), "과제": rel("hw1") } },
