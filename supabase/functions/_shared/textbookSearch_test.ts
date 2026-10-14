@@ -229,10 +229,10 @@ Deno.test("register-custom: title required, optional ISBN/cover/price, https cov
 	await withMock(m, async () => {
 		const r: any = await tb.registerCustom({ title: " 학원 자체 교재 ", units: [{ name: "1. 소개" }] })
 		const p = m.created[0].properties
-		assert(r.ok && r.units === 1 && p["교재명"].title[0].text.content === "학원 자체 교재" && !("ISBN13" in p) && !("북커버" in p) && !("가격" in p), JSON.stringify(p))
-		await tb.registerCustom({ title: "Phonics Monster 1 WB", isbn13: "979-11-6951-337-1", cover: "https://ecimg.cafe24img.com/a/big/1/abc.jpg", price: 5400, publisher: "", units: [] })
+		assert(r.ok && r.units === 1 && p["교재명"].title[0].text.content === "학원 자체 교재" && !("ISBN13" in p) && !("북커버" in p) && !("가격" in p) && !("전체 페이지" in p), JSON.stringify(p))
+		await tb.registerCustom({ title: "Phonics Monster 1 WB", isbn13: "979-11-6951-337-1", cover: "https://ecimg.cafe24img.com/a/big/1/abc.jpg", price: 5400, pages: 286, publisher: "", units: [] })
 		const q = m.created[2].properties
-		assert(q.ISBN13.rich_text[0].text.content === "9791169513371" && q["북커버"].files[0].external.url.endsWith("abc.jpg") && q["가격"].number === 5400 && !("출판사" in q), JSON.stringify(q))
+		assert(q.ISBN13.rich_text[0].text.content === "9791169513371" && q["북커버"].files[0].external.url.endsWith("abc.jpg") && q["가격"].number === 5400 && q["전체 페이지"].number === 286 && !("출판사" in q), JSON.stringify(q))
 		await rejects(() => tb.registerCustom({ title: "", units: [] }), 400)
 		await rejects(() => tb.registerCustom({ title: "x", publisher: "AList", units: [] }), 400, /출판사 선택지에 없는/)
 		await rejects(() => tb.registerCustom({ title: "x", isbn13: "123", units: [] }), 400)

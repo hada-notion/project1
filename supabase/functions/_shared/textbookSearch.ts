@@ -168,7 +168,7 @@ async function createLibraryBook(b: NewBook) {
 }
 
 // ---------- 직접 추가(v2.5.119) ----------
-// 검색에 없는 교재(학원 자체 교재 등). ISBN·표지·가격은 있을 때만. 표지는 https 주소만.
+// 검색에 없는 교재(학원 자체 교재 등)와 교보문고에서 가져온 교재(v2.6.6). ISBN·표지·가격·쪽수는 있을 때만. 표지는 https 주소만.
 export async function registerCustom(body: any) {
 	const name = String(body?.title ?? "").replace(/\s+/g, " ").trim().slice(0, 200)
 	if (!name) throw new TextbookError(400, "교재명을 입력하세요.")
@@ -177,7 +177,8 @@ export async function registerCustom(body: any) {
 	const cover = String(body?.cover ?? "").trim()
 	if (cover && (!/^https:\/\/[^\s]+$/i.test(cover) || cover.length > 1000)) throw new TextbookError(400, "표지 주소는 https로 시작하는 이미지 주소여야 합니다.")
 	const price = Number(body?.price)
-	return await createLibraryBook({ name, isbn13: isbn13 || undefined, price: price > 0 && price < 10_000_000 ? Math.round(price) : null, cover, units: body?.units, seriesPick: await pickOption(body?.series, "series"), publisherPick: await pickOption(body?.publisher, "publishers") })
+	const pages = Number(body?.pages)
+	return await createLibraryBook({ name, isbn13: isbn13 || undefined, price: price > 0 && price < 10_000_000 ? Math.round(price) : null, pages: pages > 0 && pages < 10_000 ? Math.round(pages) : null, cover, units: body?.units, seriesPick: await pickOption(body?.series, "series"), publisherPick: await pickOption(body?.publisher, "publishers") })
 }
 
 // ---------- 라이브러리 열기(v2.5.118) ----------
