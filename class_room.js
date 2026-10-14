@@ -39,7 +39,7 @@ function shortDate(iso){if(!iso)return '';const d=new Date(new Date(iso).getTime
 
 const state={session:store.get(SESSION_KEY),teacherId:store.get(TEACHER_KEY),teachers:[],date:seoulDate(),view:'main',day:null,
  sessionId:'',detail:null,tab:'home',bookSeg:'진행 중',bookItem:null,classRecs:null,calOpen:false,calMode:'att',rosterCache:{},statsCache:{},seg:'att',recKind:'전체',hwRecord:'',edit:false,editOwner:'',saver:null,draft:{},recordId:'',acts:null,books:null,picked:new Set(),
- classWeek:[],cwMonth:'',cwFrom:'',cwTo:'',classes:null,form:null,bookCache:{},bookByRegs:{},cwStale:false};
+ classWeek:[],cwMonth:'',cwFrom:'',cwTo:'',classes:null,form:null,bookCache:{},bookByRegs:{},cwStale:false,bodyCache:{}};
 
 async function api(action,data={}){
  if(CFG.error)throw new Error(CFG.error);
@@ -408,7 +408,7 @@ function heroHtml(){const s=state.detail.session,tname=teacherName(s.teacherIds?
 function classBar(){const s=state.detail.session;
  bar([crumbToMain(),state.tab==='home'?className(s):crumbToTab('home',className(s)),TAB_NAME[state.tab]||''],{back:()=>{if(nav.stack.length)return navBack();if(!leaveEdit())return;if(state.tab!=='home'){state.tab='home';nav.replace=true;render();}else run(()=>showMain());},
   right:`<button class="icon-btn" id="bar-refresh" type="button" aria-label="새로고침">${icon('refresh')}</button>`});
- $('bar-refresh').onclick=e=>{if(!leaveEdit())return;state.classRecs=null;state.cwStale=true;state.bookCache={};state.bookByRegs={};delete state.rosterCache[state.sessionId];delete state.statsCache[state.sessionId];run(()=>openSessionNow(state.sessionId,true),e.currentTarget);};}
+ $('bar-refresh').onclick=e=>{if(!leaveEdit())return;state.classRecs=null;state.cwStale=true;state.bookCache={};state.bookByRegs={};state.bodyCache={};delete state.rosterCache[state.sessionId];delete state.statsCache[state.sessionId];run(()=>openSessionNow(state.sessionId,true),e.currentTarget);};}
 // 경로 글자 누르기(v2.5.98, 학부모 리포트 경로처럼): 강사 이름 → 첫 화면, 반 이름 → 그 반 홈, "교재" → 교재 탭. 마지막 글자(지금 화면)는 누르지 않는다.
 // 그 화면이 방문 기록에 있으면 뒤로가기를 여러 번 한 것처럼 돌아가고(기록이 꼬이지 않게), 없으면 그 화면을 바로 연다.
 function backTo(match,fallback){if(!leaveEdit())return;let i=nav.stack.length-1;while(i>=0&&!match(nav.stack[i]))i--;
@@ -657,10 +657,12 @@ function recCard(r){
  const hw=r.homework,sc=r.score;
  const pill=hw?`<span class="pill ${pillTone(hw.submitted,hw.total)}">제출 ${hw.submitted}/${hw.total}</span>`:sc?`<span class="pill b-${["good","fair","low","poor"][scoreBand(sc.avg)]}">평균 ${sc.avg}점</span>`:'';
  const body=bodyHtml(r.body),meta=units.map(u=>`<span class="log-context">• ${esc(u)}</span>`).join('')+(note?`<span class="log-note">${esc(note)}</span>`:'')+extras.map(x=>`<span class="log-context">• ${esc(x)}</span>`).join('');
- return `<div class="rec log-card ${body?'has-extra':''}"><div class="log-head"><button class="log-main" type="button" data-rec="${esc(r.id)}"><span class="log-top"><span class="log-icon k-${esc(r.kind||'학습')}">${icon(r.kind||'학습')}<small>${esc(r.kind||'학습')}</small></span><span class="log-title">${esc(title)}</span>${pill}${r.makeup?'<span class="pill s-보강">보강</span>':''}</span>
+ // 펼치기(v2.5.111): 본문을 미리 읽지 않으므로 늘 둔다. 펼칠 때 record-body로 그 기록 본문만 읽는다(이미 받은 본문이 있으면 그대로).
+ if(body)state.bodyCache[r.id]=r.body;
+ return `<div class="rec log-card has-extra"><div class="log-head"><button class="log-main" type="button" data-rec="${esc(r.id)}"><span class="log-top"><span class="log-icon k-${esc(r.kind||'학습')}">${icon(r.kind||'학습')}<small>${esc(r.kind||'학습')}</small></span><span class="log-title">${esc(title)}</span>${pill}${r.makeup?'<span class="pill s-보강">보강</span>':''}</span>
  ${meta?`<span class="log-meta">${meta}</span>`:''}</button>
- ${body?`<button class="log-chev" type="button" data-chev aria-expanded="false" aria-label="본문 펼치기"><span>${CHEVRON_DOWN}</span></button>`:''}</div>
- ${body?`<div class="log-extra" hidden>${body}</div>`:''}</div>`;}
+ <button class="log-chev" type="button" data-chev data-body="${esc(r.id)}" aria-expanded="false" aria-label="본문 펼치기"><span>${CHEVRON_DOWN}</span></button></div>
+ <div class="log-extra" hidden>${body}</div></div>`;}
 // Notion 페이지 본문(feedBody.ts가 내려주는 블록 목록) → HTML. 글은 굵게·기울임·코드·링크만 살리고, 사진·동영상·파일은 새 탭으로 연다.
 function spansHtml(b){const sp=Array.isArray(b.spans)&&b.spans.length?b.spans:[{text:b.text||''}];
  return sp.map(s=>{let h=esc(s.text??'');if(s.code)h=`<code>${h}</code>`;if(s.bold)h=`<b>${h}</b>`;if(s.italic)h=`<i>${h}</i>`;if(s.strikethrough)h=`<s>${h}</s>`;
@@ -677,7 +679,14 @@ function bodyHtml(body){if(!Array.isArray(body)||!body.length)return '';const ou
   else if(b.type==='table'&&Array.isArray(b.rows))out.push(`<table class="lb-table">${b.rows.map(row=>`<tr>${(row||[]).map(c=>`<td>${spansHtml({spans:c})}</td>`).join('')}</tr>`).join('')}</table>`);}
  close();return out.join('');}
 // 내용 펼치기·접기(모든 화면 공용, 화면을 다시 그리지 않는다)
-$('app').addEventListener('click',e=>{const b=e.target.closest('[data-chev]');if(!b)return;const x=b.closest('.log-card').querySelector('.log-extra'),open=x.hidden;x.hidden=!open;b.setAttribute('aria-expanded',open);const what=b.dataset.chev||'본문';b.setAttribute('aria-label',open?`${what} 접기`:`${what} 펼치기`);});
+$('app').addEventListener('click',e=>{const b=e.target.closest('[data-chev]');if(!b)return;const x=b.closest('.log-card').querySelector('.log-extra'),open=x.hidden;x.hidden=!open;b.setAttribute('aria-expanded',open);const what=b.dataset.chev||'본문';b.setAttribute('aria-label',open?`${what} 접기`:`${what} 펼치기`);
+ if(open&&b.dataset.body&&!x.dataset.loaded)fillBody(b.dataset.body,x);});
+// 기록 본문 펼치기(v2.5.111): 처음 펼칠 때 그 기록 본문만 읽고, 받은 본문은 ⟳ 새로고침 전까지 다시 쓴다.
+async function fillBody(id,x){const show=list=>{x.dataset.loaded='1';x.innerHTML=bodyHtml(list)||'<p class="empty body-empty">본문이 없어요.</p>';};
+ if(state.bodyCache[id])return show(state.bodyCache[id]);
+ x.innerHTML='<p class="empty body-empty">본문을 불러오는 중…</p>';
+ try{const r=await api('record-body',{recordId:id});state.bodyCache[id]=r.body||[];show(state.bodyCache[id]);}
+ catch(err){x.innerHTML='<p class="empty body-empty">본문을 불러오지 못했어요. 다시 펼쳐 주세요.</p>';if(err.message!=='silent')toast(err.message);}}
 // 기록을 날짜별로(v2.5.103 타임라인): 오늘이 맨 위("날짜 · 오늘", 오늘 카드는 테두리) → 지난 날짜 최근부터 → 앞으로 날짜는 가까운 날부터 맨 아래.
 // 보고 있는 수업 날짜는 글자색으로 표시한다.
 function recTimeline(recs,empty){const t=seoulDate(),all=[...new Set(recs.map(r=>r.date||''))];
