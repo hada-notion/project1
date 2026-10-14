@@ -39,11 +39,6 @@
   --warning-soft: #fff5d9;
   --info: #3478f6;
   --info-soft: #eaf2ff;
-  /* 수업 칸 막대 중간 톤 (assets/hada-tokens.css의 --bar-* 와 같은 값) */
-  --bar-present: #5dbb8a;
-  --bar-absent: #ec8a85;
-  --bar-makeup: #7fa8f0;
-  --bar-partial: #f3c15a;
 }
 @media (min-width: 700px) {
   :root { --content-w: clamp(480px, 82vw, 760px); --content-w-wide: clamp(540px, 86vw, 960px); }
@@ -815,10 +810,6 @@ body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
 .session-bar .lbl { font-size: 13px; color: var(--text-muted); font-weight: 600; white-space: nowrap; }
 .session-bar .cells { order: 3; flex: 1 1 100%; display: flex; gap: 3px; min-width: 0; margin-top: -2px; }
 .session-bar .cells i { flex: 1; height: 10px; border-radius: 3px; background: var(--brand-soft); }
-.session-bar .cells i.출석, .session-bar .cells i.완료 { background: var(--bar-present); }
-.session-bar .cells i.결석, .session-bar .cells i.미완료 { background: var(--bar-absent); }
-.session-bar .cells i.보강 { background: var(--bar-makeup); }
-.session-bar .cells i.부분완료 { background: var(--bar-partial); }
 .session-bar .cells i.지남 { background: repeating-linear-gradient(135deg, var(--brand-soft) 0 3px, var(--brand-light) 3px 6px); }
 .session-bar b { margin-left: auto; font-size: 15px; color: var(--brand-deep); white-space: nowrap; }
 .session-chips { display: flex; gap: 6px; margin-top: 10px; }
@@ -883,6 +874,70 @@ body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
 .cal-cell, .attendance-calendar .cal-day { aspect-ratio: auto; height: min(calc((100cqw - 24px) / 7 * 5 / 4), 72px); font-size: 16px; border-radius: 10px; }
 .cal-cell.today { box-shadow: inset 0 0 0 2px var(--danger); }
 .cal-cell.today { font-weight: 800; }
+/* ===== 디자인 기준 맞춤 (docs/DESIGN.md 1부 3장 "의미 색·대비", 6장 "크기 단계·누르는 영역", 부품 기준표) =====
+   위 규칙을 지우지 않고 같은 선택자로 덮어 쓴다(부분 수정). 값은 assets/hada-tokens.css와 같다. */
+:root {
+  /* 연한 바탕 위 글자용 진한 의미색(글자 대비 4.5:1 이상) */
+  --success-ink: #0f7b4e;
+  --danger-ink: #b42318;
+  --warning-ink: #7a5200;
+  --info-ink: #1d5bbf;
+  /* 그림(점·막대 칸)용 경고색: --warning은 흰 바탕 2.1:1이라 그림 기준 3:1에 못 미친다 */
+  --warning-graphic: #c27e00;
+}
+/* 색: 연한 바탕 위 글자는 진한 의미색, 과제 "제출"은 초록 */
+.attendance-calendar .cal-day.출석, .attendance-calendar .cal-day.완료 { color: var(--success-ink); }
+.attendance-calendar .cal-day.결석, .attendance-calendar .cal-day.미완료 { color: var(--danger-ink); }
+.attendance-calendar .cal-day.보강 { color: var(--info-ink); }
+.attendance-calendar .cal-day.부분완료 { color: var(--warning-ink); }
+.badge.수강중, .badge.출석, .badge.완료 { color: var(--success-ink); }
+.badge.결석, .badge.미완료, .badge.미제출 { color: var(--danger-ink); }
+.badge.보강 { color: var(--info-ink); }
+.badge.부분완료 { color: var(--warning-ink); }
+.badge.제출 { background: var(--success-soft); color: var(--success-ink); }
+.log-card.학습 .log-icon, .kind-tile.학습 { color: var(--info-ink); }
+.log-card.과제 .log-icon, .kind-tile.과제 { color: var(--warning-ink); }
+.log-card.평가 .log-icon, .kind-tile.평가 { color: var(--success-ink); }
+.log-card.학습 .log-pill, .log-row.학습 .log-pill { color: var(--info-ink); }
+.log-card.과제 .log-pill, .log-row.과제 .log-pill { color: var(--warning-ink); }
+.log-card.평가 .log-pill, .log-row.평가 .log-pill { color: var(--success-ink); }
+.log-pill.tone-submit { background: var(--success-soft) !important; color: var(--success-ink) !important; }
+.log-pill.tone-late, .log-pill.tone-red { color: var(--danger-ink) !important; }
+.log-pill.tone-green { color: var(--success-ink) !important; }
+.log-pill.tone-blue, .log-pill.tone-perfect { color: var(--info-ink) !important; }
+.home-stat.good b, .session-chips .present b, .cal-summary-item.present .num { color: var(--success-ink); }
+.home-stat.bad b, .session-chips .absent b, .cal-summary-item.absent .num { color: var(--danger-ink); }
+.home-stat.info b, .session-chips .makeup b, .cal-summary-item.makeup .num { color: var(--info-ink); }
+.session-chips .partial b, .cal-summary-item.partial .num { color: var(--warning-ink); }
+/* 막대 칸: 중간 톤 대신 그림 색 */
+.session-bar .cells i.출석, .session-bar .cells i.완료 { background: var(--success); }
+.session-bar .cells i.결석, .session-bar .cells i.미완료 { background: var(--danger); }
+.session-bar .cells i.보강 { background: var(--info); }
+.session-bar .cells i.부분완료 { background: var(--warning-graphic); }
+/* 크기 단계(4px) */
+.reg-tabbar { padding-top: 4px; padding-bottom: calc(4px + env(safe-area-inset-bottom, 0px)); }
+.reg-tab-btn { gap: 4px; line-height: 14px; }
+.reg-tab-content h2, .schedule-section h2, .books-section h2, .attendance-section h2, .study-section h2, .tasks-section h2, .sub-page h2 { color: var(--text-primary); gap: 8px; }
+.seg-toggle { padding: 4px; margin-bottom: 16px; }
+.seg-toggle button { position: relative; padding: 8px 16px; }
+.seg-toggle button.active { box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.book-row { gap: 16px; padding: 16px; }
+.attendance-calendar .cal-dow { padding-bottom: 4px; }
+.attendance-calendar .cal-legend { gap: 16px; }
+.session-bar-card { padding: 16px; }
+.session-bar .cells { gap: 4px; }
+.session-bar .cells i { height: 8px; }
+.session-chips { gap: 8px; }
+.log-date-label { margin-bottom: 12px; }
+.log-card { padding: 16px; }
+.log-icon { border-radius: 10px; }
+.log-pill { padding: 2px 12px; line-height: 16px; }
+.log-extra-chevron { width: 24px; height: 24px; }
+/* 누르는 영역 44px: 보이는 크기는 그대로 두고 투명 여백으로 넓힌다 */
+.seg-toggle button::after { content: ""; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; }
+.cal-collapse-btn { position: relative; }
+.cal-collapse-btn::after { content: ""; position: absolute; left: 0; right: 0; top: -4px; bottom: -4px; }
+.log-extra-chevron::after { content: ""; position: absolute; left: -10px; right: -10px; top: -10px; bottom: -10px; }
 </style>
 </head>
 <body>
@@ -929,6 +984,6 @@ body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
 
 <script src="hada_config.js"></script>
 <script src="student_report_part1.js?v=48c8ebc8"></script>
-<script src="student_report_part2.js?v=4f625933"></script>
+<script src="student_report_part2.js?v=7bf13ca0"></script>
 </body>
 </html>
