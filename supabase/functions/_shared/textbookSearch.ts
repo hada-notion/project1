@@ -102,11 +102,22 @@ async function registeredIsbns(isbns: string[]): Promise<Set<string>> {
 }
 
 // ---------- 동작 ----------
+// 검색(v2.5.119): ISBN13(하이픈·띄어쓰기 허용)이면 그 책 한 권, 아니면 알라딘 국내도서와 외국도서를 함께 찾아
+// 하나의 목록으로(국내 먼저, 같은 ISBN13은 한 번만).
+export const isbnQuery = (q: string) => { const d = q.replace(/[-\s]/g, ""); return isIsbn13(d) ? d : null }
 export async function searchBooks(query: unknown) {
 	const q = String(query ?? "").trim()
 	if (q.length < 2 || q.length > 80) throw new TextbookError(400, "교재명은 2~80자로 입력하세요.")
-	const data = await aladin("ItemSearch.aspx", { Query: q, QueryType: "Keyword", SearchTarget: "Book", MaxResults: "20", start: "1", Cover: "Big" })
-	const books = (data.item ?? []).map(toBook).filter(Boolean) as Book[]
+	let books: Book[]
+	const isbn = isbnQuery(q)
+	if (isbn) {
+		try { books = [(await lookup(isbn)).book] } catch (err) { if (err instanceof TextbookError && err.status === 404) books = []; else throw err }
+	} else {
+		const search = (target: string) => aladin("ItemSearch.aspx", { Query: q, QueryType: "Keyword", SearchTarget: target, MaxResults: "20", start: "1", Cover: "Big" })
+		const [domestic, foreign] = await Promise.all([search("Book"), search("Foreign")])
+		const seen = new Set<string>()
+		books = ([...(domestic.item ?? []), ...(foreign.item ?? [])].map(toBook).filter(Boolean) as Book[]).filter((b) => !seen.has(b.isbn13) && seen.add(b.isbn13))
+	}
 	const done = await registeredIsbns(books.map((b) => b.isbn13))
 	return { books: books.map((b) => ({ ...b, registered: done.has(b.isbn13) })) }
 }
@@ -145,22 +156,30 @@ const title = (s: string) => ({ title: [{ text: { content: s.slice(0, 2000) } }]
 
 export async function registerBook(body: any) {
 	const isbn13 = String(body?.isbn13 ?? "")
-	const units = cleanUnits(body?.units)
 	const { book } = await lookup(isbn13)
 	const name = String(body?.title ?? "").replace(/\s+/g, " ").trim().slice(0, 200) || book.title
+	return await createLibraryBook({ name, isbn13, price: book.price, pages: book.pages, cover: body?.noCover ? "" : coverUrl(isbn13), publisher: book.publisher, seriesHint: book.series, units: body?.units })
+}
+
+type NewBook = { name: string; isbn13?: string; price?: number | null; pages?: number | null; cover?: string; publisher?: string; seriesHint?: string; units: unknown }
+// 라이브러리 교재 1권 + 단원목록. 같은 ISBN13이 있으면 409. 출판사·시리즈는 기존 선택지와 맞을 때만.
+async function createLibraryBook(b: NewBook) {
+	const units = cleanUnits(b.units)
 	const src = await textbookSources()
-	if ((await registeredIsbns([isbn13])).has(isbn13)) throw new TextbookError(409, "이미 라이브러리에 있는 교재입니다(같은 ISBN13).")
-	const publisher = matchPublisher(book.publisher, src.publishers), series = matchSeries(name, book.series, src.series)
+	if (b.isbn13 && (await registeredIsbns([b.isbn13])).has(b.isbn13)) throw new TextbookError(409, "이미 라이브러리에 있는 교재입니다(같은 ISBN13).")
+	const publisher = matchPublisher(b.publisher ?? "", src.publishers), series = matchSeries(b.name, b.seriesHint ?? "", src.series)
+	const fileName = (b.isbn13 || "cover") + (/\.(png|gif|webp)(\?|$)/i.exec(b.cover ?? "")?.[0]?.replace(/\?$/, "") ?? ".jpg")
 	const props: Record<string, unknown> = {
-		"교재명": title(name),
-		"ISBN13": { rich_text: [{ text: { content: isbn13 } }] },
+		"교재명": title(b.name),
 		"사용중": { checkbox: true },
-		...(book.price ? { "가격": { number: book.price } } : {}),
-		...(book.pages ? { "전체 페이지": { number: book.pages } } : {}),
-		...(body?.noCover ? {} : { "북커버": { files: [{ type: "external", name: `${isbn13}.jpg`, external: { url: coverUrl(isbn13) } }] } }),
+		...(b.isbn13 ? { "ISBN13": { rich_text: [{ text: { content: b.isbn13 } }] } } : {}),
+		...(b.price ? { "가격": { number: b.price } } : {}),
+		...(b.pages ? { "전체 페이지": { number: b.pages } } : {}),
+		...(b.cover ? { "북커버": { files: [{ type: "external", name: fileName, external: { url: b.cover } }] } } : {}),
 		...(publisher ? { "출판사": { select: { name: publisher } } } : {}),
 		...(series ? { "시리즈": { select: { name: series } } } : {}),
 	}
+	const name = b.name
 	const pageId = await createOnce(src.books, props)
 	let created = 0
 	try {
@@ -172,7 +191,20 @@ export async function registerBook(body: any) {
 		console.error("[textbook-api] 단원 만들기 중단:", (err as Error).message)
 		return { ok: false, pageId, name, units: created, failed: units.length - created, error: `단원 ${units.length}개 중 ${created}개만 만들었습니다. 나머지는 Notion에서 직접 추가하세요.` }
 	}
-	return { ok: true, pageId, name, units: created, publisher, series, cover: !body?.noCover }
+	return { ok: true, pageId, name, units: created, publisher, series, cover: !!b.cover }
+}
+
+// ---------- 직접 추가(v2.5.119) ----------
+// 알라딘에 없는 교재(학원 자체 교재 등). ISBN·표지·가격은 있을 때만. 표지는 https 주소만.
+export async function registerCustom(body: any) {
+	const name = String(body?.title ?? "").replace(/\s+/g, " ").trim().slice(0, 200)
+	if (!name) throw new TextbookError(400, "교재명을 입력하세요.")
+	const isbn13 = String(body?.isbn13 ?? "").replace(/[-\s]/g, "")
+	if (isbn13 && !isIsbn13(isbn13)) throw new TextbookError(400, "ISBN13은 978 또는 979로 시작하는 13자리 숫자입니다.")
+	const cover = String(body?.cover ?? "").trim()
+	if (cover && (!/^https:\/\/[^\s]+$/i.test(cover) || cover.length > 1000)) throw new TextbookError(400, "표지 주소는 https로 시작하는 이미지 주소여야 합니다.")
+	const price = Number(body?.price)
+	return await createLibraryBook({ name, isbn13: isbn13 || undefined, price: price > 0 && price < 10_000_000 ? Math.round(price) : null, cover, publisher: String(body?.publisher ?? "").slice(0, 60), units: body?.units })
 }
 
 // ---------- 라이브러리 열기(v2.5.118) ----------

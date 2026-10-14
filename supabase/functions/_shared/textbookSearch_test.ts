@@ -153,3 +153,37 @@ Deno.test("add-units: new names only, linked to the book, existing units untouch
 		await rejects(() => tb.addUnits({ bookId: "33333333-3333-4333-8333-333333333333", units: [{ name: "x" }] }), 403)
 	})
 })
+
+// ---------- v2.5.119: 국내·외국도서 함께, ISBN 검색, 직접 추가 ----------
+Deno.test("search: domestic and foreign together, duplicates once; ISBN query looks up one book", async () => {
+	const m = mock()
+	await withMock(m, async () => {
+		const r = await tb.searchBooks("쎈 중등 수학")
+		assert(r.books.map((b) => b.isbn13).join() === "9788928334858,9788928334865", "same ISBNs from both targets appear once: " + r.books.map((b) => b.isbn13).join())
+		const one = await tb.searchBooks("979-11-6951-337-1")
+		assert(one.books.length === 1 && one.books[0].isbn13 === "9791169513371", JSON.stringify(one))
+	})
+	const targets = m.calls.filter((c) => c.includes("ItemSearch")).map((c) => new URL(c).searchParams.get("SearchTarget"))
+	assert(targets.join() === "Book,Foreign", targets.join())
+	assert(m.calls.filter((c) => c.includes("ItemLookUp")).length === 1, "ISBN query uses ItemLookUp")
+	assert(tb.isbnQuery("쎈 1-1") === null && tb.isbnQuery("9791169513371") === "9791169513371")
+})
+
+Deno.test("register-custom: title required, optional ISBN/cover/price, https cover only, duplicate ISBN refused", async () => {
+	const m = mock()
+	await withMock(m, async () => {
+		const r: any = await tb.registerCustom({ title: " 학원 자체 교재 ", units: [{ name: "1. 소개" }] })
+		const p = m.created[0].properties
+		assert(r.ok && r.units === 1 && p["교재명"].title[0].text.content === "학원 자체 교재" && !("ISBN13" in p) && !("북커버" in p) && !("가격" in p), JSON.stringify(p))
+		await tb.registerCustom({ title: "Phonics Monster 1 WB", isbn13: "979-11-6951-337-1", cover: "https://ecimg.cafe24img.com/a/big/1/abc.jpg", price: 5400, publisher: "AList", units: [] })
+		const q = m.created[2].properties
+		assert(q.ISBN13.rich_text[0].text.content === "9791169513371" && q["북커버"].files[0].external.url.endsWith("abc.jpg") && q["가격"].number === 5400 && !("출판사" in q), JSON.stringify(q))
+		await rejects(() => tb.registerCustom({ title: "", units: [] }), 400)
+		await rejects(() => tb.registerCustom({ title: "x", isbn13: "123", units: [] }), 400)
+		await rejects(() => tb.registerCustom({ title: "x", cover: "http://a/b.jpg", units: [] }), 400)
+		await rejects(() => tb.registerCustom({ title: "x", cover: "javascript:alert(1)", units: [] }), 400)
+	})
+	await withMock(mock({ existing: ["9791169513371"] }), async () => {
+		await rejects(() => tb.registerCustom({ title: "x", isbn13: "9791169513371", units: [] }), 409)
+	})
+})
