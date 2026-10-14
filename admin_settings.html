@@ -7,7 +7,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.supabase.co; base-uri 'none'; form-action 'none'">
 <title>관리자 설정 | 하다 학원관리</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236B5D4D%22%20stroke-width%3D%222.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cstyle%3E%40media(prefers-color-scheme%3Adark)%7Bsvg%7Bstroke%3A%23E6D7C4%7D%7D%3C%2Fstyle%3E%3Cpath%20d%3D%22M12%2015a3%203%200%201%200%200-6%203%203%200%200%200%200%206z%22%2F%3E%3Cpath%20d%3D%22M19.4%2015a1.65%201.65%200%200%200%20.33%201.82l.06.06a2%202%200%201%201-2.83%202.83l-.06-.06a1.65%201.65%200%200%200-1.82-.33%201.65%201.65%200%200%200-1%201.51V21a2%202%200%201%201-4%200v-.09A1.65%201.65%200%200%200%209%2019.4a1.65%201.65%200%200%200-1.82.33l-.06.06a2%202%200%201%201-2.83-2.83l.06-.06A1.65%201.65%200%200%200%204.68%2015a1.65%201.65%200%200%200-1.51-1H3a2%202%200%201%201%200-4h.09A1.65%201.65%200%200%200%204.6%209a1.65%201.65%200%200%200-.33-1.82l-.06-.06a2%202%200%201%201%202.83-2.83l.06.06A1.65%201.65%200%200%200%209%204.68a1.65%201.65%200%200%200%201-1.51V3a2%202%200%201%201%204%200v.09a1.65%201.65%200%200%200%201%201.51%201.65%201.65%200%200%200%201.82-.33l.06-.06a2%202%200%201%201%202.83%202.83l-.06.06A1.65%201.65%200%200%200%2019.4%209a1.65%201.65%200%200%200%201.51%201H21a2%202%200%201%201%200%204h-.09a1.65%201.65%200%200%200-1.51%201z%22%2F%3E%3C%2Fsvg%3E">
-<link rel="stylesheet" href="assets/hada-ui.css?v=45035ea3">
+<link rel="stylesheet" href="assets/hada-ui.css?v=7f1880e7">
 <style>
 /* 관리자 설정 화면 전용. 값은 assets/hada-ui.css 토큰만 쓴다(docs/DESIGN.md). */
 .centered #panel-title,.centered #panel-description,.centered #form-error{max-width:var(--form-max);margin-left:auto;margin-right:auto}
@@ -27,7 +27,6 @@
 .dash-col .help{margin:0 0 var(--space-1)}
 .dash-col .status{flex:1;margin:var(--space-3) 0 var(--space-4)}
 .dash-col .wide{margin-top:0}
-.dash-foot{display:flex;justify-content:flex-end;margin-top:var(--space-4)}
 /* 웹훅 키 */
 #new-webhook-key{font-family:var(--font-mono)}
 .cancel-box{margin-top:var(--space-5);padding:var(--space-3) var(--space-4);border:1px solid var(--brand-border);border-radius:var(--radius-md)}
@@ -97,12 +96,12 @@
 @media(max-width:1100px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:860px){.guide-grid,.dash-grid{grid-template-columns:minmax(0,1fr)}}
 /* 휴대폰: 키 막대는 붙어 다니지 않고(화면을 가리지 않게) 이름·버튼 한 줄, 키 값은 아래 한 줄 전체. 아래쪽 버튼은 가로 꽉 */
-@media(max-width:700px){.topright .badge{display:none}.progress-head{flex-wrap:wrap}.cards{grid-template-columns:minmax(0,1fr)}.key-bar{position:static}.key-bar-label{flex-basis:100%}.key-bar-value{order:2;flex-basis:100%}#key-bar-show,#key-bar-copy{order:3;flex:1}.dash-foot .secondary{width:100%}}
+@media(max-width:700px){.progress-head{flex-wrap:wrap}.cards{grid-template-columns:minmax(0,1fr)}.key-bar{position:static}.key-bar-label{flex-basis:100%}.key-bar-value{order:2;flex-basis:100%}#key-bar-show,#key-bar-copy{order:3;flex:1}.dash-foot .secondary{width:100%}}
 </style>
 </head>
 <body>
 <div class="shell">
-<nav class="top" aria-label="서비스 정보"><div class="brand"><img class="logo" src="assets/brand/hada-wordmark.png" alt="HADA" width="96" height="36"><div class="wordmark">하다<span>학원관리</span></div></div><div class="app-nav" id="app-nav"></div><div class="topright"><button class="ghost" id="open-facts" type="button">보안 설정 현황</button><span class="badge">관리자 전용</span></div></nav>
+<nav class="top" aria-label="서비스 정보"><div class="brand"><img class="logo" src="assets/brand/hada-wordmark.png" alt="HADA" width="96" height="36"><div class="wordmark">하다<span>학원관리</span></div></div><div class="app-nav" id="app-nav"></div><div class="topright"><button class="ghost" id="open-facts" type="button">보안 설정 현황</button><button class="ghost" id="logout" type="button" hidden>로그아웃</button></div></nav>
 <header><h1>관리자 설정</h1><p class="muted">키오스크·법정 서류·학교 검색·수업 관리 화면에서 쓰는 관리자 비밀번호를 변경하고, 필요할 때 Notion 웹훅 키를 교체합니다.</p></header>
 <div class="notice info" role="status" id="connection-status"><strong>인증 서버 연결을 확인하고 있어요.</strong>비밀번호를 바꿔도 Notion 버튼·자동화의 웹훅 키는 바뀌지 않습니다.</div>
 <main class="layout">
@@ -126,7 +125,7 @@
 <div id="dashboard" hidden><div class="dash-grid">
 <section class="dash-col"><h3 class="subhead">관리자 비밀번호</h3><p class="help">키오스크·법정 서류·학교 검색·수업 관리 화면에서 씁니다.</p><div class="status" id="due-status"></div><button class="primary" id="start-change" type="button">비밀번호 변경</button></section>
 <section class="dash-col"><h3 class="subhead">Notion 웹훅 키</h3><p class="help">Notion 버튼·자동화가 서버를 부를 때 씁니다.</p><div class="status" id="webhook-summary"></div><button class="secondary wide" id="open-webhook" type="button">웹훅 키 교체</button></section>
-</div><div class="dash-foot"><button class="secondary" id="logout" type="button">로그아웃</button></div></div>
+</div></div>
 <form id="webhook-form" class="narrow" hidden>
 <ol class="flow"><li>새 웹훅 키를 만들면 화면에 표시되고, 교체를 마칠 때까지 이 탭에서 언제든 다시 복사할 수 있습니다.</li><li>교체 기간에는 이전 키와 새 키가 모두 동작합니다. Notion 버튼·자동화의 키를 하나씩 바꿉니다.</li><li>이전 키로 들어오는 호출이 없어지면 교체를 완료합니다. 이때 이전 키가 삭제되어 더 이상 동작하지 않습니다.</li></ol>
 <label for="webhook-password">현재 관리자 비밀번호</label><input type="password" id="webhook-password" autocomplete="current-password" maxlength="128" required>
@@ -182,7 +181,7 @@
 <p class="foot"><strong>비밀번호는 타인에게 전달하지 마세요.</strong> 공용 기기에서는 사용 후 로그아웃하세요.</p>
 <noscript><p class="notice">관리자 설정을 사용하려면 JavaScript가 필요합니다.</p></noscript>
 </div>
-<script src="assets/hada-shortcuts.js?v=c5c40163"></script>
-<script src="hada_config.js"></script><script src="admin_auth.js?v=4ffde89c"></script><script src="admin_settings.js?v=faab9663"></script>
+<script src="assets/hada-shortcuts.js?v=5c199761"></script>
+<script src="hada_config.js"></script><script src="admin_auth.js?v=4ffde89c"></script><script src="admin_settings.js?v=12a22add"></script>
 </body>
 </html>

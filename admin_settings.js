@@ -14,7 +14,7 @@ function text(id,value){$(id).textContent=value;}
 function notice(message,kind='info'){text('connection-status',message);['info','success','error'].forEach(k=>$('connection-status').classList.toggle(k,k===kind));}
 function friendly(e){return e instanceof TypeError||e.name==='TimeoutError'||e.name==='AbortError'?'인증 서버에 연결하지 못했습니다. 연결 설정과 네트워크를 확인해 주세요.':(e.message||'처리하지 못했습니다.');}
 function error(message){text('form-error',message);$('form-error').hidden=!message;}
-function panel(id,title,description){forms.forEach(x=>$(x).hidden=x!==id);text('panel-title',title);text('panel-description',description);error('');$('retry').hidden=true;$('main-card').classList.toggle('centered',!!id&&!['dashboard','webhook-progress'].includes(id));}
+function panel(id,title,description){forms.forEach(x=>$(x).hidden=x!==id);$('logout').hidden=id!=='dashboard';text('panel-title',title);text('panel-description',description);error('');$('retry').hidden=true;$('main-card').classList.toggle('centered',!!id&&!['dashboard','webhook-progress'].includes(id));}
 function clearPasswords(){document.querySelectorAll('input[type=password]').forEach(x=>x.value='');$('new-webhook-key').value='';}
 function forgetSession(){session='';mustChange=false;HadaAdminAuth.saveSession('');keepNewKey('');clearPasswords();}
 function loggedOutFacts(){text('owner-status','로그인 후 확인');text('last-change','로그인 후 표시');text('next-change','로그인 후 표시');text('webhook-fact','평소 유지 · 사고 시 별도 교체');}
