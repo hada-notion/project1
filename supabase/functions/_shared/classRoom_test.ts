@@ -1,6 +1,6 @@
 // All network calls are mocked. No live Notion/Supabase writes or secret values are used.
 function assert(value: unknown, message = "assertion failed") { if (!value) throw new Error(message) }
-for (const [key, value] of Object.entries({ NOTION_TOKEN: "test-only", SB_URL: "https://mock.supabase", DATA_SOURCE_CLASS_SESSION_ID: "sessions", DATA_SOURCE_ATTENDANCE_ID: "attendance", DATA_SOURCE_LEARNING_RECORD_ID: "records", DATA_SOURCE_STUDY_ACTIVITY_ID: "activities", DATA_SOURCE_PROGRESS_BOOK_ID: "books", DATA_SOURCE_REGISTRATION_ID: "registrations" })) Deno.env.set(key, value)
+for (const [key, value] of Object.entries({ NOTION_TOKEN: "test-only", CLASS_ROOM_COPY_WRITE: "off", SB_URL: "https://mock.supabase", DATA_SOURCE_CLASS_SESSION_ID: "sessions", DATA_SOURCE_ATTENDANCE_ID: "attendance", DATA_SOURCE_LEARNING_RECORD_ID: "records", DATA_SOURCE_STUDY_ACTIVITY_ID: "activities", DATA_SOURCE_PROGRESS_BOOK_ID: "books", DATA_SOURCE_REGISTRATION_ID: "registrations" })) Deno.env.set(key, value)
 const room = await import("./classRoom.ts")
 const rel = (...ids: string[]) => ({ relation: ids.map((id) => ({ id })) })
 const title = (s: string) => ({ type: "title", title: [{ plain_text: s, text: { content: s } }] })
