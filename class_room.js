@@ -242,6 +242,7 @@ async function ensureClassMonth(ym){const list=state.classWeek||[],from=`${ym}-0
 // 기록 만들기 창(v2.5.80, v2.5.87부터 학습기록 탭의 + 버튼·교재 탭의 교재 카드에서 연다): 클래스(보고 있는 날짜의 내 수업) → 교재(리포트 교재 카드처럼 표지·진도) → 구분 → 주제 → 범위 → 내용. 만든 뒤 바로 기록 화면으로 간다.
 async function openCreateSheet(book=null){
  if(!leaveEdit())return;
+ if(state.day?.date!==state.date)await ensureDay(state.date);
  const sessions=(state.day?.sessions||[]).slice();if(state.detail&&!sessions.some(s=>s.id===state.sessionId))sessions.push(state.detail.session);sessions.sort((a,b)=>String(a.start).localeCompare(String(b.start)));
  if(!sessions.length){toast(`${state.date===seoulDate()?'오늘':dateLabel(state.date)} 수업이 없어요. Notion에서 수업 페이지를 먼저 만들어 주세요.`);return;}
  if(state.date!==seoulDate()&&!confirm(`오늘 수업이 아닙니다. ${dateLabel(state.date)} 수업으로 기록을 만들까요?`))return;
@@ -353,14 +354,18 @@ async function openSessionNow(id,keep=false,tab='home',open=false){
  const booksP=sameClass?null:booksFor(id).catch(()=>null);
  const [detail,week]=await Promise.all([api('session',{sessionId:id}),sameClass?null:api('class-sessions',{sessionId:id}).catch(()=>({sessions:[]}))]);
  const date=ymdOf(detail.session.start)||state.date;
- if(date!==state.day?.date)state.day=await fetchDay(date).then(d=>({...d,date})).catch(()=>({sessions:[],makeupWaiting:[],date}));
- state.date=date;state.sessionId=id;state.detail=detail;state.view='session';state.books=null;
+ state.date=date;state.sessionId=id;state.detail=detail;state.view='session';state.books=null;ensureDay(date);
  if(week){state.classWeek=week.sessions||[];state.cwFrom=addDays(date,-63);state.cwTo=addDays(date,35);state.cwStale=false;}
  const rk=regsKey(detail);if(rk){if(state.bookCache[id])state.bookByRegs[rk]=state.bookCache[id];else if(state.bookByRegs[rk])state.bookCache[id]=state.bookByRegs[rk];}
  if(booksP&&rk)booksP.then(b=>{if(b)state.bookByRegs[rk]=b;});
  if(!keep){state.tab=tab;state.seg='att';state.recKind='전체';state.calOpen=open;}
  if(!keep||state.tab!=='calendar')state.cwMonth=date.slice(0,7);
  state.edit=false;state.draft={};state.hwRecord=state.detail.homeworkDue[0]?.recordId||'';render();}
+// 그날 수업 목록(day, v2.5.110 속도): 반 상세에서는 [+ 기록 만들기]의 클래스 고르기에만 쓰므로 수업을 열 때 기다리지 않고 뒤에서 읽는다.
+// 기록 만들기를 눌렀을 때 아직 다 안 읽혔으면 그때만 기다린다. 같은 날짜를 동시에 두 번 읽지 않는다.
+function ensureDay(date){if(state.day?.date===date)return Promise.resolve();if(ensureDay.p?.date===date)return ensureDay.p.p;
+ const p=fetchDay(date).then(d=>({...d,date})).catch(()=>({sessions:[],makeupWaiting:[],date})).then(d=>{if(state.date===date)state.day=d;});
+ ensureDay.p={date,p};return p;}
 function switchSession(id,btn){if(id===state.sessionId||!leaveEdit())return;run(async()=>{nav.replace=true;try{await openSessionNow(id,true);}finally{nav.replace=false;}},btn);}
 async function reloadSession(){state.detail=await api('session',{sessionId:state.sessionId});state.classRecs=null;state.cwStale=true;}
 function paneHead(title,hint,tabs='',acts=''){
