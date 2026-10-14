@@ -55,7 +55,7 @@ Deno.test("search: Aladin results with kyobo cover, registered by ISBN13, no ISB
 		assert(r.books.length === 2, "items without ISBN13 dropped")
 		assert(r.books[0].cover === "https://contents.kyobobook.co.kr/sih/fit-in/458x0/pdt/9788928334858.jpg" && r.books[0].price === 19000 && !r.books[0].registered)
 		assert(r.books[1].registered === true)
-		assert(r.books[0].link.startsWith("https://www.aladin.co.kr/"), "aladin link upgraded to https")
+		assert(!("link" in r.books[0]), "no Aladin product link")
 		await rejects(() => tb.searchBooks("쎈"), 400)
 	})
 })

@@ -22,7 +22,6 @@
 .result-info strong{display:block;font-size:var(--text-lead);overflow-wrap:anywhere;cursor:pointer}
 .result.locked .result-info strong{cursor:default}
 .result-info p{margin:var(--space-1) 0 0;color:var(--text-muted);font-size:var(--text-small);overflow-wrap:anywhere}
-.result-info .link-chip{margin-top:var(--space-2)}
 .done-tag{flex-shrink:0;font-size:var(--text-caption);font-weight:700;color:var(--success-ink);background:var(--success-soft);padding:var(--space-1) var(--space-3);border-radius:var(--radius-pill);white-space:nowrap}
 .source-note{margin:var(--space-5) 0 0}
 /* 등록할 교재: 교재마다 한 묶음(교재명 → 정보 한 줄 → 단원 줄) */
@@ -111,7 +110,6 @@ function drawResults(){
   const box=el('label','check');const cb=el('input');cb.type='checkbox';cb.id=id;cb.checked=picked.has(b.isbn13);cb.disabled=b.registered;cb.setAttribute('aria-label',b.title+' 선택');cb.onchange=()=>toggle(b,cb.checked);box.append(cb);
   const info=el('div','result-info');const t=el('strong',null,b.title);t.onclick=()=>{if(!cb.disabled)cb.click()};if(b.registered)row.classList.add('locked');
   info.append(t,el('p',null,[b.publisher,b.pubDate,won(b.price),'ISBN '+b.isbn13].filter(Boolean).join(' · ')));
-  if(b.link){const a=el('a','link-chip icon-ext','알라딘 상품');a.href=b.link;a.target='_blank';a.rel='noopener noreferrer';info.append(a)}
   row.append(box,cover(b),info);if(b.registered)row.append(el('span','done-tag','등록됨'));return row}));
 }
 async function toggle(book,on){

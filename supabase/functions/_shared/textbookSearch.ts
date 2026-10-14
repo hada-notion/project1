@@ -36,7 +36,7 @@ async function aladin(path: string, params: Record<string, string>): Promise<any
 	return data
 }
 
-export type Book = { isbn13: string; title: string; author: string; publisher: string; pubDate: string; price: number | null; cover: string; link: string; series: string; pages: number | null }
+export type Book = { isbn13: string; title: string; author: string; publisher: string; pubDate: string; price: number | null; cover: string; series: string; pages: number | null }
 function toBook(it: any): Book | null {
 	const isbn13 = String(it?.isbn13 ?? "")
 	if (!isIsbn13(isbn13)) return null
@@ -49,7 +49,6 @@ function toBook(it: any): Book | null {
 		pubDate: String(it.pubDate ?? "").slice(0, 10),
 		price: price > 0 ? price : null,
 		cover: coverUrl(isbn13),
-		link: /^https:\/\/www\.aladin\.co\.kr\//.test(String(it.link ?? "").replace(/^http:/, "https:")) ? String(it.link).replace(/^http:/, "https:") : "",
 		series: String(it.seriesInfo?.seriesName ?? "").trim(),
 		pages: pages > 0 ? pages : null,
 	}
