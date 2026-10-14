@@ -40,6 +40,7 @@ TARGET_FILES_URL_KEY = [
     "supabase/migrations/20260924010000_backfill_assignment_deadlines_cron.sql",
     "supabase/migrations/20260926020000_status_watchdog_cron_15min.sql",
     "supabase/migrations/20261013030000_kiosk_today.sql",
+    "supabase/migrations/20261014060000_class_room_copy_cron.sql",
     "hada_config.js",
 ]
 
@@ -68,6 +69,9 @@ def replace_in_file(path: pathlib.Path, replacements: list[tuple[str, str]]) -> 
 
 
 def main() -> int:
+    # Windows 콘솔(cp949)에서도 안내 문구의 기호가 출력되게 한다.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--old-url", default="https://twczhsxybkcvjkdfdxvs.supabase.co")
     parser.add_argument("--new-url", required=True, help="예: https://abcdefgh.supabase.co")

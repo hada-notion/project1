@@ -358,9 +358,8 @@ function buildRegCalendarHtml(r, mode) {
           <div class="cal-nav-right"><button class="cal-nav-btn" onclick="moveCalDayWeek(7)" aria-label="다음 주">›</button></div>
         </div>
         <div class="cal-grid">${dowHeader}${cells}</div>
-        <button type="button" class="cal-collapse-btn" onclick="clearCalDay()">${CHEVRON_DOWN_SVG}월 전체 보기</button>
+        <div class="cal-foot"><span></span><button type="button" class="cal-collapse-btn" onclick="clearCalDay()">${CHEVRON_DOWN_SVG}월 전체 보기</button>${weekStartToggleHtml()}</div>
       </div>
-      <div class="cal-week-row">${weekStartToggleHtml()}</div>
       ${buildCalDayPanelHtml(r, selectedCalDate)}
     `
   }
@@ -386,9 +385,8 @@ function buildRegCalendarHtml(r, mode) {
         </div>
       </div>
       <div class="cal-grid">${dowHeader}${cells.join("")}</div>
-      ${legend}
+      <div class="cal-foot"><span></span>${legend}${weekStartToggleHtml()}</div>
     </div>
-    <div class="cal-week-row">${weekStartToggleHtml()}</div>
   `
 }
 function moveCalDayWeek(days) {
