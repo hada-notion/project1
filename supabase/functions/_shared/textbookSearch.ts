@@ -1,6 +1,6 @@
 // _shared/textbookSearch.ts
 //
-// 교재 검색(textbook_search.html → textbook-api, v2.5.118). 알라딘 Open API로 책을 찾고, 고른 책을 Notion 정규교재 DB에
+// 라이브러리(library.html → textbook-api, v2.5.118). 알라딘 Open API로 책을 찾고, 고른 책을 Notion 정규교재 DB(라이브러리)에
 // 한 권 만들고 목차에서 고친 단원을 단원목록 DB에 만든다.
 //   - 알라딘 키: 함수 Secret ALADIN_TTB_KEY(값은 로그·응답에 쓰지 않는다). 출처 표시는 화면 아래.
 //   - DB 위치: 진도교재 DB의 "정규교재" 관계 → 정규교재 DB, 그 "단원목록" 관계 → 단원목록 DB(새 Notion ID 설정 없음).
@@ -170,4 +170,78 @@ export async function registerBook(body: any) {
 		return { ok: false, pageId, name, units: created, failed: units.length - created, error: `단원 ${units.length}개 중 ${created}개만 만들었습니다. 나머지는 Notion에서 직접 추가하세요.` }
 	}
 	return { ok: true, pageId, name, units: created, publisher, series, cover: !body?.noCover }
+}
+
+// ---------- 라이브러리 열기(v2.5.118) ----------
+const plainOf = (p: any, name: string) => {
+	const v = p?.properties?.[name]
+	return ((v?.title ?? v?.rich_text ?? []) as any[]).map((t) => t.plain_text ?? "").join("").trim()
+}
+const fileUrlOf = (p: any, name: string) => {
+	const f = p?.properties?.[name]?.files?.[0]
+	return String(f?.external?.url ?? f?.file?.url ?? "")
+}
+const compact = (id: string) => String(id).replaceAll("-", "").toLowerCase()
+
+// 라이브러리(정규교재 DB) 전체. 시리즈 선택지 순서를 함께 준다(화면이 시리즈별로 묶는다).
+export async function libraryBooks() {
+	const src = await textbookSources()
+	const pages = await queryAllPages(src.books)
+	const books = pages.map((p: any) => {
+		const units = p.properties?.["단원목록"]
+		return {
+			id: p.id as string,
+			title: plainOf(p, "교재명"),
+			series: String(p.properties?.["시리즈"]?.select?.name ?? ""),
+			publisher: String(p.properties?.["출판사"]?.select?.name ?? ""),
+			cover: fileUrlOf(p, "북커버"),
+			used: p.properties?.["사용중"]?.checkbox === true,
+			isbn13: plainOf(p, "ISBN13"),
+			units: (units?.relation ?? []).length,
+			unitsMore: units?.has_more === true,
+		}
+	}).sort((a: any, b: any) => a.title.localeCompare(b.title, "ko", { numeric: true }))
+	return { books, seriesOrder: src.series }
+}
+
+async function bookPageOf(bookId: unknown) {
+	const id = String(bookId ?? "")
+	if (!/^[0-9a-f-]{32,36}$/i.test(id)) throw new TextbookError(400, "교재 형식이 올바르지 않습니다.")
+	const src = await textbookSources()
+	const res = await fetchWithRetry(`${NOTION_API}/pages/${id}`, { headers: notionHeaders() }, 2)
+	if (!res.ok) throw new TextbookError(404, "교재를 찾지 못했습니다.")
+	const page = await res.json()
+	if (compact(page.parent?.data_source_id ?? "") !== compact(src.books) || page.archived || page.in_trash) throw new TextbookError(403, "라이브러리에 있는 교재가 아닙니다.")
+	return { id: page.id as string, src }
+}
+
+// 한 교재의 단원목록(시작쪽 순, 쪽이 없으면 이름 순으로 뒤에)
+export async function bookUnits(bookId: unknown) {
+	const { id, src } = await bookPageOf(bookId)
+	const pages = await queryAllPages(src.units, { property: "정규교재", relation: { contains: id } })
+	const units = pages.map((p: any) => {
+		const n = p.properties?.["시작페이지"]?.number
+		return { id: p.id as string, name: plainOf(p, "단원명"), page: typeof n === "number" ? n : null }
+	}).sort((a: any, b: any) => (a.page ?? Infinity) - (b.page ?? Infinity) || a.name.localeCompare(b.name, "ko", { numeric: true }))
+	return { bookId: id, units }
+}
+
+// 이미 있는 교재에 단원 추가. 같은 이름의 단원은 다시 만들지 않는다. 기존 단원은 고치거나 지우지 않는다.
+export async function addUnits(body: any) {
+	const { id, src } = await bookPageOf(body?.bookId)
+	const units = cleanUnits(body?.units)
+	if (!units.length) throw new TextbookError(400, "추가할 단원이 없습니다.")
+	const existing = new Set((await queryAllPages(src.units, { property: "정규교재", relation: { contains: id } })).map((p: any) => plainOf(p, "단원명")))
+	const fresh = units.filter((u) => !existing.has(u.name))
+	let created = 0
+	try {
+		for (const u of fresh) {
+			await createOnce(src.units, { "단원명": title(u.name), "정규교재": { relation: [{ id }] }, ...(u.page ? { "시작페이지": { number: u.page } } : {}) })
+			created++
+		}
+	} catch (err) {
+		console.error("[textbook-api] 단원 추가 중단:", (err as Error).message)
+		return { ok: false, created, skipped: units.length - fresh.length, error: `단원 ${fresh.length}개 중 ${created}개만 추가했습니다. 다시 시도하면 이미 만든 단원은 건너뜁니다.` }
+	}
+	return { ok: true, created, skipped: units.length - fresh.length }
 }

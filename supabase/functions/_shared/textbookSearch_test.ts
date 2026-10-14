@@ -1,9 +1,15 @@
-// 교재 검색(v2.5.118). 알라딘·Notion 호출은 모두 가짜 응답. 실제 키·데이터 없음.
+// 라이브러리(v2.5.118). 알라딘·Notion 호출은 모두 가짜 응답. 실제 키·데이터 없음.
 function assert(value: unknown, message = "assertion failed") { if (!value) throw new Error(message) }
 for (const [k, v] of Object.entries({ NOTION_TOKEN: "test-only", DATA_SOURCE_PROGRESS_BOOK_ID: "progress", ALADIN_TTB_KEY: "test-only-ttb" })) Deno.env.set(k, v)
 const tb = await import("./textbookSearch.ts")
 
 const ITEM = (isbn: string, extra: Record<string, unknown> = {}) => ({ title: "쎈 중등 수학 1-1 (2026년용)", author: "홍범준", publisher: "좋은책신사고", pubDate: "2025-11-01", isbn13: isbn, priceStandard: 19000, link: "http://www.aladin.co.kr/shop/wproduct.aspx?ItemId=1", seriesInfo: { seriesName: "쎈 중등 수학" }, ...extra })
+const tt = (s: string) => [{ plain_text: s }]
+const LIB = [
+	{ id: "22222222-2222-4222-8222-222222222222", properties: { "교재명": { title: tt("쎈 중등 수학 1-2") }, "시리즈": { select: { name: "쎈" } }, "출판사": { select: { name: "좋은책신사고" } }, "북커버": { files: [{ external: { url: "https://contents.kyobobook.co.kr/x.jpg" } }] }, "사용중": { checkbox: true }, ISBN13: { rich_text: tt("9788928334001") }, "단원목록": { relation: [{ id: "u1" }, { id: "u2" }], has_more: false } } },
+	{ id: "11111111-1111-4111-8111-111111111111", properties: { "교재명": { title: tt("개념원리 수학 1-1") }, "시리즈": { select: null }, "북커버": { files: [] }, "사용중": { checkbox: false }, "단원목록": { relation: [], has_more: false } } },
+]
+const UNITS = [{ id: "u2", book: "22222222-2222-4222-8222-222222222222", name: "1-2. 일차부등식", page: 30 }, { id: "u1", book: "22222222-2222-4222-8222-222222222222", name: "1-1. 다항식", page: 8 }, { id: "u3", book: "22222222-2222-4222-8222-222222222222", name: "부록", page: null }]
 function mock(opts: { existing?: string[]; failUnitAt?: number; toc?: string } = {}) {
 	const created: any[] = [], calls: string[] = []
 	const reply = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status })
@@ -17,9 +23,17 @@ function mock(opts: { existing?: string[]; failUnitAt?: number; toc?: string } =
 		if (url.endsWith("/data_sources/progress")) return reply({ properties: { "정규교재": { relation: { data_source_id: "books" } } } })
 		if (url.endsWith("/data_sources/books")) return reply({ properties: { "단원목록": { relation: { data_source_id: "units" } }, "출판사": { select: { options: [{ name: "좋은책신사고" }, { name: "천재교육" }] } }, "시리즈": { select: { options: [{ name: "쎈" }, { name: "라이트쎈" }] } } } })
 		if (url.endsWith("/data_sources/books/query")) {
-			const isbns = (JSON.parse(init.body).filter?.or ?? []).map((f: any) => f.rich_text.equals)
+			const filter = JSON.parse(init.body).filter
+			if (!filter) return reply({ results: LIB, has_more: false })
+			const isbns = (filter.or ?? []).map((f: any) => f.rich_text.equals)
 			return reply({ results: (opts.existing ?? []).filter((i) => isbns.includes(i)).map((i) => ({ id: "p" + i, properties: { ISBN13: { rich_text: [{ plain_text: i }] } } })), has_more: false })
 		}
+		if (url.endsWith("/data_sources/units/query")) {
+			const id = JSON.parse(init.body).filter.relation.contains
+			return reply({ results: UNITS.filter((u) => u.book === id).map((u) => ({ id: u.id, properties: { "단원명": { title: [{ plain_text: u.name }] }, "시작페이지": { number: u.page } } })), has_more: false })
+		}
+		const got = url.match(/\/pages\/([^/?]+)$/)?.[1]
+		if (got && !init.method) return got === "11111111-1111-4111-8111-111111111111" || got === "22222222-2222-4222-8222-222222222222" ? reply({ id: got, parent: { data_source_id: "books" } }) : got === "33333333-3333-4333-8333-333333333333" ? reply({ id: got, parent: { data_source_id: "elsewhere" } }) : reply({ message: "missing" }, 404)
 		if (url.endsWith("/pages") && init.method === "POST") {
 			const body = JSON.parse(init.body)
 			if (body.parent.data_source_id === "units" && created.filter((c) => c.parent.data_source_id === "units").length === opts.failUnitAt) return reply({ message: "fail" }, 500)
@@ -106,4 +120,35 @@ Deno.test("missing Aladin key is a clear 503 without calling Aladin", async () =
 	const m = mock()
 	try { await withMock(m, () => rejects(() => tb.searchBooks("쎈 중등"), 503, /ALADIN_TTB_KEY/)) } finally { Deno.env.set("ALADIN_TTB_KEY", "test-only-ttb") }
 	assert(!m.calls.some((c) => c.includes("aladin")))
+})
+
+Deno.test("library: all books with series, cover, in-use and unit counts", async () => {
+	await withMock(mock(), async () => {
+		const r = await tb.libraryBooks()
+		assert(r.books.map((b) => b.id).join() === "11111111-1111-4111-8111-111111111111,22222222-2222-4222-8222-222222222222", "sorted by title")
+		const b = r.books[1]
+		assert(b.series === "쎈" && b.cover.endsWith("x.jpg") && b.used && b.units === 2 && !b.unitsMore && b.isbn13 === "9788928334001", JSON.stringify(b))
+		assert(r.books[0].series === "" && r.books[0].cover === "" && r.seriesOrder.join() === "쎈,라이트쎈")
+	})
+})
+
+Deno.test("units: units of one book by start page; pages of other DBs refused", async () => {
+	await withMock(mock(), async () => {
+		const r = await tb.bookUnits("22222222-2222-4222-8222-222222222222")
+		assert(r.units.map((u) => u.name).join("|") === "1-1. 다항식|1-2. 일차부등식|부록", JSON.stringify(r))
+		await rejects(() => tb.bookUnits("33333333-3333-4333-8333-333333333333"), 403)
+		await rejects(() => tb.bookUnits("../x"), 400)
+	})
+})
+
+Deno.test("add-units: new names only, linked to the book, existing units untouched", async () => {
+	const m = mock()
+	await withMock(m, async () => {
+		const r = await tb.addUnits({ bookId: "22222222-2222-4222-8222-222222222222", units: [{ name: "1-1. 다항식", page: 8 }, { name: "1-3. 연립방정식", page: 44 }, { name: "" }] })
+		assert(r.ok && r.created === 1 && r.skipped === 1, JSON.stringify(r))
+		assert(m.created.length === 1 && m.created[0].properties["단원명"].title[0].text.content === "1-3. 연립방정식" && m.created[0].properties["정규교재"].relation[0].id === "22222222-2222-4222-8222-222222222222")
+		assert(!m.calls.some((c) => /\/pages\/u\d/.test(c)), "existing unit pages are not touched")
+		await rejects(() => tb.addUnits({ bookId: "22222222-2222-4222-8222-222222222222", units: [] }), 400)
+		await rejects(() => tb.addUnits({ bookId: "33333333-3333-4333-8333-333333333333", units: [{ name: "x" }] }), 403)
+	})
 })

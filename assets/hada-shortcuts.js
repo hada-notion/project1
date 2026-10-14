@@ -18,7 +18,7 @@ const PAGES=[
  ['admin_settings.html','관리자 설정','settings','관리자 비밀번호 변경과 Notion 웹훅 키 교체','설정'],
  ['legal_documents.html','법정 서류','legal','출석부·원부·영수증 서식을 기간별로 조회하고 출력','서류'],
  ['school_search.html','학교 검색','school','나이스에서 학교를 찾아 Notion 학교 페이지와 연결','학교'],
- ['textbook_search.html','교재 검색','book','알라딘에서 교재를 찾아 정규교재·단원목록에 등록','교재'],
+ ['library.html','라이브러리','book','교재(정규교재)를 시리즈별로 보고, 알라딘에서 찾아 추가','라이브러리'],
 ];
 const EXTERNAL=[
  ['attendance_kiosk.html','키오스크','check','학원 입구 태블릿에서 전화번호로 등원·하원 체크(새 탭)','출결 키오스크(새 탭에서 열림)'],
