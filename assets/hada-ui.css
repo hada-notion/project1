@@ -148,20 +148,41 @@ dialog::backdrop{background:var(--overlay)}
 .nav-tab{padding:var(--space-2) var(--space-4);border-radius:var(--radius-pill);color:var(--text-muted)}
 .nav-tab:hover{color:var(--text-ink)}
 .nav-tab[aria-current=page]{background:var(--surface);color:var(--text-ink);box-shadow:var(--shadow-card)}
+.nav-tab.nav-soon{opacity:.55;cursor:default}
+.nav-tab.nav-soon:hover{color:var(--text-muted)}
 .nav-ext{padding:var(--space-2) var(--space-3);border:1px solid var(--brand-border);border-radius:var(--radius-md);color:var(--brand-deep)}
 .nav-ext:hover{border-color:var(--brand-deep)}
 svg.nav-icon{width:var(--icon-sm);height:var(--icon-sm);flex-shrink:0}
 /* 맨 오른쪽 ⋯ 메뉴: 화면별 부가 버튼(보안 설정 현황·로그아웃)을 모은다 */
 .nav-more{position:relative}
-.nav-more-btn{display:inline-flex;align-items:center;justify-content:center;width:2rem;height:2rem;padding:0}
-.nav-more-btn svg.nav-icon{width:var(--icon-md);height:var(--icon-md)}
+.nav-icon-btn{display:inline-flex;align-items:center;justify-content:center;width:2rem;height:2rem;padding:0}
+.nav-icon-btn svg.nav-icon{width:var(--icon-md);height:var(--icon-md)}
 .nav-more-btn[aria-expanded=true]{border-color:var(--brand-deep);background:var(--brand-soft)}
 .nav-menu{position:absolute;right:0;top:calc(100% + var(--space-2));z-index:30;display:flex;flex-direction:column;min-width:11rem;padding:var(--space-1);background:var(--surface);border:1px solid var(--brand-border);border-radius:var(--radius-md);box-shadow:var(--shadow-md)}
 .nav-menu-item{min-height:var(--hit-min);padding:0 var(--space-3);border:0;border-radius:var(--radius-sm);background:none;text-align:left;white-space:nowrap;font:inherit;font-size:var(--text-small);font-weight:600;color:var(--text-ink);cursor:pointer}
 .nav-menu-item:hover,.nav-menu-item:focus-visible{background:var(--brand-soft)}
-/* 새 탭 메뉴(키오스크·수업 관리): 넓은 화면은 ↗ + 이름, 폰 폭은 각자의 아이콘만(둘이 같은 ↗로 보이지 않게) */
+/* 새 탭 메뉴(키오스크·수업 관리): 넓은 화면은 ↗ + 이름, 태블릿 폭은 각자의 아이콘만(둘이 같은 ↗로 보이지 않게) */
 .nav-ext svg.nav-own{display:none}
-.nav-tab .nav-short{display:none}
+/* ☰ 사이드바(휴대폰 폭 700px 이하): 상단 바에는 ☰만 두고 관리 화면·새 탭 링크·부가 버튼을 오른쪽 서랍에 모은다.
+   수업 관리 ☰ 서랍과 같은 모양: 화면 높이 전체, 폭 폰 86%·최대 360, 바깥은 어둡게, 머리 "메뉴" + ✕(44), 안쪽 16 */
+.nav-burger{display:none}
+dialog.nav-drawer{position:fixed;inset:0 0 0 auto;margin:0;width:min(86vw,22.5rem);max-width:none;height:100%;max-height:none;padding:0;border:0;border-radius:0;border-top-left-radius:var(--radius-lg);border-bottom-left-radius:var(--radius-lg);background:var(--surface);color:var(--text-ink);box-shadow:var(--shadow-md);overflow:auto;animation:nav-dr .18s ease-out}
+@keyframes nav-dr{from{transform:translateX(100%)}}
+.nav-dr-in{min-height:100%;box-sizing:border-box;padding:0 var(--space-4) var(--space-4);display:flex;flex-direction:column}
+.nav-dr-head{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);min-height:var(--header-h);margin-right:calc(-1*var(--space-2))}
+.nav-dr-head h2{margin:0;font-size:var(--text-title)}
+.nav-dr-x{border:0;width:var(--hit-min);height:var(--hit-min);color:var(--text-ink)}
+.nav-dr-group{display:flex;flex-direction:column;gap:2px;padding:var(--space-2) 0;border-top:1px solid var(--brand-border)}
+.nav-dr-group:last-child{margin-top:auto}
+.nav-dr-label{margin:0;padding:var(--space-1) var(--space-3);font-size:var(--text-caption);font-weight:600;color:var(--text-muted)}
+.nav-dr-item{display:flex;align-items:center;gap:var(--space-3);width:100%;min-height:var(--hit-min);padding:0 var(--space-3);border:0;border-radius:var(--radius-md);background:none;font:inherit;font-size:var(--text-body);font-weight:600;color:var(--text-ink);text-align:left;text-decoration:none;cursor:pointer}
+.nav-dr-item:hover{background:var(--brand-soft)}
+.nav-dr-item[aria-current=page]{background:var(--brand-soft);color:var(--brand-deep);font-weight:700}
+.nav-dr-item svg.nav-icon{width:var(--icon-md);height:var(--icon-md);color:var(--brand-deep)}
+.nav-dr-item .nav-out,.nav-dr-item small{margin-left:auto}
+.nav-dr-item small{font-size:var(--text-caption);font-weight:600;color:var(--text-muted)}
+.nav-dr-item.nav-soon{opacity:.55;cursor:default}
+.nav-dr-item.nav-soon:hover{background:none}
 /* 같은 탭 이동 때 상단 바는 그대로 두고 본문만 바뀌어 보이게(지원 브라우저만, 나머지는 일반 이동) */
 @view-transition{navigation:auto}
 .top{view-transition-name:hada-top}
@@ -177,20 +198,21 @@ dd{margin:0;font-weight:600}
 .flow li{margin:var(--space-1) 0}
 
 /* 상단 메뉴가 로고·오른쪽 버튼과 한 줄에 들어가지 않는 폭: 메뉴를 상단 바 아래 줄로 */
-@media(max-width:1080px){
+@media(max-width:1180px){
  .top{flex-wrap:wrap}
  .app-nav{order:3;flex-basis:100%;margin-right:0}
 }
+/* 태블릿 폭: 탭 아이콘을 빼고, 새 탭 링크는 각자의 아이콘만 */
+@media(max-width:900px){
+ .nav-tab svg.nav-icon{display:none}
+ .nav-ext .nav-label,.nav-ext svg.nav-out{display:none}.nav-ext svg.nav-own{display:block}
+ .nav-ext svg.nav-icon{width:var(--icon-md);height:var(--icon-md)}
+}
 @media(max-width:700px){
  .shell{padding:var(--space-6) var(--space-5) var(--space-8)}
- .top{padding-bottom:var(--space-5);flex-wrap:wrap}
- .nav-tabs{flex:1;min-width:0}
- .nav-tab{flex:1;justify-content:center;padding:var(--space-2)}
- .nav-tab svg.nav-icon{display:none}
- .nav-tab .nav-label{display:none}.nav-tab .nav-short{display:inline}
- .app-nav{gap:var(--space-2)}
- .nav-ext{padding:var(--space-3) var(--space-2)}.nav-ext .nav-label,.nav-ext svg.nav-out{display:none}.nav-ext svg.nav-own{display:block}
- .nav-ext svg.nav-icon{width:var(--icon-md);height:var(--icon-md)}
+ .top{padding-bottom:var(--space-5);flex-wrap:nowrap}
+ .app-nav,.topright .nav-more{display:none!important}
+ .nav-burger{display:inline-flex}
  .wordmark span{display:block;margin:0}
  header{margin-top:var(--space-6)}
  .card{padding:var(--space-5)}
@@ -198,4 +220,4 @@ dd{margin:0;font-weight:600}
  .actions{flex-direction:column}.actions button,.actions .primary{width:100%;flex:none}
  .foot{margin-top:var(--space-5)}
 }
-@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}.loading::before{animation:none}::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none!important}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}.loading::before{animation:none}dialog.nav-drawer{animation:none}::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none!important}}
