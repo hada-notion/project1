@@ -353,13 +353,14 @@ function buildRegCalendarHtml(r, mode) {
       ${buildSessionBarHtml(r, sy, sm, mode, false)}
       <div class="attendance-calendar">
         <div class="cal-month-nav">
-          <div class="cal-nav-left"><button class="cal-nav-btn" onclick="moveCalDayWeek(-7)" aria-label="이전 주">‹</button>${weekStartToggleHtml()}</div>
+          <button class="cal-nav-btn" onclick="moveCalDayWeek(-7)" aria-label="이전 주">‹</button>
           <div class="cal-month-title">${shortDateDow(weekStart).split(" ")[0]} ~ ${shortDateDow(weekEnd).split(" ")[0]}</div>
           <div class="cal-nav-right"><button class="cal-nav-btn" onclick="moveCalDayWeek(7)" aria-label="다음 주">›</button></div>
         </div>
         <div class="cal-grid">${dowHeader}${cells}</div>
         <button type="button" class="cal-collapse-btn" onclick="clearCalDay()">${CHEVRON_DOWN_SVG}월 전체 보기</button>
       </div>
+      <div class="cal-week-row">${weekStartToggleHtml()}</div>
       ${buildCalDayPanelHtml(r, selectedCalDate)}
     `
   }
@@ -377,7 +378,7 @@ function buildRegCalendarHtml(r, mode) {
     ${buildSessionBarHtml(r, y, m, mode, true)}
     <div class="attendance-calendar">
       <div class="cal-month-nav">
-        <div class="cal-nav-left"><button class="cal-nav-btn" ${regCalMonthIndex <= -MAX_LOOKBACK_MONTHS ? "disabled" : ""} onclick="navigateRegCalMonth(-1)">‹</button>${weekStartToggleHtml()}</div>
+        <button class="cal-nav-btn" ${regCalMonthIndex <= -MAX_LOOKBACK_MONTHS ? "disabled" : ""} onclick="navigateRegCalMonth(-1)">‹</button>
         <div class="cal-month-title">${y}년 ${m}월</div>
         <div class="cal-nav-right">
           <button class="cal-today-btn" onclick="goRegCalToday()">오늘</button>
@@ -387,6 +388,7 @@ function buildRegCalendarHtml(r, mode) {
       <div class="cal-grid">${dowHeader}${cells.join("")}</div>
       ${legend}
     </div>
+    <div class="cal-week-row">${weekStartToggleHtml()}</div>
   `
 }
 function moveCalDayWeek(days) {

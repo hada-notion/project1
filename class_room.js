@@ -140,7 +140,7 @@ function pickClassColorEmoji(seed){let h=0;for(const ch of String(seed||''))h=(h
 const emojiOf=s=>s.classEmoji||pickClassColorEmoji(s.className||s.name);
 const CHEVRON_DOWN='<svg class="line" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>';
 const CHEVRON_UP='<svg class="line" viewBox="0 0 24 24" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg>';
-// 달력 첫 요일(v2.5.130): 달력 왼쪽 위 [월–일]/[일–토] 버튼, 이 기기에 저장(학부모 리포트와 같은 키). 홈 주간 시간표는 월요일 시작 그대로.
+// 달력 첫 요일(v2.5.130): 달력 카드 아래 오른쪽 [월–일]/[일–토] 버튼, 이 기기에 저장(학부모 리포트와 같은 키). 홈 주간 시간표는 월요일 시작 그대로.
 const WEEK_START_KEY='hada_week_start',weekSun=()=>store.get(WEEK_START_KEY)==='sun';
 const calLead=ymd=>weekSun()?(dowMon(ymd)+1)%7:dowMon(ymd);
 const calDow=()=>(weekSun()?['일','월','화','수','목','금','토']:['월','화','수','목','금','토','일']).map(l=>`<div class="cal-dow${l==='토'?' sat':l==='일'?' sun':''}">${l}</div>`).join('');
@@ -555,13 +555,13 @@ function paneCalendar(el){
   return `<button type="button" class="${c.join(' ')}" data-cs="${esc(x.id)}" aria-label="${esc(dateLabel(dd))} 수업${what}" aria-pressed="${x.id===state.sessionId}"><span>${Number(dd.slice(8))}</span></button>`;};
  const mon=addDays(state.date,-calLead(state.date)),days=open?Array.from({length:7},(_,i)=>cell(addDays(mon,i))).join('')
   :Array.from({length:calLead(first)},()=>'<div class="cal-day empty"></div>').join('')+Array.from({length:monthDays(ym)},(_,k)=>cell(`${ym}-${pad(k+1)}`)).join('');
- const navRow=open?`<div class="cal-month-nav"><div class="cal-nav-left">${weekBtn()}</div><div class="cal-month-title">${y}년 ${m}월</div><span></span></div>`
-  :`<div class="cal-month-nav"><div class="cal-nav-left">${navBtn('data-cwm="-1"','이전 달','‹')}${weekBtn()}</div><div class="cal-month-title">${y}년 ${m}월</div><div class="cal-nav-right">${todayBtn('cw-today')}${navBtn('data-cwm="1"','다음 달','›')}</div></div>`;
+ const navRow=open?`<div class="cal-month-nav"><span></span><div class="cal-month-title">${y}년 ${m}월</div><span></span></div>`
+  :`<div class="cal-month-nav">${navBtn('data-cwm="-1"','이전 달','‹')}<div class="cal-month-title">${y}년 ${m}월</div><div class="cal-nav-right">${todayBtn('cw-today')}${navBtn('data-cwm="1"','다음 달','›')}</div></div>`;
  const ms=list.filter(x=>x.date.startsWith(ym));
  el.innerHTML=paneHead(`<p class="page-title">${icon('cal')}캘린더</p>`,!list.length?'반이 없는 보강 수업이라 달력 없이 이 수업만 봐요':open?'같은 주의 다른 날을 누르면 그 수업으로 바뀌어요':'날짜를 누르면 그 주로 접히고 학생 목록·학습 기록을 봐요',
   list.length?CAL_MODES.map(([k,l])=>tabBtn(mode===k,`data-cm="${k}"`,l)).join(''):'')+
  `<div class="pbody">${list.length&&!open?calSummary(ms,mode,m):''}${list.length?`<div class="attendance-calendar">${navRow}<div class="cal-grid">${calDow()}${days}</div>
- ${open?`<button class="cal-collapse-btn" type="button" id="cal-month">${CHEVRON_DOWN}<span>월 전체 보기</span></button>`:`<div class="cal-legend">${CAL_LEGEND[mode].map((l,i)=>`<span><i class="${['ok','mid','bad'][i]}"></i>${l}</span>`).join('')}</div>`}</div>`:''}
+ ${open?`<button class="cal-collapse-btn" type="button" id="cal-month">${CHEVRON_DOWN}<span>월 전체 보기</span></button>`:`<div class="cal-legend">${CAL_LEGEND[mode].map((l,i)=>`<span><i class="${['ok','mid','bad'][i]}"></i>${l}</span>`).join('')}</div>`}</div><div class="cal-week-row">${weekBtn()}</div>`:''}
  ${open?'<div id="cal-sub"></div>':''}</div>`;
  const openDay=(id,b)=>{if(!leaveEdit())return;state.calOpen=true;if(id===state.sessionId)return render();run(()=>openSessionNow(id,true),b);};
  el.querySelectorAll('[data-cs]').forEach(b=>b.onclick=()=>open?switchSession(b.dataset.cs,b):openDay(b.dataset.cs,b));
