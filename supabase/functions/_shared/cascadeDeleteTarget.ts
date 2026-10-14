@@ -29,6 +29,7 @@ import {
 	DS_TEXTBOOK_PAYMENT,
 } from "./constants.ts"
 import { isRunning, markQueued, markRunning, markDone, markError, type StatusSpec } from "./statusTracking.ts"
+import { removeLater } from "./classRoomCopy.ts"
 // (2026-09-21, 이식성 리팩토링) 위 7개 데이터소스 ID는 이 파일에 직접 하드코딩돼 있었는데, 이제
 // constants.ts 한 곳에서 환경변수로 읽어와 공유한다 (constants.ts 상단 주석 참고). export하지 않아도
 // 되도록 이 파일 밖에서 이 이름들을 가져다 쓰는 곳이 없는지 확인했다.
@@ -233,6 +234,7 @@ export async function cascadeDelete(
     }
 
     await archivePage(pageId)
+    removeLater([pageId]) // 수업 관리 복사본에서도 지운다(v2.5.115, 수업·출석·학습기록·학습활동이면)
     await markDeletingDone(pageId)
     log.push(`${indent}🗑️ [${name}] 삭제되어 휴지통으로 이동됨`)
   } catch (err) {

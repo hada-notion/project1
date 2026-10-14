@@ -15,6 +15,7 @@
 import { queryAllPages, getPage, mapWithConcurrency, selectName, formulaString, checkboxValue, anyTitleText } from "./notionClient.ts"
 import { text, dateStartOf, relationIds, numberOf, fetchSupabaseWithRetry } from "./reportCacheShared.ts"
 import { DS_CLASS_SESSION, DS_ATTENDANCE, DS_LEARNING_RECORD, DS_STUDY_ACTIVITY } from "./constants.ts"
+import { runInBackground } from "./backgroundTask.ts"
 
 type Page = Record<string, any>
 type Row = Record<string, unknown>
@@ -268,3 +269,63 @@ export function isCopyTable(v: unknown): v is CopyTable {
 }
 // 동기화 함수 이름(보안 설정 SECURITY_WEBHOOK_ROUTES와 같아야 한다)
 export const COPY_SYNC_FUNCTION = "sync-class-room-copy"
+
+// ---------- 함께 쓰기(v2.5.115, 4단계) ----------
+// 우리 함수가 Notion에 쓴 직후 복사본도 맞춘다. 응답을 늦추지 않도록 뒤에서(runInBackground) 하고, 실패해도
+// 원래 작업(Notion 쓰기)에는 영향이 없다 — 놓친 것은 5분 증분·매일 밤 대조가 맞춘다.
+// 페이지를 다시 읽는 이유: 반대쪽 관계(예: 기록을 만들면 수업의 "학습기록")와 수식 값까지 Notion의 지금 상태로 맞추기 위해.
+
+// 페이지들을 Notion에서 다시 읽어 upsert(휴지통에 간 페이지는 복사본에서 지움). 읽은 페이지를 돌려준다.
+export async function mirrorPageIds(table: CopyTable, ids: string[]): Promise<Page[]> {
+	const uniq = [...new Set(ids.filter(Boolean))]
+	if (!uniq.length) return []
+	const pages = (await mapWithConcurrency(uniq, 4, async (id: string) => {
+		try { return await getPage(id) as Page } catch { return null }
+	})).filter(Boolean) as Page[]
+	const live = pages.filter((p) => !p.archived && !p.in_trash)
+	if (live.length) await upsertCopyRows(table, await toRows(table, live))
+	const gone = pages.filter((p) => p.archived || p.in_trash).map((p) => p.id as string)
+	if (gone.length) await deleteCopyRows(table, gone)
+	return live
+}
+
+// 테스트처럼 뒤에서 도는 작업을 원하지 않을 때 CLASS_ROOM_COPY_WRITE=off
+const writeOff = () => Deno.env.get("CLASS_ROOM_COPY_WRITE") === "off"
+const logMirror = (what: string, err: unknown) => console.error(`[classRoomCopy] ${what} 실패(다음 증분이 맞춤):`, (err as Error)?.message)
+
+// 여러 표를 차례로 맞춘다(뒤에서).
+export function mirrorLater(jobs: [CopyTable, string[]][]): void {
+	if (writeOff()) return
+	runInBackground(async () => {
+		for (const [table, ids] of jobs) {
+			try { await mirrorPageIds(table, ids) } catch (err) { logMirror(table, err) }
+		}
+	})
+}
+
+// 지운 페이지(Notion 휴지통)를 네 복사본 표에서 지운다(뒤에서). 어느 표의 페이지인지 몰라도 된다.
+export function removeLater(ids: string[]): void {
+	const uniq = [...new Set(ids.filter(Boolean))]
+	if (!uniq.length || writeOff()) return
+	runInBackground(async () => {
+		for (const table of COPY_TABLES) {
+			try { await deleteCopyRows(table, uniq) } catch (err) { logMirror(`${table} 삭제`, err) }
+		}
+	})
+}
+
+// 키오스크 등원·하원: Notion을 다시 읽지 않고 그 출석 행의 시각·상태만 고친다(행이 아직 없으면 아무 일도 없음).
+export async function patchAttendanceStamp(attendanceId: string, field: "arrived_at" | "left_at", iso: string | null, status: string): Promise<void> {
+	const res = await fetchSupabaseWithRetry(`${SB_URL()}/rest/v1/cr_attendance?id=eq.${encodeURIComponent(attendanceId)}`, {
+		method: "PATCH",
+		headers: sbHeaders({ Prefer: "return=minimal" }),
+		body: JSON.stringify({ [field]: iso, ...(status ? { status } : {}), synced_at: new Date().toISOString() }),
+	})
+	if (!res.ok) throw new Error(`cr_attendance 스템프 실패: ${res.status} ${await res.text()}`)
+}
+export function patchAttendanceStampLater(attendanceId: string | null | undefined, field: "arrived_at" | "left_at", iso: string | null, status: string): void {
+	if (!attendanceId || writeOff()) return
+	runInBackground(async () => {
+		try { await patchAttendanceStamp(attendanceId, field, iso, status) } catch (err) { logMirror("cr_attendance 스템프", err) }
+	})
+}

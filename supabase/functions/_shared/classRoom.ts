@@ -44,6 +44,7 @@ import { isRunning } from "./statusTracking.ts"
 import { text as propText, numberOf as propNumber, fileUrlOf, dateStartOf } from "./reportCacheShared.ts"
 import { readPageBodyBlocks } from "./feedBody.ts"
 import { runInBackground } from "./backgroundTask.ts"
+import { mirrorLater, mirrorPageIds, removeLater } from "./classRoomCopy.ts"
 
 type Page = Record<string, any>
 
@@ -659,6 +660,7 @@ export async function saveAttendance(items: unknown) {
 		return { id: it.attendanceId as string, props }
 	})
 	await mapWithConcurrency(updates, 3, (u) => updatePageProperties(u.id, u.props))
+	mirrorLater([["cr_attendance", updates.map((u) => u.id)]]) // 복사본 함께 쓰기(v2.5.115)
 	return { saved: updates.length }
 }
 
@@ -678,6 +680,7 @@ export async function saveActivities(items: unknown) {
 		return { id: it.activityId as string, props }
 	})
 	await mapWithConcurrency(updates, 3, (u) => updatePageProperties(u.id, u.props))
+	mirrorLater([["cr_activities", updates.map((u) => u.id)]]) // 복사본 함께 쓰기(v2.5.115)
 	return { saved: updates.length }
 }
 
@@ -756,6 +759,8 @@ export async function createRecords(body: any) {
 		existing.push(page)
 		results.push({ id: page.id as string, title: anyTitleText(page) || String((props["학습"] as any).title[0].text.content), created: true })
 	}
+	// 복사본 함께 쓰기(v2.5.115): 새 기록과, "학습기록" 관계가 바뀐 수업
+	mirrorLater([["cr_records", results.map((r) => r.id)], ["cr_sessions", [ctx.session.id as string]]])
 	return { records: results }
 }
 
@@ -798,6 +803,7 @@ export async function updateRecord(body: any) {
 		props["학습"] = { title: [{ text: { content: recordTitle(kind, subject, session ? await className(session) : "", session ? dateStart(session, "수업일시") : null) } }] }
 	}
 	await updatePageProperties(record.id, props)
+	mirrorLater([["cr_records", [record.id as string]]]) // 복사본 함께 쓰기(v2.5.115)
 	return { ok: true }
 }
 
@@ -815,6 +821,12 @@ export async function createActivities(recordId: string) {
 		try {
 			await finishCreateAssignment(recordId, kind, registrationIds)
 			await setAssignmentGenDone(recordId)
+			// 복사본 함께 쓰기(v2.5.115): 기록·새 학습활동·마감 과제가 붙은 출석
+			try {
+				const [rec] = await mirrorPageIds("cr_records", [recordId])
+				const acts = await mirrorPageIds("cr_activities", rel(rec ?? {}, "학습활동"))
+				await mirrorPageIds("cr_attendance", acts.flatMap((a) => rel(a, "출석")))
+			} catch (err) { console.error("[classRoom] 복사본 함께 쓰기 실패(다음 증분이 맞춤):", (err as Error).message) }
 		} catch (err) {
 			await setAssignmentGenError(recordId, (err as Error).message)
 		}
@@ -848,6 +860,7 @@ export async function createMakeupSession(body: any) {
 	}) as Page
 	await mapWithConcurrency(attendanceIds, 3, (id) =>
 		updatePageProperties(id, { "수업": relation([session.id]), "담당강사": relation([body.teacherId]), ...touched() }))
+	mirrorLater([["cr_sessions", [session.id as string]], ["cr_attendance", attendanceIds]]) // 복사본 함께 쓰기(v2.5.115)
 	return { sessionId: session.id as string }
 }
 
@@ -865,6 +878,7 @@ export async function unlinkMakeup(attendanceId: string) {
 		"출석": relation(rel(session, "출석").filter((id) => id !== attendanceId)),
 		"등록": relation(rel(session, "등록").filter((id) => !regs.includes(id))),
 	})
+	mirrorLater([["cr_attendance", [attendanceId]], ["cr_sessions", [sessionId]]]) // 복사본 함께 쓰기(v2.5.115)
 	return { ok: true }
 }
 
@@ -878,6 +892,8 @@ export async function deleteMakeupSession(sessionId: string) {
 	const attendanceIds = rel(session, "출석")
 	await mapWithConcurrency(attendanceIds, 3, (id) => updatePageProperties(id, { "수업": relation([]), "담당강사": relation([]), ...touched() }))
 	await archivePage(sessionId)
+	removeLater([sessionId]) // 복사본 함께 쓰기(v2.5.115)
+	mirrorLater([["cr_attendance", attendanceIds]])
 	return { ok: true, released: attendanceIds.length }
 }
 

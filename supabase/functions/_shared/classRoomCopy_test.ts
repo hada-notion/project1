@@ -52,6 +52,7 @@ function fixture() {
   const rows = db[table]
   if (!rows) throw new Error("unexpected url " + url)
   if (method === "POST") { for (const r of JSON.parse(init.body)) rows.set(r.id, r); return reply(null, 201) }
+  if (method === "PATCH") { const id = u.searchParams.get("id")!.replace("eq.", ""); if (rows.has(id)) rows.set(id, { ...rows.get(id), ...JSON.parse(init.body) }); return new Response(null, { status: 204 }) }
   if (method === "DELETE") { const list = u.searchParams.get("id")!.replace(/^in\.\(|\)$/g, "").split(",").map((x) => x.replace(/"/g, "")); list.forEach((id) => rows.delete(id)); return new Response(null, { status: 204 }) }
   const range = [...u.searchParams.entries()].filter(([k]) => k === "starts_at" || k === "class_at")
   const ok = (r: any) => range.every(([k, v]) => { const [op, val] = v.split(/\.(.+)/); const t = Date.parse(r[k]); return op === "gte" ? t >= Date.parse(val) : t < Date.parse(val) })
@@ -108,4 +109,26 @@ Deno.test("class: one session's class around it, with attendance, records and ac
  const r = await copy.syncClassOfSession("s1")
  assert(r.map((x) => x.table + ":" + x.upserted).join() === "cr_sessions:2,cr_attendance:1,cr_records:2,cr_activities:1", JSON.stringify(r))
  assert(!f.db.cr_sessions.has("sOld"), "outside 9 weeks before / 5 weeks after")
+}))
+
+Deno.test("write-through: mirror pages from Notion, drop trashed ones, patch kiosk stamps (v2.5.115)", () => withMock(async (f) => {
+ f.db.cr_attendance.set("a1", { id: "a1", status: "" })
+ f.db.cr_sessions.set("s0", { id: "s0" })
+ f.pages.s0.archived = true
+ const live = await copy.mirrorPageIds("cr_sessions", ["s1", "s0", "s1", "missing"])
+ assert(live.map((p: any) => p.id).join() === "s1" && f.db.cr_sessions.get("s1").class_name === "중1 A" && !f.db.cr_sessions.has("s0"), "live upserted, trashed removed, missing ignored")
+ await copy.patchAttendanceStamp("a1", "left_at", "2026-10-14T09:01:00.000Z", "🟢 출석")
+ assert(f.db.cr_attendance.get("a1").left_at === "2026-10-14T09:01:00.000Z" && f.db.cr_attendance.get("a1").status === "🟢 출석")
+ await copy.patchAttendanceStamp("nope", "arrived_at", null, "")
+ assert(!f.db.cr_attendance.has("nope"), "no row, nothing created")
+}))
+
+Deno.test("write-through can be switched off (tests)", () => withMock(async (f) => {
+ Deno.env.set("CLASS_ROOM_COPY_WRITE", "off")
+ try {
+  const before = f.queries.length
+  copy.mirrorLater([["cr_sessions", ["s1"]]]); copy.removeLater(["s1"]); copy.patchAttendanceStampLater("a1", "arrived_at", null, "")
+  await new Promise((r) => setTimeout(r, 20))
+  assert(f.queries.length === before && f.db.cr_sessions.size === 0 && f.db.cr_attendance.size === 0, "no background work when off")
+ } finally { Deno.env.delete("CLASS_ROOM_COPY_WRITE") }
 }))

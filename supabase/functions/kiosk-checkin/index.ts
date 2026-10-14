@@ -64,6 +64,7 @@ import { resolveKioskHint, queryAllKioskPages, ACTIVE_KIOSK_STATUS } from "../_s
 import { runAfterResponse } from "../_shared/afterResponse.ts"
 import { decideStamp, kioskCheckMode } from "../_shared/kioskPolicy.ts"
 import { StepTiming } from "../_shared/stepTiming.ts"
+import { patchAttendanceStampLater } from "../_shared/classRoomCopy.ts"
 import { hashPhone, kstDate, markKioskTodayStamp, readKioskPrepared, readKioskTodayRow, type KioskPrepared, type KioskTodayRow } from "../_shared/kioskToday.ts"
 
 // "학생이름(등록)"/"클래스명(등록)" 같은 rollup(title 대상) 속성에서 표시 텍스트를 뽑아낸다.
@@ -199,8 +200,11 @@ Deno.serve(async (req: Request) => {
       return { patch, status: currentStatus === "🔵 보강" ? currentStatus : "🟢 출석" }
     }
     // 오늘 준비 행을 Notion과 맞춘다(실패해도 출결 처리에는 영향 없음).
-    const syncToday = (regId: string, iso: string | null, status: string, pageId?: string) =>
-      markKioskTodayStamp(regId, field, iso, status, pageId).catch(err => console.error("kiosk today stamp error:", extractErrorMessage(err)))
+    // 수업 관리 복사본(v2.5.115)도 같은 출석 행의 등원·하원 시각·상태를 뒤에서 고친다(응답을 늦추지 않고, 실패해도 출결 처리에 영향 없음).
+    const syncToday = (regId: string, iso: string | null, status: string, pageId?: string, copyId?: string) => {
+      patchAttendanceStampLater(copyId ?? pageId, type === "checkin" ? "arrived_at" : "left_at", iso, status)
+      return markKioskTodayStamp(regId, field, iso, status, pageId).catch(err => console.error("kiosk today stamp error:", extractErrorMessage(err)))
+    }
 
     // [v2.5.37] 오늘 출석 준비(_shared/kioskToday.ts)가 있으면 Notion 조회 없이 바로 기록한다.
     // 준비된 행은 오늘(KST) 날짜·전화번호 해시가 맞을 때만 쓴다. 출석 페이지가 없거나(보강 생성 필요)
@@ -228,7 +232,7 @@ Deno.serve(async (req: Request) => {
           timing.mark("notion_recheck")
           existing = page.properties?.[stampProp]?.date?.start ?? null
           currentStatus = page.properties?.["출석 상태"]?.select?.name ?? currentStatus
-          if (!existing) await syncToday(row.registration_id, null, currentStatus)
+          if (!existing) await syncToday(row.registration_id, null, currentStatus, undefined, pageId)
         }
         if (needsWrite(existing)) {
           const { patch, status } = writePatch(currentStatus)
@@ -236,7 +240,7 @@ Deno.serve(async (req: Request) => {
           timing.mark("attendance_write")
           attendance = { id: pageId }
           stateChanged = true
-          await syncToday(row.registration_id, nowIso, status)
+          await syncToday(row.registration_id, nowIso, status, undefined, pageId)
           timing.mark("cache_write")
         }
         fastDone = true
