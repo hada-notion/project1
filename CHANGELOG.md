@@ -3,6 +3,10 @@
 버전별 변경 기록입니다. 최신 버전이 맨 위에 옵니다. 상세 실행 지침은 `docs/updates/vX.Y.md`에 있습니다.
 패치를 올릴 때마다 한 줄 이상 추가하고, 해당 버전의 지침 파일을 함께 만듭니다. (템플릿: `docs/updates/_TEMPLATE.md`)
 
+## v2.5.113 — 2026-10-14
+
+- 수업 관리 복사본 2단계: 새 함수 `sync-class-room-copy`(관리자 키)가 Notion 수업·출석·학습기록·학습활동을 Supabase 복사본 표에 맞춘다 — `reconcile`(기간 전체 대조, 표 하나씩), `incremental`(마지막 동기화 이후 바뀐 것만), `class`(한 반만). Notion은 읽기만 한다. 처음 채우기용 수동 워크플로 `Class room copy sync (manual)` 추가. 수업 관리는 아직 복사본을 읽지 않는다. 함수 추가 — `main` 병합 시 자동 배포. 지침: `docs/updates/v2.5.113.md`
+
 ## v2.5.112 — 2026-10-14
 
 - 수업 관리 복사본 1단계: Supabase에 빈 표 4개(`cr_sessions`·`cr_attendance`·`cr_records`·`cr_activities`, 수업·출석·학습기록·학습활동)를 만든다. 아직 아무 함수도 읽거나 쓰지 않는다(채우기·읽기 전환은 다음 단계). 학부모 리포트 표와 분리, 서비스 역할만 접근. 마이그레이션 — `main` 병합 시 운영 DB에 자동 적용. 지침: `docs/updates/v2.5.112.md`

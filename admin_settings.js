@@ -111,8 +111,8 @@ const CHECKLIST=[
   ['schedule-report-sync-new','새 일정 반영',AUTO,route('sync-report-cache'),{trigger:{when:'페이지 추가'}}]]],
 ];
 // Webhook routes with no Notion button or automation, so they are not checklist items:
-// sync-attendance (GitHub Actions manual run; its GitHub Secret is noted below the checklist).
-const OUTSIDE_NOTION=[route('sync-attendance')];
+// sync-attendance and sync-class-room-copy (GitHub Actions manual runs; their GitHub Secret is noted below the checklist).
+const OUTSIDE_NOTION=[route('sync-attendance'),route('sync-class-room-copy')];
 function route(name){return name;}
 // Notion database / "웹훅 등록" view links (normalized DB title -> {db, view}), cached on the server.
 let links=null,linksUpdated=null;
