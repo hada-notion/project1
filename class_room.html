@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex">
 <title>수업 관리 | 하다 학원관리</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236B5D4D%22%20stroke-width%3D%222.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cstyle%3E%40media(prefers-color-scheme%3Adark)%7Bsvg%7Bstroke%3A%23E6D7C4%7D%7D%3C%2Fstyle%3E%3Cpath%20d%3D%22M12%2020h9%22%2F%3E%3Cpath%20d%3D%22M16.5%203.5a2.121%202.121%200%200%201%203%203L7%2019l-4%201%201-4L16.5%203.5z%22%2F%3E%3C%2Fsvg%3E">
-<link rel="stylesheet" href="assets/hada-ui.css?v=8401a820">
+<link rel="stylesheet" href="assets/hada-ui.css?v=1f9c5a27">
 <style>
 /* 수업 관리(v2.5.67, v2.5.82에 이름 변경): 선생님이 쓰는 화면. v2.5.70부터 리포트처럼 모든 폭에서 640 한 줄. 모양은 학부모 리포트(상단 베이지 바, 하단 탭, 카드)를 따르고
    값은 공용 토큰만 쓴다(docs/DESIGN.md). 분류 색: 학습 --info, 과제 --warning, 평가 --success.
@@ -46,7 +46,7 @@ body{background:var(--canvas)}
 .sec-title{display:flex;align-items:center;gap:var(--space-2);font-size:var(--text-section);font-weight:700;margin:var(--space-5) 0 var(--space-2);line-height:1.3}
 .sec-title:first-child{margin-top:var(--space-1)}
 /* 3단계 묶음 라벨(리포트 .rep-sub) */
-.group-label{font-size:var(--text-label);font-weight:600;color:var(--text-subtle);margin:var(--space-4) 0 var(--space-2)}
+.group-label{font-size:var(--text-label);font-weight:600;color:var(--text-subtle);margin:var(--space-4) 0 var(--space-3)}
 .sec-title .cnt{font-weight:400;color:var(--text-subtle);font-size:var(--text-label)}
 .sec-title .grow{flex:1}
 .chips{display:flex;align-items:center;gap:var(--space-2);overflow-x:auto;padding-bottom:var(--space-1)}
@@ -78,23 +78,23 @@ button.row{cursor:pointer}
 .fact.warn{background:var(--danger-soft);color:var(--danger-ink)}
 .fact.ok{background:var(--success-soft);color:var(--success-ink)}
 .fact.info{background:var(--info-soft);color:var(--info-ink)}
-.pill{display:inline-flex;align-items:center;font-size:var(--text-caption);font-weight:700;padding:var(--space-1) var(--space-2);border-radius:var(--radius-pill);background:var(--brand-soft);color:var(--text-muted)}
-.pill.s-출석,.pill.k-평가{background:var(--success-soft);color:var(--success-ink)}
+.pill{display:inline-flex;align-items:center;font-size:var(--text-caption);font-weight:600;line-height:var(--space-4);padding:2px var(--space-3);border-radius:var(--radius-pill);background:var(--brand-soft);color:var(--text-muted)}
+.pill.s-출석,.pill.k-평가,.pill.done{background:var(--success-soft);color:var(--success-ink)}
 .pill.s-결석,.pill.miss{background:var(--danger-soft);color:var(--danger-ink)}
-.pill.s-보강,.pill.k-학습,.pill.done{background:var(--info-soft);color:var(--info-ink)}
-.pill.k-과제{background:var(--warning-soft);color:var(--warning-ink)}
+.pill.s-보강,.pill.k-학습{background:var(--info-soft);color:var(--info-ink)}
+.pill.k-과제,.pill.mid{background:var(--warning-soft);color:var(--warning-ink)}
 .seg{display:inline-flex;background:var(--brand-soft);border-radius:var(--radius-md);padding:var(--space-1);gap:var(--space-1);flex:none}
 .seg button{min-height:var(--hit-min);min-width:var(--hit-min);padding:0 var(--space-2);border:0;border-radius:var(--radius-sm);background:transparent;color:var(--text-muted);font-weight:700;font-size:var(--text-label);cursor:pointer}
 .seg button.on{background:var(--surface);box-shadow:var(--shadow-card)}
-.seg button.on.v-출석{color:var(--success-ink)}.seg button.on.v-결석,.seg button.on.v-미제출{color:var(--danger-ink)}.seg button.on.v-보강,.seg button.on.v-제출{color:var(--info-ink)}
+.seg button.on.v-출석{color:var(--success-ink)}.seg button.on.v-결석,.seg button.on.v-미제출{color:var(--danger-ink)}.seg button.on.v-보강{color:var(--info-ink)}.seg button.on.v-제출{color:var(--success-ink)}
 .toolrow{display:flex;align-items:center;gap:var(--space-2);margin:0 0 var(--space-3)}
 .toolrow .sum{flex:1;color:var(--text-muted);font-size:var(--text-label)}
 .center-tabs{display:flex;justify-content:center;margin:0 0 var(--space-4)}
 /* 전환 탭: 리포트 seg-toggle 모양(12px 알약, 3px 트랙)을 그리되, 버튼은 위아래 투명 여백으로 44px 클릭 영역을 채운다 */
-.center-tabs .tabs{position:relative;background:transparent;padding:0 var(--space-1);gap:0}
-.center-tabs .tabs::before{content:'';position:absolute;left:0;right:0;top:50%;height:calc(var(--hit-min) - var(--space-3));transform:translateY(-50%);background:var(--brand-soft);border-radius:var(--radius-pill)}
-.center-tabs .tabs button{position:relative;min-height:var(--hit-min);padding:0;background:transparent;box-shadow:none;font-size:var(--text-caption)}
-.center-tabs .tabs button span{display:block;padding:var(--space-1) var(--space-4);border-radius:var(--radius-pill)}
+.center-tabs .tabs{position:relative;background:var(--brand-soft);padding:var(--space-1);gap:0}
+.center-tabs .tabs button{position:relative;padding:0;background:transparent;box-shadow:none;font-size:var(--text-caption)}
+.center-tabs .tabs button::after{content:'';position:absolute;left:0;right:0;top:calc(-1.5*var(--space-1));bottom:calc(-1.5*var(--space-1))}
+.center-tabs .tabs button span{display:block;padding:var(--space-2) var(--space-4);line-height:var(--space-4);border-radius:var(--radius-pill)}
 .center-tabs .tabs button.active{background:transparent;box-shadow:none}
 .center-tabs .tabs button.active span{background:var(--surface);color:var(--brand-deep);box-shadow:var(--shadow-card)}
 .rec{background:var(--surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-card);margin-bottom:var(--space-3);overflow:hidden}
@@ -108,7 +108,7 @@ button.row{cursor:pointer}
 /* 기록 카드(v2.5.89): 학부모 리포트 학습기록 카드(student_report.html .log-card·.log-icon·.log-title·.log-context·.log-extra-chevron·.log-extra)와 같은 규칙.
    아이콘 칸 44px에 아이콘과 구분 글자, 제목 14px 굵게, 아래 "• " 줄 12px 옅은 글자, 내용은 접어 두고 ⌄(테두리 원, 누르는 영역 44px)로 펼친다. */
 .log-head{position:relative}
-.log-main{display:block;width:100%;padding:var(--space-3) var(--space-4);border:0;background:transparent;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.log-main{display:block;width:100%;padding:var(--space-4);border:0;background:transparent;font:inherit;color:inherit;text-align:left;cursor:pointer}
 .log-card.has-extra .log-main{padding-right:var(--space-12)}
 .log-top{display:flex;align-items:center;gap:var(--space-3);min-height:var(--hit-min)}
 .log-icon{flex:none;width:var(--hit-area);height:var(--hit-area);border-radius:var(--radius-md);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
@@ -148,10 +148,10 @@ button.row{cursor:pointer}
 .target{font-size:var(--text-label);color:var(--text-muted);background:var(--brand-soft);border-radius:var(--radius-sm);padding:var(--space-2) var(--space-3);margin-top:var(--space-2)}
 .score{display:flex;align-items:center;gap:var(--space-1);flex:none}
 .score input{width:calc(var(--hit-area) + var(--space-4));min-height:var(--hit-min);text-align:center;font-weight:700;padding:0}
-.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);box-shadow:var(--shadow-md);padding:var(--space-1) var(--space-3) var(--space-2)}
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);box-shadow:var(--shadow-tabbar);padding:var(--space-1) var(--space-3)}
 .tab-in{max-width:calc(var(--feed-w) + 2*var(--space-4));margin:0 auto;display:flex;gap:var(--space-2)}
 .tabbar .tab-in{gap:var(--space-1)}
-.tabbar button{flex:1;min-width:0;min-height:calc(var(--hit-min) + var(--space-2));border:0;background:transparent;color:var(--text-subtle);font-weight:600;font-size:var(--text-caption);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-1);border-radius:var(--radius-md);cursor:pointer}
+.tabbar button{flex:1;min-width:0;min-height:calc(var(--hit-min) + var(--space-3));border:0;background:transparent;color:var(--text-subtle);font-weight:600;font-size:var(--text-micro);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-1);border-radius:var(--radius-md);cursor:pointer}
 .tabbar button svg{width:var(--icon-md);height:var(--icon-md)}
 .tabbar button.on{color:var(--brand-deep);background:var(--brand-tint)}
 .savebar{position:fixed;left:var(--space-4);right:var(--space-4);bottom:calc(var(--hit-min) + var(--space-8));z-index:21;max-width:var(--feed-w);margin:0 auto;background:var(--surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-2) var(--space-2) var(--space-4)}
@@ -172,10 +172,10 @@ svg.line.check,.row svg.line,.choose svg.line,.pill svg.line{width:var(--icon-md
 /* 칸 머리(v2.5.69): 제목 / 안내(집계 숫자 포함) / 가운데 탭 + 오른쪽 버튼. 리포트처럼 본문이 상단 바 가까이에서 시작한다. */
 .ph{min-width:0}
 .ph .page-title{margin:0 0 var(--space-1)}
-.page-hint.ph{margin:0 0 var(--space-2)}
+.page-hint.ph{margin:0 0 var(--space-4)}
 .page-hint b{color:var(--text-ink)}
 .page-title .grow{flex:1}
-.tab-row{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:var(--space-2);margin-bottom:var(--space-2)}
+.tab-row{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:var(--space-2);margin-bottom:var(--space-4)}
 .tab-row .center-tabs{margin:0}
 .tab-row .acts{display:flex;justify-content:flex-end;align-items:center;gap:var(--space-1)}
 /* 칸 머리 버튼(.act): 전환 탭과 같은 32px 알약·12px 글자로 보이고, 위아래 투명 여백으로 누르는 영역은 44px */
@@ -271,7 +271,7 @@ dialog.drawer.right{inset:0 0 0 auto;border-radius:0;border-top-left-radius:var(
 /* 교재 탭·교재 상세 카드(v2.5.102): 학부모 리포트 교재 카드(student_report.html .book-row)와 같은 결 —
    테두리 없는 흰 그림자 카드(모서리 14, 안쪽 12/16), 위로 맞춤, 표지 64×86(모서리 6)·표지가 없으면 갈색 그라데이션에 교재명, 제목은 줄바꿈, 카드 사이 10 */
 .br-list.feed{gap:calc(2.5*var(--space-1))}
-.book-row.feed{align-items:flex-start;border:0;border-radius:var(--radius-lg);padding:var(--space-3) var(--space-4);background:var(--surface);box-shadow:var(--shadow-card)}
+.book-row.feed{align-items:flex-start;gap:var(--space-4);border:0;border-radius:var(--radius-lg);padding:var(--space-4);background:var(--surface);box-shadow:var(--shadow-card)}
 .book-row.feed .br-cover{width:calc(var(--space-12) + var(--space-4));background:linear-gradient(160deg,var(--brand-mid),var(--brand-deep));color:var(--surface);align-items:flex-end;justify-content:flex-start;padding:var(--space-2)}
 .book-row.feed .br-fallback{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;font-size:var(--text-caption);font-weight:700;line-height:1.3;word-break:keep-all}
 .book-row.feed .br-title{white-space:normal;word-break:keep-all}
@@ -413,8 +413,8 @@ body.snap-on .cr-main{max-width:none;padding:0}
 .r-extra .tel{display:inline-flex;align-items:center;min-height:var(--hit-min);color:var(--brand-deep);font-size:var(--text-label);font-weight:600;text-decoration:none;font-variant-numeric:tabular-nums}
 .r-extra .no-tel{display:inline-flex;align-items:center;min-height:var(--hit-min);font-size:var(--text-label);color:var(--text-subtle)}
 .r-extra .no-rep{margin:0;font-size:var(--text-caption);color:var(--text-subtle)}
-.home-stat b{display:block;font-size:var(--text-body);font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.home-stat small{display:block;margin-top:var(--space-1);font-size:var(--text-caption);color:var(--text-muted)}
+.home-stat b{display:block;line-height:var(--space-5);font-size:var(--text-section);font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.home-stat small{display:block;margin-top:var(--space-1);line-height:var(--space-4);font-size:var(--text-micro);color:var(--text-muted)}
 .home-stat.good b{color:var(--success-ink)}
 .home-stat.bad b{color:var(--danger-ink)}
 .card .home-stats+.actions{margin-top:var(--space-3)}
@@ -441,25 +441,25 @@ body.snap-on .cr-main{max-width:none;padding:0}
 .cal-day.has.picked{box-shadow:inset 0 0 0 2px var(--brand-deep)}
 .cal-day.has.today,.cal-day.has.today.picked{box-shadow:inset 0 0 0 2px var(--danger)}
 /* 범례(v2.5.100): 리포트처럼 진한 점 두 개만(모두 출석·결석 있음). 빗금·테두리는 범례 없이도 알아볼 수 있다 */
-.cal-legend{display:flex;flex-wrap:wrap;justify-content:center;gap:var(--space-2) var(--space-4);margin-top:var(--space-3);font-size:var(--text-caption);color:var(--text-muted)}
+.cal-legend{display:flex;flex-wrap:wrap;justify-content:center;gap:var(--space-2) var(--space-4);margin-top:var(--space-3);font-size:var(--text-micro);color:var(--text-muted)}
 .cal-legend span{display:inline-flex;align-items:center;gap:var(--space-1)}
 .cal-legend i{width:var(--space-2);height:var(--space-2);border-radius:50%}
-.cal-legend i.ok{background:var(--success)}.cal-legend i.mid{background:var(--warning)}.cal-legend i.bad{background:var(--danger)}
+.cal-legend i.ok{background:var(--success)}.cal-legend i.mid{background:var(--warning-graphic)}.cal-legend i.bad{background:var(--danger)}
 /* 현황 색(v2.5.103): 100% 초록 · 50% 이상 노랑 · 50% 미만 빨강 */
 .cal-day.has.mid{background:var(--warning-soft);color:var(--warning-ink)}
 /* 달 보기 위 막대 카드(v2.5.103, 리포트 .session-bar B안): 첫 줄 "n월 수업 ··· 지난/전체회", 둘째 줄 막대 한 줄, 아래 칩 4개(누르면 그날로) */
 .cal-sum{margin-bottom:var(--space-3)}
-.sum-bar{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2)}
+.sum-bar{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);line-height:var(--space-5)}
 .sum-bar .lbl{font-size:var(--text-label);font-weight:600;color:var(--text-muted)}
-.sum-bar b{margin-left:auto;font-size:var(--text-body);color:var(--brand-deep)}
+.sum-bar b{margin-left:auto;font-size:var(--text-section);color:var(--brand-deep)}
 .sum-bar .cells{order:3;flex-basis:100%;display:flex;gap:var(--space-1);min-width:0}
-.sum-bar .cells i{flex:1;height:var(--space-2);border-radius:var(--radius-sm);box-shadow:inset 0 0 0 1px var(--brand-border)}
-.sum-bar .cells i.ok{background:var(--success);box-shadow:none}.sum-bar .cells i.mid{background:var(--warning);box-shadow:none}.sum-bar .cells i.bad{background:var(--danger);box-shadow:none}
+.sum-bar .cells i{flex:1;height:var(--space-2);border-radius:var(--radius-xs);box-shadow:inset 0 0 0 1px var(--brand-border)}
+.sum-bar .cells i.ok{background:var(--success);box-shadow:none}.sum-bar .cells i.mid{background:var(--warning-graphic);box-shadow:none}.sum-bar .cells i.bad{background:var(--danger);box-shadow:none}
 .sum-bar .cells i.miss{background:repeating-linear-gradient(135deg,transparent 0 3px,var(--brand-soft) 3px 6px)}
 .sum-chips{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-2);margin-top:var(--space-3)}
-.sum-chip{min-height:var(--hit-min);border:0;border-radius:var(--radius-md);background:var(--brand-tint);font:inherit;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:var(--space-1);min-width:0}
-.sum-chip b{font-size:var(--text-lead);font-weight:800;color:var(--text-ink)}
-.sum-chip small{font-size:var(--text-micro);font-weight:600;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.sum-chip{min-height:var(--hit-min);border:0;border-radius:var(--radius-md);background:var(--brand-tint);font:inherit;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:var(--space-2) var(--space-1);min-width:0}
+.sum-chip b{line-height:var(--space-6);font-size:var(--text-body);font-weight:800;color:var(--text-ink)}
+.sum-chip small{line-height:var(--space-4);font-size:var(--text-micro);font-weight:600;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .sum-chip.ok b{color:var(--success-ink)}.sum-chip.mid b{color:var(--warning-ink)}.sum-chip.bad b{color:var(--danger-ink)}
 .sum-chip:disabled{cursor:default;opacity:.55}
 /* 학습기록 타임라인 오늘 묶음(v2.5.103): 오늘 기록 카드는 테두리 */
@@ -493,6 +493,6 @@ body.snap-on .cr-main{max-width:none;padding:0}
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <script src="hada_config.js"></script>
 <script src="admin_auth.js?v=4ffde89c"></script>
-<script src="class_room.js?v=e80259b3"></script>
+<script src="class_room.js?v=c96fcc2f"></script>
 </body>
 </html>
