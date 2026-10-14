@@ -63,6 +63,10 @@
 .pick-bar{display:flex;gap:var(--space-4);align-items:center;justify-content:space-between;margin-top:var(--space-5);padding:var(--space-3) var(--space-4);border-radius:var(--radius-md);background:var(--brand-soft)}
 .pick-bar p{margin:0;font-weight:700;color:var(--text-ink)}
 .pick-bar .primary{width:auto;flex-shrink:0}
+/* 선택 막대 오른쪽: [선택 비우기](작은 버튼) [라이브러리에 추가](주 버튼), v2.6.8 */
+.pick-actions{display:flex;gap:var(--space-3);align-items:center;flex-shrink:0}
+.pick-actions .ghost{flex-shrink:0}
+.sheet-head #sheet-tag{justify-self:end}
 .result{display:flex;gap:var(--space-4);align-items:center;padding:var(--space-4) 0;border-top:1px solid var(--divider)}
 .result:first-child{margin-top:var(--space-4)}
 .result-info{flex:1;min-width:0}
@@ -130,7 +134,7 @@ dialog.sheet[open]{display:flex}
 .sheet-foot .primary{flex:1.6}
 @media(max-width:700px){
  .field-row{flex-direction:column;align-items:stretch}.field-row button{width:100%}
- .pick-bar{flex-direction:column;align-items:stretch}.pick-bar .primary{width:100%}
+ .pick-bar{flex-direction:column;align-items:stretch}.pick-actions{flex-direction:column-reverse;align-items:stretch}.pick-bar .primary{width:100%}
  #manual-add,#grab-paste{width:100%}
  .series-row{flex-wrap:wrap}.series-acts{width:100%;justify-content:flex-end}
  .series-foot{flex-direction:column}.series-foot button{width:100%}
@@ -159,7 +163,7 @@ dialog.sheet[open]{display:flex}
 <section class="card" id="add" hidden>
 <h2>검색해서 추가</h2>
 <form id="searchForm"><div class="field-row"><div><label for="query">교재명 · 시리즈 · ISBN</label><input id="query" type="search" placeholder="예: 쎈 중1, 쎈 중등 수학 1-1 또는 ISBN 13자리" required maxlength="80"></div><button class="secondary">검색</button></div><p class="help">국내 도서와 수입 원서를 함께 찾아요. 한 글자도 되지만 “쎈 중1”처럼 좁히면 더 정확해요. 서점에서 본 책은 ISBN으로 찾으세요.</p></form>
-<div class="pick-bar" id="pick-bar" hidden><p id="pick-count"></p><button class="primary" id="open-sheet" type="button">라이브러리에 추가</button></div>
+<div class="pick-bar" id="pick-bar" hidden><p id="pick-count"></p><div class="pick-actions"><button class="ghost" id="clear-picks" type="button">선택 비우기</button><button class="primary" id="open-sheet" type="button">라이브러리에 추가</button></div></div>
 <div id="results"></div>
 <p class="help source-note">도서 정보 출처: 국립중앙도서관 ISBN 서지정보 · 카카오 책 검색 · 표지: 교보문고(없으면 국립중앙도서관·카카오)</p>
 </section>
@@ -169,7 +173,7 @@ dialog.sheet[open]{display:flex}
 <div class="manual-actions"><button class="secondary" type="button" id="manual-add">직접 추가</button><button class="secondary" type="button" id="grab-paste">가져온 정보 붙여넣기</button></div>
 <textarea id="grab-text" hidden aria-label="가져온 교재 정보 붙여넣기" placeholder="여기에 붙여넣으세요(Ctrl+V)"></textarea>
 <details class="grab-help"><summary>교보문고에서 가져오기 준비(PC, 처음 한 번)</summary>
-<ol><li>아래 [교재 가져오기]를 브라우저 즐겨찾기 막대로 끌어다 놓아요. 막대가 안 보이면 Ctrl+Shift+B.</li><li>교보문고에서 책을 찾아 책 상세 페이지를 열고, 즐겨찾기의 [교재 가져오기]를 눌러요.</li><li>"복사했어요"가 뜨면 여기서 [가져온 정보 붙여넣기]를 눌러요.</li></ol>
+<ol><li>아래 [교재 가져오기]를 브라우저 즐겨찾기 막대로 끌어다 놓아요. 막대가 안 보이면 Ctrl+Shift+B.</li><li>교보문고에서 책 상세 페이지를 열거나, 검색 목록에서 책을 체크(한 번에 20권까지)하고 즐겨찾기의 [교재 가져오기]를 눌러요.</li><li>"복사했어요"가 뜨면 여기서 [가져온 정보 붙여넣기]를 눌러요.</li></ol>
 <a class="link-chip" id="grab-link" href="#grab-link" draggable="true">교재 가져오기</a>
 </details>
 </section>
@@ -339,8 +343,15 @@ $('open-sheet').onclick=()=>{const list=todo();if(!list.length)return;sheet={mod
 // 취소선 가격(정가), "기본정보" 구역의 쪽수, "이 책의 시리즈" 구역(그려져 있을 때만), "목차" 구역(없으면 교보문고 목차 요청). 화면 클래스 이름 대신 구역 제목으로 찾는다. 목차 구역은 스크롤해야 그려져서, 아직 없으면 그 구역이 쓰는 교보문고 요청(같은 사이트)으로 읽는다. 즐겨찾기 주소는 줄바꿈이 사라질 수 있으니 함수 안에 // 주석을 두지 않는다.
 async function kyoboGrab(){
  const fail=m=>alert('교재 가져오기: '+m);
+ const send=(json,msg)=>{const done=()=>alert(msg);const copy=()=>{const t=document.createElement('textarea');t.value=json;document.body.append(t);t.select();const ok=document.execCommand('copy');t.remove();if(ok)done();else prompt('아래 내용을 모두 복사(Ctrl+C)하세요.',json)};if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(json).then(done,copy);else copy()};
+ if(/^search\.kyobobook\.co\.kr$/.test(location.hostname)){
+  const items=[...document.querySelectorAll('input.result_checkbox:checked')].map(c=>({pid:String(c.dataset.pid||''),isbn13:(/97[89]\d{10}/.exec(String(c.dataset.bid||''))||[''])[0],title:String(c.dataset.name||'').trim()})).filter(x=>/^S\d+$/.test(x.pid));
+  if(!items.length)return fail('검색 결과에서 가져올 책을 체크한 뒤 눌러 주세요(한 번에 20권까지).');
+  if(items.length>20)return fail('한 번에 20권까지 가져올 수 있어요. 지금 '+items.length+'권이 체크되어 있어요.');
+  return send(JSON.stringify({hada:'books',v:1,source:'kyobo-list',items}),'체크한 '+items.length+'권을 복사했어요.\n\n라이브러리 [직접 추가]에서 [가져온 정보 붙여넣기]를 누르세요. 정가·출판사·목차는 라이브러리가 교보문고에서 한 권씩 채워요.');
+ }
  const id=(/\/detail\/(S\d+)/.exec(location.pathname)||[])[1];
- if(!/(^|\.)kyobobook\.co\.kr$/.test(location.hostname)||!id)return fail('교보문고 책 상세 페이지에서 눌러 주세요.');
+ if(!/(^|\.)kyobobook\.co\.kr$/.test(location.hostname)||!id)return fail('교보문고 책 상세 페이지나 검색 목록에서 눌러 주세요.');
  const ld=[...document.querySelectorAll('script[type="application/ld+json"]')].map(x=>{try{return JSON.parse(x.textContent)}catch(e){return null}}).flat().find(x=>x&&x['@type']==='Book');
  if(!ld)return fail('책 정보를 찾지 못했어요. 페이지를 새로고침한 뒤 다시 눌러 주세요.');
  const sec=n=>[...document.querySelectorAll('section')].find(x=>{const h=x.querySelector('h1,h2,h3,h4');return h&&h.textContent.replace(/\s+/g,'')===n});
@@ -354,10 +365,8 @@ async function kyoboGrab(){
  if(!toc)try{const j=await (await fetch('/api/gw/pdt/v2/product/component/'+id+'/middle')).json();toc=clean(((j.data||{}).middle||{}).contentTableList)}catch(e){}
  const data={hada:'book',v:1,source:'kyobo',url:location.origin+location.pathname,title:String(ld.name||'').trim(),isbn13:(/97[89]\d{10}/.exec(String(ld.isbn||'')+' '+String(ld.image||''))||[''])[0],cover:String(ld.image||'').split('?')[0].replace(/\/fit-in\/\d+x\d+\//,'/fit-in/458x0/'),publisher:String((ld.publisher||{}).name||'').trim(),
   price:list&&(!sale||list>=sale&&list<=sale*3)?list:sale,pages,series:sa?sa.textContent.trim():'',toc};
- const json=JSON.stringify(data),n=toc?toc.split('\n').length:0;
- const done=()=>alert('교재 정보를 복사했어요.\n'+data.title+'\n목차 '+(n?n+'줄':'없음(교보문고에 목차가 없어요)')+'\n\n라이브러리 [직접 추가]에서 [가져온 정보 붙여넣기]를 누르세요.');
- const copy=()=>{const t=document.createElement('textarea');t.value=json;document.body.append(t);t.select();const ok=document.execCommand('copy');t.remove();if(ok)done();else prompt('아래 내용을 모두 복사(Ctrl+C)하세요.',json)};
- if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(json).then(done,copy);else copy();
+ const n=toc?toc.split('\n').length:0;
+ send(JSON.stringify(data),'교재 정보를 복사했어요.\n'+data.title+'\n목차 '+(n?n+'줄':'없음(교보문고에 목차가 없어요)')+'\n\n라이브러리 [직접 추가]에서 [가져온 정보 붙여넣기]를 누르세요.');
 }
 $('grab-link').href='javascript:'+encodeURIComponent('('+kyoboGrab.toString()+')()');
 $('grab-link').onclick=e=>{e.preventDefault();status('[교재 가져오기]는 여기서 누르지 않고, 즐겨찾기 막대로 끌어다 놓은 뒤 교보문고 책 페이지에서 눌러요.','info')};
@@ -369,6 +378,7 @@ function matchOption(options,names){const ns=names.map(n=>String(n||'').replace(
 // 붙여넣은 글이 [교재 가져오기]가 만든 정보면 직접 추가 창을 채워 연다. 표지는 ISBN의 교보문고 표지 규칙 주소, ISBN이 없으면 교보문고가 준 표지 주소(v2.6.7). 목차가 있으면 지금의 목차 나누기로 단원을 만든다.
 function grabbed(raw){
  let d=null;try{d=JSON.parse(String(raw||'').trim())}catch{}
+ if(d&&d.hada==='books'&&Array.isArray(d.items))return grabbedList(d.items);
  if(!d||d.hada!=='book'||!String(d.title||'').trim()){status('교보문고에서 가져온 정보가 아니에요. 교보문고 책 페이지에서 [교재 가져오기]를 다시 누른 뒤 붙여넣으세요.','error');return false}
  const isbn=/^97[89]\d{10}$/.test(String(d.isbn13))?String(d.isbn13):'',key='m:'+(++seq);
  const p=customPick({source:'kyobo',key,title:String(d.title).trim().slice(0,200),cover:isbn?kyoboCover(isbn):/^https:\/\/contents\.kyobobook\.co\.kr\//.test(String(d.cover||''))?String(d.cover):'',isbn13:isbn,price:+d.price>0?Math.round(+d.price):null});
@@ -378,6 +388,36 @@ function grabbed(raw){
  if(d.toc){p.loading=true;api({action:'parse',text:String(d.toc).slice(0,20000)}).then(r=>{p.units.splice(0,p.units.length,...r.toc.units)}).catch(e=>{p.error=e.message}).finally(()=>{p.loading=false;if(sheet?.list?.[sheet.i]===p)drawSheet()})}
  const list=todo();sheet={mode:'add',i:list.indexOf(p),list};drawSheet();$('sheet').showModal();
  status(`"${p.title}" 정보를 채웠어요. 시리즈·출판사·단원을 확인하고 [라이브러리에 추가]를 누르세요.`);return true}
+// 검색 목록에서 체크한 책들(v2.6.8): 상품번호·ISBN·교재명으로 창을 바로 열고, 정가·출판사·목차는 함수(kyobo-book)로 한 권씩 채운다.
+function grabbedList(items){
+ const list=items.filter(x=>/^S\d{9,15}$/.test(String(x&&x.pid))).slice(0,20);
+ if(!list.length){status('가져온 책이 없어요. 교보문고 검색 목록에서 책을 체크하고 [교재 가져오기]를 다시 누르세요.','error');return false}
+ $('grab-text').hidden=true;
+ const ps=list.map(x=>{const isbn=/^97[89]\d{10}$/.test(String(x.isbn13))?String(x.isbn13):'';
+  const p=customPick({source:'kyobo',key:'m:'+(++seq),title:String(x.title||'').trim().slice(0,200),cover:isbn?kyoboCover(isbn):'',isbn13:isbn,price:null});
+  p.pid=String(x.pid);p.series=matchOption(lists.series,[p.title]);p.from={series:'',publisher:'',pages:null,toc:true};p.loading=true;picked.set(keyOf(p.book),p);return p});
+ drawPickBar();const all=todo();sheet={mode:'add',i:all.indexOf(ps[0]),list:all};drawSheet();$('sheet').showModal();
+ status(`${ps.length}권의 정가·출판사·목차를 교보문고에서 가져오는 중…`);
+ (async()=>{let ok=0;
+  for(const p of ps){if(!picked.has(keyOf(p.book)))continue;
+   try{const r=await api({action:'kyobo-book',pid:p.pid});
+    if(!p.title.trim())p.title=r.title;if(!p.isbnIn&&r.isbn13){p.isbnIn=r.isbn13;p.coverIn=kyoboCover(r.isbn13)}if(r.price)p.priceIn=r.price;
+    if(!p.publisher)p.publisher=matchOption(lists.publishers,[r.publisher]);if(!p.series)p.series=matchOption(lists.series,[r.title]);
+    p.from={...p.from,publisher:r.publisher||'',toc:r.toc.units.length>0};if(!p.units.length)p.units.splice(0,0,...r.toc.units);ok++}
+   catch(e){p.error=e.message;p.from={...p.from,toc:false}}
+   finally{p.loading=false;if(sheet?.list?.[sheet.i]===p)drawSheet()}}
+  status(ok===ps.length?`${ps.length}권 정보를 채웠어요. 한 권씩 확인하고 추가하세요.`:`${ps.length}권 중 ${ok}권만 정보를 채웠어요. 나머지는 교재명·표지만 있어요(책 상세 페이지에서 한 권씩 가져올 수 있어요).`,ok===ps.length?'info':'error')})();
+ return true}
+// 선택에서 빼기(v2.6.8): 검색 결과에서 고른 책이면 체크도 푼다. 라이브러리에 이미 추가한 교재는 그대로다.
+function unpick(p){picked.delete(keyOf(p.book));if(!p.custom){const cb=$('b-'+p.book.isbn13);if(cb)cb.checked=false}}
+function dropCurrent(){const p=sheet.list[sheet.i];
+ if(p.custom&&(p.title.trim()||p.units.length)&&!confirm(`"${p.title.trim()||'이 교재'}"를 목록에서 뺄까요? 넣은 내용은 사라져요.`))return;
+ unpick(p);sheet.list.splice(sheet.i,1);drawPickBar();
+ if(!sheet.list.length){$('sheet').close();return}
+ sheet.i=Math.min(sheet.i,sheet.list.length-1);drawSheet()}
+$('clear-picks').onclick=()=>{const list=todo();if(!list.length)return;
+ if(!confirm(`선택한 ${list.length}권을 모두 비울까요? 라이브러리에 추가한 교재는 그대로예요.`))return;
+ list.forEach(unpick);drawResults();drawPickBar();status('선택을 비웠어요.')};
 $('grab-paste').onclick=async()=>{let t='';try{t=await navigator.clipboard.readText()}catch{}
  if(t&&t.trim().startsWith('{')){grabbed(t);return}
  const ta=$('grab-text');ta.hidden=false;ta.value='';ta.focus();status('붙여넣기 칸에 Ctrl+V로 붙여넣으세요.','info')};
@@ -389,7 +429,7 @@ $('manual-add').onclick=()=>{const key='m:'+(++seq),p=customPick({source:'manual
 // ---------- 창 ----------
 $('sheet-close').onclick=()=>{if(dirty()&&!confirm('고친 내용을 버릴까요?'))return;$('sheet').close()};
 $('sheet').addEventListener('cancel',e=>{if(dirty()&&!confirm('고친 내용을 버릴까요?'))e.preventDefault()});
-$('sheet').addEventListener('close',()=>{const m=sheet?.mode;sheet=null;if(m==='add'){drawResults();drawPickBar()}if(m==='open'&&library)drawShelves()});
+$('sheet').addEventListener('close',()=>{const m=sheet?.mode;sheet=null;if(m==='add'){for(const p of todo())if(p.custom&&!p.loading&&!p.title.trim()&&!p.units.length)picked.delete(keyOf(p.book));drawResults();drawPickBar()}if(m==='open'&&library)drawShelves()});
 function nextName(units){const last=[...units].reverse().find(u=>u.name&&u.include!==false)?.name||'';let m=last.match(/^(\d+)-(\d+)\./);if(m)return `${m[1]}-${+m[2]+1}. `;m=last.match(/^(\d+)\./);if(m)return `${+m[1]+1}. `;return ''}
 function unitEditor(units,{onChange,saved=[]}={}){
  const box=el('div','units');
@@ -421,7 +461,7 @@ function drawSheet(){
  if(!sheet)return;const body=$('sheet-body');
  if(sheet.mode==='add'){
   const p=sheet.list[sheet.i],n=sheet.list.length;
-  $('sheet-title').textContent=`${sheet.i+1} / ${n}`;$('sheet-tag').replaceChildren(...(p.done?.ok?[el('span','done-tag','등록됨')]:[]));
+  $('sheet-title').textContent=`${sheet.i+1} / ${n}`;$('sheet-tag').replaceChildren(...(p.done?.ok?[el('span','done-tag','등록됨')]:[(()=>{const b=el('button','ghost','빼기');b.type='button';b.id='sheet-drop';b.title='이 교재를 목록에서 빼요';b.onclick=dropCurrent;return b})()]));
   $('dots').hidden=n<2;$('dots').replaceChildren(...sheet.list.map((q,k)=>el('i',[k===sheet.i?'on':'',q.done?.ok?'ok':''].join(' ').trim())));
   const top=el('div','sheet-book');top.append(p.custom?cover(p.coverIn,()=>{p.noCover=true}):bookCover(p.book,p));const col=el('div');
   if(p.done?.ok){col.append(titleRow(p.done.name,p.done.pageId),el('p','book-meta',`등록했어요 · 단원 ${p.done.units}개`))}
