@@ -5,7 +5,7 @@
  /* 색: 1부 3장 색상표 */
  --brand-primary:#E6D8C4;--brand-deep:#6B5D4D;--brand-mid:#D1BEA5;--brand-light:#F1E8DC;
  --brand-soft:#F5EFE7;--brand-tint:#FBF8F3;--brand-border:#DED1C0;--brand-on-primary:#3F372F;
- --canvas:#F7F8FA;--text-ink:#191F28;--text-muted:#4E5968;--text-subtle:#8B95A1;
+ --canvas:#F7F8FA;--text-ink:#191F28;--text-muted:#4E5968;--text-subtle:#68727F;
  --success:#16A064;--success-soft:#E8F7F0;--danger:#E5484D;--danger-soft:#FDEBEC;
  --warning:#F59F00;--warning-soft:#FFF5D9;--info:#3478F6;--info-soft:#EAF2FF;
  /* 1부 색상표에 없는 추가 값: 작은 글자용 상태색(흰 바탕 대비 4.5:1 이상), 카드 표면, 입력칸 테두리 */
