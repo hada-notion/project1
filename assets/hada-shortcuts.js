@@ -12,13 +12,16 @@ const ICONS={
  external:'<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line>',
  check:'<polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>',
  edit:'<path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>',
+ award:'<circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>',
+ more:'<circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle>',
 };
-// [주소, 메뉴 이름, 아이콘, 설명(마우스를 올리면 보임), 휴대폰 폭(700px 이하)에서 보이는 짧은 이름]. 새 탭 메뉴는 넓은 화면에서 ↗와 이름, 폰 폭에서는 각자의 아이콘만 보인다.
+// [주소, 메뉴 이름, 아이콘, 설명(마우스를 올리면 보임), 휴대폰 폭(700px 이하)에서 보이는 짧은 이름, 화면 준비 여부(false면 숨김)]. 새 탭 메뉴는 넓은 화면에서 ↗와 이름, 폰 폭에서는 각자의 아이콘만 보인다.
 const PAGES=[
  ['admin_settings.html','관리자 설정','settings','관리자 비밀번호 변경과 Notion 웹훅 키 교체','설정'],
- ['legal_documents.html','법정 서류','legal','출석부·원부·영수증 서식을 기간별로 조회하고 출력','서류'],
- ['school_search.html','학교 검색','school','나이스에서 학교를 찾아 Notion 학교 페이지와 연결','학교'],
  ['library.html','라이브러리','book','교재를 시리즈별로 보고, 찾아서 추가','라이브러리'],
+ ['exam.html','시험 관리','award','학교·학년별 시험 범위와 일정 관리','시험',false], // 화면을 만들면 false를 지운다
+ ['school_search.html','학교 검색','school','나이스에서 학교를 찾아 Notion 학교 페이지와 연결','학교'],
+ ['legal_documents.html','법정 서류','legal','출석부·원부·영수증 서식을 기간별로 조회하고 출력','서류'],
 ];
 const EXTERNAL=[
  ['attendance_kiosk.html','키오스크','check','학원 입구 태블릿에서 전화번호로 등원·하원 체크(새 탭)','출결 키오스크(새 탭에서 열림)'],
@@ -30,9 +33,32 @@ function render(){
  const box=document.getElementById('app-nav');if(!box||box.childElementCount)return;
  const here=location.pathname.split('/').pop()||'index.html';
  const nav=document.createElement('nav');nav.className='nav-tabs';nav.setAttribute('aria-label','관리 화면');
- for(const [href,name,iconName,desc,short] of PAGES){const a=link(href,name,iconName,desc,'nav-tab');const s=document.createElement('span');s.className='nav-short';s.textContent=short;s.setAttribute('aria-hidden','true');a.append(s);if(href===here)a.setAttribute('aria-current','page');nav.append(a)}
+ for(const [href,name,iconName,desc,short,ready=true] of PAGES){if(!ready)continue;const a=link(href,name,iconName,desc,'nav-tab');const s=document.createElement('span');s.className='nav-short';s.textContent=short;s.setAttribute('aria-hidden','true');a.append(s);if(href===here)a.setAttribute('aria-current','page');nav.append(a)}
  const ext=EXTERNAL.map(([href,name,own,desc,aria])=>{const a=link(href,name,'external',desc,'nav-ext');a.firstChild.classList.add('nav-out');a.insertAdjacentHTML('afterbegin',icon(own).replace('nav-icon','nav-icon nav-own'));a.target='_blank';a.rel='noopener';a.setAttribute('aria-label',aria);return a;});
  box.replaceChildren(nav,...ext);
+ moreMenu();
+}
+// 화면별 부가 버튼(.topright 안의 보안 설정 현황·로그아웃 등)을 맨 오른쪽 ⋯ 메뉴로 모은다. 버튼의 id·hidden·클릭 동작은 그대로 둔다.
+function moreMenu(){
+ const right=document.querySelector('.top .topright');if(!right||right.querySelector('.nav-more'))return;
+ const items=[...right.querySelectorAll('button')];if(!items.length)return;
+ const wrap=document.createElement('div');wrap.className='nav-more';
+ const btn=document.createElement('button');btn.type='button';btn.className='ghost nav-more-btn';btn.title='더 보기';
+ btn.setAttribute('aria-label','더 보기');btn.setAttribute('aria-haspopup','menu');btn.setAttribute('aria-expanded','false');btn.setAttribute('aria-controls','nav-menu');
+ btn.innerHTML=icon('more');
+ const menu=document.createElement('div');menu.className='nav-menu';menu.id='nav-menu';menu.setAttribute('role','menu');menu.hidden=true;
+ for(const b of items){b.classList.remove('ghost','secondary');b.classList.add('nav-menu-item');b.setAttribute('role','menuitem');menu.append(b)}
+ const shown=()=>items.filter(b=>!b.hidden);
+ const close=focus=>{if(menu.hidden)return;menu.hidden=true;btn.setAttribute('aria-expanded','false');if(focus)btn.focus()};
+ const sync=()=>{wrap.hidden=!shown().length;if(wrap.hidden)close()};
+ btn.addEventListener('click',()=>{if(!menu.hidden)return close();menu.hidden=false;btn.setAttribute('aria-expanded','true');shown()[0]?.focus()});
+ menu.addEventListener('click',e=>{if(e.target.closest('.nav-menu-item'))close()});
+ menu.addEventListener('keydown',e=>{const list=shown(),i=list.indexOf(document.activeElement);
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();list[(i+(e.key==='ArrowDown'?1:list.length-1))%list.length]?.focus()}});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape')close(true)});
+ document.addEventListener('click',e=>{if(!wrap.contains(e.target))close()});
+ new MutationObserver(sync).observe(menu,{subtree:true,attributes:true,attributeFilter:['hidden']});
+ wrap.append(btn,menu);right.replaceChildren(wrap);sync();
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',render);else render();
 })();
