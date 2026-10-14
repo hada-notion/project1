@@ -1,7 +1,7 @@
 /* 하다 학원관리 공용 UI 스타일 (docs/DESIGN.md)
  * 값(토큰)은 assets/hada-tokens.css에만 있다. 각 화면 CSS는 var(--토큰)만 쓴다.
  * 이 파일을 쓰는 화면은 docs/DESIGN.md "적용 현황" 표를 본다. */
-@import url("hada-tokens.css?v=385456a2");
+@import url("hada-tokens.css?v=55572761");
 
 /* 기본 */
 *{box-sizing:border-box}
@@ -94,6 +94,11 @@ select:disabled{color:var(--text-subtle);background-color:var(--brand-tint)}
 .link-chip:hover{border-color:var(--brand-deep)}
 .link-chip.main{background:var(--brand-soft);border-color:var(--brand-soft);color:var(--brand-on-primary)}
 .link-chip.main:hover{filter:brightness(.95)}
+/* 누르는 영역 44(DESIGN.md 1부 6장): 보이는 크기는 그대로, 가운데를 기준으로 최소 44×44 투명 영역. 링크 칩은 ::after를 ↗ 아이콘에 쓰므로 ::before */
+.ghost,.help-btn,.link-chip,.nav-tab,.nav-ext,summary{position:relative}
+.ghost::after,.help-btn::after,.nav-tab::after,.nav-ext::after,summary::after,.link-chip::before{content:"";position:absolute;left:50%;top:50%;width:max(100%,var(--hit-min));height:max(100%,var(--hit-min));transform:translate(-50%,-50%)}
+/* 기기 화면 모드: 글자가 화면에 비례해 작아져도 입력칸·버튼은 44 아래로 내려가지 않는다(짧은 가로 화면 제외) */
+@media (min-height:600px){html.device .primary,html.device .secondary,html.device input:not([type=checkbox]):not([type=radio]){min-height:max(var(--control-h),var(--hit-min))}}
 .wide{width:100%;margin-top:var(--space-3)}
 .actions{display:flex;gap:var(--space-3);flex-wrap:wrap;margin:var(--space-4) 0}
 .actions .primary{width:auto;flex:1}
@@ -123,9 +128,12 @@ html.device body{display:flex;align-items:center;justify-content:center;min-heig
 svg.line{width:100%;height:100%;display:block;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 
 /* 전환 탭: 리포트 seg-toggle과 같은 모양(베이지 트랙 안에서 선택한 칸만 흰 표면) */
-.tabs{display:flex;flex-wrap:wrap;gap:2px;width:fit-content;max-width:100%;padding:2px;background:var(--brand-soft);border-radius:var(--radius-pill)}
-.tabs button{border:0;background:none;padding:var(--space-2) var(--space-4);border-radius:var(--radius-pill);font-size:var(--text-small);font-weight:700;color:var(--text-muted)}
-.tabs button.active{background:var(--surface);color:var(--text-ink);box-shadow:var(--shadow-card)}
+/* 전환 탭(DESIGN.md 부품 기준표 "전환 탭"): 트랙 4, 보이는 버튼 32(12/700), 선택 = 흰 바탕·브라운 글자, 누르는 영역은 위아래 투명 여백으로 44.
+   좁은 화면에서 두 줄이 되면 줄 사이 12(위아래 투명 여백 6+6이 겹치지 않게) */
+.tabs{display:flex;flex-wrap:wrap;gap:var(--space-3) 0;width:fit-content;max-width:100%;padding:var(--space-1);background:var(--brand-soft);border-radius:var(--radius-pill)}
+.tabs button{position:relative;border:0;background:none;padding:var(--space-2) var(--space-4);line-height:var(--space-4);border-radius:var(--radius-pill);font-size:var(--text-caption);font-weight:700;color:var(--text-muted)}
+.tabs button::after{content:"";position:absolute;left:0;right:0;top:calc(-1.5*var(--space-1));bottom:calc(-1.5*var(--space-1))}
+.tabs button.active{background:var(--surface);color:var(--brand-deep);box-shadow:var(--shadow-card)}
 
 /* 대화상자 */
 dialog.card{width:calc(100% - var(--space-8));padding:var(--space-6)}
