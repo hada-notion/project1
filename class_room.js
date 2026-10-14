@@ -38,7 +38,7 @@ function timeOf(iso){if(!iso)return '';const d=new Date(new Date(iso).getTime()+
 function shortDate(iso){if(!iso)return '';const d=new Date(new Date(iso).getTime()+(String(iso).includes('T')?9*3600e3:0));return `${d.getUTCMonth()+1}/${d.getUTCDate()}`;}
 
 const state={session:store.get(SESSION_KEY),teacherId:store.get(TEACHER_KEY),teachers:[],date:seoulDate(),view:'main',day:null,
- sessionId:'',detail:null,tab:'home',bookSeg:'진행 중',bookItem:null,classRecs:null,calOpen:false,rosterCache:{},statsCache:{},seg:'att',recKind:'전체',hwRecord:'',edit:false,editOwner:'',saver:null,draft:{},recordId:'',acts:null,books:null,picked:new Set(),
+ sessionId:'',detail:null,tab:'home',bookSeg:'진행 중',bookItem:null,classRecs:null,calOpen:false,calMode:'att',rosterCache:{},statsCache:{},seg:'att',recKind:'전체',hwRecord:'',edit:false,editOwner:'',saver:null,draft:{},recordId:'',acts:null,books:null,picked:new Set(),
  classWeek:[],cwMonth:'',cwFrom:'',cwTo:'',classes:null,form:null,bookCache:{}};
 
 async function api(action,data={}){
@@ -78,7 +78,7 @@ function goTab(tab,open=false){
  if(tab==='calendar'&&(state.tab!=='calendar'||state.view!=='session')){state.cwMonth=state.date.slice(0,7);state.calOpen=open;}
  state.tab=tab;state.view='session';render();}
 // 홈 → 캘린더 접힌 날의 [출석 체크]·[과제 점검]
-function jumpCheck(seg,hwRecord){state.seg=seg;if(hwRecord)state.hwRecord=hwRecord;goTab('calendar',true);}
+function jumpCheck(seg){state.seg=seg;goTab('calendar',true);}
 function leaveEdit(){if(state.edit&&Object.keys(state.draft).length&&!confirm('저장하지 않은 변경이 있어요. 버리고 나갈까요?'))return false;state.edit=false;state.draft={};updateSavebar();return true;}
 function updateSavebar(){const sb=$('savebar'),n=Object.keys(state.draft).length;sb.hidden=!state.edit||!n;sb.classList.toggle('no-tabs',$('tabbar').hidden);$('save-count').textContent=`변경 ${n}건`;
  document.body.classList.toggle('save-on',!sb.hidden);}
@@ -208,7 +208,7 @@ function drawer(side,title,body){const d=$('drawer');d.className=`drawer ${side}
 $('drawer').addEventListener('click',e=>{if(e.target===$('drawer'))navBack();});
 const stat=(v,l,cls='')=>`<div class="home-stat ${cls}"><b>${esc(v)}</b><small>${esc(l)}</small></div>`;
 // 누르는 요약 칸(v2.5.93): 홈의 등원·과제 제출 → 캘린더 접힌 날의 출석 체크·과제 점검
-const statBtn=(jump,v,l,cls='')=>`<button class="home-stat go ${cls}" type="button" data-jump="${jump}" aria-label="${esc(l)} ${esc(v)} · ${jump==='att'?'출석 체크':'과제 점검'}로 가기"><b>${esc(v)}</b><small>${esc(l)} ›</small></button>`;
+const statBtn=(jump,v,l,cls='')=>`<button class="home-stat go ${cls}" type="button" data-jump="${jump}" aria-label="${esc(l)} ${esc(v)} · ${jump==='att'?'학생 목록':'학습 기록'}으로 가기"><b>${esc(v)}</b><small>${esc(l)} ›</small></button>`;
 function openMenu(){
  const list=state.classes?.list||[],students=list.reduce((a,c)=>a+(c.students||0),0),week=list.reduce((a,c)=>a+(c.week?.length||0),0);
  drawer('right','메뉴',`<div class="who-card"><span class="av">${esc(whoName().slice(0,1))}</span><span class="meta"><b>${esc(whoName())}</b><small>${esc(whoRole())}</small></span></div>
@@ -407,7 +407,7 @@ function paneHome(el){
  el.innerHTML=`<div class="card now-card"><span class="meta"><small>보고 있는 수업</small><b>${today?'오늘 ':''}${esc(dateLabel(state.date))} ${esc(s.time||'')}</b></span>
  <span class="now-nav">${navBtn(prev?`data-go="${esc(prev.id)}"`:'disabled','이전 수업','‹')}${navBtn(next?`data-go="${esc(next.id)}"`:'disabled','다음 수업','›')}</span></div>
  <h2 class="sec-title">${icon('sun')}${today?'오늘 ':''}${esc(longDate(state.date).replace(/^\d+년 /,''))}</h2>
- <div class="card"><div class="home-stats">${statBtn('att',`${arrived}/${d.students.length}`,'등원',d.students.length&&arrived===d.students.length?'good':'')}${statBtn('hw',items.length?`${sub}/${items.length}`:'–','과제 제출',items.length?(sub===items.length?'good':'bad'):'')}${stat(next?whenLabel(next.date,next.time):'–','다음 수업')}</div></div>
+ <div class="card"><div class="home-stats">${statBtn('att',`${arrived}/${d.students.length}`,'등원',d.students.length&&arrived===d.students.length?'good':'')}${statBtn('rec',items.length?`${sub}/${items.length}`:'–','과제 제출',items.length?(sub===items.length?'good':'bad'):'')}${stat(next?whenLabel(next.date,next.time):'–','다음 수업')}</div></div>
  <h2 class="sec-title">${icon('과제')}${today?'오늘':'이날'} 마감 과제 <span class="cnt">${d.homeworkDue.length}</span></h2>
  ${d.homeworkDue.length?`<div class="list">${d.homeworkDue.map(h=>{const n=h.items.filter(x=>x.submitted).length;return `<button class="row" type="button" data-hwgo="${esc(h.recordId)}"><span class="kind-icon k-과제">${icon('과제')}</span><span class="meta"><span class="t">${esc(h.range||h.title)}</span><span class="d">${esc(h.title)}</span></span><span class="pill ${n===h.items.length?'done':'miss'}">제출 ${n}/${h.items.length}</span></button>`;}).join('')}</div>`:`<div class="list"><p class="empty">${today?'오늘':'이날'}이 마감인 과제가 없어요.</p></div>`}
  <h2 class="sec-title">${icon('book')}교재 진도</h2>${homeBooks()}
@@ -415,7 +415,7 @@ function paneHome(el){
  ${d.records.map(recCard).join('')||'<div class="list"><p class="empty">아직 기록이 없어요. 학습기록 탭의 + 로 만들어요.</p></div>'}`;
  el.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>switchSession(b.dataset.go,b));
  bindBookOpen(el);
- el.querySelectorAll('[data-hwgo]').forEach(b=>b.onclick=()=>jumpCheck('hw',b.dataset.hwgo));
+ el.querySelectorAll('[data-hwgo]').forEach(b=>b.onclick=()=>openRecord(b.dataset.hwgo,b));
  el.querySelectorAll('[data-jump]').forEach(b=>b.onclick=()=>jumpCheck(b.dataset.jump));
  el.querySelectorAll('[data-rec]').forEach(b=>b.onclick=()=>openRecord(b.dataset.rec,b));
 }
@@ -467,46 +467,69 @@ function paneBook(el){
  const nb=el.querySelector('#bk-new');if(nb)nb.onclick=()=>openCreateSheet(it.value);
  el.querySelectorAll('[data-rec]').forEach(b=>b.onclick=()=>openRecord(b.dataset.rec,b));
 }
-// 캘린더 탭(v2.5.87, 접기 v2.5.93 — 학부모 리포트 캘린더처럼): 처음엔 이 반 수업 한 달(출석 색: 모두 출석 초록·결석 있음 빨강·미입력 노랑·예정 테두리,
-// 오늘 빨간 테두리, 보는 수업 진하게, 범례). 날짜를 누르면 그 수업으로 가며 그 주 한 줄로 접히고(방문 기록 한 칸) 아래에 [⌄ 월 전체 보기] ·
-// 그날 머리 · [출석 체크 | 과제 점검 | 학습 기록]. 접힌 주에서 다른 날을 누르면 수업만 바꾼다(칸을 쌓지 않음, 고른 탭 유지).
-// 뒤로가기·[월 전체 보기]는 월 보기로. 반이 없는 보강 수업은 달력 없이 바로 그날 체크를 보인다.
-// 칸 상태: 앞으로 = plan(테두리), 오늘 아직 다 찍지 않음 = open(테두리, 진행 중이라 빗금 아님), 지난 수업 미입력 = miss(빗금), 결석·보강 있음 = bad, 모두 출석 = ok
-function calState(x){const t=seoulDate();if(x.date>t)return 'plan';if(!x.total)return 'has';if(x.missing)return x.date===t?'open':'miss';if(x.absent)return 'bad';return 'ok';}
-const CAL_TABS=[['att','출석 체크'],['hw','과제 점검'],['rec','학습 기록']];
+// 캘린더 탭(v2.5.87, 접기 v2.5.93, 현황 v2.5.103 — 학부모 리포트 캘린더처럼): 위에 [출석 현황 | 과제 현황], 처음엔 이 반 수업 한 달.
+// 칸 색(두 현황 같은 기준): 비율 100% 초록 · 50% 이상 노랑 · 50% 미만 빨강. 출석 = 출석(또는 등원 찍음) ÷ 그 수업 학생 수(일부만 입력해도 전체 기준),
+// 과제 = 그날 마감 과제 제출 ÷ 그날 마감 과제 수. 지난 수업에 출석을 하나도 안 넣었으면 빗금, 오늘 아직 안 넣었거나 앞으로 수업·그날 마감 과제가 없는 날은 테두리.
+// 달 보기 위 막대 카드(리포트와 같은 B안: 첫 줄 "n월 수업 지난/전체회", 둘째 줄 막대 한 줄)와 칩 4개 — 누르면 그 상태의 가장 최근 날짜(남은 수업·마감 전은 가장 가까운 날)로 접혀 열린다.
+// 날짜를 누르면 그 수업으로 가며 그 주 한 줄로 접히고 아래에 [⌄ 월 전체 보기] · [학생 목록 | 학습 기록]. 접힌 주에서 다른 날을 누르면 수업만 바꾼다(칸을 쌓지 않음, 고른 탭 유지).
+// 뒤로가기·[월 전체 보기]는 월 보기로. 반이 없는 보강 수업은 달력 없이 바로 그날 목록을 보인다.
+const rateTone=(n,t)=>n>=t?'ok':n*2>=t?'mid':'bad';
+function calState(x,mode=state.calMode){const t=seoulDate();if(x.date>t)return 'plan';
+ if(mode==='hw')return x.hwTotal?rateTone(x.hwDone||0,x.hwTotal):'open';
+ if(!x.total)return 'open';if(x.missing>=x.total)return x.date===t?'open':'miss';return rateTone(x.present||0,x.total);}
+const CAL_MODES=[['att','출석 현황'],['hw','과제 현황']];
+const CAL_TABS=[['att','학생 목록'],['rec','학습 기록']];
+const CAL_CHIPS={att:[['ok','전원 출석'],['mid','50% 이상'],['bad','50% 미만'],['plan','남은 수업']],hw:[['ok','모두 제출'],['mid','50% 이상'],['bad','50% 미만'],['plan','마감 전']]};
+const CAL_LEGEND={att:['전원 출석','50% 이상 출석','50% 미만 출석'],hw:['모두 제출','50% 이상 제출','50% 미만 제출']};
+function calSummary(ms,mode,m){
+ const st=ms.map(x=>calState(x,mode)),cnt=k=>k==='plan'&&mode==='hw'?ms.filter((x,i)=>st[i]==='plan'&&x.hwTotal).length:st.filter(s=>s===k).length;
+ const past=ms.filter(x=>x.date<=seoulDate()),hwAll=ms.filter(x=>x.date<=seoulDate()).reduce((a,x)=>[a[0]+(x.hwDone||0),a[1]+(x.hwTotal||0)],[0,0]);
+ const head=mode==='hw'?`<span class="lbl">${m}월 과제</span><b>${hwAll[0]} / ${hwAll[1]} 제출</b>`:`<span class="lbl">${m}월 수업</span><b>${past.length} / ${ms.length}회</b>`;
+ return `<div class="card cal-sum"><div class="sum-bar">${head}<span class="cells">${st.map(s=>`<i class="${s}"></i>`).join('')||'<i></i>'}</span></div>
+ <div class="sum-chips">${CAL_CHIPS[mode].map(([k,l])=>{const n=cnt(k);return `<button class="sum-chip ${k}" type="button" data-chip="${k}" ${n?'':'disabled'} aria-label="${esc(l)} ${n}회${n?' · 그날로 가기':''}"><b>${n}</b><small>${esc(l)}</small></button>`;}).join('')}</div></div>`;}
 function paneCalendar(el){
- const d=state.detail,list=state.classWeek||[],byDate=new Map(list.map(x=>[x.date,x])),open=state.calOpen||!list.length;
+ const d=state.detail,list=state.classWeek||[],byDate=new Map(list.map(x=>[x.date,x])),open=state.calOpen||!list.length,mode=state.calMode==='hw'?'hw':'att';
  const ym=open?state.date.slice(0,7):(state.cwMonth||state.date.slice(0,7)),[y,m]=ym.split('-').map(Number),first=`${ym}-01`;
- const cell=dd=>{const x=byDate.get(dd);if(!x)return dayCell(dd,false,false,'');const c=['cal-day','has',calState(x)];if(dd===seoulDate())c.push('today');if(x.id===state.sessionId)c.push('picked');
-  return `<button type="button" class="${c.join(' ')}" data-cs="${esc(x.id)}" aria-label="${esc(dateLabel(dd))} 수업${x.total?` 출석 ${x.present}/${x.total}`:''}" aria-pressed="${x.id===state.sessionId}"><span>${Number(dd.slice(8))}</span></button>`;};
+ const cell=dd=>{const x=byDate.get(dd);if(!x)return dayCell(dd,false,false,'');const c=['cal-day','has',calState(x,mode)];if(dd===seoulDate())c.push('today');if(x.id===state.sessionId)c.push('picked');
+  const what=mode==='hw'?(x.hwTotal?` 과제 제출 ${x.hwDone||0}/${x.hwTotal}`:''):(x.total?` 출석 ${x.present}/${x.total}`:'');
+  return `<button type="button" class="${c.join(' ')}" data-cs="${esc(x.id)}" aria-label="${esc(dateLabel(dd))} 수업${what}" aria-pressed="${x.id===state.sessionId}"><span>${Number(dd.slice(8))}</span></button>`;};
  const mon=weekStart(state.date),days=open?Array.from({length:7},(_,i)=>cell(addDays(mon,i))).join('')
   :Array.from({length:dowMon(first)},()=>'<div class="cal-day empty"></div>').join('')+Array.from({length:monthDays(ym)},(_,k)=>cell(`${ym}-${pad(k+1)}`)).join('');
  const navRow=open?`<div class="cal-month-nav"><span></span><div class="cal-month-title">${y}년 ${m}월</div><span></span></div>`
   :`<div class="cal-month-nav">${navBtn('data-cwm="-1"','이전 달','‹')}<div class="cal-month-title">${y}년 ${m}월</div><div class="cal-nav-right">${todayBtn('cw-today')}${navBtn('data-cwm="1"','다음 달','›')}</div></div>`;
- const arrived=d.students.filter(x=>x.arrivedAt||x.status==='🟢 출석').length;
- el.innerHTML=paneHead(`<p class="page-title">${icon('cal')}캘린더</p>`,!list.length?'반이 없는 보강 수업이라 달력 없이 이 수업만 봐요':open?'같은 주의 다른 날을 누르면 그 수업으로 바뀌어요':'날짜를 누르면 그 주로 접히고 출석 체크·과제 점검·학습 기록을 해요')+
- `<div class="pbody">${list.length?`<div class="attendance-calendar">${navRow}<div class="cal-grid">${CAL_DOW}${days}</div>
- ${open?`<button class="cal-collapse-btn" type="button" id="cal-month">${CHEVRON_DOWN}<span>월 전체 보기</span></button>`:'<div class="cal-legend"><span><i class="ok"></i>모두 출석</span><span><i class="bad"></i>결석 있음</span></div>'}</div>`:''}
- ${open?`<div class="cal-day-head"><b>${esc(longDate(state.date))} ${esc(d.session.time||'')}</b><b>등원 ${arrived}/${d.students.length}</b></div><div id="cal-sub"></div>`:''}</div>`;
- el.querySelectorAll('[data-cs]').forEach(b=>b.onclick=()=>{const id=b.dataset.cs;if(open)return switchSession(id,b);
-  if(!leaveEdit())return;state.calOpen=true;if(id===state.sessionId)return render();run(()=>openSessionNow(id,true),b);});
+ const ms=list.filter(x=>x.date.startsWith(ym));
+ el.innerHTML=paneHead(`<p class="page-title">${icon('cal')}캘린더</p>`,!list.length?'반이 없는 보강 수업이라 달력 없이 이 수업만 봐요':open?'같은 주의 다른 날을 누르면 그 수업으로 바뀌어요':'날짜를 누르면 그 주로 접히고 학생 목록·학습 기록을 봐요',
+  list.length?CAL_MODES.map(([k,l])=>tabBtn(mode===k,`data-cm="${k}"`,l)).join(''):'')+
+ `<div class="pbody">${list.length&&!open?calSummary(ms,mode,m):''}${list.length?`<div class="attendance-calendar">${navRow}<div class="cal-grid">${CAL_DOW}${days}</div>
+ ${open?`<button class="cal-collapse-btn" type="button" id="cal-month">${CHEVRON_DOWN}<span>월 전체 보기</span></button>`:`<div class="cal-legend">${CAL_LEGEND[mode].map((l,i)=>`<span><i class="${['ok','mid','bad'][i]}"></i>${l}</span>`).join('')}</div>`}</div>`:''}
+ ${open?'<div id="cal-sub"></div>':''}</div>`;
+ const openDay=(id,b)=>{if(!leaveEdit())return;state.calOpen=true;if(id===state.sessionId)return render();run(()=>openSessionNow(id,true),b);};
+ el.querySelectorAll('[data-cs]').forEach(b=>b.onclick=()=>open?switchSession(b.dataset.cs,b):openDay(b.dataset.cs,b));
+ el.querySelectorAll('[data-cm]').forEach(b=>b.onclick=()=>{if(b.dataset.cm===mode)return;state.calMode=b.dataset.cm;render();});
+ // 칩: 지난 상태는 가장 최근 날, 남은 수업·마감 전은 가장 가까운 날
+ el.querySelectorAll('[data-chip]').forEach(b=>b.onclick=()=>{const k=b.dataset.chip,hit=ms.filter(x=>calState(x,mode)===k&&(k!=='plan'||mode!=='hw'||x.hwTotal));
+  const x=k==='plan'?hit[0]:hit.at(-1);if(x)openDay(x.id,b);});
  el.querySelectorAll('[data-cwm]').forEach(b=>b.onclick=()=>run(async()=>{state.cwMonth=shiftMonth(ym,Number(b.dataset.cwm));await ensureClassMonth(state.cwMonth);render();},b));
  const ct=el.querySelector('#cw-today');if(ct)ct.onclick=e=>{run(async()=>{state.cwMonth=seoulDate().slice(0,7);await ensureClassMonth(state.cwMonth);render();},e.currentTarget);};
  const cm=el.querySelector('#cal-month');if(cm)cm.onclick=()=>{if(!leaveEdit())return;const top=nav.stack.at(-1);state.cwMonth=state.date.slice(0,7);
   if(top&&top.view==='session'&&top.tab==='calendar'&&!top.calOpen&&sameClass(top))return navBack();state.calOpen=false;nav.replace=true;render();};
  if(open)paneCheck($('cal-sub'));
 }
-// 접힌 날 아래 [출석 체크 | 과제 점검 | 학습 기록](v2.5.93, v2.5.80 학생 목록의 출석·과제 검사를 옮김). 탭 줄 아래 한 줄에 집계와 [편집]·↗.
+// 접힌 날 아래 [학생 목록 | 학습 기록](v2.5.93, v2.5.103에 과제 점검 탭을 없앰). 탭 줄 아래 한 줄에 집계와 [편집]·↗.
+// 학습 기록 = 맨 위에 그날이 마감인 과제(앞 수업에서 낸 과제 포함, 카드를 누르면 그 기록 화면에서 제출·미제출을 고친다) → 이 수업에 만든 기록 → [이 수업에 기록 만들기].
 function paneCheck(el){
- const d=state.detail,seg=CAL_TABS.some(([k])=>k===state.seg)?state.seg:'att',att=seg==='att',ed=editing('students');
+ const d=state.detail,seg=CAL_TABS.some(([k])=>k===state.seg)?state.seg:'att',att=seg==='att',ed=att&&editing('students');
  const n=s=>d.students.filter(x=>(state.draft[x.attendanceId]?.status??x.status)===s).length;
- const hw=d.homeworkDue,cur=hw.find(h=>h.recordId===state.hwRecord)||hw[0],sub=i=>state.draft[i.activityId]?.submitted??i.submitted;
- const nameOf=i=>d.students.find(s=>s.attendanceId===i.attendanceId)?.name||'학생';
  let hint='',acts='',body='';
- if(seg==='rec'){
-  hint=`기록 <b>${d.records.length}</b>개 · 이 수업에 만든 학습·과제·평가 기록`;
-  body=`${d.records.map(recCard).join('')||'<div class="list"><p class="empty">이 수업에 만든 기록이 없어요.</p></div>'}<div class="actions"><button class="primary" type="button" id="cal-new-rec">${icon('plus','inline-icon')} 이 수업에 기록 만들기</button></div>`;
- }else if(att){
+ if(!att){
+  const all=ensureClassRecords()||[],today=state.date===seoulDate();
+  const due=d.homeworkDue.map(h=>all.find(r=>r.id===h.recordId)||{id:h.recordId,kind:'과제',title:h.title,range:h.range,homework:{submitted:h.items.filter(i=>i.submitted).length,total:h.items.length,due:state.date}});
+  const dueIds=new Set(due.map(r=>r.id)),mine=d.records.filter(r=>!dueIds.has(r.id));
+  hint=`마감 과제 <b>${due.length}</b> · 이 수업 기록 <b>${mine.length}</b> · 과제를 누르면 제출 체크`;
+  body=`${due.length?`<p class="group-label rec-date">${today?'지난 과제 · 오늘 마감':`${esc(withDow(state.date))} 마감 과제`}</p>${due.map(recCard).join('')}`:''}
+  <p class="group-label rec-date">이 수업 기록</p>${mine.map(recCard).join('')||'<div class="list"><p class="empty">이 수업에 만든 기록이 없어요.</p></div>'}
+  <div class="actions"><button class="primary" type="button" id="cal-new-rec">${icon('plus','inline-icon')} 이 수업에 기록 만들기</button></div>`;
+ }else{
   hint=`출석 <b>${n('🟢 출석')}</b> · 결석 <b>${n('🔴 결석')}</b> · 보강 <b>${n('🔵 보강')}</b> · 웹 출석은 알림톡을 보내지 않아요`;acts=d.students.length?editButton('students'):'';
   // 한 줄(v2.5.80): [이름] [출석 상태] [등원] [하원] [메모]. 메모 칸은 메모·선생님 한마디 창(바로 저장). 편집 중에는 [이름] [출석|결석|보강]만.
   const rows=d.students.map(s=>{const st=state.draft[s.attendanceId]?.status??s.status,ch=state.draft[s.attendanceId];
@@ -515,29 +538,17 @@ function paneCheck(el){
    <button class="c memo-btn ${s.memo||s.comment?'has':''}" type="button" data-memo="${esc(s.attendanceId)}" aria-label="${esc(s.name)} 메모·선생님 한마디${s.memo||s.comment?' 있음':''}">${icon('memo')}</button>`}</div>`;}).join('');
   body=d.students.length?`<div class="list stu ${ed?'editing':''}"><div class="srow-h" aria-hidden="true"><span>이름</span><span class="c">출석</span>${ed?'':'<span class="c">등원</span><span class="c">하원</span><span class="c">메모</span>'}</div>${rows}</div>`
    :'<div class="list"><p class="empty">이 수업에 연결된 학생이 없어요.</p></div>';
- }else{
-  hint=cur?`제출 <b>${cur.items.filter(sub).length}</b> · 미제출 <b>${cur.items.filter(i=>!sub(i)).length}</b> · 이날이 마감인 과제예요`:'이날이 마감인 과제를 제출·미제출로 체크해요';acts=cur?editButton('students')+nlink(cur.recordId,cur.title):'';
-  if(!cur)body='<div class="list"><p class="empty">이날이 마감인 과제가 없어요.</p></div>';
-  else{const pick=hw.length>=4?`<select id="hw-pick">${hw.map(h=>`<option value="${esc(h.recordId)}" ${h.recordId===cur.recordId?'selected':''}>${esc(h.title)}</option>`).join('')}</select>`:hw.length>1?`<div class="chips">${hw.map(h=>`<button class="chip ${h.recordId===cur.recordId?'on':''}" type="button" data-hw="${esc(h.recordId)}">${esc(h.range||h.title)} ${h.items.filter(sub).length}/${h.items.length}</button>`).join('')}</div>`:'';
-   body=`${pick||ed?`<div class="toolrow pick-row"><div class="grow">${pick}</div>${ed?'<button class="act" type="button" id="all-done"><span>전원 제출</span></button>':''}</div>`:''}
-   <div class="list">${cur.items.map(i=>{const v=sub(i),ch=state.draft[i.activityId];return `<div class="row ${ch?'changed':''}"><span class="meta"><span class="t">${esc(nameOf(i))}</span></span>
-   ${ed?`<span class="seg"><button type="button" class="v-제출 ${v?'on':''}" data-hwact="${esc(i.activityId)}" data-v="1">제출</button><button type="button" class="v-미제출 ${v?'':'on'}" data-hwact="${esc(i.activityId)}" data-v="0">미제출</button></span>`:`<span class="pill ${v?'done':'miss'}">${v?'제출':'미제출'}</span>`}${nlink(i.activityId,nameOf(i)+' 학습활동')}</div>`;}).join('')}</div>`;}
  }
  el.innerHTML=`<div class="center-tabs check-tabs"><div class="tabs" role="tablist">${CAL_TABS.map(([k,l])=>tabBtn(seg===k,`data-seg="${k}"`,l)).join('')}</div></div>
  <div class="toolrow check-row"><p class="sum">${hint}</p>${acts}</div>${body}`;
  el.querySelectorAll('[data-seg]').forEach(b=>b.onclick=()=>{if(b.dataset.seg===seg||!leaveEdit())return;state.seg=b.dataset.seg;render();});
- el.querySelectorAll('[data-hw]').forEach(b=>b.onclick=()=>{if(!leaveEdit())return;state.hwRecord=b.dataset.hw;render();});
- const hp=el.querySelector('#hw-pick');if(hp)hp.onchange=e=>{if(!leaveEdit()){e.target.value=state.hwRecord;return;}state.hwRecord=e.target.value;render();};
  bindEdit(el);
  el.querySelectorAll('[data-att]').forEach(b=>b.onclick=()=>{const id=b.dataset.att,orig=d.students.find(s=>s.attendanceId===id).status;if(b.dataset.v===orig)delete state.draft[id];else state.draft[id]={status:b.dataset.v};render();});
- el.querySelectorAll('[data-hwact]').forEach(b=>b.onclick=()=>{const id=b.dataset.hwact,v=b.dataset.v==='1',orig=hw.flatMap(h=>h.items).find(i=>i.activityId===id).submitted;if(v===orig)delete state.draft[id];else state.draft[id]={submitted:v};render();});
- const ad=el.querySelector('#all-done');if(ad)ad.onclick=()=>{cur.items.forEach(i=>{if(i.submitted)delete state.draft[i.activityId];else state.draft[i.activityId]={submitted:true};});render();};
  el.querySelectorAll('[data-memo]').forEach(b=>b.onclick=()=>openMemo(b.dataset.memo));
  el.querySelectorAll('[data-rec]').forEach(b=>b.onclick=()=>openRecord(b.dataset.rec,b));
  const nr=el.querySelector('#cal-new-rec');if(nr)nr.onclick=()=>openCreateSheet();
  if(ed)state.saver=async()=>{const entries=Object.entries(state.draft);
-  if(att)await api('save-attendance',{items:entries.map(([attendanceId,v])=>({attendanceId,...v}))});
-  else await api('save-activities',{items:entries.map(([activityId,v])=>({activityId,...v}))});
+  await api('save-attendance',{items:entries.map(([attendanceId,v])=>({attendanceId,...v}))});
   state.edit=false;state.draft={};updateSavebar();await reloadSession();toast(`저장했어요 · ${entries.length}건`);render();};
 }
 
@@ -638,10 +649,12 @@ function bodyHtml(body){if(!Array.isArray(body)||!body.length)return '';const ou
  close();return out.join('');}
 // 내용 펼치기·접기(모든 화면 공용, 화면을 다시 그리지 않는다)
 $('app').addEventListener('click',e=>{const b=e.target.closest('[data-chev]');if(!b)return;const x=b.closest('.log-card').querySelector('.log-extra'),open=x.hidden;x.hidden=!open;b.setAttribute('aria-expanded',open);const what=b.dataset.chev||'본문';b.setAttribute('aria-label',open?`${what} 접기`:`${what} 펼치기`);});
-// 기록을 날짜별로(최근 날짜부터). 보고 있는 수업 날짜에는 표시를 붙인다.
-function recTimeline(recs,empty){const dates=[...new Set(recs.map(r=>r.date||''))];
+// 기록을 날짜별로(v2.5.103 타임라인): 오늘이 맨 위("날짜 · 오늘", 오늘 카드는 테두리) → 지난 날짜 최근부터 → 앞으로 날짜는 가까운 날부터 맨 아래.
+// 보고 있는 수업 날짜는 글자색으로 표시한다.
+function recTimeline(recs,empty){const t=seoulDate(),all=[...new Set(recs.map(r=>r.date||''))];
+ const dates=[...all.filter(d=>d===t),...all.filter(d=>d<t).sort().reverse(),...all.filter(d=>d>t).sort()];
  return dates.map(d=>{const day=recs.filter(r=>(r.date||'')===d),cur=day.some(r=>r.sessionId===state.sessionId);
-  return `<p class="group-label rec-date ${cur?'cur':''}">${esc(d?withDow(d):'날짜 없음')}${cur?' · 보고 있는 수업':''}</p>${day.map(recCard).join('')}`;}).join('')||`<div class="list"><p class="empty">${esc(empty)}</p></div>`;}
+  return `<div class="rec-day ${d===t?'today':''}"><p class="group-label rec-date ${cur?'cur':''}">${esc(d?withDow(d):'날짜 없음')}${d===t?' · 오늘':''}</p>${day.map(recCard).join('')}</div>`;}).join('')||`<div class="list"><p class="empty">${esc(empty)}</p></div>`;}
 // 학습기록 탭(v2.5.89): 이 반 앞뒤 수업(9주 전 ~ 5주 뒤)의 기록을 날짜별로. [전체 · 학습 · 과제 · 평가], + 기록 만들기는 보고 있는 수업에.
 function paneRecords(el){
  const all=ensureClassRecords(),k=state.recKind||'전체',fab=`<button class="fab" type="button" id="new-rec">${icon('plus')}<span>기록 만들기</span></button>`;
@@ -706,7 +719,7 @@ const nav={stack:[],layers:[],after:null,count:0,last:null,restoring:false,idx:0
 const chainNext=()=>{if(nav.chain>0){nav.chain--;setTimeout(navBack,0);}};
 history.replaceState({cr:'base',idx:0},'');
 const navPush=kind=>history.pushState({cr:kind,idx:++nav.idx},'');
-const NAV_FIELDS=['calOpen','bookItem','view','tab','sessionId','recordId','seg','recKind','detail','classWeek','cwFrom','cwTo','date','day','acts','recEdit','books','hwRecord','picked'];
+const NAV_FIELDS=['calOpen','bookItem','view','tab','sessionId','recordId','seg','recKind','calMode','detail','classWeek','cwFrom','cwTo','date','day','acts','recEdit','books','hwRecord','picked'];
 const screenKey=()=>!['session','record','book'].includes(state.view)?state.view:[state.view,state.tab,state.sessionId,state.view==='record'?state.recordId:'',state.view==='book'?state.bookItem?.value:'',state.view==='session'&&state.tab==='calendar'&&state.calOpen?'open':''].join('|');
 function takeSnap(){const o={key:screenKey()};for(const k of NAV_FIELDS)o[k]=state[k];return o;}
 function navTrack(){

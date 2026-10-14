@@ -187,6 +187,18 @@ Deno.test("record cards: unit, homework count and due, test average, page body (
  await rejects(() => room.loadClassRecords("../x"), 400)
 }))
 
+Deno.test("class-sessions: homework due that day per session (v2.5.103)", () => withMock(async (f) => {
+ const due = (d: string) => ({ type: "formula", formula: { type: "date", date: { start: d } } })
+ f.pages.rH = { id: "rH", db: "records", properties: { "학습": title("[과제]"), "구분": { select: { name: "과제" } }, "수업": rel("sPrev") } }
+ f.pages.k1 = { id: "k1", db: "activities", properties: { "학습활동": title("k1"), "학습기록": rel("rH"), "과제상태": { select: { name: "🔵 제출" } }, "과제 마감일": due("2026-10-13T00:00:00.000+09:00") } }
+ f.pages.k2 = { id: "k2", db: "activities", properties: { "학습활동": title("k2"), "학습기록": rel("rH"), "과제상태": { select: { name: "🔴 미제출" } }, "과제 마감일": due("2026-10-13") } }
+ f.pages.k3 = { id: "k3", db: "activities", properties: { "학습활동": title("k3"), "학습기록": rel("rH"), "과제상태": { select: { name: "🔵 제출" } } } }
+ const r = await room.loadClassSessions("s1")
+ const s1: any = r.sessions.find((x: any) => x.id === "s1"), prev: any = r.sessions.find((x: any) => x.id === "sPrev")
+ assert(s1.hwDone === 1 && s1.hwTotal === 2, "due on the 13th: 1 of 2 " + JSON.stringify(s1))
+ assert(prev.hwDone === 0 && prev.hwTotal === 0, "nothing due on the 8th")
+}))
+
 Deno.test("class-sessions: same class around the session with attendance counts, makeups skipped", () => withMock(async () => {
  const r = await room.loadClassSessions("s1")
  assert(r.sessions.map((s) => s.id).join() === "sPrev,s1", r.sessions.map((s) => s.id).join())
