@@ -85,3 +85,25 @@ export async function reconcileDeadline(io: DeadlineIO, activityId: string, trig
   })
   return "updated"
 }
+// (v2.6.12) 여러 등록의 대기 과제를 한 번에(등록 50명씩 묶어 조회). 출석 조정이 새 출석을 만들 때 학생마다 따로 조회하지 않는다.
+export async function pendingDeadlinesForRegistrations(io: DeadlineIO, registrationIds: string[]): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>()
+  const regs = [...new Set(registrationIds.map(key))]
+  for (let i = 0; i < regs.length; i += 50) {
+    const chunk = regs.slice(i, i + 50)
+    const rows = await queryEveryPage(io, io.activityDb, { filter: { and: [
+      { or: chunk.map((id) => ({ property: "등록", relation: { contains: id } })) },
+      { property: "과제상태", select: { equals: "🔴 미제출" } },
+      { property: "삭제 체크", checkbox: { equals: false } },
+      { or: [ { property: "과제 마감", relation: { is_empty: true } }, { property: AUTO_DEADLINE_PROP, relation: { is_not_empty: true } } ] },
+    ] } })
+    for (const p of rows) {
+      const owner = ids(p, "등록")
+      if (!live(p) || owner.length !== 1 || !automaticDeadlineAllowed(p)) continue
+      const reg = key(owner[0])
+      if (!chunk.includes(reg)) continue
+      out.set(reg, [...(out.get(reg) ?? []), p.id])
+    }
+  }
+  return out
+}

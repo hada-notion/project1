@@ -48,6 +48,7 @@ import {
 	markQueued,
 	isRunning,
 	STATUS_RUNNING,
+	STATUS_DONE,
 	STATUS_QUEUED,
 	type StatusSpec,
 } from "../_shared/statusTracking.ts"
@@ -78,8 +79,7 @@ const SESSION_GEN_STATUS_SPEC: StatusSpec = {
 // 당겨오는" pull 모델로 별도 작업에서 다시 만들 예정이다. (예전 import는
 // `import { enqueueDashboardLink } from "../_shared/dashboardLinkTarget.ts"`, 호출부는
 // createPage(DS.classSession) 직후와 등록별 출석 생성 루프 안쪽 두 곳이었다.)
-import { wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
-import { pendingDeadlineActivities, type DeadlineIO } from "../_shared/assignmentDeadline.ts"
+import { wakeSyncQueueWorker, enqueueSync } from "../_shared/syncQueue.ts"
 import { orderBulkClasses, finishBulkStep, timetableStartAt, type BulkClassItem } from "../_shared/bulkClassOrder.ts"
 // (2026-09-21, 인증 정책 추가) 이 함수는 지금까지 아무 인증도 없이 POST만 확인하면 누구나 호출할 수 있었다.
 // 다른 어드민 함수들과 동일하게 x-admin-key 헤더를 요구해서, URL만 알면 전체 시간표를 강제로
@@ -107,15 +107,7 @@ const DS = {
   studyActivity: DS_STUDY_ACTIVITY,
 }
 
-// Deadline candidates are grouped by each activity's own registration, across all weekdays.
-const deadlineIO: DeadlineIO = {
-  getPage, query: queryDataSource, update: updatePageProperties,
-  attendanceDb: DS.attendance, activityDb: DS.studyActivity,
-}
-// 출석(학원) DB: 여기서는 실제로 마감을 연결하지 않고, "이 학생 것으로 이미 계산해둔 대상"만
-// 채워서 별도 큐(backfill-assignment-deadlines)에 넘긴다 (분리 큐 설계, 사용자 요청).
-const PROP_ATTENDANCE_BACKFILL_TARGET = "과제마감 백필 대상" // relation -> 학습활동(학원) DB
-const PROP_ATTENDANCE_BACKFILL_STATUS = "과제마감 백필 상태" // select
+// (v2.6.12) 출석·과제 마감 백필은 출석 조정 큐(_shared/fixAttendanceTarget.ts)가 맡는다.
 
 // Korean weekday select option name -> weekday number (0 = Sunday ... 6 = Saturday)
 const WEEKDAY_MAP: Record<string, number> = {
@@ -380,41 +372,6 @@ type ProcessMode =
 // markRunning/markDone/markError(TIMETABLE_STATUS_SPEC 사용)로 대체했다 — 동작은 동일하되
 // "작업중"으로 바뀐 시각도 함께 기록해서, 워치독이 오래 멈춘 항목을 자동으로 회수할 수 있게 됐다.
 
-// 수업(학원) DB 개별 행에 처리 상태 표시 (2026-09-11 추가, 2026-09-22 Phase 3에서 상태(select)
-// 방식으로 전환). "생성 상태"는 세션 생성 시점에 이미 🔄 작업중으로 함께 만들어지므로(아래
-// createPage 호출부 참고), 여기서는 "끝났을 때" markDone/markError(SESSION_GEN_STATUS_SPEC)만
-// 감싸서 실패해도 전체 캐스케이드를 막지 않도록 조용히 무시한다.
-async function markSessionDone(sessionId: string): Promise<void> {
-  try {
-    await markDone(sessionId, SESSION_GEN_STATUS_SPEC)
-  } catch (err) {
-    console.error(`markSessionDone(${sessionId}) failed:`, (err as Error).message)
-  }
-}
-
-async function markSessionError(sessionId: string, message: string): Promise<void> {
-  try {
-    await markError(sessionId, SESSION_GEN_STATUS_SPEC, message)
-  } catch (err) {
-    console.error(`markSessionError(${sessionId}) failed:`, (err as Error).message)
-  }
-}
-
-// (2026-09-24, PART N-12 후속) fetchWithRetry는 호출 하나하나에는 타임아웃(12초, 최대 5회 재시도)이
-// 걸려 있지만, processTimetable() 한 번의 실행 안에는 그런 호출이 순서대로(닫힌기간/클래스정보/등록
-// 목록 조회 + 주차마다 세션/출석 생성) 여러 번 들어있다. 개별 호출은 각자 자기 한도 안에서 "정상적으로"
-// 재시도하며 시간을 쓰더라도, 합치면 여전히 150초 플랫폼 한도를 넘길 수 있다 (실측: 09/23
-// backfill-attendance에서 같은 패턴 재현됨 — cpu_time_used는 0.5초 수준으로 낮은데 wall clock은
-// 150초를 다 씀 -- 즉 거의 전부 네트워크 대기/재시도였다는 뜻). 그래서 processTimetable() 호출
-// 전체를 withTimeout으로 감싸서, 이 예산을 넘기면 호출부가 기다리지 않고 포기하고 돌아간다.
-// (2026-09-24, PART N-16) 100_000 -> 70_000으로 하향. 실제 사고 로그에서 이 withTimeout 자체의
-// 100초 데드라인이 148초가 되어서야 발동한 사례가 확인됐다 -- Notion 호출/재시도가 몰려 이벤트
-// 루프가 밀리면 우리 내부 타임아웃 체크조차 정시에 실행되지 못하고, 그 순간 플랫폼의 하드
-// 종료 한도(약 150초)와 거의 붙어버려서 뒤이은 markQueued/callSelf(정상 종료 경로)가 끝까지
-// 실행될 시간을 못 받고 함께 죽었다. 데드라인을 낮추면 실제 작업량이 줄어드는 건 아니지만
-// (사용자가 지적한 대로 안전장치 자체는 일을 줄이지 않는다), 최소한 "정상 종료 경로가 실행될
-// 여유 시간"을 더 확보해서 완전 침묵 사망 대신 항상 로그+재대기열+이어달리기로 끝나게 한다.
-// 진짜 근본 수정은 아래 실제 호출 수를 줄이는 변경(등록당 미연결 출석 검색을 세션당 1회로 통합)이다.
 const PROCESS_TIMETABLE_TIMEOUT_MS = 70_000
 
 async function processTimetable(timetable: any, log: string[], mode: ProcessMode) {
@@ -455,18 +412,18 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
   // withTimeout이 중간에 포기해도 이미 push된 항목은 그 시점의 오류 로그에 그대로 남으므로,
   // "어느 항목까지는 찍혔고 그 다음이 없는지"로 막힌 구간을 알 수 있다.
   const setupStartedAt = Date.now()
-  let latestDate = await getLatestClassDate(timetableId)
+  // (v2.6.12) 버튼(single) 처리에서 시간표 수식 "기준일"(최근 수업 다음 요일, 휴원 건너뜀)이 있으면 그 날짜로 만든다.
+  // Notion [수업추가] 버튼이 직접 만드는 수업과 날짜가 같아지고, 최근 수업·휴원 조회 2회를 건너뛴다.
+  const baseFormula: string | null = mode.type === "single" ? (props["기준일"]?.formula?.date?.start ?? null) : null
+  let latestDate = baseFormula ? null : await getLatestClassDate(timetableId)
   let createdCount = 0
-  let backfillQueuedCount = 0
-  // Fetch student-owned candidates only for dates that will actually be created.
-  const pendingDeadlineTargets = new Map<string, string[]>()
 
   // Perf (2026-09-11): closures, class name, and the registration list don't change across
   // iterations of the while-loop below for a given timetable, but were previously re-fetched
   // from Notion on EVERY iteration (i.e. once per session created). Fetching them once up
   // front removes most of the redundant network calls that made a multi-session backfill (the
   // first-ever "일주일 일괄 생성" run) slow.
-  const closures = await getClosurePeriods(classId)
+  const closures = baseFormula ? [] : await getClosurePeriods(classId)
   const { name: className, teacherIds } = await getClassInfo(classId)
   const weekdayKr = WEEKDAY_KR[weekday]
   const timetableRegs = await getTimetableRegistrations(timetableId)
@@ -489,7 +446,7 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
   // 이 시간표를 다시 "대기열"에 넣고, 다음 체인 스텝이 최신 latestDate 기준으로 이어서 만들게
   // 한다 (한 주씩 이어달리기). single/cron 호출 경로는 이 반환값을 그냥 무시하므로 동작이 그대로다.
   const baseDate = latestDate ? addDays(latestDate, 1) : today
-  const nextDate = findNextClassDate(baseDate, weekday, closures)
+  const nextDate = baseFormula ? baseFormula.slice(0, 10) : findNextClassDate(baseDate, weekday, closures)
 
   // Cron/extend mode: don't create a session that falls beyond horizonDate.
   const withinHorizon = horizonDate === null || nextDate <= horizonDate
@@ -524,10 +481,12 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
     // from the single timetableRegs fetch above instead of a fresh Notion query per session
     // date (2026-09-11 perf fix).
     const registrationIds = filterRegistrationsForDate(timetableRegs, nextDate)
-    await mapWithConcurrency(registrationIds, REG_CONCURRENCY, async regId => {
-      pendingDeadlineTargets.set(regId, await pendingDeadlineActivities(deadlineIO, regId))
-    })
 
+    // (v2.6.12, 웹훅 재정리 3단계) 수업 페이지만 명단과 함께 만들고, 출석은 이 수업을 "출석 조정" 큐에 넣어 만든다.
+    // 출석 조정은 수업의 수식 "출석 조정 정보"(명단 중 수강 기간인 학생)를 읽어 출석·학습기록·과제 마감 백필을 한 번에
+    // 처리하므로, 출석 만드는 길이 등록 [수업 생성]·[출석 조정]과 하나로 모인다. 예전에는 여기서 학생마다 과제 조회 +
+    // 미연결 출석 조회 + 출석 생성을 하고 수업 상태를 작업중 → 완료로 따로 썼다.
+    // 수식 속성이 없는 운영은 출석 조정 큐가 예전 방식(fixAttendanceForClassSession)으로 같은 결과를 만든다.
     const createSessionStartedAt = Date.now()
     const classPage = await createPage(DS.classSession, {
       이름: { title: [{ text: { content: classPageTitle } }] },
@@ -536,107 +495,11 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
       시간표: { relation: [{ id: timetableId }] },
       등록: { relation: registrationIds.map((id) => ({ id })) },
       ...(teacherIds.length ? { 담당강사: { relation: teacherIds.map((id) => ({ id })) } } : {}),
-      // 아래에서 출석 생성이 끝나는 즉시 markSessionDone/markSessionError로 완료/오류 처리된다.
-      [SESSION_GEN_STATUS_SPEC.statusProp]: { select: { name: STATUS_RUNNING } },
-      [SESSION_GEN_STATUS_SPEC.startedAtProp]: { date: { start: new Date().toISOString() } },
+      [SESSION_GEN_STATUS_SPEC.statusProp]: { select: { name: STATUS_DONE } },
     })
     log.push(`[timing] ${timetableName}: 수업 페이지 생성 ${Date.now() - createSessionStartedAt}ms`)
-
-    log.push(`[created] ${timetableName}: class session created (${nextDate}), 등록 ${registrationIds.length}건 연결`)
-
-    // (2026-09-24, PART N-16 근본 수정) 학부모 요청 등으로 이 날짜의 수업이 생기기 전에 등록
-    // 페이지의 캘린더 탭에서 미리 출석을 만들어둔 경우(결석 표시, 메모 등을 이미 적어둔 상태)가
-    // 있을 수 있어서, 원래는 "등록별로" 미연결 출석을 검색했다(등록 N명 = 검색 N번). 그런데
-    // 실제로 이 사전 생성 케이스는 드물고, 검색 자체는 전체 반에 대해 한 번만 해도 결과가 같다
-    // (같은 날짜 범위 + "수업이 비어있음" 조건은 등록마다 다르지 않다 -- 등록 조건만 "OR로 이 반
-    // 학생 중 하나"로 넓히면 된다). 등록 13명 기준 검색 호출을 13번 -> 1번으로 줄인다 -- 이게
-    // 동시성 제한(REG_CONCURRENCY)보다 훨씬 직접적인 "실제 호출 수 자체를 줄이는" 수정이다.
-    const { start: dayStart, end: dayEnd } = dayRangeIso(nextDate)
-    const unlinkedSearchStartedAt = Date.now()
-    const unlinkedByReg = new Map<string, any>()
-    if (registrationIds.length > 0) {
-      const unlinkedCandidates = await queryAllPages(DS.attendance, {
-        and: [
-          { property: "수업", relation: { is_empty: true } },
-          { property: "수업일시", date: { on_or_after: dayStart } },
-          { property: "수업일시", date: { before: dayEnd } },
-          { or: registrationIds.map((id) => ({ property: "등록", relation: { contains: id } })) },
-        ],
-      })
-      for (const candidate of unlinkedCandidates) {
-        for (const regId of relIds(candidate.properties["등록"])) {
-          if (!unlinkedByReg.has(regId)) unlinkedByReg.set(regId, candidate)
-        }
-      }
-    }
-    log.push(
-      `[timing] ${timetableName}: 미연결 출석 검색 ${Date.now() - unlinkedSearchStartedAt}ms (등록 ${registrationIds.length}명)`,
-    )
-
-    // Perf (2026-09-11): attendance creation + pending-assignment-deadline linking for each
-    // registration are independent of each other, so run them concurrently instead of
-    // one-at-a-time — this matters most for classes with many students.
-    // (2026-09-24, PART N-14) 무제한 Promise.all -> REG_CONCURRENCY로 상한. 학생 수가 많은 반일수록
-    // 등록당 2건(미연결 출석 검색 + 생성/갱신)씩 한꺼번에 쏘던 게 429/재시도 폭주로 150초
-    // WallClockTime 타임아웃의 주요 원인이었다 (위 REG_CONCURRENCY 주석 참고). 동시성을 낮추는 게
-    // "안전장치"가 아니라 실제 동시 호출 수 자체를 줄이는 근본 수정이다.
-    const regLoopStartedAt = Date.now()
-    try {
-      await mapWithConcurrency(registrationIds, REG_CONCURRENCY, async (regId) => {
-        const unlinkedCandidates = unlinkedByReg.has(regId) ? [unlinkedByReg.get(regId)] : []
-
-        // (2026-09-24, 분리 큐 재설계) 이 학생 것으로 미리 계산해둔 백필 대상이 있으면
-        // 출석 생성/연결과 같은 쓰기에 얹어서 채운다 — 없으면 아무 것도 안 채우고 그대로
-        // 패스(추가 호출 없음). 실제 마감 연결은 여기서 하지 않고 별도 큐가 한다.
-        const backfillTargets = pendingDeadlineTargets.get(regId)
-        const backfillProps =
-          backfillTargets && backfillTargets.length > 0
-            ? {
-                [PROP_ATTENDANCE_BACKFILL_TARGET]: { relation: backfillTargets.map((id) => ({ id })) },
-                [PROP_ATTENDANCE_BACKFILL_STATUS]: { select: { name: STATUS_QUEUED } },
-              }
-            : {}
-        if (backfillTargets && backfillTargets.length > 0) backfillQueuedCount++
-
-        if (unlinkedCandidates.length > 0) {
-          const candidate = unlinkedCandidates[0]
-          await updatePageProperties(candidate.id, {
-            수업: { relation: [{ id: classPage.id }] },
-            클래스: { relation: [{ id: classId }] },
-            수업일시: { date: { start: startIso, end: endIso } },
-            // 2026-09-16 버그 수정: 시간표 -> 수업까지만 복사되던 담당강사가 출석에는
-            // 전달되지 않고 있었음. 기존 미연결 출석을 새로 연결할 때도 담당강사를 채운다.
-            ...(teacherIds.length ? { 담당강사: { relation: teacherIds.map((id) => ({ id })) } } : {}),
-            ...backfillProps,
-          })
-          log.push(`[linked] ${timetableName}: existing unlinked attendance ${candidate.id} -> reg ${regId} (${nextDate})`)
-        } else {
-          await createPage(DS.attendance, {
-            출석: { title: [{ text: { content: `${nextDate} 출석` } }] },
-            수업일시: { date: { start: startIso, end: endIso } },
-            수업: { relation: [{ id: classPage.id }] },
-            클래스: { relation: [{ id: classId }] },
-            등록: { relation: [{ id: regId }] },
-            // 2026-09-16 버그 수정: 시간표의 담당강사를 출석 생성 시에도 함께 복사한다.
-            ...(teacherIds.length ? { 담당강사: { relation: teacherIds.map((id) => ({ id })) } } : {}),
-            ...backfillProps,
-          })
-        }
-      })
-    } catch (err) {
-      log.push(
-        `[timing] ${timetableName}: 학생별 출석 처리 중 오류 발생 (실패까지 ${Date.now() - regLoopStartedAt}ms, ${registrationIds.length}명, concurrency=${REG_CONCURRENCY})`,
-      )
-      // 출석 생성 중 하나라도 실패하면 이 수업 행의 "생성중"을 끄고 오류를 남긴 뒤 그대로 다시 던진다
-      // (이 예외는 위쪽 호출부의 catch에서 markError(TIMETABLE_STATUS_SPEC)로 시간표 쪽에도 기록된다 — 기존 동작 유지).
-      await markSessionError(classPage.id, (err as Error).message)
-      throw err
-    }
-    log.push(
-      `[timing] ${timetableName}: 학생별 출석 처리 완료 ${Date.now() - regLoopStartedAt}ms (${registrationIds.length}명, concurrency=${REG_CONCURRENCY})`,
-    )
-    await markSessionDone(classPage.id)
-    log.push(`  -> ${registrationIds.length} attendance record(s) created`)
+    log.push(`[created] ${timetableName}: class session created (${nextDate}), 등록 ${registrationIds.length}건 연결 → 출석 조정 큐`)
+    if (registrationIds.length > 0) await enqueueSync("fix-attendance", { pageId: classPage.id })
 
     latestDate = nextDate
     createdCount++
@@ -654,7 +517,6 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
   // (2026-09-24, 분리 큐 재설계) 과제마감 백필은 완전히 별도의 큐/함수(backfill-assignment-deadlines)
   // 이므로 독립적으로 깨운다 — sync_queue 워커와 몰려서 같은 레이트리밋 문제를 재현하지 않도록
   // 이 호출 하나당 최대 1번만 호출한다(위 wakeSyncQueueWorker와 동일한 이유).
-  if (backfillQueuedCount > 0) wakeAssignmentDeadlineWorker()
 
   // (PART N-12 후속 4차) 이 시간표에 아직 더 만들 날짜가 남아있는지 미리보기(다음 날짜 하나만
   // 계산 -- DB 스캔 아니고 이미 메모리에 있는 closures/weekday로 순수 계산)한다. mode.type이
@@ -688,31 +550,6 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
 const BULK_CHAIN_TOTAL_BUDGET_MS = 30 * 60 * 1000 // 30분 -- 극단적으로 많이 밀려있는 경우의 최후 안전장치.
 const BULK_SELF_CALL_TIMEOUT_MS = 60_000 // 자기호출(다음 시간표로 이어달리기) 자체가 응답 없이 멈추는 것을 방지.
 const FUNCTIONS_BASE = `${Deno.env.get("SB_URL") ?? ""}/functions/v1`
-
-// (2026-09-24, 분리 큐 재설계) sync_queue의 wakeSyncQueueWorker(_shared/syncQueue.ts)와 정확히
-// 같은 패턴 -- 실패해도 조용히 로그만 남기고 던지지 않는다(어차피 이 함수 전용 pg_cron 안전망이
-// 나중에 대기열을 다시 찾아 처리한다). generate-classes 전용 로컬 함수로 두는 이유는 다른 함수
-// 폴더들과 같은 관례(TIMETABLE_STATUS_SPEC 등도 로컬 복제)를 따르기 위함이다.
-function wakeAssignmentDeadlineWorker(): void {
-  if (!Deno.env.get("SB_URL")) return
-  const promise = getCurrentAdminKey()
-    .then((adminKey) =>
-      fetch(`${FUNCTIONS_BASE}/backfill-assignment-deadlines`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-key": adminKey },
-        body: JSON.stringify({ source: "wake" }),
-      }),
-    )
-    .catch((err) => {
-      console.error("[wakeAssignmentDeadlineWorker] 워커 즉시 트리거 실패 (pg_cron 안전망이 대신 처리함):", (err as Error)?.message)
-    })
-  const edgeRuntime = (globalThis as Record<string, unknown>).EdgeRuntime as
-    | { waitUntil?: (p: Promise<unknown>) => void }
-    | undefined
-  if (edgeRuntime && typeof edgeRuntime.waitUntil === "function") {
-    edgeRuntime.waitUntil(promise)
-  }
-}
 
 // (2026-09-24, PART N-12 후속 5차 버그 수정) 이 함수가 체인을 이어가는 유일한 연결고리인데,
 // 지금까지 fetch()의 응답 상태(response.ok)를 전혀 확인하지 않았다 -- Supabase 자체 함수
@@ -963,6 +800,17 @@ Deno.serve(async (req: Request) => {
   }
 
   const log: string[] = []
+
+  // (v2.6.12, 웹훅 재정리 3단계) 시간표 DB 자동화("상태"가 ⚪ 대기로 바뀌면 — 메뉴 [다음주 수업 일괄 생성]이 조건에 맞는
+  // 시간표만 대기로 바꿈)가 부르는 경로. 큐에 넣고 바로 202. 워커가 시간표 하나씩 아래 버튼 처리를 끝까지 기다리며 부른다.
+  const route = new URL(req.url).pathname.split("/").pop()
+  if (route === "queue") {
+    if (!timetableId) return new Response(JSON.stringify({ ok: false, error: "시간표 id를 찾지 못했어요." }), { status: 400, headers: { "Content-Type": "application/json" } })
+    await enqueueSync("generate-classes", { timetableId })
+    wakeSyncQueueWorker()
+    return respondAccepted({ timetableId, queued: true })
+  }
+  const waitForResult = (rawBodyForLog as any)?.waitForResult === true
   // Always record what we received, so the response log makes it easy to see the exact
   // payload shape Notion's webhook action sent (helpful for debugging button wiring).
   log.push(`[debug] parsed timetableId=${timetableId ?? "(none)"} rawBody=${describeBody(rawBodyForLog)}`)
@@ -1031,6 +879,34 @@ Deno.serve(async (req: Request) => {
     runInBackground(async () => {
       try {
         const timetables = await queryAllPages(DS.timetable)
+
+        // (v2.6.12) 시간표 수식 "기준일"이 있으면 조회 결과만으로 판단한다(시간표마다 최근 수업·휴원 조회 없음).
+        // 기준일이 가장 이른 주(월~일)를 고르고, 그 주 일요일까지 기준일이 들어오는 시간표만 큐에 넣는다.
+        // 워커가 시간표 하나씩 수업을 만들고(버튼 경로, 기준일 날짜) 출석은 출석 조정 큐가 만든다.
+        // 한 주가 다 차 있으면 다음 빈 주가 골라진다(예전과 같은 "가장 이른 빈 주" 규칙). 수식이 없으면 아래 예전 방식.
+        const baseOf = (t: any): string | null => t.properties?.["기준일"]?.formula?.date?.start?.slice(0, 10) ?? null
+        if (timetables.length > 0 && timetables.every((t: any) => t.properties?.["기준일"] !== undefined)) {
+          const ready = timetables.filter((t: any) => baseOf(t) && relIds(t.properties?.["클래스"]).length > 0 && t.properties?.["요일"]?.select?.name)
+          if (ready.length === 0) {
+            log.push(`[ok] bulk(기준일): 만들 수업이 없어요`)
+            console.log("generate-classes (bulk button) finished:\n", log.join("\n"))
+            if (menuPageId) await markDone(menuPageId, TIMETABLE_STATUS_SPEC)
+            return
+          }
+          // 날짜·등원시간 순으로 넣는다(시간 형식이 틀린 시간표는 그날 맨 끝으로).
+          const startKey = (t: any): string => { try { return timetableStartAt(t, baseOf(t)!) } catch { return baseOf(t)! + "T99" } }
+          const weekStart = ready.map((t: any) => mondayOfWeek(baseOf(t)!)).reduce((a: string, b: string) => (b < a ? b : a))
+          const weekEnd = addDays(weekStart, 6)
+          const targets = ready
+            .filter((t: any) => baseOf(t)! <= weekEnd)
+            .sort((a: any, b: any) => startKey(a).localeCompare(startKey(b)))
+          for (const t of targets) await enqueueSync("generate-classes", { timetableId: t.id })
+          wakeSyncQueueWorker()
+          log.push(`[queued] bulk(기준일): ${weekStart}~${weekEnd} 주, 시간표 ${targets.length}개를 큐에 넣음`)
+          console.log("generate-classes (bulk button) finished:\n", log.join("\n"))
+          if (menuPageId) await markDone(menuPageId, TIMETABLE_STATUS_SPEC)
+          return
+        }
 
         // Week-completeness pre-pass (2026-09-11): find the earliest calendar week (Mon-Sun)
         // that at least one timetable is still missing a session for. This becomes the SHARED
@@ -1111,7 +987,7 @@ Deno.serve(async (req: Request) => {
     }
     await markRunning(timetableId, TIMETABLE_STATUS_SPEC)
 
-    runInBackground(async () => {
+    const work = async (): Promise<boolean> => {
       try {
         await withTimeout(
           processTimetable(timetable, log, { type: "single" }),
@@ -1120,6 +996,7 @@ Deno.serve(async (req: Request) => {
         )
         console.log("generate-classes (button) finished:", timetableId, "\n", log.join("\n"))
         await markDone(timetableId, TIMETABLE_STATUS_SPEC)
+        return true
       } catch (err) {
         console.error(
           "generate-classes (button) failed:",
@@ -1130,8 +1007,15 @@ Deno.serve(async (req: Request) => {
           (err as Error).stack,
         )
         await markError(timetableId, TIMETABLE_STATUS_SPEC, (err as Error)?.message ?? String(err))
+        return false
       }
-    })
+    }
+    // (v2.6.12) 큐 워커(generate-classes 대상)는 끝날 때까지 기다려 시간표를 하나씩 처리한다. 버튼은 예전처럼 바로 202.
+    if (waitForResult) {
+      const ok = await work()
+      return new Response(JSON.stringify({ ok, timetableId }), { status: ok ? 200 : 500, headers: { "Content-Type": "application/json" } })
+    }
+    runInBackground(async () => { await work() })
 
     return respondAccepted({ timetableId })
   }
