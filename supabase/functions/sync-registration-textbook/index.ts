@@ -93,7 +93,7 @@ import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 // 바꿨다 -- 이 라우트(index.ts)의 호출 방식 자체는 바뀌지 않는다. 자세한 내용은
 // _shared/registrationTextbookTarget.ts의 PART N-12 주석 참고.
 
-import { extractPageId, getPage } from "../_shared/notionClient.ts"
+import { extractPageId, getPage, describeBody } from "../_shared/notionClient.ts"
 import {
 	TEXTBOOK_STATUS_SPEC,
 	cleanupUnusedBooksOnEnd,
@@ -305,7 +305,7 @@ Deno.serve(async (req: Request) => {
 		// 빈 바디 허용하지 않음 - 아래에서 pageId 누락으로 에러 처리
 	}
 	// 본문 전체는 남기지 않는다(v2.6.10). Notion 자동화 본문에는 연락처·리포트 토큰 같은 속성이, 예전 버튼 본문에는 adminKey가 들어 있을 수 있다.
-	console.log("sync-registration-textbook request:", route, extractPageId(body) ?? "(pageId 없음)")
+	console.log("sync-registration-textbook request:", route, describeBody(body))
 
 	const adminKey = resolveAdminKeyFromRequest(req, body)
 	const currentAdminKey = securityEnabled() ? "" : await getCurrentAdminKey()

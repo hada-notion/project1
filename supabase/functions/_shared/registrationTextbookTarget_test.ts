@@ -256,3 +256,8 @@ Deno.test("v2.6.10 종료 처리 교재 정리: 그룹 교재의 등록을 다�
  const r = await target.cleanupUnusedBooksOnEnd("a")
  assert(r.unlinked.join() === "template" && !f.writes.some((w: any) => w.id === "template") && ids(f.pages.a, "진도교재") === "" && ids(f.pages.template, "등록") === "b")
 }))
+Deno.test("v2.6.10 로그용 본문 요약은 값을 남기지 않는다", async () => {
+ const { describeBody } = await import("./notionClient.ts")
+ const text = describeBody({ adminKey: "secret-value", data: { id: "11111111111141118111111111111111", properties: { "학생 연락처": { phone_number: "010-0000-0001" } } } })
+ assert(text.includes("pageId=11111111111141118111111111111111") && text.includes("keys=[adminKey,data]") && !text.includes("secret-value") && !text.includes("010-0000-0001"), text)
+})

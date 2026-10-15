@@ -34,7 +34,7 @@ import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 //   POST /sync-textbook-distribution/from-cart         <- 교재비(학원) DB "진도교재 담기" 버튼 (학생 1명, 담기까지 수행)
 //   POST /sync-textbook-distribution/from-class-carts   <- 클래스(학원) DB "교재비 생성" 버튼 (반 전체, 교재비 페이지만 일괄 생성 - 교재 배부는 하지 않음)
 
-import { getPage, extractPageId, relationIds } from "../_shared/notionClient.ts"
+import { getPage, extractPageId, relationIds, describeBody } from "../_shared/notionClient.ts"
 import { respondAccepted } from "../_shared/backgroundTask.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 import { runSyncWebhookForPage } from "../_shared/webhookIngest.ts"
@@ -62,7 +62,7 @@ Deno.serve(async (req: Request) => {
 	} catch {
 		// 빈 바디 허용하지 않음 - 아래에서 pageId 누락으로 에러 처리
 	}
-	console.log("sync-textbook-distribution payload:", route, JSON.stringify(body))
+	console.log("sync-textbook-distribution request:", route, describeBody(body))
 
 	const adminKey = resolveAdminKeyFromRequest(req, body)
 	const currentAdminKey = securityEnabled() ? "" : await getCurrentAdminKey()

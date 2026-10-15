@@ -8,7 +8,7 @@ import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 // 반대 방향 호출(수업·출석·일정 DB 자동화, generate-classes/kiosk-checkin의 직접 적재,
 // nightly-dashboard-link-audit)은 수업 생성 중 Notion API 호출량 때문에 제거했고 다시 연결하지 않는다.
 
-import { extractPageId } from "../_shared/notionClient.ts"
+import { extractPageId, describeBody } from "../_shared/notionClient.ts"
 import { processDashboardLinkQueueItem } from "../_shared/dashboardLinkTarget.ts"
 import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
 
@@ -23,7 +23,7 @@ Deno.serve(async (req: Request) => {
   } catch {
     body = {}
   }
-  console.log("[sync-dashboard-link] received body:", JSON.stringify(body))
+  console.log("[sync-dashboard-link] received:", describeBody(body))
 
   const adminKey = resolveAdminKeyFromRequest(req, body)
   const currentAdminKey = securityEnabled() ? "" : await getCurrentAdminKey()

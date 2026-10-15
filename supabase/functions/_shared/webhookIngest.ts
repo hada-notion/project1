@@ -58,7 +58,7 @@ import { authorizeKey, securityEnabled } from "./adminSecurity.ts"
 // 등)는 전혀 수정할 필요가 없다. 공용 헬퍼를 쓰지 않는 커스텀 3곳(cascade-delete/create-assignment/
 // fix-attendance)도 같은 패턴으로 각각 개별 수정했다.
 
-import { getPage, extractPageId, checkboxValue } from "./notionClient.ts"
+import { getPage, extractPageId, checkboxValue, describeBody } from "./notionClient.ts"
 import { runInBackground, respondAccepted } from "./backgroundTask.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "./syncQueue.ts"
 import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "./adminShared.ts"
@@ -163,7 +163,7 @@ export async function handleLockedQueueWebhook(
   } catch {
     body = {}
   }
-  console.log(`[${opts.functionName}] received body:`, JSON.stringify(body))
+  console.log(`[${opts.functionName}] received:`, describeBody(body))
 
   if (opts.requireAdminKey) {
     const adminKey = resolveAdminKeyFromRequest(req, body)
@@ -252,7 +252,7 @@ export async function handleSyncWebhook(
   } catch {
     body = {}
   }
-  console.log(`[${opts.functionName}] received body:`, JSON.stringify(body))
+  console.log(`[${opts.functionName}] received:`, describeBody(body))
 
   if (opts.requireAdminKey) {
     const adminKey = resolveAdminKeyFromRequest(req, body)
