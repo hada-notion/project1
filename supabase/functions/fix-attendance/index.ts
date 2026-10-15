@@ -45,12 +45,14 @@ import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 // fixAttendanceForClassSession은 EdgeRuntime.waitUntil로 백그라운드에서 계속 진행한 뒤 완료/오류를
 // 반영하도록 바꿨다.
 
-import { extractPageId } from "../_shared/notionClient.ts"
+import { extractPageId, describeBody } from "../_shared/notionClient.ts"
+import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 import {
   markAttendanceFixRunning,
   markAttendanceFixDone,
   markAttendanceFixError,
   fixAttendanceForClassSession,
+  planFromWebhookBody,
 } from "../_shared/fixAttendanceTarget.ts"
 import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
@@ -61,7 +63,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const rawText = await req.text()
-  console.log("fix-attendance raw body:", rawText)
+  // 본문 전체는 남기지 않는다(v2.6.11): 예전 버튼 본문에는 adminKey가, 자동화 본문에는 수업 속성이 들어 있다.
 
   let body: any = {}
   try {
@@ -85,10 +87,21 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({
         ok: false,
         error: "수업 페이지 id를 payload에서 찾지 못하였습니다. raw body를 확인하세요.",
-        receivedBodyPreview: rawText.slice(0, 500),
+        received: describeBody(body),
       }),
       { status: 400, headers: { "Content-Type": "application/json" } },
     )
+  }
+
+  console.log("fix-attendance request:", describeBody(body))
+
+  // (v2.6.11, 웹훅 재정리 2단계) 수업 DB 자동화 "출석조정 상태가 ⚪ 대기로 바뀌면"이 부르는 경로.
+  // 본문의 "출석 조정 정보" 수식(계획)과 클래스·수업일시·담당강사·보강을 큐에 함께 넣는다. 수식이 없으면 워커가 예전 방식으로 처리.
+  if (new URL(req.url).pathname.split("/").pop() === "queue") {
+    const parsed = planFromWebhookBody(body, classSessionId)
+    await enqueueSync("fix-attendance", { pageId: classSessionId, plan: parsed?.plan ?? null, session: parsed?.session ?? null })
+    wakeSyncQueueWorker()
+    return respondAccepted({ classSessionId, queued: true, plan: !!parsed })
   }
 
   await markAttendanceFixRunning(classSessionId)

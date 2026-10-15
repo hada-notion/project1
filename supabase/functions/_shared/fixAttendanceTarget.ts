@@ -25,6 +25,9 @@ import { markRunning, markDone, markError, type StatusSpec } from "./statusTrack
 // 다시 상태(select)+처리 시작 시각으로 전환. 기존 "출석조정 처리중" checkbox는 폐기. 마스터플랜 참고).
 // best-effort로 갱신하며 실패해도 무시한다.
 export const PROP_SHARED_LAST_ERROR = PROP_LAST_ERROR
+// 출석 DB의 "삭제"는 버튼이고, 삭제 자동화(cascade-delete)를 부르는 체크박스는 "삭제 체크"다(v2.6.11 수정 — 예전 코드는
+// "삭제"에 체크를 써서 Notion이 거절했고, 초과·중복 출석 표시가 그 자리에서 오류로 끝났다).
+const PROP_DELETE_CHECK = "삭제 체크"
 
 export const ATTENDANCE_FIX_STATUS_SPEC: StatusSpec = {
   statusProp: "출석조정 상태",
@@ -305,7 +308,7 @@ export async function fixAttendanceForClassSession(
   for (const [regId, atts] of attendanceByRegId) {
     if (activeRegIds.has(regId)) continue
     for (const att of atts) {
-      await updatePageProperties(att.id, { 삭제: { checkbox: true } })
+      await updatePageProperties(att.id, { [PROP_DELETE_CHECK]: { checkbox: true } })
       deletedFlagCount++
       log.push(`[flagged-extra] ${sessionName}: attendance ${att.id} (reg ${regId} not actively enrolled)`)
     }
@@ -321,7 +324,7 @@ export async function fixAttendanceForClassSession(
     )
     const [, ...rest] = sorted
     for (const dup of rest) {
-      await updatePageProperties(dup.id, { 삭제: { checkbox: true } })
+      await updatePageProperties(dup.id, { [PROP_DELETE_CHECK]: { checkbox: true } })
       deletedFlagCount++
       log.push(`[flagged-duplicate] ${sessionName}: attendance ${dup.id} (reg ${regId} duplicate)`)
     }
@@ -330,4 +333,157 @@ export async function fixAttendanceForClassSession(
   if (createdCount === 0 && linkedCount === 0 && deletedFlagCount === 0) {
     log.push(`[ok] ${sessionName}: attendance already matches active registrations, nothing to fix`)
   }
+}
+// ---------- v2.6.11 웹훅 재정리 2단계: 수업의 "출석 조정 정보" 수식으로 조회 없이 처리 ----------
+// 수업(학원) DB 수식 "출석 조정 정보"가 이 수업 날짜에 다녀야 할 등록(시간표의 등록 중 등록일 ≤ 수업일 ≤ 종료일)과
+// 지금 출석을 비교해 JSON 한 줄을 만든다. Notion 자동화("출석조정 상태"가 ⚪ 대기로 바뀌면)가 이 값과 클래스·수업일시·담당강사·
+// 보강을 웹훅 본문에 싣고, 서버는 Notion을 읽지 않고 쓰기만 한다. 수식은 관계 25개 제한이 없다.
+//   { "v":1, "day":"YYYY-MM-DD", "skip":"사유"(있으면 아무것도 안 함),
+//     "add":[{"reg":등록id,"att":같은 날 수업 없는 출석id 또는 "","rec":[이 수업의 학습기록 중 그 등록 것]}],
+//     "del":[명단 밖·중복 출석 id], "roster":[다녀야 할 등록 id](지금 수업 명단과 다를 때만) }
+// Notion 호출: 출석 연결·생성 수 + 삭제 표시 수 + 학생별 과제 마감 확인 + 수업 쓰기 1(명단 + 완료).
+export type FixPlan = {
+	v: 1
+	day?: string
+	skip?: string
+	add: { reg: string; att?: string; rec?: string[] }[]
+	del: string[]
+	roster?: string[]
+}
+export type FixSession = { id: string; classIds: string[]; teacherIds: string[]; start: string | null; end: string | null; makeup: boolean }
+
+const ID = /^[0-9a-f]{32}$/
+const cleanId = (v: unknown): string | null => {
+	const s = String(v ?? "").replace(/-/g, "").toLowerCase()
+	return ID.test(s) ? s : null
+}
+// 수식 값이 아니면(속성이 없거나 형식이 다르면) null → 예전 방식(fixAttendanceForClassSession)으로 처리한다.
+export function planFromText(text: unknown): FixPlan | null {
+	if (typeof text !== "string" || !text.trim()) return null
+	let raw: any
+	try { raw = JSON.parse(text) } catch { return null }
+	if (!raw || raw.v !== 1) return null
+	if (typeof raw.skip === "string" && raw.skip) return { v: 1, skip: raw.skip, add: [], del: [] }
+	if (!Array.isArray(raw.add) || !Array.isArray(raw.del)) return null
+	const add: FixPlan["add"] = []
+	for (const a of raw.add) {
+		const reg = cleanId(a?.reg)
+		if (!reg) return null
+		add.push({ reg, att: cleanId(a?.att) ?? undefined, rec: (Array.isArray(a?.rec) ? a.rec : []).map(cleanId).filter(Boolean) as string[] })
+	}
+	const del = raw.del.map(cleanId)
+	if (del.some((x: string | null) => !x)) return null
+	let roster: string[] | undefined
+	if (raw.roster !== undefined) {
+		if (!Array.isArray(raw.roster)) return null
+		roster = raw.roster.map(cleanId)
+		if (roster!.some((x) => !x)) return null
+	}
+	return { v: 1, day: typeof raw.day === "string" ? raw.day : undefined, add, del, roster }
+}
+
+const propText = (p: any): string => {
+	if (!p) return ""
+	if (p.type === "formula" || p.formula) return String(p.formula?.string ?? "")
+	if (Array.isArray(p.rich_text)) return p.rich_text.map((t: any) => t.plain_text ?? t.text?.content ?? "").join("")
+	return ""
+}
+
+// Notion 자동화 웹훅 본문에서 계획과 수업 정보를 꺼낸다. 하나라도 없으면 null.
+export function planFromWebhookBody(body: any, sessionId: string): { plan: FixPlan; session: FixSession } | null {
+	const p = body?.data?.properties
+	if (!p || typeof p !== "object") return null
+	const plan = planFromText(propText(p["출석 조정 정보"]))
+	if (!plan) return null
+	if (!Array.isArray(p["클래스"]?.relation) || !("수업일시" in p)) return null
+	return {
+		plan,
+		session: {
+			id: sessionId,
+			classIds: relIds(p["클래스"]),
+			teacherIds: relIds(p["담당강사"]),
+			start: p["수업일시"]?.date?.start ?? null,
+			end: p["수업일시"]?.date?.end ?? null,
+			makeup: p["보강"]?.checkbox === true,
+		},
+	}
+}
+
+export async function applyFixPlan(session: FixSession, plan: FixPlan, log: string[], extraSessionProps: Record<string, unknown> = {}) {
+	const finish = async (props: Record<string, unknown>) => {
+		const all = { ...props, ...extraSessionProps }
+		if (Object.keys(all).length) await updatePageProperties(session.id, all)
+	}
+	if (plan.skip || session.makeup) {
+		log.push(`[skip] ${session.id}: ${plan.skip ?? "보강 수업"}`)
+		return await finish({})
+	}
+	if (!session.start || !session.classIds.length) throw new Error("수업일시·클래스가 없어 출석을 맞출 수 없어요.")
+	// 안전장치: 다녀야 할 학생이 0명으로 계산됐는데 출석을 지우라는 계획은 실행하지 않는다(수식 오류일 가능성이 크다 —
+	// 처음 만든 수식이 날짜를 글자로 비교해 모든 출석을 지우라고 계산한 적이 있다). 반 전체 종료는 손으로 정리한다.
+	if (plan.roster && plan.roster.length === 0 && plan.del.length > 0) {
+		throw new Error(`다녀야 할 학생이 0명인데 출석 ${plan.del.length}건을 지우라는 계산이 나왔어요. "출석 조정 정보" 수식을 확인해 주세요. 반 학생이 모두 종료됐다면 출석은 직접 정리해 주세요.`)
+	}
+	const day = plan.day ?? session.start.slice(0, 10)
+	const classId = session.classIds[0]
+	const teacher = session.teacherIds.length ? { 담당강사: { relation: session.teacherIds.map((id) => ({ id })) } } : {}
+
+	// 1) 출석이 없는 등록: 같은 날 수업 없는 출석이 있으면 연결, 없으면 새로 만든다(이 수업 학습기록도 함께).
+	for (const a of plan.add) {
+		if (a.att) {
+			await updatePageProperties(a.att, { 수업: { relation: [{ id: session.id }] }, 클래스: { relation: [{ id: classId }] }, ...teacher })
+			log.push(`[linked] ${session.id}: attendance ${a.att} -> reg ${a.reg}`)
+		} else {
+			await createPage(DS_ATTENDANCE, {
+				출석: { title: [{ text: { content: `${day} 출석` } }] },
+				수업일시: { date: { start: session.start, end: session.end ?? session.start } },
+				수업: { relation: [{ id: session.id }] },
+				클래스: { relation: [{ id: classId }] },
+				등록: { relation: [{ id: a.reg }] },
+				...(a.rec?.length ? { 학습기록: { relation: a.rec.map((id) => ({ id })) } } : {}),
+				...teacher,
+			})
+			log.push(`[created] ${session.id}: attendance for reg ${a.reg}`)
+		}
+		try {
+			await linkPendingAssignmentDeadlines(a.reg, log)
+		} catch (err) {
+			log.push(`[error] linkPendingAssignmentDeadlines(${a.reg}): ${(err as Error).message}`)
+		}
+	}
+	// 2) 명단 밖·중복 출석: 삭제 체크 → 출석마다 삭제 자동화(cascade-delete)
+	for (const id of plan.del) {
+		await updatePageProperties(id, { [PROP_DELETE_CHECK]: { checkbox: true } })
+		log.push(`[flagged] ${session.id}: attendance ${id}`)
+	}
+	// 3) 수업 명단(수식이 다를 때만 보냄) + 완료를 수업 쓰기 한 번에
+	await finish(plan.roster ? { 등록: { relation: plan.roster.map((id) => ({ id })) } } : {})
+	if (!plan.add.length && !plan.del.length && !plan.roster) log.push(`[ok] ${session.id}: 출석이 명단과 같아요`)
+}
+
+// 큐 처리(워커가 한 건씩). 계획이 있으면 쓰기만, 없으면 예전 방식으로 수업을 읽어 맞춘다. 실패하면 오류를 쓰고 큐 재시도.
+export async function processFixAttendanceQueueItem(payload: { pageId: string; plan?: FixPlan | null; session?: FixSession | null }): Promise<void> {
+	const log: string[] = []
+	const done = { [ATTENDANCE_FIX_STATUS_SPEC.statusProp]: { select: { name: "✅ 완료" } }, [ATTENDANCE_FIX_STATUS_SPEC.errorProp]: { rich_text: [] } }
+	try {
+		// 본문에 계획이 없으면 수업 페이지를 한 번 읽어 수식 값을 쓴다. Notion 자동화는 여러 DB를 거치는 수식을
+		// "권한 없는 DB를 참조"한다며 웹훅에 싣지 못하게 막지만, 서버 연결은 페이지 조회로 수식 결과를 받는다.
+		let parsed = payload.plan && payload.session ? { plan: payload.plan, session: payload.session } : null
+		let page: any = null
+		if (!parsed) {
+			page = await getPage(payload.pageId)
+			parsed = planFromWebhookBody({ data: { properties: page.properties } }, payload.pageId)
+		}
+		if (parsed) await applyFixPlan(parsed.session, parsed.plan, log, done)
+		else {
+			// 수식 속성이 없는 운영(아직 v2.6.11 Notion 작업 전)은 예전 방식으로 수업을 읽어 맞춘다.
+			await fixAttendanceForClassSession(payload.pageId, log)
+			await updatePageProperties(payload.pageId, done)
+		}
+	} catch (err) {
+		await markError(payload.pageId, ATTENDANCE_FIX_STATUS_SPEC, (err as Error).message).catch(() => {})
+		throw err
+	} finally {
+		console.log("[fix-attendance] queue finished:", payload.pageId, "\n", log.join("\n"))
+	}
 }
