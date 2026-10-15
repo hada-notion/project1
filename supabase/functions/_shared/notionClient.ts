@@ -487,3 +487,12 @@ export function extractPageId(body: unknown): string | null {
 	}
 	return null
 }
+
+// 로그용 본문 요약(v2.6.10): 페이지 id와 최상위·data 키 이름만. 값은 남기지 않는다 — Notion 자동화 본문에는
+// 연락처·리포트 토큰 같은 속성이, 예전 버튼 본문에는 adminKey가 들어 있을 수 있다.
+export function describeBody(body: unknown): string {
+	if (typeof body !== "object" || body === null) return "(본문 없음)"
+	const obj = body as Record<string, unknown>
+	const data = typeof obj.data === "object" && obj.data !== null ? Object.keys(obj.data as Record<string, unknown>) : []
+	return `pageId=${extractPageId(body) ?? "(없음)"} keys=[${Object.keys(obj).join(",")}]${data.length ? ` data=[${data.join(",")}]` : ""}`
+}

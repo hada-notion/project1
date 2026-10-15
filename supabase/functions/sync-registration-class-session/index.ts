@@ -36,7 +36,7 @@ import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 // 상태"가 실제 완료 전에 사라져 보이던 문제). body 없는 cron 전체 스캔 경로(createSessionsForAllPending)는
 // 그대로 동기 유지한다(원래도 큐를 거치지 않았음).
 
-import { extractPageId, getPage } from "../_shared/notionClient.ts"
+import { extractPageId, getPage, describeBody } from "../_shared/notionClient.ts"
 import {
 	CLASS_SESSION_STATUS_SPEC,
 	createSessionsForAllPending,
@@ -67,7 +67,7 @@ Deno.serve(async (req: Request) => {
 		} catch {
 			body = {}
 		}
-		console.log("[sync-registration-class-session] received body:", JSON.stringify(body))
+		console.log("[sync-registration-class-session] received:", describeBody(body))
 
 		const adminKey = resolveAdminKeyFromRequest(req, body)
 		const currentAdminKey = securityEnabled() ? "" : await getCurrentAdminKey()

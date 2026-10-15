@@ -1,6 +1,6 @@
 // All network calls are mocked. No live Notion/Supabase writes or secret values are used.
 function assert(value: unknown, message = "assertion failed") { if (!value) throw new Error(message) }
-for (const [key, value] of Object.entries({ NOTION_TOKEN: "test-only", ADMIN_SECRET: "test-only", SB_URL: "https://mock.supabase", DATA_SOURCE_PROGRESS_BOOK_ID: "books", DATA_SOURCE_REGISTRATION_ID: "registrations", DATA_SOURCE_LEARNING_RECORD_ID: "records", DATA_SOURCE_CLASS_SESSION_ID: "sessions", DATA_SOURCE_ATTENDANCE_ID: "attendance" })) Deno.env.set(key, value)
+for (const [key, value] of Object.entries({ NOTION_TOKEN: "test-only", ADMIN_SECRET: "test-only", SB_URL: "https://mock.supabase", SB_SERVICE_ROLE_KEY: "test-only", DATA_SOURCE_PROGRESS_BOOK_ID: "books", DATA_SOURCE_REGISTRATION_ID: "registrations", DATA_SOURCE_LEARNING_RECORD_ID: "records", DATA_SOURCE_CLASS_SESSION_ID: "sessions", DATA_SOURCE_ATTENDANCE_ID: "attendance" })) Deno.env.set(key, value)
 const target = await import("./registrationTextbookTarget.ts")
 const learning = await import("./createLearningRecordTarget.ts")
 let handler: (req: Request) => Promise<Response>
@@ -43,14 +43,23 @@ function fixture() {
   const id = url.match(/\/pages\/([^/?]+)/)?.[1]
   if (id) {
    assert(pages[id], "missing mock page " + id)
-   if (init.method === "PATCH") { writes.push({ id, body }); Object.assign(pages[id].properties, body.properties); if (body.archived) pages[id].archived = true }
+   if (init.method === "PATCH") { writes.push({ id, body }); const before = pages[id].properties; const prev = { 진도교재: relOf(before, "진도교재"), 등록: relOf(before, "등록") }; Object.assign(pages[id].properties, body.properties); if (body.archived) pages[id].archived = true; syncPair(id, prev) }
    return reply(pages[id])
   }
   if (url.endsWith("/pages") && init.method === "POST") {
    if (createFailure) return reply({ message: "mock create rejected" }, 400)
-   const page = { id: "created-" + created.length, db: body.parent.data_source_id, properties: body.properties }; pages[page.id] = page; created.push(page); return reply(page)
+   const page = { id: "created-" + created.length, db: body.parent.data_source_id, properties: body.properties }; pages[page.id] = page; created.push(page); syncPair(page.id, { 진도교재: [], 등록: [] }); return reply(page)
   }
   throw new Error("unmocked network request " + url)
+ }
+ // 쓴 쪽의 바뀐 연결만 반대쪽에 반영한다(테스트가 일부러 만든 한쪽 연결 자료는 건드리지 않음).
+ function relOf(props: any, key: string): string[] { return (props?.[key]?.relation ?? []).map((r: any) => r.id) }
+ function syncPair(id: string, prev: { 진도교재: string[]; 등록: string[] }) {
+  const p = pages[id], [mine, other] = p.db === "registrations" ? ["진도교재", "등록"] : p.db === "books" ? ["등록", "진도교재"] : [null, null]
+  if (!mine) return
+  const now = relOf(p.properties, mine), was = (prev as any)[mine] as string[]
+  for (const t of now.filter((x) => !was.includes(x))) { const q = pages[t]; if (q && !relOf(q.properties, other!).includes(id)) q.properties[other!] = { relation: [...relOf(q.properties, other!), id].map((x) => ({ id: x })) } }
+  for (const t of was.filter((x) => !now.includes(x))) { const q = pages[t]; if (q) q.properties[other!] = { relation: relOf(q.properties, other!).filter((x) => x !== id).map((x) => ({ id: x })) } }
  }
  const drain = async () => { for (let i = 0; i < tasks.length; i++) { assert(i < 100, "continuation loop"); await tasks[i] } }
  return { pages, calls, writes, created, tasks, fetch, drain, paginate: (n: number) => { pageLimit = n }, failCreate: () => { createFailure = true } }
@@ -115,9 +124,11 @@ Deno.test("그룹 교재: 클래스 유지·여러 등록 공유·학생별 복�
  await target.createIndividualBooksForRegistration("a"); await target.createIndividualBooksForRegistration("b"); assert(f.created.length===0 && ids(f.pages.template,"등록")==="a,b" && ids(f.pages.template,"클래스")==="class")
  assert((await target.getPendingClassTextbookRegistrations("class")).length===0)
 }))
-Deno.test("그룹 교재 양방향 연결 누락을 판정하고 복구", () => withMock(async f => {
+// v2.6.10: 실제 Notion에서는 하나의 양방향 쌍이라 한쪽만 연결된 상태가 생기지 않는다. 그런 자료가 있으면 등록 쪽에 다시 써서 고친다(템플릿은 쓰지 않음).
+Deno.test("그룹 교재 양방향 연결 누락을 판정하고 등록 쪽 쓰기로 복구", () => withMock(async f => {
  f.pages.template.properties["진도방식"].select.name="그룹 진도"; f.pages.a.properties["진도교재"]=rel("template")
- assert((await target.getPendingClassTextbookRegistrations("class")).some(p=>p.id==="a")); await target.createIndividualBooksForRegistration("a"); assert(ids(f.pages.template,"등록")==="a")
+ assert((await target.getPendingClassTextbookRegistrations("class")).some(p=>p.id==="a")); await target.createIndividualBooksForRegistration("a")
+ assert(!f.writes.some(w=>w.id==="template") && f.writes.some(w=>w.id==="a" && w.body.properties["진도교재"].relation.some((r:any)=>r.id==="template")))
 }))
 Deno.test("그룹/개별 혼합 반은 각각 공유/복사 규칙 적용", () => withMock(async f => {
  f.pages.group=book("group","그룹 진도"); await target.createIndividualBooksForRegistration("a")
@@ -198,3 +209,55 @@ Deno.test("타 학생의 개별교재 존재로 현재 학생 누락을 숨기�
  f.pages.other=book("other","개별 진도",[],["b"],["template"]);f.pages.b.properties["진도교재"]=rel("other"); assert((await target.getPendingClassTextbookRegistrations("class")).map(p=>p.id).join()==="a")
  await target.createIndividualBooksForRegistration("a");assert(f.created.length===1 && ids(f.created[0],"등록")==="a" && !f.writes.some(w=>w.id==="other"))
 }))
+
+const notionCalls = (f: any) => f.calls.filter((c: any) => c.url.startsWith("https://api.notion.com/")).length
+Deno.test("v2.6.10 그룹 교재: 템플릿 등록을 다시 쓰지 않고 등록 쪽에서만 연결(26번째 학생도 앞 연결 유지)", () => withMock(async f => {
+ f.pages.template.properties["진도방식"].select.name = "그룹 진도"
+ const many = Array.from({ length: 25 }, (_, i) => "r" + i)
+ f.pages.template.properties["등록"] = rel(...many)
+ for (const id of many) f.pages[id] = { id, db: "registrations", properties: { "이름": title(id), "클래스": rel("class"), "진도교재": rel("template") } }
+ await target.createIndividualBooksForRegistration("a")
+ assert(!f.writes.some((w: any) => w.id === "template"), "template not rewritten")
+ assert(ids(f.pages.a, "진도교재") === "template" && ids(f.pages.template, "등록").split(",").length === 26, ids(f.pages.template, "등록"))
+}))
+Deno.test("v2.6.10 큐 경로: 웹훅 본문의 클래스·이름으로 페이지 조회 없이 처리, 완료를 등록 쓰기 한 번에", () => withMock(async f => {
+ f.pages.group = book("group", "그룹 진도"); f.pages.template2 = book("template2")
+ useUuidIds(f)
+ const a = f.pages.a, body = { source: { type: "automation" }, data: { object: "page", id: a.id, properties: { "클래스": { type: "relation", relation: [{ id: mockIds.class }], has_more: false }, "이름": a.properties["이름"] } } }
+ const enq: any[] = []
+ const res = await handler(new Request("https://mock.supabase/functions/v1/sync-registration-textbook/queue", { method: "POST", headers: { "x-admin-key": "test-only" }, body: JSON.stringify(body) }))
+ assert(res.status === 202)
+ const q = f.calls.find((c: any) => c.url.endsWith("/rest/v1/sync_queue")); assert(q && q.body[0].target === "sync-registration-textbook" && q.body[0].payload.snapshot.classId === mockIds.class && q.body[0].payload.snapshot.name === "김철수 중3 A", JSON.stringify(q?.body))
+ assert(notionCalls(f) === 0, "enqueue reads nothing from Notion")
+ const before = notionCalls(f)
+ await target.processRegistrationTextbookQueueItem(q.body[0].payload)
+ const used = f.calls.slice(f.calls.findIndex((c: any) => c === q) + 1).filter((c: any) => c.url.startsWith("https://api.notion.com/"))
+ // 클래스 교재 조회 1 + 이 등록 교재 조회 1 + 라이브러리 1 + 개별교재 생성 2 + 등록 쓰기 1 = 6 (페이지 조회 없음)
+ assert(!used.some((c: any) => c.method === "GET" && c.url.includes("/pages/" + a.id)), "no registration page read")
+ assert(notionCalls(f) - before === 6, "calls " + (notionCalls(f) - before) + " " + used.map((c: any) => c.method + " " + c.url.replace("https://api.notion.com/v1", "")).join(" | "))
+ const regWrites = f.writes.filter((w: any) => w.id === a.id); assert(regWrites.length === 1 && regWrites[0].body.properties["교재 상태"].select.name === "✅ 완료")
+ assert(f.created.length === 2 && ids(a, "진도교재").split(",").length === 3 && ids(f.pages.group, "등록") === a.id)
+ // 다시 실행: 만들 것이 없으면 완료 쓰기 1번만
+ const n = f.writes.length; await target.processRegistrationTextbookQueueItem(q.body[0].payload); assert(f.created.length === 2 && f.writes.length === n + 1)
+}))
+Deno.test("v2.6.10 큐 경로 실패: 오류 상태를 쓰고 큐 재시도를 위해 예외를 다시 던짐", () => withMock(async f => {
+ f.failCreate(); let threw = false
+ try { await target.processRegistrationTextbookQueueItem({ pageId: "a", snapshot: { id: "a", classId: "class", name: "김철수 중3 A" } }) } catch { threw = true }
+ assert(threw && f.pages.a.properties["교재 상태"].select.name === "⚠️ 오류")
+}))
+Deno.test("v2.6.10 본문에 클래스·이름이 없으면 페이지를 읽는다", () => withMock(async f => {
+ assert(target.snapshotFromWebhookBody({ pageId: "a" }, "a") === null)
+ assert(target.snapshotFromWebhookBody({ data: { properties: { "클래스": { relation: [] }, "이름": { title: [] } } } }, "a")?.classId === null)
+}))
+Deno.test("v2.6.10 종료 처리 교재 정리: 그룹 교재의 등록을 다시 쓰지 않고 등록 쪽에서만 뺀다", () => withMock(async f => {
+ f.pages.template.properties["진도방식"].select.name = "그룹 진도"
+ f.pages.b.properties["진도교재"] = rel("template"); f.pages.template.properties["등록"] = rel("b")
+ await target.createIndividualBooksForRegistration("a")
+ const r = await target.cleanupUnusedBooksOnEnd("a")
+ assert(r.unlinked.join() === "template" && !f.writes.some((w: any) => w.id === "template") && ids(f.pages.a, "진도교재") === "" && ids(f.pages.template, "등록") === "b")
+}))
+Deno.test("v2.6.10 로그용 본문 요약은 값을 남기지 않는다", async () => {
+ const { describeBody } = await import("./notionClient.ts")
+ const text = describeBody({ adminKey: "secret-value", data: { id: "11111111111141118111111111111111", properties: { "학생 연락처": { phone_number: "010-0000-0001" } } } })
+ assert(text.includes("pageId=11111111111141118111111111111111") && text.includes("keys=[adminKey,data]") && !text.includes("secret-value") && !text.includes("010-0000-0001"), text)
+})

@@ -29,6 +29,7 @@ import {
 	updatePageProperties,
 	relIds,
 	withTimeout,
+	describeBody,
 } from "../_shared/notionClient.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 import {
@@ -964,7 +965,7 @@ Deno.serve(async (req: Request) => {
   const log: string[] = []
   // Always record what we received, so the response log makes it easy to see the exact
   // payload shape Notion's webhook action sent (helpful for debugging button wiring).
-  log.push(`[debug] parsed timetableId=${timetableId ?? "(none)"} rawBody=${JSON.stringify(rawBodyForLog)}`)
+  log.push(`[debug] parsed timetableId=${timetableId ?? "(none)"} rawBody=${describeBody(rawBodyForLog)}`)
 
   if (isBulkButton) {
     // (0) 메뉴 DB "다음주 수업 일괄 생성" 버튼 call: scan ALL timetables and backfill sessions
@@ -981,7 +982,7 @@ Deno.serve(async (req: Request) => {
       if (!contHorizonDate || contChainStartedAt === undefined) {
         console.error(
           "generate-classes (bulk continuation): 잘못된 이어달리기 body:",
-          JSON.stringify(rawBodyForLog),
+          describeBody(rawBodyForLog),
         )
         return respondAccepted({ mode: "bulk", warning: "invalid continuation body" })
       }
@@ -1140,7 +1141,7 @@ Deno.serve(async (req: Request) => {
   // 배포 단계라 예약실행을 최대한 줄이는 방향에 맞춰 제거했다 -- timetableId도 mode=bulk도
   // 없는 호출은 이제 명확한 에러로 응답한다.
   log.push(`[error] invalid request: no timetableId and mode != bulk`)
-  console.error("generate-classes: invalid request (no timetableId, mode!=bulk):", JSON.stringify(rawBodyForLog))
+  console.error("generate-classes: invalid request (no timetableId, mode!=bulk):", describeBody(rawBodyForLog))
   return new Response(
     JSON.stringify(
       { ok: false, error: "invalid_request: timetableId 또는 ?mode=bulk 가 필요합니다 (자동/크론 모드는 제거됨)", log },
