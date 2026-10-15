@@ -60,3 +60,22 @@ Deno.test("실제 버튼 핸들러: 월수금 날짜순 수업 생성 → 출석
   const before=f.created.length;await handler(new Request("https://mock.supabase/functions/v1/generate-classes?mode=bulk",{method:"POST",headers:{"x-admin-key":"test-only"},body:JSON.stringify({isContinuation:true,menuPageId:"menu",horizonDate:"2026-10-18",chainStartedAt:Date.now(),bulkPlan:[]})}));await f.drain();assert(f.created.length===before)
  }finally{globalThis.fetch=originalFetch;delete(globalThis as any).EdgeRuntime}
 })
+Deno.test("v2.6.12 시간표 자동화: queue는 큐에만 넣고, 워커는 기준일 수식 날짜로 수업 1개를 끝까지 기다려 만든다",async()=>{
+ const f=mock(),originalFetch=globalThis.fetch;globalThis.fetch=f.fetch as typeof fetch;(globalThis as any).EdgeRuntime={waitUntil:(p:Promise<unknown>)=>f.tasks.push(p)}
+ try{
+  const { processGenerateClassesQueueItem } = await import("../_shared/generateClassesQueue.ts")
+  const q=await handler(new Request("https://mock.supabase/functions/v1/generate-classes/queue",{method:"POST",headers:{"x-admin-key":"test-only"},body:JSON.stringify({source:{type:"automation"},data:{object:"page",id:"mon",properties:{}}})}))
+  assert(q.status===202)
+  const enq=f.calls.filter(c=>c.url.endsWith("/rest/v1/sync_queue")).map(c=>c.body[0]);assert(enq.length===1&&enq[0].target==="generate-classes"&&enq[0].payload.timetableId==="mon",JSON.stringify(enq))
+  assert(!f.calls.some(c=>c.url.includes("api.notion.com")),"queue reads nothing")
+  // 시간표 수식 기준일(휴원을 건너뛴 날짜라고 가정) → 그 날짜로 만든다
+  f.pages.mon.properties["기준일"]={type:"formula",formula:{type:"date",date:{start:"2026-10-19"}}}
+  const before=f.calls.length
+  await processGenerateClassesQueueItem({timetableId:"mon"})
+  const used=f.calls.slice(before).filter(c=>c.url.includes("/data_sources/"))
+  assert(!used.some(c=>c.url.includes("/data_sources/sessions/")||c.url.includes("/data_sources/events/")),"no latest-session / closure query with 기준일")
+  const s=f.created.filter(p=>p.db==="sessions");assert(s.length===1&&s[0].properties["수업일시"].date.start.startsWith("2026-10-19T20:00"),JSON.stringify(s.map(p=>p.properties["수업일시"])))
+  assert(f.pages.mon.properties["상태"].select.name==="✅ 완료")
+  assert(f.calls.filter(c=>c.url.endsWith("/rest/v1/sync_queue")).at(-1).body[0].target==="fix-attendance","attendance via fix-attendance queue")
+ }finally{globalThis.fetch=originalFetch;delete(globalThis as any).EdgeRuntime}
+})

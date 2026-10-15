@@ -412,7 +412,10 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
   // withTimeout이 중간에 포기해도 이미 push된 항목은 그 시점의 오류 로그에 그대로 남으므로,
   // "어느 항목까지는 찍혔고 그 다음이 없는지"로 막힌 구간을 알 수 있다.
   const setupStartedAt = Date.now()
-  let latestDate = await getLatestClassDate(timetableId)
+  // (v2.6.12) 버튼(single) 처리에서 시간표 수식 "기준일"(최근 수업 다음 요일, 휴원 건너뜀)이 있으면 그 날짜로 만든다.
+  // Notion [수업추가] 버튼이 직접 만드는 수업과 날짜가 같아지고, 최근 수업·휴원 조회 2회를 건너뛴다.
+  const baseFormula: string | null = mode.type === "single" ? (props["기준일"]?.formula?.date?.start ?? null) : null
+  let latestDate = baseFormula ? null : await getLatestClassDate(timetableId)
   let createdCount = 0
 
   // Perf (2026-09-11): closures, class name, and the registration list don't change across
@@ -420,7 +423,7 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
   // from Notion on EVERY iteration (i.e. once per session created). Fetching them once up
   // front removes most of the redundant network calls that made a multi-session backfill (the
   // first-ever "일주일 일괄 생성" run) slow.
-  const closures = await getClosurePeriods(classId)
+  const closures = baseFormula ? [] : await getClosurePeriods(classId)
   const { name: className, teacherIds } = await getClassInfo(classId)
   const weekdayKr = WEEKDAY_KR[weekday]
   const timetableRegs = await getTimetableRegistrations(timetableId)
@@ -443,7 +446,7 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
   // 이 시간표를 다시 "대기열"에 넣고, 다음 체인 스텝이 최신 latestDate 기준으로 이어서 만들게
   // 한다 (한 주씩 이어달리기). single/cron 호출 경로는 이 반환값을 그냥 무시하므로 동작이 그대로다.
   const baseDate = latestDate ? addDays(latestDate, 1) : today
-  const nextDate = findNextClassDate(baseDate, weekday, closures)
+  const nextDate = baseFormula ? baseFormula.slice(0, 10) : findNextClassDate(baseDate, weekday, closures)
 
   // Cron/extend mode: don't create a session that falls beyond horizonDate.
   const withinHorizon = horizonDate === null || nextDate <= horizonDate
@@ -797,6 +800,17 @@ Deno.serve(async (req: Request) => {
   }
 
   const log: string[] = []
+
+  // (v2.6.12, 웹훅 재정리 3단계) 시간표 DB 자동화("상태"가 ⚪ 대기로 바뀌면 — 메뉴 [다음주 수업 일괄 생성]이 조건에 맞는
+  // 시간표만 대기로 바꿈)가 부르는 경로. 큐에 넣고 바로 202. 워커가 시간표 하나씩 아래 버튼 처리를 끝까지 기다리며 부른다.
+  const route = new URL(req.url).pathname.split("/").pop()
+  if (route === "queue") {
+    if (!timetableId) return new Response(JSON.stringify({ ok: false, error: "시간표 id를 찾지 못했어요." }), { status: 400, headers: { "Content-Type": "application/json" } })
+    await enqueueSync("generate-classes", { timetableId })
+    wakeSyncQueueWorker()
+    return respondAccepted({ timetableId, queued: true })
+  }
+  const waitForResult = (rawBodyForLog as any)?.waitForResult === true
   // Always record what we received, so the response log makes it easy to see the exact
   // payload shape Notion's webhook action sent (helpful for debugging button wiring).
   log.push(`[debug] parsed timetableId=${timetableId ?? "(none)"} rawBody=${describeBody(rawBodyForLog)}`)
@@ -945,7 +959,7 @@ Deno.serve(async (req: Request) => {
     }
     await markRunning(timetableId, TIMETABLE_STATUS_SPEC)
 
-    runInBackground(async () => {
+    const work = async (): Promise<boolean> => {
       try {
         await withTimeout(
           processTimetable(timetable, log, { type: "single" }),
@@ -954,6 +968,7 @@ Deno.serve(async (req: Request) => {
         )
         console.log("generate-classes (button) finished:", timetableId, "\n", log.join("\n"))
         await markDone(timetableId, TIMETABLE_STATUS_SPEC)
+        return true
       } catch (err) {
         console.error(
           "generate-classes (button) failed:",
@@ -964,8 +979,15 @@ Deno.serve(async (req: Request) => {
           (err as Error).stack,
         )
         await markError(timetableId, TIMETABLE_STATUS_SPEC, (err as Error)?.message ?? String(err))
+        return false
       }
-    })
+    }
+    // (v2.6.12) 큐 워커(generate-classes 대상)는 끝날 때까지 기다려 시간표를 하나씩 처리한다. 버튼은 예전처럼 바로 202.
+    if (waitForResult) {
+      const ok = await work()
+      return new Response(JSON.stringify({ ok, timetableId }), { status: ok ? 200 : 500, headers: { "Content-Type": "application/json" } })
+    }
+    runInBackground(async () => { await work() })
 
     return respondAccepted({ timetableId })
   }
