@@ -351,7 +351,7 @@ async function mapWithConcurrency<T, R = void>(
 type ProcessMode =
   // Button (manual, single) mode: always creates exactly ONE new session right after the
   // latest existing one, regardless of whether that latest session is already in the future.
-  | { type: "single" }
+  | { type: "single"; expectedDate?: string }
   // Bulk button (manual, "다음주 수업 일괄 생성") mode: keep creating sessions
   // (oldest-missing-first) until one exists on/after horizonDate. horizonDate is recomputed
   //   fresh on EVERY click as the Sunday of the earliest calendar week that at least one
@@ -447,6 +447,12 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
   // 한다 (한 주씩 이어달리기). single/cron 호출 경로는 이 반환값을 그냥 무시하므로 동작이 그대로다.
   const baseDate = latestDate ? addDays(latestDate, 1) : today
   const nextDate = baseFormula ? baseFormula.slice(0, 10) : findNextClassDate(baseDate, weekday, closures)
+  // (v2.6.13) 큐가 "이 날짜를 만들라"고 넘겼는데 기준일이 이미 그 뒤라면, 앞선 시도가 실제로는 수업을 만든 것이다.
+  // 그대로 진행하면 한 주치를 더 만들게 되므로 건너뛴다.
+  if (mode.type === "single" && mode.expectedDate && nextDate > mode.expectedDate) {
+    log.push(`[skip] ${timetableName}: ${mode.expectedDate} 수업은 이미 만들어짐(기준일 ${nextDate})`)
+    return { done: true }
+  }
 
   // Cron/extend mode: don't create a session that falls beyond horizonDate.
   const withinHorizon = horizonDate === null || nextDate <= horizonDate
@@ -811,6 +817,7 @@ Deno.serve(async (req: Request) => {
     return respondAccepted({ timetableId, queued: true })
   }
   const waitForResult = (rawBodyForLog as any)?.waitForResult === true
+  const expectedDate = typeof (rawBodyForLog as any)?.expectedDate === "string" ? (rawBodyForLog as any).expectedDate as string : undefined
   // Always record what we received, so the response log makes it easy to see the exact
   // payload shape Notion's webhook action sent (helpful for debugging button wiring).
   log.push(`[debug] parsed timetableId=${timetableId ?? "(none)"} rawBody=${describeBody(rawBodyForLog)}`)
@@ -900,7 +907,7 @@ Deno.serve(async (req: Request) => {
           const targets = ready
             .filter((t: any) => baseOf(t)! <= weekEnd)
             .sort((a: any, b: any) => startKey(a).localeCompare(startKey(b)))
-          for (const t of targets) await enqueueSync("generate-classes", { timetableId: t.id })
+          for (const t of targets) await enqueueSync("generate-classes", { timetableId: t.id, date: baseOf(t) })
           wakeSyncQueueWorker()
           log.push(`[queued] bulk(기준일): ${weekStart}~${weekEnd} 주, 시간표 ${targets.length}개를 큐에 넣음`)
           console.log("generate-classes (bulk button) finished:\n", log.join("\n"))
@@ -990,7 +997,7 @@ Deno.serve(async (req: Request) => {
     const work = async (): Promise<boolean> => {
       try {
         await withTimeout(
-          processTimetable(timetable, log, { type: "single" }),
+          processTimetable(timetable, log, { type: "single", expectedDate }),
           PROCESS_TIMETABLE_TIMEOUT_MS,
           `processTimetable(${timetableId})`,
         )

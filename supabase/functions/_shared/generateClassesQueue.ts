@@ -4,14 +4,15 @@
 // 시간표 하나씩 차례로 처리돼 Notion 호출이 몰리지 않는다. 출석은 그 뒤 출석 조정 큐가 만든다.
 import { getCurrentAdminKey } from "./adminShared.ts"
 
-export async function processGenerateClassesQueueItem(payload: { timetableId: string }): Promise<void> {
+// date: 일괄 생성이 판단한 그 시간표의 기준일. 재시도 때 기준일이 이미 지났으면(수업이 실제로는 만들어짐) 건너뛴다.
+export async function processGenerateClassesQueueItem(payload: { timetableId: string; date?: string }): Promise<void> {
 	const base = Deno.env.get("SB_URL")
 	if (!base) throw new Error("SB_URL이 없어 수업을 만들 수 없어요.")
 	const key = await getCurrentAdminKey()
 	const res = await fetch(`${base}/functions/v1/generate-classes`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json", "x-admin-key": key },
-		body: JSON.stringify({ timetableId: payload.timetableId, waitForResult: true }),
+		body: JSON.stringify({ timetableId: payload.timetableId, waitForResult: true, ...(payload.date ? { expectedDate: payload.date } : {}) }),
 		signal: AbortSignal.timeout(90_000),
 	})
 	const text = await res.text().catch(() => "")

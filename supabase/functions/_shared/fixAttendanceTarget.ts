@@ -21,6 +21,7 @@ import {
 import { markRunning, markDone, markError, type StatusSpec } from "./statusTracking.ts"
 import { type DeadlineIO, pendingDeadlinesForRegistrations } from "./assignmentDeadline.ts"
 import { getCurrentAdminKey } from "./adminShared.ts"
+import { enqueueSync } from "./syncQueue.ts"
 
 // 수업(학원) DB의 "출석조정 상태"(select) + "마지막 오류" 텍스트 필드로 진행 상황을 표시한다
 // (2026-09-11: 공유 select "동기화 상태"에서 체크박스로 마이그레이션 -> 2026-09-22, Phase 3에서
@@ -431,6 +432,13 @@ export async function processFixAttendanceQueueItem(payload: { pageId: string; p
 			await updatePageProperties(payload.pageId, done)
 		}
 	} catch (err) {
+		// (v2.6.13) 본문에 실려 온 계획으로 하다 실패했으면, 같은 계획으로 다시 하지 않는다(이미 만든 출석을 또 만들 수 있음).
+		// 계획 없는 새 항목을 넣어 다음 처리 때 수업 페이지를 새로 읽고 정말 빠진 것만 맞춘다. 페이지를 읽은 경우는 큐 재시도.
+		if (payload.plan) {
+			console.error("[fix-attendance] 본문 계획으로 처리 중 실패 → 페이지를 새로 읽는 항목으로 다시 넣음:", payload.pageId, (err as Error).message)
+			await enqueueSync("fix-attendance", { pageId: payload.pageId })
+			return
+		}
 		await markError(payload.pageId, ATTENDANCE_FIX_STATUS_SPEC, (err as Error).message).catch(() => {})
 		throw err
 	} finally {
