@@ -101,7 +101,9 @@ import {
 	CLASS_TEXTBOOK_STATUS_SPEC,
 	getPendingClassTextbookRegistrations,
 	createBooksForOneRegistrationWithStatus,
+	snapshotFromWebhookBody,
 } from "../_shared/registrationTextbookTarget.ts"
+import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 import { runSyncWebhookForPage } from "../_shared/webhookIngest.ts"
 import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
@@ -326,6 +328,13 @@ Deno.serve(async (req: Request) => {
 			return new Response(JSON.stringify({ error: "pageId를 찾을 수 없음" }), { status: 400 })
 		}
 
+		// (v2.6.10, 웹훅 재정리 1단계) 등록 DB 자동화 "교재 상태가 ⚪ 대기로 바뀌면"이 부르는 경로.
+		// 페이지를 읽지 않고(본문의 클래스·이름을 큐에 함께 저장) 바로 큐에 넣는다. 처리는 process-sync-queue가 한 건씩.
+		if (route === "queue") {
+			await enqueueSync("sync-registration-textbook", { pageId, snapshot: snapshotFromWebhookBody(body, pageId) })
+			wakeSyncQueueWorker()
+			return respondAccepted({ pageId, queued: true })
+		}
 		if (route === "create-individual") {
 			return await runSyncWebhookForPage(pageId, {
 				functionName: "sync-registration-textbook",

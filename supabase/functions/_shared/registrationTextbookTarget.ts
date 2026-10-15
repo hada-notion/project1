@@ -95,8 +95,9 @@ import {
 	formulaString,
 	mapWithConcurrency,
 } from "./notionClient.ts"
-import { type StatusSpec, markRunning, markDone, markError } from "./statusTracking.ts"
+import { type StatusSpec, markRunning, markError, STATUS_DONE } from "./statusTracking.ts"
 import { LIBRARY_PROP, libraryIds, libraryKey } from "./libraryProp.ts"
+import { libraryCopyReady, readBooks } from "./libraryCopy.ts"
 
 // (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) "교재 처리중" 체크박스(등록 DB, create-individual
 // 라우트 전용) → "교재 상태"(select) + "교재 처리 시작 시각"(date). 마스터플랜:
@@ -139,119 +140,132 @@ function fullBookTitle(page: any, name: string): string {
 	return (page?.properties?.[name]?.title ?? []).map((part: any) => part.plain_text ?? part.text?.content ?? "").join("")
 }
 
-// 반별교재(템플릿) 하나를 보고, 이 등록에 연결할 개별교재 인스턴스를 확보한다.
-// - 그룹 진도: 반 전체가 인스턴스 "하나"를 공유한다. 이미 이 템플릿의 인스턴스가 있으면
-//   새로 만들지 않고 그 인스턴스에 이 등록을 추가로 연결(등록 relation에 추가)만 한다.
-// - 개별 진도: 학생(등록)마다 자기만의 인스턴스를 갖는다. 이미 (이 등록 + 이 템플릿)
-//   조합의 인스턴스가 있으면 건너뛰고, 없으면 새로 만든다.
-// 주의: 등록 페이지의 "진도교재" relation은 여기서 건드리지 않는다. 여러 템플릿을 동시에
-// 처리할 때 각자 등록 페이지를 read-modify-write 하면 서로 덮어써서 일부가 유실되는
-// 문제가 있었기 때문에, 호출부(createIndividualBooksForRegistration)에서 결과를 모아
-// 마지막에 한 번만 반영한다.
-//
-// (PART N-11) 이 함수 자체는 "그룹 진도 템플릿의 등록 relation"에 대해 여전히 read-modify-write를
-// 한다 -- 그런데 그 템플릿 하나를 "같은 클래스의 여러 등록"이 공유하므로, 등록 여러 건을 동시에
-// 처리하면 이 read-modify-write끼리 경쟁해서 유실이 생긴다(실제로 재현된 버그). 그래서 이제
-// index.ts의 클래스 "교재 생성" 이어달리기는 등록을 절대 동시에 처리하지 않는다(완전 순차) --
-// 이 함수 내부 로직은 그대로 두되, 호출부가 등록을 하나씩만 넘기도록 보장해서 안전하게 만든다.
-async function resolveInstanceForTemplate(registration: any, templatePage: any) {
-	const registrationId = registration.id as string
-	const templateId = templatePage.id
-	const mode = selectName(templatePage, PROP_PROGRESS_MODE) ?? "그룹 진도"
+// (v2.6.10, 웹훅 재정리 1단계) 등록 쪽에서 한 번만 쓴다.
+// 등록.진도교재와 진도교재.등록은 하나의 양방향 관계라, 등록의 "진도교재"를 쓰면 템플릿·개별교재의 "등록"은
+// Notion이 맞춘다. 예전에는 그룹 템플릿의 "등록"을 읽고-고치고-다시 썼는데, 페이지 조회는 관계를 25개까지만
+// 돌려줘서 25명이 넘는 반에서는 다시 쓸 때 나머지 연결이 지워질 수 있었다. 이제 템플릿 쪽은 쓰지 않는다.
+// Notion 호출: (등록 조회 1, 웹훅 본문에 클래스·이름이 있으면 0) + 클래스 교재 조회 1 + 이 등록의 교재 조회 1
+// + 없는 개별교재 생성 + 등록 쓰기 1. 이 등록의 교재 조회가 관계 25개 제한 없이 지금 연결 전체를 준다.
+// bookIds: 페이지에서 읽은 등록의 "진도교재"(25개 미만일 때만 믿는다). 웹훅 본문에는 없다.
+export type RegistrationSnapshot = { id: string; classId: string | null; name: string; bookIds?: string[] }
 
-	// 그룹 진도: 반별교재(템플릿) 페이지 자체가 곧 반 전체가 쓰는 "그 교재"이다 - 별도 인스턴스를
-	// 찾거나 만들지 않고, 이 등록을 템플릿 자체의 "등록" relation에만 추가로 연결한다.
-	if (mode === "그룹 진도") {
-		const registrationIds = relationIds(templatePage, PROP_REGISTRATION_ON_BOOK)
-		if (!registrationIds.includes(registrationId)) {
-			await updatePageProperties(templateId, {
-				[PROP_REGISTRATION_ON_BOOK]: { relation: [...registrationIds, registrationId].map((id) => ({ id })) },
-			})
-		}
-		return { instanceId: templateId, linked: true }
-	} else {
-		const already = await queryDataSource(DATA_SOURCE_PROGRESS_BOOK, {
-			filter: {
-				and: [
-					{ property: PROP_REGISTRATION_ON_BOOK, relation: { contains: registrationId } },
-					{ property: PROP_TEMPLATE_RELATION, relation: { contains: templateId } },
-				],
-			},
-			page_size: 1,
-		})
-		if (already.results.length > 0) return { instanceId: already.results[0].id, linked: true }
-	}
-
-	const regularBookIds = libraryIds(templatePage)
-	// 개별교재의 주인은 등록이며, 반별교재는 복사 출처다. 기준 교재의 클래스/제목을
-	// 복사하지 않는다. 자동화 설정 전에도 새 교재는 같은 네이밍으로 생성한다.
-	const regularBookPage = regularBookIds[0] ? await getPage(regularBookIds[0]) : null
-	const bookName = regularBookPage ? (fullBookTitle(regularBookPage, "교재명") || "라이브러리 연결 필요") : "라이브러리 연결 필요"
-	const registrationName = fullBookTitle(registration, "이름")
-	const individualTitle = `${bookName}(${registrationName})`
-
-	const properties: Record<string, unknown> = {
-		[PROP_BOOK_TITLE]: { title: [{ text: { content: individualTitle } }] },
-		[PROP_TEMPLATE_RELATION]: { relation: [{ id: templateId }] },
-		[PROP_PROGRESS_MODE]: { select: { name: mode } },
-		// 새 인스턴스는 아직 진도를 시작하지 않았으니 "다음 교재"로 생성한다.
-		// 실제로 진도를 시작할 때 사용자가 "진행 중"으로 수동 전환한다.
-		[PROP_PROGRESS_STATUS]: { status: { name: STATUS_NEXT } },
-		[PROP_REGISTRATION_ON_BOOK]: { relation: [{ id: registrationId }] },
-	}
-	// 라이브러리 관계 이름은 템플릿(같은 진도교재 DB)에 있는 이름을 그대로 쓴다(새 이름 "라이브러리", 옛 이름 "정규교재").
-	if (regularBookIds.length > 0) properties[libraryKey(templatePage) ?? LIBRARY_PROP] = { relation: [{ id: regularBookIds[0] }] }
-	// PROP_CLASS_ON_BOOK 는 새 개별교재에 설정하지 않는다. 기존 행의 클래스는 변경하지 않는다.
-
-	const page = await createPage(DATA_SOURCE_PROGRESS_BOOK, properties)
-	return { instanceId: page.id, created: true }
+export function snapshotFromRegistrationPage(page: any): RegistrationSnapshot {
+	return { id: page.id as string, classId: relationIds(page, PROP_CLASS)[0] ?? null, name: fullBookTitle(page, "이름"), bookIds: relationIds(page, PROP_REGISTRATION_BOOKS) }
 }
 
-// 등록에 연결된 클래스의 반별교재(템플릿) 전체를 그룹/개별 진도 규칙에 따라 연결하거나 생성한다.
-// 클래스가 없거나 템플릿이 하나도 없으면 건너뛴다 (에러로 취급하지 않음 - 클래스 세팅 전에도
-// 버튼을 눌러볼 수 있어야 하며, 그 경우 안내만 반환한다).
-export async function createIndividualBooksForRegistration(registrationId: string) {
-	const registration = await getPage(registrationId)
-	const classIds = relationIds(registration, PROP_CLASS)
-	if (classIds.length === 0) return { skipped: "클래스가 아직 연결되어 있지 않음" }
+// Notion 자동화 웹훅 본문(data.properties)에서 등록의 클래스·이름을 꺼낸다. 둘 중 하나라도 없으면 null(페이지를 읽는다).
+export function snapshotFromWebhookBody(body: any, pageId: string): RegistrationSnapshot | null {
+	const props = body?.data?.properties
+	if (!props || typeof props !== "object") return null
+	const cls = props[PROP_CLASS], name = props["이름"]
+	if (!Array.isArray(cls?.relation) || !Array.isArray(name?.title)) return null
+	return { id: pageId, classId: cls.relation[0]?.id ?? null, name: fullBookTitle({ properties: { 이름: name } }, "이름") }
+}
 
-	// (PART N-7) 클래스 페이지를 getPage로 읽어서 그 안의 "진도교재" relation을 쓰면 25개까지만
-	// 돌아온다 (Notion 페이지 조회 API의 relation 절단 제약). "진도교재"는 "클래스"<->"진도교재"
-	// 양방향 관계라서 인스턴스가 생길 때마다 이 목록에도 자동으로 끼어들기 때문에, 개별 지도처럼
-	// 학생이 쌓이는 클래스는 금방 25개를 넘기고 그 뒤 진짜 템플릿 일부가 조용히 누락된다. 그 대신
-	// 진도교재 데이터소스를 "클래스 = 이 클래스"로 직접 쿼리한다 - queryAllPages가 커서를 끝까지
-	// 따라가므로 개수 제한 없이 전부 가져온다.
+// 교재명: 라이브러리 복사본이 준비됐으면 Supabase에서(Notion 호출 0), 아니면 라이브러리 페이지를 읽는다.
+async function libraryTitles(ids: string[]): Promise<Map<string, string>> {
+	const out = new Map<string, string>()
+	if (!ids.length) return out
+	if (await libraryCopyReady()) {
+		try {
+			for (const b of await readBooks(ids)) if (b.title) out.set(b.id, b.title)
+		} catch (err) {
+			console.error("[registrationTextbook] 라이브러리 복사본 읽기 실패(Notion을 읽음):", (err as Error).message)
+		}
+	}
+	const missing = ids.filter((id) => !out.has(id))
+	const pages = await mapWithConcurrency(missing, 3, (id) => getPage(id).catch(() => null))
+	pages.forEach((p, i) => { const t = p ? fullBookTitle(p, "교재명") : ""; if (t) out.set(missing[i], t) })
+	return out
+}
+
+// 이 등록에 연결된 진도교재 전체(관계 25개 제한 없이)
+async function booksOfRegistration(registrationId: string): Promise<any[]> {
+	return await queryAllPages(DATA_SOURCE_PROGRESS_BOOK, { property: PROP_REGISTRATION_ON_BOOK, relation: { contains: registrationId } })
+}
+
+type CreateOptions = {
+	// 큐 처리: 등록 쓰기에 함께 넣을 속성(교재 상태 완료 등). 있으면 바뀐 것이 없어도 한 번 쓴다.
+	extraProps?: Record<string, unknown>
+}
+
+export async function createIndividualBooksForRegistration(registrationId: string, snapshot?: RegistrationSnapshot, opts: CreateOptions = {}) {
+	const reg = snapshot ?? snapshotFromRegistrationPage(await getPage(registrationId))
+	const finish = async (props: Record<string, unknown>) => {
+		const all = { ...props, ...(opts.extraProps ?? {}) }
+		if (Object.keys(all).length) await updatePageProperties(registrationId, all)
+	}
+	if (!reg.classId) { await finish({}); return { skipped: "클래스가 아직 연결되어 있지 않음" } }
+
 	const candidates = await queryAllPages(DATA_SOURCE_PROGRESS_BOOK, {
 		property: PROP_CLASS_ON_BOOK,
-		relation: { contains: classIds[0] },
+		relation: { contains: reg.classId },
 	})
-	if (candidates.length === 0) return { skipped: "클래스에 반별교재(템플릿)가 아직 없음 - 먼저 진도교재 DB에서 템플릿을 만들어 클래스에 연결하세요" }
-
-	// 구형 개별 인스턴스나 학생에게 직접 만든 교재를 반의 배포 기준으로 오인하지 않는다.
 	const templatePages = candidates.filter(isClassTextbookTemplate)
+	if (candidates.length === 0) { await finish({}); return { skipped: "클래스에 반별교재(템플릿)가 아직 없음 - 먼저 진도교재 DB에서 템플릿을 만들어 클래스에 연결하세요" } }
 	if (templatePages.length === 0) {
+		await finish({})
 		return { skipped: "클래스에 연결된 진도교재 중 진짜 템플릿이 없음 (전부 이미 생성된 개별교재 인스턴스로 보임)" }
 	}
 
-	const results = await mapWithConcurrency(templatePages, 4, (templatePage) => resolveInstanceForTemplate(registration, templatePage))
-
-	// 등록의 "진도교재" relation은 여기서 한 번만 최신 상태를 읽어서 반영한다 (동시 처리로 인한
-	// read-modify-write 유실 방지).
-	const freshRegistration = await getPage(registrationId)
-	const existingBookIds = relationIds(freshRegistration, PROP_REGISTRATION_BOOKS)
-	const newIds = results.map((r) => r.instanceId).filter((id) => !existingBookIds.includes(id))
-	if (newIds.length > 0) {
-		await updatePageProperties(registrationId, {
-			[PROP_REGISTRATION_BOOKS]: { relation: [...existingBookIds, ...newIds].map((id) => ({ id })) },
-		})
+	const owned = await booksOfRegistration(registrationId)
+	const ownedIds = owned.map((p: any) => p.id as string)
+	const linkIds: string[] = []
+	const toCreate: any[] = []
+	const results: { instanceId: string; linked?: boolean; created?: boolean }[] = []
+	for (const t of templatePages) {
+		const mode = selectName(t, PROP_PROGRESS_MODE) ?? "그룹 진도"
+		if (mode === "그룹 진도") {
+			if (!ownedIds.includes(t.id)) linkIds.push(t.id)
+			results.push({ instanceId: t.id, linked: true })
+			continue
+		}
+		const instance = owned.find((p: any) => relationIds(p, PROP_TEMPLATE_RELATION).includes(t.id))
+		if (instance) results.push({ instanceId: instance.id, linked: true })
+		else toCreate.push(t)
 	}
 
+	const titles = await libraryTitles([...new Set(toCreate.map((t) => libraryIds(t)[0]).filter(Boolean) as string[])])
+	const created = await mapWithConcurrency(toCreate, 3, async (t: any) => {
+		const libId = libraryIds(t)[0]
+		const bookName = (libId && titles.get(libId)) || "라이브러리 연결 필요"
+		const properties: Record<string, unknown> = {
+			[PROP_BOOK_TITLE]: { title: [{ text: { content: `${bookName}(${reg.name})` } }] },
+			[PROP_TEMPLATE_RELATION]: { relation: [{ id: t.id }] },
+			[PROP_PROGRESS_MODE]: { select: { name: selectName(t, PROP_PROGRESS_MODE) ?? "개별 진도" } },
+			[PROP_PROGRESS_STATUS]: { status: { name: STATUS_NEXT } },
+			[PROP_REGISTRATION_ON_BOOK]: { relation: [{ id: registrationId }] },
+		}
+		if (libId) properties[libraryKey(t) ?? LIBRARY_PROP] = { relation: [{ id: libId }] }
+		const page = await createPage(DATA_SOURCE_PROGRESS_BOOK, properties)
+		return page.id as string
+	})
+	for (const id of created) results.push({ instanceId: id, created: true })
+
+	// 개별교재는 만들 때 "등록"을 넣었으므로 양방향 관계로 이미 연결돼 있다. 그래도 등록 쓰기에 함께 넣어
+	// (같은 요청 하나) 쌍이 아닌 옛 구성에서도 연결되게 한다.
+	const next = [...new Set([...ownedIds, ...linkIds, ...created])]
+	// 페이지에서 읽은 등록 쪽 목록에 빠진 교재가 있으면(예전 한쪽만 연결된 자료) 함께 고친다.
+	const known = reg.bookIds && reg.bookIds.length < 25 ? reg.bookIds : null
+	const changed = linkIds.length > 0 || created.length > 0 || (known !== null && next.some((id) => !known.includes(id)))
+	await finish(changed || opts.extraProps ? { [PROP_REGISTRATION_BOOKS]: { relation: next.map((id) => ({ id })) } } : {})
 	return { results }
 }
 
-// 클래스에 연결된 등록 중 현재 "🟢 수강 중"인 등록만 반환한다. (PART N-8) 보고서 생성/수강료 생성/
-// 교재비 생성처럼 "학생수" 수식과 같은 기준으로 대상을 정한다 -- 종료된 학생은 새로 교재를 만들
-// 필요가 없기 때문이다.
+// (v2.6.10) Notion 자동화 "교재 상태가 ⚪ 대기로 바뀌면" 웹훅 → sync_queue → 이 함수(워커가 한 건씩).
+// 작업중 쓰기 없이, 결과와 "✅ 완료"를 등록 쓰기 한 번에 넣는다. 실패하면 "⚠️ 오류"를 쓰고 큐 재시도에 맡긴다(다시 실행해도 중복 생성 없음).
+export async function processRegistrationTextbookQueueItem(payload: { pageId: string; snapshot?: RegistrationSnapshot | null }): Promise<void> {
+	try {
+		const result = await createIndividualBooksForRegistration(payload.pageId, payload.snapshot ?? undefined, {
+			extraProps: { [TEXTBOOK_STATUS_SPEC.statusProp]: { select: { name: STATUS_DONE } }, [TEXTBOOK_STATUS_SPEC.errorProp]: { rich_text: [] } },
+		})
+		console.log("[sync-registration-textbook] queue finished:", payload.pageId, JSON.stringify(result))
+	} catch (err) {
+		await markError(payload.pageId, TEXTBOOK_STATUS_SPEC, (err as Error).message).catch(() => {})
+		throw err
+	}
+}
+
 async function getActiveRegistrationsForClassNow(classId: string): Promise<any[]> {
 	const registrations = await queryAllPages(DS_REGISTRATION, {
 		property: PROP_CLASS,
@@ -355,8 +369,9 @@ export async function createBooksForOneRegistrationWithStatus(
 	const label = registrationLabel(reg)
 	try {
 		await markRunning(reg.id, TEXTBOOK_STATUS_SPEC)
-		const result: any = await createIndividualBooksForRegistration(reg.id)
-		await markDone(reg.id, TEXTBOOK_STATUS_SPEC)
+		const result: any = await createIndividualBooksForRegistration(reg.id, snapshotFromRegistrationPage(reg), {
+			extraProps: { [TEXTBOOK_STATUS_SPEC.statusProp]: { select: { name: STATUS_DONE } }, [TEXTBOOK_STATUS_SPEC.errorProp]: { rich_text: [] } },
+		})
 		const note = result && typeof result.skipped === "string" ? result.skipped : `처리 ${result?.results?.length ?? 0}건`
 		return { id: reg.id, label, ok: true, note }
 	} catch (err) {
@@ -371,15 +386,17 @@ export async function createBooksForOneRegistrationWithStatus(
 // 개별 진도 -> 인스턴스 페이지 자체를 아카이브
 // 그 외(진행 중/완료 상태이거나 학습기록이 있음)는 절대 건드리지 않고 그대로 둔다.
 export async function cleanupUnusedBooksOnEnd(registrationId: string) {
-	const registration = await getPage(registrationId)
-	const bookIds = relationIds(registration, PROP_REGISTRATION_BOOKS)
+	// (v2.6.10) 이 등록의 교재는 관계 25개 제한 없이 조회하고, 그룹 교재는 등록 쪽에서만 뺀다(양방향 관계라 교재의
+	// "등록"은 Notion이 맞춤). 예전처럼 그룹 교재의 "등록"을 읽고-고치고-다시 쓰면 25명이 넘는 반에서 연결이 지워졌다.
+	const books = await booksOfRegistration(registrationId)
+	const bookIds = books.map((b: any) => b.id as string)
 	const unlinked: string[] = []
 	const deleted: string[] = []
 	const kept: string[] = []
 	let remaining = bookIds
 
-	for (const bookId of bookIds) {
-		const book = await getPage(bookId)
+	for (const book of books) {
+		const bookId = book.id as string
 		const mode = selectName(book, PROP_PROGRESS_MODE)
 		const status = statusName(book, PROP_PROGRESS_STATUS)
 		const hasRecords = relationIds(book, PROP_LEARNING_RECORD).length > 0
@@ -392,12 +409,7 @@ export async function cleanupUnusedBooksOnEnd(registrationId: string) {
 		if (mode === "그룹 진도") {
 			remaining = remaining.filter((id) => id !== bookId)
 			unlinked.push(bookId)
-			// 그룹 진도 교재는 반 전체가 공유하므로, 이 등록만 해당 교재의 "등록" relation에서 뺀다
-			// (인스턴스 자체는 다른 학생들이 계속 쓰므로 보존).
-			const bookRegistrationIds = relationIds(book, PROP_REGISTRATION_ON_BOOK).filter((id) => id !== registrationId)
-			await updatePageProperties(bookId, {
-				[PROP_REGISTRATION_ON_BOOK]: { relation: bookRegistrationIds.map((id) => ({ id })) },
-			})
+			// 그룹 진도 교재는 반 전체가 공유하므로 교재는 그대로 두고, 이 등록의 "진도교재"에서만 뺀다(아래 등록 쓰기).
 		} else {
 			await archivePage(bookId)
 			deleted.push(bookId)
