@@ -79,3 +79,20 @@ Deno.test("v2.6.12 시간표 자동화: queue는 큐에만 넣고, 워커는 기
   assert(f.calls.filter(c=>c.url.endsWith("/rest/v1/sync_queue")).at(-1).body[0].target==="fix-attendance","attendance via fix-attendance queue")
  }finally{globalThis.fetch=originalFetch;delete(globalThis as any).EdgeRuntime}
 })
+Deno.test("v2.6.12 메뉴 일괄 생성(기준일): 가장 이른 빈 주만, 시간표 DB 한 번 조회로 큐에 넣고 워커가 하나씩 만든다",async()=>{
+ const f=mock(),originalFetch=globalThis.fetch;globalThis.fetch=f.fetch as typeof fetch;(globalThis as any).EdgeRuntime={waitUntil:(p:Promise<unknown>)=>f.tasks.push(p)}
+ try{
+  const { processGenerateClassesQueueItem } = await import("../_shared/generateClassesQueue.ts")
+  const base=(d:string)=>({type:"formula",formula:{type:"date",date:{start:d}}})
+  // 월 10/26, 금 10/30은 같은 주(10/26~11/1), 수는 휴원으로 11/4 → 이번에는 빠진다
+  f.pages.mon.properties["기준일"]=base("2026-10-26");f.pages.wed.properties["기준일"]=base("2026-11-04");f.pages.fri.properties["기준일"]=base("2026-10-30")
+  const r=await handler(new Request("https://mock.supabase/functions/v1/generate-classes?mode=bulk",{method:"POST",headers:{"x-admin-key":"test-only"},body:JSON.stringify({id:"menu"})}));assert(r.status===202);await f.drain()
+  const enq=f.calls.filter(c=>c.url.endsWith("/rest/v1/sync_queue")).map(c=>c.body[0])
+  assert(enq.map(q=>q.target+":"+q.payload.timetableId).join()==="generate-classes:mon,generate-classes:fri",JSON.stringify(enq))
+  assert(!f.calls.some(c=>c.url.includes("/data_sources/sessions/")||c.url.includes("/data_sources/events/")),"no per-timetable latest/closure queries")
+  assert(f.calls.filter(c=>c.url.includes("/data_sources/timetables/")).length===1,"one timetable query")
+  assert(f.pages.menu.properties["상태"].select.name==="✅ 완료"&&f.created.length===0)
+  for(const q of enq)await processGenerateClassesQueueItem(q.payload)
+  const days=f.created.filter(p=>p.db==="sessions").map(p=>p.properties["수업일시"].date.start.slice(0,10));assert(days.join()==="2026-10-26,2026-10-30",days.join())
+ }finally{globalThis.fetch=originalFetch;delete(globalThis as any).EdgeRuntime}
+})

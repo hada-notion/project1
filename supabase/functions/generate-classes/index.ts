@@ -880,6 +880,34 @@ Deno.serve(async (req: Request) => {
       try {
         const timetables = await queryAllPages(DS.timetable)
 
+        // (v2.6.12) 시간표 수식 "기준일"이 있으면 조회 결과만으로 판단한다(시간표마다 최근 수업·휴원 조회 없음).
+        // 기준일이 가장 이른 주(월~일)를 고르고, 그 주 일요일까지 기준일이 들어오는 시간표만 큐에 넣는다.
+        // 워커가 시간표 하나씩 수업을 만들고(버튼 경로, 기준일 날짜) 출석은 출석 조정 큐가 만든다.
+        // 한 주가 다 차 있으면 다음 빈 주가 골라진다(예전과 같은 "가장 이른 빈 주" 규칙). 수식이 없으면 아래 예전 방식.
+        const baseOf = (t: any): string | null => t.properties?.["기준일"]?.formula?.date?.start?.slice(0, 10) ?? null
+        if (timetables.length > 0 && timetables.every((t: any) => t.properties?.["기준일"] !== undefined)) {
+          const ready = timetables.filter((t: any) => baseOf(t) && relIds(t.properties?.["클래스"]).length > 0 && t.properties?.["요일"]?.select?.name)
+          if (ready.length === 0) {
+            log.push(`[ok] bulk(기준일): 만들 수업이 없어요`)
+            console.log("generate-classes (bulk button) finished:\n", log.join("\n"))
+            if (menuPageId) await markDone(menuPageId, TIMETABLE_STATUS_SPEC)
+            return
+          }
+          // 날짜·등원시간 순으로 넣는다(시간 형식이 틀린 시간표는 그날 맨 끝으로).
+          const startKey = (t: any): string => { try { return timetableStartAt(t, baseOf(t)!) } catch { return baseOf(t)! + "T99" } }
+          const weekStart = ready.map((t: any) => mondayOfWeek(baseOf(t)!)).reduce((a: string, b: string) => (b < a ? b : a))
+          const weekEnd = addDays(weekStart, 6)
+          const targets = ready
+            .filter((t: any) => baseOf(t)! <= weekEnd)
+            .sort((a: any, b: any) => startKey(a).localeCompare(startKey(b)))
+          for (const t of targets) await enqueueSync("generate-classes", { timetableId: t.id })
+          wakeSyncQueueWorker()
+          log.push(`[queued] bulk(기준일): ${weekStart}~${weekEnd} 주, 시간표 ${targets.length}개를 큐에 넣음`)
+          console.log("generate-classes (bulk button) finished:\n", log.join("\n"))
+          if (menuPageId) await markDone(menuPageId, TIMETABLE_STATUS_SPEC)
+          return
+        }
+
         // Week-completeness pre-pass (2026-09-11): find the earliest calendar week (Mon-Sun)
         // that at least one timetable is still missing a session for. This becomes the SHARED
         // horizon for this click, so timetables that already have extra weeks pre-made ahead
