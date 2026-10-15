@@ -1,10 +1,10 @@
 // End-to-end handler test with every network boundary mocked; never writes real Notion/Supabase.
 import { reconcileDeadline } from "../_shared/assignmentDeadline.ts"
 function assert(v: unknown,msg="assertion failed"){if(!v)throw new Error(msg)}
-for(const [name,value] of Object.entries({ADMIN_SECRET:"test-only",SB_URL:"https://mock.supabase",NOTION_TOKEN:"mock",DATA_SOURCE_TIMETABLE_ID:"timetables",DATA_SOURCE_CLASS_SESSION_ID:"sessions",DATA_SOURCE_CLASS_ID:"classes",DATA_SOURCE_ATTENDANCE_ID:"attendance",DATA_SOURCE_REGISTRATION_ID:"registrations",DATA_SOURCE_SCHEDULE_EVENT_ID:"events",DATA_SOURCE_STUDY_ACTIVITY_ID:"activities"}))Deno.env.set(name,value)
+for(const [name,value] of Object.entries({ADMIN_SECRET:"test-only",SB_URL:"https://mock.supabase",SB_SERVICE_ROLE_KEY:"test-only",NOTION_TOKEN:"mock",DATA_SOURCE_TIMETABLE_ID:"timetables",DATA_SOURCE_CLASS_SESSION_ID:"sessions",DATA_SOURCE_CLASS_ID:"classes",DATA_SOURCE_ATTENDANCE_ID:"attendance",DATA_SOURCE_REGISTRATION_ID:"registrations",DATA_SOURCE_SCHEDULE_EVENT_ID:"events",DATA_SOURCE_STUDY_ACTIVITY_ID:"activities"}))Deno.env.set(name,value)
 let handler: (r:Request)=>Promise<Response>
 const serve=Deno.serve;(Deno as any).serve=(h:any)=>{handler=h;return {}}
-await import("./index.ts");(Deno as any).serve=serve
+await import("./index.ts");const { processFixAttendanceQueueItem } = await import("../_shared/fixAttendanceTarget.ts");(Deno as any).serve=serve
 const rel=(id?:string)=>({relation:id?[{id}]:[]})
 const txt=(s:string)=>({rich_text:[{plain_text:s,text:{content:s}}]})
 function mock(){
@@ -24,7 +24,7 @@ function mock(){
    if(db==="sessions"){const tid=body.filter.relation.contains;return result(Object.values(pages).filter((p:any)=>p.db==="sessions"&&p.properties["시간표"].relation[0].id===tid).sort((a:any,b:any)=>b.properties["수업일시"].date.start.localeCompare(a.properties["수업일시"].date.start)).slice(0,1))}
    if(db==="events")return result([])
    if(db==="registrations")return result(["a","b"].map(id=>({id,properties:{}})))
-   if(db==="activities"){const reg=body.filter.and[0].relation.contains;return result([pages["task-"+reg]])}
+   if(db==="activities"){const f0=body.filter.and[0];const regs=f0.or?f0.or.map((x:any)=>x.relation.contains):[f0.relation.contains];return result(regs.map((r:string)=>pages["task-"+r]).filter(Boolean))}
    if(db==="attendance")return result([])
    throw new Error("unknown mock database "+db)
   }
@@ -35,13 +35,23 @@ function mock(){
  }
  return {pages,created,calls,fetch,tasks,drain:async()=>{for(let i=0;i<tasks.length;i++){assert(i<100,"chain did not stop");await tasks[i]}}}
 }
-Deno.test("실제 버튼 핸들러: 월수금 날짜순 생성·학생별 백필·역순 워커 실행·재실행 검증",async()=>{
+Deno.test("실제 버튼 핸들러: 월수금 날짜순 수업 생성 → 출석 조정 큐 → 학생별 출석·백필·역순 워커·재실행 검증",async()=>{
  const f=mock(),originalFetch=globalThis.fetch;globalThis.fetch=f.fetch as typeof fetch;(globalThis as any).EdgeRuntime={waitUntil:(p:Promise<unknown>)=>f.tasks.push(p)}
  try{
   const unauth=await handler(new Request("https://mock.supabase/functions/v1/generate-classes?mode=bulk",{method:"POST",body:"{}"}));assert(unauth.status===401&&f.created.length===0)
   const response=await handler(new Request("https://mock.supabase/functions/v1/generate-classes?mode=bulk",{method:"POST",headers:{"x-admin-key":"test-only"},body:JSON.stringify({id:"menu"})}));assert(response.status===202);await f.drain()
   const sessions=f.created.filter(p=>p.db==="sessions");assert(sessions.map(p=>p.properties["수업일시"].date.start.slice(0,10)).join()==="2026-10-12,2026-10-14,2026-10-16","wrong order "+JSON.stringify(sessions));assert(f.pages.menu.properties["상태"].select.name==="✅ 완료")
+  // v2.6.12: 수업추가는 수업만 명단과 함께 만들고(완료 상태) 출석은 만들지 않는다. 수업마다 출석 조정 큐에 한 건.
+  assert(f.created.filter(p=>p.db==="attendance").length===0,"no attendance from generate-classes")
+  assert(sessions.every(p=>p.properties["등록"].relation.map((r:any)=>r.id).join()==="a,b"&&p.properties["생성 상태"].select.name==="✅ 완료"))
+  const queued=f.calls.filter(c=>c.url.endsWith("/rest/v1/sync_queue")).map(c=>c.body[0]);assert(queued.length===3&&queued.every(q=>q.target==="fix-attendance")&&queued.map(q=>q.payload.pageId).join()===sessions.map(p=>p.id).join(),JSON.stringify(queued))
+  // 워커: Notion이 계산한 "출석 조정 정보"(명단 a,b 모두 출석 없음)를 수업 페이지에 두고 큐를 처리한다.
+  for(const p of sessions)p.properties["출석 조정 정보"]={type:"formula",formula:{type:"string",string:JSON.stringify({v:1,day:p.properties["수업일시"].date.start.slice(0,10),add:[{reg:"a",att:"",rec:[]},{reg:"b",att:"",rec:[]}],del:[]})}}
+  for(const q of queued)await processFixAttendanceQueueItem(q.payload)
   const attends=f.created.filter(p=>p.db==="attendance");assert(attends.length===6)
+  assert(sessions.every(p=>p.properties["출석조정 상태"].select.name==="✅ 완료"))
+  // 대기 과제는 수업마다 한 번에 조회(학생마다 조회하지 않음)
+  assert(f.calls.filter(c=>c.url.includes("/data_sources/activities/query")).length===3,"one deadline query per session")
   for(const p of attends)assert(p.properties["과제마감 백필 대상"].relation.map((r:any)=>r.id).join()==="task-"+p.properties["등록"].relation[0].id,"cross-student queue target")
   // Execute the same policy used by the actual worker against all attendance pages now present.
   const io={getPage:async(id:string)=>structuredClone(f.pages[id]),activityDb:"activities",attendanceDb:"attendance",query:async(_db:string,b:any)=>({results:attends.filter(p=>p.properties["등록"].relation[0].id===b.filter.and[0].relation.contains&&Date.parse(p.properties["수업일시"].date.start)>Date.parse(b.filter.and[1].date.after)).sort((a,b)=>Date.parse(a.properties["수업일시"].date.start)-Date.parse(b.properties["수업일시"].date.start)),has_more:false}),update:async(id:string,props:any)=>Object.assign(f.pages[id].properties,props)}

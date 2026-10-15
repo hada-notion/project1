@@ -19,6 +19,8 @@ import {
 } from "./constants.ts"
 // (2026-09-21, 이식성 리팩토링) 아래 4개 데이터소스 ID는 constants.ts로 이동함 — 그 파일 상단 주석 참고.
 import { markRunning, markDone, markError, type StatusSpec } from "./statusTracking.ts"
+import { type DeadlineIO, pendingDeadlinesForRegistrations } from "./assignmentDeadline.ts"
+import { getCurrentAdminKey } from "./adminShared.ts"
 
 // 수업(학원) DB의 "출석조정 상태"(select) + "마지막 오류" 텍스트 필드로 진행 상황을 표시한다
 // (2026-09-11: 공유 select "동기화 상태"에서 체크박스로 마이그레이션 -> 2026-09-22, Phase 3에서
@@ -77,75 +79,27 @@ function addDays(dateStr: string, days: number): string {
 }
 
 // ---- 학습활동(학원) DB: 대기 중인 과제 마감 백필 ----
-// [PART N-11, 2026-09-23] generate-classes/index.ts에 있던 linkPendingAssignmentDeadlines를
-// 여기로 가져왔다. 배경: generate-classes의 일괄 생성 체인이 "수업 생성"과 "출석 생성"을 완전히
-// 분리하면서(사용자 요청), 수업 생성 시점에는 출석이 아직 없어서 이 로직이 그때는 못 돈다 -- 대신
-// 출석이 실제로 만들어지는 이 시점(fixAttendanceForClassSession, 아래)에서 함께 처리해야
-// 맞다. 개별 "출석 조정" 버튼에도 이 안전망이 함께 적용되는 효과가 있다(기존엔 없었음, 개선).
-const PROP_ACTIVITY_CATEGORY = "구분"
-const PROP_ACTIVITY_REGISTRATION = "등록"
-const PROP_ACTIVITY_ATTENDANCE = "출석"
-const PROP_ACTIVITY_RECORD = "학습기록"
-const PROP_ACTIVITY_DEADLINE = "과제 마감"
-const CATEGORY_ASSIGNMENT = "과제"
-const PROP_RECORD_DATE = "수업일" // 학습기록(학원) DB
-const PROP_ATTENDANCE_REGISTRATION = "등록" // 출석(학원) DB
-const PROP_ATTENDANCE_CLASS_DATETIME = "수업일시" // 출석(학원) DB
-
-// 등록 1건에 대해, "과제 마감"이 아직 비어있는 과제 학습활동들을 찾아서 그 학생의 다음 수업(출석)이
-// 새로 생겨났는지 확인하고 있으면 연결한다. 출제 당시엔 다음 수업이 없어서 마감을 못 잡았던 경우,
-// 나중에 출석이 생성될 때(이 함수가 호출될 때) 자동으로 채워지도록 하는 안전망이다.
-async function linkPendingAssignmentDeadlines(regId: string, log: string[]) {
-  const pending = await queryDataSource(DS_STUDY_ACTIVITY, {
-    filter: {
-      and: [
-        { property: PROP_ACTIVITY_REGISTRATION, relation: { contains: regId } },
-        { property: PROP_ACTIVITY_CATEGORY, select: { equals: CATEGORY_ASSIGNMENT } },
-        { property: PROP_ACTIVITY_DEADLINE, relation: { is_empty: true } },
-      ],
-    },
-    page_size: 100,
-  })
-  if (pending.results.length === 0) return
-
-  let linked = 0
-  for (const activity of pending.results as any[]) {
-    let issueDate: string | null = null
-    const attendanceIds = relIds(activity.properties[PROP_ACTIVITY_ATTENDANCE])
-    if (attendanceIds.length > 0) {
-      const attendancePage = await getPage(attendanceIds[0])
-      issueDate = dateStart(attendancePage, PROP_ATTENDANCE_CLASS_DATETIME)
-    }
-    if (!issueDate) {
-      const recordIds = relIds(activity.properties[PROP_ACTIVITY_RECORD])
-      if (recordIds.length > 0) {
-        const recordPage = await getPage(recordIds[0])
-        issueDate = dateStart(recordPage, PROP_RECORD_DATE)
-      }
-    }
-    if (!issueDate) continue
-
-    const nextAttendance = await queryDataSource(DS_ATTENDANCE, {
-      filter: {
-        and: [
-          { property: PROP_ATTENDANCE_REGISTRATION, relation: { contains: regId } },
-          { property: PROP_ATTENDANCE_CLASS_DATETIME, date: { after: issueDate } },
-        ],
-      },
-      sorts: [{ property: PROP_ATTENDANCE_CLASS_DATETIME, direction: "ascending" }],
-      page_size: 1,
-    })
-    const nextId = nextAttendance.results[0]?.id
-    if (!nextId) continue
-
-    await updatePageProperties(activity.id, {
-      [PROP_ACTIVITY_DEADLINE]: { relation: [{ id: nextId }] },
-    })
-    linked++
-  }
-  if (linked > 0) {
-    log.push(`📌 대기 중이던 과제 마감 ${linked}건을 새로 생긴 수업에 연결함 (등록 ${regId})`)
-  }
+// (v2.6.12) 수업추가(generate-classes)와 같은 방식으로 맞춘다: 새 출석(또는 연결한 출석)의 "과제마감 백필 대상"에
+// 그 학생의 대기 과제를 넣고 "⏳ 대기열"로 두면 backfill-assignment-deadlines 큐가 "자동 마감 기준"을 지키며 연결한다.
+// 예전 linkPendingAssignmentDeadlines는 학생마다 활동·출석을 하나씩 읽어 바로 연결했고, 자동 마감 기준을 보지 않았다.
+const PROP_ATTENDANCE_BACKFILL_TARGET = "과제마감 백필 대상"
+const PROP_ATTENDANCE_BACKFILL_STATUS = "과제마감 백필 상태"
+const deadlineIO: DeadlineIO = { getPage, query: queryDataSource, update: updatePageProperties, attendanceDb: DS_ATTENDANCE, activityDb: DS_STUDY_ACTIVITY }
+const normId = (id: string) => id.replace(/-/g, "").toLowerCase()
+function backfillProps(targets: string[] | undefined): Record<string, unknown> {
+  return targets && targets.length
+    ? { [PROP_ATTENDANCE_BACKFILL_TARGET]: { relation: targets.map((id) => ({ id })) }, [PROP_ATTENDANCE_BACKFILL_STATUS]: { select: { name: "⏳ 대기열" } } }
+    : {}
+}
+// 대기열에 넣은 백필을 바로 처리하도록 워커를 깨운다(실패해도 pg_cron이 10분마다 처리).
+function wakeDeadlineWorker(): void {
+  const base = Deno.env.get("SB_URL")
+  if (!base) return
+  const p = getCurrentAdminKey()
+    .then((key) => fetch(`${base}/functions/v1/backfill-assignment-deadlines`, { method: "POST", headers: { "Content-Type": "application/json", "x-admin-key": key }, body: JSON.stringify({ source: "wake" }) }))
+    .catch((err) => console.error("[fix-attendance] 과제 마감 워커 깨우기 실패(예약 실행이 처리):", (err as Error)?.message))
+  const rt = (globalThis as any).EdgeRuntime
+  if (rt && typeof rt.waitUntil === "function") rt.waitUntil(p)
 }
 
 export async function fixAttendanceForClassSession(
@@ -255,8 +209,10 @@ export async function fixAttendanceForClassSession(
   let deletedFlagCount = 0
 
   // --- Missing: active registration with no attendance on this class session ---
-  for (const regId of activeRegIds) {
-    if (attendanceByRegId.has(regId)) continue
+  const missingRegIds = [...activeRegIds].filter((id) => !attendanceByRegId.has(id))
+  const deadlines = missingRegIds.length ? await pendingDeadlinesForRegistrations(deadlineIO, missingRegIds) : new Map<string, string[]>()
+  for (const regId of missingRegIds) {
+    const backfill = backfillProps(deadlines.get(normId(regId)))
 
     // Look for an existing attendance page for this registration, same calendar day,
     // not yet linked to any class session.
@@ -277,6 +233,7 @@ export async function fixAttendanceForClassSession(
         클래스: { relation: [{ id: classId }] },
         // 2026-09-16 버그 수정: 기존 미연결 출석을 새로 연결할 때도 담당강사를 채운다.
         ...(teacherIds.length ? { 담당강사: { relation: teacherIds.map((id) => ({ id })) } } : {}),
+        ...backfill,
       })
       linkedCount++
       log.push(`[linked] ${sessionName}: existing unlinked attendance ${candidate.id} -> reg ${regId}`)
@@ -289,20 +246,13 @@ export async function fixAttendanceForClassSession(
         등록: { relation: [{ id: regId }] },
         // 2026-09-16 버그 수정: 수업의 담당강사를 새로 만드는 출석에도 함께 복사한다.
         ...(teacherIds.length ? { 담당강사: { relation: teacherIds.map((id) => ({ id })) } } : {}),
+        ...backfill,
       })
       createdCount++
       log.push(`[created] ${sessionName}: new attendance ${newAttendance.id} for reg ${regId}`)
     }
-
-    // [PART N-11, 2026-09-23] 출석이 실제로 (링크 또는 생성으로) 채워진 시점에, 그 학생의 대기 중인
-    // 과제 마감을 이 출석에 연결할 수 있는지 확인한다 (예전엔 generate-classes 자신의 세션 생성
-    // 루프에서 이 일을 했는데, 수업 생성과 출석 생성을 분리하면서 이 시점으로 옮겨왔다).
-    try {
-      await linkPendingAssignmentDeadlines(regId, log)
-    } catch (err) {
-      log.push(`[error] linkPendingAssignmentDeadlines(${regId}): ${(err as Error).message}`)
-    }
   }
+  if ([...deadlines.values()].some((v) => v.length)) wakeDeadlineWorker()
 
   // --- Extra: attendance whose registration is no longer actively enrolled ---
   for (const [regId, atts] of attendanceByRegId) {
@@ -428,10 +378,13 @@ export async function applyFixPlan(session: FixSession, plan: FixPlan, log: stri
 	const classId = session.classIds[0]
 	const teacher = session.teacherIds.length ? { 담당강사: { relation: session.teacherIds.map((id) => ({ id })) } } : {}
 
-	// 1) 출석이 없는 등록: 같은 날 수업 없는 출석이 있으면 연결, 없으면 새로 만든다(이 수업 학습기록도 함께).
+	// 1) 출석이 없는 등록: 같은 날 수업 없는 출석이 있으면 연결, 없으면 새로 만든다(이 수업 학습기록·대기 과제 백필도 함께).
+	//    대기 과제는 학생 전원을 한 번에 조회한다.
+	const deadlines = plan.add.length ? await pendingDeadlinesForRegistrations(deadlineIO, plan.add.map((a) => a.reg)) : new Map<string, string[]>()
 	for (const a of plan.add) {
+		const backfill = backfillProps(deadlines.get(normId(a.reg)))
 		if (a.att) {
-			await updatePageProperties(a.att, { 수업: { relation: [{ id: session.id }] }, 클래스: { relation: [{ id: classId }] }, ...teacher })
+			await updatePageProperties(a.att, { 수업: { relation: [{ id: session.id }] }, 클래스: { relation: [{ id: classId }] }, ...teacher, ...backfill })
 			log.push(`[linked] ${session.id}: attendance ${a.att} -> reg ${a.reg}`)
 		} else {
 			await createPage(DS_ATTENDANCE, {
@@ -442,15 +395,12 @@ export async function applyFixPlan(session: FixSession, plan: FixPlan, log: stri
 				등록: { relation: [{ id: a.reg }] },
 				...(a.rec?.length ? { 학습기록: { relation: a.rec.map((id) => ({ id })) } } : {}),
 				...teacher,
+				...backfill,
 			})
 			log.push(`[created] ${session.id}: attendance for reg ${a.reg}`)
 		}
-		try {
-			await linkPendingAssignmentDeadlines(a.reg, log)
-		} catch (err) {
-			log.push(`[error] linkPendingAssignmentDeadlines(${a.reg}): ${(err as Error).message}`)
-		}
 	}
+	if ([...deadlines.values()].some((v) => v.length)) wakeDeadlineWorker()
 	// 2) 명단 밖·중복 출석: 삭제 체크 → 출석마다 삭제 자동화(cascade-delete)
 	for (const id of plan.del) {
 		await updatePageProperties(id, { [PROP_DELETE_CHECK]: { checkbox: true } })
