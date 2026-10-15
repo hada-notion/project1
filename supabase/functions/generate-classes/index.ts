@@ -25,13 +25,13 @@ import {
 	queryDataSource,
 	queryAllPages,
 	getPage,
-	createPage,
 	updatePageProperties,
 	relIds,
 	withTimeout,
 	describeBody,
 } from "../_shared/notionClient.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
+import { sessionPlanFromTimetable, createSessionFromPlan } from "../_shared/timetableSessionPlan.ts"
 import {
 	PROP_TIMETABLE_LAST_ERROR,
 	PROP_LAST_ERROR,
@@ -48,7 +48,6 @@ import {
 	markQueued,
 	isRunning,
 	STATUS_RUNNING,
-	STATUS_DONE,
 	STATUS_QUEUED,
 	type StatusSpec,
 } from "../_shared/statusTracking.ts"
@@ -282,11 +281,6 @@ async function getClassInfo(classId: string): Promise<{ name: string; teacherIds
   return { name, teacherIds }
 }
 
-// "2026-09-14" -> "09.14"
-function toMonthDayStr(dateStr: string): string {
-  return `${dateStr.slice(5, 7)}.${dateStr.slice(8, 10)}`
-}
-
 // Perf (2026-09-11): previously this ran ONE Notion query per session date inside the
 // processTimetable while-loop below — during a multi-session backfill (e.g. the first-ever
 // "일주일 일괄 생성" run creating ~7 sessions per timetable) that meant 7x redundant queries per
@@ -423,10 +417,11 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
   // from Notion on EVERY iteration (i.e. once per session created). Fetching them once up
   // front removes most of the redundant network calls that made a multi-session backfill (the
   // first-ever "일주일 일괄 생성" run) slow.
+  // (v2.6.14) 시간표 수식 "수업추가 정보"(기준일 날짜의 클래스 이름·담당강사·명단)가 있으면 클래스 읽기·등록 조회도 건너뛴다.
+  const plan = baseFormula ? sessionPlanFromTimetable(props) : null
   const closures = baseFormula ? [] : await getClosurePeriods(classId)
-  const { name: className, teacherIds } = await getClassInfo(classId)
-  const weekdayKr = WEEKDAY_KR[weekday]
-  const timetableRegs = await getTimetableRegistrations(timetableId)
+  const { name: className, teacherIds } = plan ? { name: plan.className, teacherIds: plan.teacherIds } : await getClassInfo(classId)
+  const timetableRegs = plan ? [] : await getTimetableRegistrations(timetableId)
   log.push(`[timing] ${timetableName}: 준비 단계(최근수업/백필계산/휴강/클래스정보/등록목록) ${Date.now() - setupStartedAt}ms`)
 
   // horizonDate is supplied directly by the caller for "until" mode. Both the cron path and
@@ -471,14 +466,7 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
   }
 
   if (withinHorizon && !gatedByGenerationTime) {
-    const startIso = `${nextDate}T${startTime}:00${KST_OFFSET}`
-    const endIso = `${nextDate}T${endTime}:00${KST_OFFSET}`
-
-    // Build the title directly as "<className> MM.DD(<Korean weekday>)", e.g. "고둥 과외 09.14(월)".
-    // NOTE: if any separate Notion automation on the class-session DB also rewrites the
-    // "이름" property (e.g. into an English "MM.DD(Mon)" format), that automation should be
-    // turned off, since this function now sets the final title directly.
-    const classPageTitle = `${className} ${toMonthDayStr(nextDate)}(${weekdayKr})`
+    // 이름은 "<클래스 이름> MM.DD(요일)"(예: "고둥 과외 09.14(월)"), 시간은 KST — createSessionFromPlan이 만든다.
 
     // Pass timetableId (not classId) so only registrations actually linked to this specific
     // timetable/weekday are considered, and nextDate so only registrations valid AS OF THIS
@@ -486,7 +474,7 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
     // below and never recomputed based on "current" 등록일/종료일 status. Filtered in-memory
     // from the single timetableRegs fetch above instead of a fresh Notion query per session
     // date (2026-09-11 perf fix).
-    const registrationIds = filterRegistrationsForDate(timetableRegs, nextDate)
+    const registrationIds = plan && plan.date === nextDate ? plan.regIds : filterRegistrationsForDate(timetableRegs, nextDate)
 
     // (v2.6.12, 웹훅 재정리 3단계) 수업 페이지만 명단과 함께 만들고, 출석은 이 수업을 "출석 조정" 큐에 넣어 만든다.
     // 출석 조정은 수업의 수식 "출석 조정 정보"(명단 중 수강 기간인 학생)를 읽어 출석·학습기록·과제 마감 백필을 한 번에
@@ -494,15 +482,15 @@ async function processTimetable(timetable: any, log: string[], mode: ProcessMode
     // 미연결 출석 조회 + 출석 생성을 하고 수업 상태를 작업중 → 완료로 따로 썼다.
     // 수식 속성이 없는 운영은 출석 조정 큐가 예전 방식(fixAttendanceForClassSession)으로 같은 결과를 만든다.
     const createSessionStartedAt = Date.now()
-    const classPage = await createPage(DS.classSession, {
-      이름: { title: [{ text: { content: classPageTitle } }] },
-      수업일시: { date: { start: startIso, end: endIso } },
-      클래스: { relation: [{ id: classId }] },
-      시간표: { relation: [{ id: timetableId }] },
-      등록: { relation: registrationIds.map((id) => ({ id })) },
-      ...(teacherIds.length ? { 담당강사: { relation: teacherIds.map((id) => ({ id })) } } : {}),
-      [SESSION_GEN_STATUS_SPEC.statusProp]: { select: { name: STATUS_DONE } },
-    })
+    const classPage = { id: await createSessionFromPlan(timetableId, {
+      date: nextDate,
+      start: startTime,
+      end: endTime,
+      classId,
+      className,
+      teacherIds,
+      regIds: registrationIds,
+    }) }
     log.push(`[timing] ${timetableName}: 수업 페이지 생성 ${Date.now() - createSessionStartedAt}ms`)
     log.push(`[created] ${timetableName}: class session created (${nextDate}), 등록 ${registrationIds.length}건 연결 → 출석 조정 큐`)
     if (registrationIds.length > 0) await enqueueSync("fix-attendance", { pageId: classPage.id })
@@ -812,7 +800,9 @@ Deno.serve(async (req: Request) => {
   const route = new URL(req.url).pathname.split("/").pop()
   if (route === "queue") {
     if (!timetableId) return new Response(JSON.stringify({ ok: false, error: "시간표 id를 찾지 못했어요." }), { status: 400, headers: { "Content-Type": "application/json" } })
-    await enqueueSync("generate-classes", { timetableId })
+    // (v2.6.14) 본문에 시간표 수식 "수업추가 정보"가 오면 함께 넣는다 → 워커는 수업 만들기 1번만 한다.
+    const bodyPlan = sessionPlanFromTimetable((rawBodyForLog as any)?.data?.properties ?? (rawBodyForLog as any)?.properties)
+    await enqueueSync("generate-classes", bodyPlan ? { timetableId, date: bodyPlan.date, plan: bodyPlan } : { timetableId })
     wakeSyncQueueWorker()
     return respondAccepted({ timetableId, queued: true })
   }
@@ -907,9 +897,15 @@ Deno.serve(async (req: Request) => {
           const targets = ready
             .filter((t: any) => baseOf(t)! <= weekEnd)
             .sort((a: any, b: any) => startKey(a).localeCompare(startKey(b)))
-          for (const t of targets) await enqueueSync("generate-classes", { timetableId: t.id, date: baseOf(t) })
+          // (v2.6.14) 조회 결과에 시간표 수식 "수업추가 정보"가 있으면 큐 항목에 담는다 → 워커는 수업 만들기 1번만 한다.
+          let withPlan = 0
+          for (const t of targets) {
+            const plan = sessionPlanFromTimetable(t.properties)
+            if (plan) withPlan++
+            await enqueueSync("generate-classes", plan ? { timetableId: t.id, date: baseOf(t), plan } : { timetableId: t.id, date: baseOf(t) })
+          }
           wakeSyncQueueWorker()
-          log.push(`[queued] bulk(기준일): ${weekStart}~${weekEnd} 주, 시간표 ${targets.length}개를 큐에 넣음`)
+          log.push(`[queued] bulk(기준일): ${weekStart}~${weekEnd} 주, 시간표 ${targets.length}개를 큐에 넣음(수업추가 정보 ${withPlan}개)`)
           console.log("generate-classes (bulk button) finished:\n", log.join("\n"))
           if (menuPageId) await markDone(menuPageId, TIMETABLE_STATUS_SPEC)
           return
