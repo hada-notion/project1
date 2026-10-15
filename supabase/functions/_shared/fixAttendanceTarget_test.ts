@@ -56,15 +56,19 @@ Deno.test("계획 적용: 보강·skip은 아무것도 만들지 않고 완료�
  await target.applyFixPlan(session, { v: 1, skip: "시간표·수업일시 없음", add: [], del: [] }, [], { "출석조정 상태": { select: { name: "✅ 완료" } } })
  assert(m.created.length === 0 && m.writes.length === 2 && m.writes.every((w) => w.id === S))
 }))
-Deno.test("안전장치: 다녀야 할 학생 0명 + 출석 삭제 계획은 아무것도 쓰지 않고 오류", () => withMock(async (m) => {
+Deno.test("안전장치: 다녀야 할 학생 0명 + 출석 삭제 계획은 아무것도 쓰지 않는다(applyFixPlan은 오류, 큐는 페이지 재읽기 항목으로)", () => withMock(async (m) => {
  let threw = false
- try { await target.processFixAttendanceQueueItem({ pageId: S, plan: { v: 1, day: "2026-10-24", add: [], del: [A1, A2], roster: [] }, session }) } catch (e) { threw = /0명/.test((e as Error).message) }
- assert(threw && !m.writes.some((w) => w.id === A1 || w.id === A2) && m.writes.some((w) => w.id === S && w.body.properties["출석조정 상태"]?.select?.name === "⚠️ 오류"))
+ try { await target.applyFixPlan(session, { v: 1, day: "2026-10-24", add: [], del: [A1, A2], roster: [] }, []) } catch (e) { threw = /0명/.test((e as Error).message) }
+ assert(threw && m.writes.length === 0 && m.created.length === 0)
+ await target.processFixAttendanceQueueItem({ pageId: S, plan: { v: 1, day: "2026-10-24", add: [], del: [A1, A2], roster: [] }, session })
+ const q = m.calls.filter((c) => c.url.endsWith("/rest/v1/sync_queue")).map((c) => c.body[0])
+ assert(q.length === 1 && !("plan" in q[0].payload) && !m.writes.some((w) => w.id === A1 || w.id === A2), JSON.stringify(q))
 }))
-Deno.test("큐 처리 실패: 오류 상태를 쓰고 재시도를 위해 예외를 다시 던짐", () => withMock(async (m) => {
+Deno.test("큐 처리 실패(페이지를 읽은 경우): 오류 상태를 쓰고 재시도를 위해 예외를 다시 던짐", () => withMock(async (m) => {
+ ;(globalThis as any).mockPages = { [S]: { id: S, properties: { "출석 조정 정보": formula(JSON.stringify({ v: 1, add: [{ reg: R1 }], del: [] })), "클래스": rel(CLS), "담당강사": rel(T), "수업일시": { date: { start: null } }, "보강": { checkbox: false } } } }
  let threw = false
- try { await target.processFixAttendanceQueueItem({ pageId: S, plan: { v: 1, add: [{ reg: R1 }], del: [] }, session: { ...session, start: null } }) } catch { threw = true }
- assert(threw && m.writes.some((w) => w.id === S && w.body.properties["출석조정 상태"]?.select?.name === "⚠️ 오류"))
+ try { await target.processFixAttendanceQueueItem({ pageId: S, plan: null, session: null }) } catch { threw = true } finally { delete (globalThis as any).mockPages }
+ assert(threw && m.writes.some((w) => w.id === S && w.body.properties["출석조정 상태"]?.select?.name === "⚠️ 오류") && !m.calls.some((c) => c.url.endsWith("/rest/v1/sync_queue")))
 }))
 Deno.test("큐 경로: 인증, 본문의 수식 계획을 Notion 읽기 없이 큐에 넣음", () => withMock(async (m) => {
  const plan = JSON.stringify({ v: 1, day: "2026-10-15", add: [{ reg: R1, att: "", rec: [] }], del: [] })
@@ -88,4 +92,13 @@ Deno.test("큐 처리: 본문에 계획이 없으면 수업 페이지를 한 번
   assert(m.calls.filter((c) => c.method === "GET" && c.url.includes("/pages/")).length === 1, "one page read")
   assert(m.created.length === 1 && ids(m.created[0].properties, "등록") === R1 && m.writes.some((w) => w.id === S && w.body.properties["출석조정 상태"]?.select?.name === "✅ 완료"))
  } finally { delete (globalThis as any).mockPages }
+}))
+Deno.test("v2.6.13 본문 계획으로 실패하면 같은 계획을 되풀이하지 않고 페이지를 새로 읽는 항목을 넣는다", () => withMock(async (m) => {
+ const failing = mock(); let n = 0
+ globalThis.fetch = (async (input: any, init: any = {}) => { const url = String(input); if (url.endsWith("/pages") && init.method === "POST" && n++ === 0) return new Response("boom", { status: 502 }); return failing.fetch(input, init) }) as typeof fetch
+ await target.processFixAttendanceQueueItem({ pageId: S, plan: { v: 1, add: [{ reg: R1 }], del: [] }, session })
+ const q = failing.calls.filter((c) => c.url.endsWith("/rest/v1/sync_queue")).map((c) => c.body[0])
+ assert(q.length === 1 && q[0].target === "fix-attendance" && q[0].payload.pageId === S && !("plan" in q[0].payload), JSON.stringify(q))
+ assert(!failing.writes.some((w) => w.id === S && w.body.properties["출석조정 상태"]?.select?.name === "⚠️ 오류"), "no error state, re-queued instead")
+ assert(m.calls.length === 0)
 }))

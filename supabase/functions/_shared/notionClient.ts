@@ -47,7 +47,11 @@ const FETCH_TIMEOUT_MS = 12_000
 // 아님, 오히려 어느 요청인지 구분하는 데 필요), 매 재시도 시점에 "어떤 요청을, 몇 번째 시도에서,
 // 왜, 얼마나 기다리고 재시도하는지"를 남긴다. 이 함수는 전 함수가 공용으로 쓰므로 여기 한 곳만
 // 고치면 generate-classes뿐 아니라 모든 함수에 자동 적용된다.
-export async function fetchWithRetry(url: string, init: RequestInit, maxRetries = 5): Promise<Response> {
+// (v2.6.13) retryAmbiguous=false: 429(요청을 처리하지 않았다는 뜻)만 다시 보낸다. 5xx·시간 초과·연결 끊김은 Notion이
+// 이미 처리했을 수 있어 다시 보내지 않는다 — 페이지 만들기(POST)를 다시 보내면 같은 페이지가 두 번 생긴다
+// (2026-10-16 메뉴 일괄 생성에서 출석 1건이 9초 차로 두 번 생긴 원인). 읽기·고치기는 여러 번 보내도 결과가 같아 기본값(true).
+export async function fetchWithRetry(url: string, init: RequestInit, maxRetries = 5, opts: { retryAmbiguous?: boolean } = {}): Promise<Response> {
+	const retryAmbiguous = opts.retryAmbiguous ?? true
 	const callStartedAt = Date.now()
 	let lastRes: Response | undefined
 	let lastErr: Error | undefined
@@ -66,7 +70,7 @@ export async function fetchWithRetry(url: string, init: RequestInit, maxRetries 
 			}
 			lastRes = res
 			lastErr = undefined
-			if (attempt === maxRetries) return res
+			if (attempt === maxRetries || (!retryAmbiguous && res.status !== 429)) return res
 			const retryAfterHeader = res.headers.get("Retry-After")
 			const retryAfterMs = retryAfterHeader ? Number(retryAfterHeader) * 1000 : NaN
 			const backoffMs = Number.isFinite(retryAfterMs) ? retryAfterMs : 300 * Math.pow(2, attempt)
@@ -80,6 +84,7 @@ export async function fetchWithRetry(url: string, init: RequestInit, maxRetries 
 			// (호출자는 이미 전부 이 예외를 자기 catch->markError 경로로 처리하도록 되어 있어 안전하다).
 			lastErr = err as Error
 			lastRes = undefined
+			if (!retryAmbiguous) throw new Error(`Notion API 요청 결과를 알 수 없어 다시 보내지 않음(이미 처리됐을 수 있음): ${lastErr.message}: ${url}`)
 			if (attempt === maxRetries) {
 				throw new Error(
 					`Notion API 요청이 ${maxRetries + 1}번 시도 후에도 실패함 (마지막 원인: ${lastErr.message}, 누적 ${Date.now() - callStartedAt}ms): ${url}`,
@@ -247,7 +252,7 @@ export async function createPage(dataSourceId: string, properties: Record<string
 		method: "POST",
 		headers: notionHeaders(),
 		body: JSON.stringify({ parent: { data_source_id: dataSourceId }, properties }),
-	})
+	}, 5, { retryAmbiguous: false })
 	if (!res.ok) {
 		throw new Error(`create page in ${dataSourceId} failed: ${res.status} ${await res.text()}`)
 	}

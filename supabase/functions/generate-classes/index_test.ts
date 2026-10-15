@@ -96,3 +96,14 @@ Deno.test("v2.6.12 메뉴 일괄 생성(기준일): 가장 이른 빈 주만, �
   const days=f.created.filter(p=>p.db==="sessions").map(p=>p.properties["수업일시"].date.start.slice(0,10));assert(days.join()==="2026-10-26,2026-10-30",days.join())
  }finally{globalThis.fetch=originalFetch;delete(globalThis as any).EdgeRuntime}
 })
+Deno.test("v2.6.13 큐 재시도: 기준일이 이미 지났으면(앞선 시도가 만든 것) 수업을 또 만들지 않는다",async()=>{
+ const f=mock(),originalFetch=globalThis.fetch;globalThis.fetch=f.fetch as typeof fetch;(globalThis as any).EdgeRuntime={waitUntil:(p:Promise<unknown>)=>f.tasks.push(p)}
+ try{
+  const { processGenerateClassesQueueItem } = await import("../_shared/generateClassesQueue.ts")
+  f.pages.mon.properties["기준일"]={type:"formula",formula:{type:"date",date:{start:"2026-10-26"}}}
+  await processGenerateClassesQueueItem({timetableId:"mon",date:"2026-10-19"})
+  assert(f.created.filter(p=>p.db==="sessions").length===0,"skipped");assert(f.pages.mon.properties["상태"].select.name==="✅ 완료")
+  await processGenerateClassesQueueItem({timetableId:"mon",date:"2026-10-26"})
+  assert(f.created.filter(p=>p.db==="sessions").length===1,"made when dates match")
+ }finally{globalThis.fetch=originalFetch;delete(globalThis as any).EdgeRuntime}
+})
