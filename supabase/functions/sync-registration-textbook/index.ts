@@ -304,7 +304,8 @@ Deno.serve(async (req: Request) => {
 	} catch {
 		// 빈 바디 허용하지 않음 - 아래에서 pageId 누락으로 에러 처리
 	}
-	console.log("sync-registration-textbook payload:", route, JSON.stringify(body))
+	// 본문 전체는 남기지 않는다(v2.6.10). Notion 자동화 본문에는 연락처·리포트 토큰 같은 속성이, 예전 버튼 본문에는 adminKey가 들어 있을 수 있다.
+	console.log("sync-registration-textbook request:", route, extractPageId(body) ?? "(pageId 없음)")
 
 	const adminKey = resolveAdminKeyFromRequest(req, body)
 	const currentAdminKey = securityEnabled() ? "" : await getCurrentAdminKey()
