@@ -101,12 +101,18 @@ export async function processAssignmentQueueItem(payload: { recordId: string; pl
 		// 본문에 수식 값이 없으면(자동화가 여러 DB를 거치는 수식을 웹훅에 싣지 못하는 경우 등) 학습기록을 한 번 읽는다.
 		let page: any = null
 		let text = payload.plan ?? ""
-		if (!text) {
+		let source = "body"
+		const bodyChars = text.length
+		// (v2.6.22 후속) 본문 값이 없거나 읽을 수 없으면(잘림 등) 학습기록을 한 번 읽어 수식 값을 다시 받는다.
+		if (!text || !planFromText(text)) {
 			page = await deps.getPage(recordId)
 			if (page?.archived || page?.in_trash) return
 			text = planText(page?.properties?.[PLAN_PROP])
+			source = bodyChars ? "page(본문 값 읽기 실패)" : "page"
 		}
 		plan = planFromText(text)
+		// 어디서 받은 계획인지·길이만 남긴다(학생 이름·ID는 남기지 않는다). 큰 반 잘림 확인용.
+		console.log(`[create-assignment] plan source=${source} bodyChars=${bodyChars} chars=${text.length} items=${plan?.items.length ?? "-"}`)
 		if (!plan) {
 			// 수식을 아직 안 넣은 운영 → 예전 방식(서버가 학습기록·출석·등록을 읽어 만든다).
 			page ??= await deps.getPage(recordId)
