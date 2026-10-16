@@ -39,6 +39,8 @@ import {
 } from "./constants.ts"
 import {
 	queryDataSource,
+	queryAllPages,
+	getPage,
 	updatePageProperties,
 	createPage,
 	archivePage,
@@ -47,6 +49,7 @@ import {
 	setCombinedSyncStatus,
 } from "./notionClient.ts"
 import { getCurrentAdminKey } from "./adminShared.ts"
+import { decideRecordRemoval, makeProgressTypeReader } from "./learningRecordShare.ts"
 
 // ---------- 0) "처리중/완료/오류" 상태 표시 헬퍼 ----------
 // class-session/end/enroll/textbook/timetable 다섯 함수 모두 거의 동일한 setSyncStatus를 각자
@@ -83,7 +86,7 @@ export function makeSyncStatusSetter(selfFlagProp: string, startedAtProp?: strin
 export async function archiveAttendanceAfterEndDate(
 	registrationId: string,
 	endDateIso: string,
-): Promise<{ deletedCount: number; activityCount: number; recordCount: number }> {
+): Promise<{ deletedCount: number; activityCount: number; recordCount: number; recordDetachedCount: number }> {
 	const data = await queryDataSource(DS_ATTENDANCE, {
 		filter: {
 			and: [
@@ -102,11 +105,36 @@ export async function archiveAttendanceAfterEndDate(
 		for (const id of relIds(att.properties[PROP_ATTENDANCE_LEARNING_RECORD])) recordIds.add(id)
 	}
 
+	// (v2.6.16) 학습기록은 이 학생만의 기록(개별 진도)만 지우고, 다른 학생도 쓰는 기록(그룹 진도·반 전체 주제 기록)은
+	// 이 출석·이 학생 연결만 끊는다(_shared/learningRecordShare.ts). 예전에는 모두 지워서, 한 학생을 종료하면
+	// 반 전체 학습기록이 휴지통으로 갔다. 관계를 다시 쓰므로 기록은 조회 결과(관계 전체)로 읽는다.
+	let recordCount = 0
+	let recordDetachedCount = 0
+	if (recordIds.size > 0) {
+		const norm = (id: string) => id.replace(/-/g, "")
+		const wanted = new Set([...recordIds].map(norm))
+		const records = (await queryAllPages(DS_LEARNING_RECORD, {
+			property: PROP_RECORD_REGISTRATION,
+			relation: { contains: registrationId },
+		})).filter((r: any) => wanted.has(norm(r.id)) && !r.archived && !r.in_trash)
+		const progressTypeOf = makeProgressTypeReader(getPage)
+		const attIds = data.results.map((a: any) => a.id)
+		await mapWithConcurrency(records, 4, async (record: any) => {
+			const decision = decideRecordRemoval(record, attIds, [registrationId], await progressTypeOf(record))
+			if (decision.action === "delete") {
+				await archivePage(record.id)
+				recordCount++
+			} else {
+				await updatePageProperties(record.id, decision.properties)
+				recordDetachedCount++
+			}
+		})
+	}
+
 	await mapWithConcurrency(data.results, 4, (att: any) => archivePage(att.id))
 	await mapWithConcurrency([...activityIds], 4, (id) => archivePage(id))
-	await mapWithConcurrency([...recordIds], 4, (id) => archivePage(id))
 
-	return { deletedCount: data.results.length, activityCount: activityIds.size, recordCount: recordIds.size }
+	return { deletedCount: data.results.length, activityCount: activityIds.size, recordCount, recordDetachedCount }
 }
 
 // ---------- 2) 종료일 이후 수업에서 등록 roster 연결 해제 ----------

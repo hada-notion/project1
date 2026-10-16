@@ -43,10 +43,11 @@ async function deleteAttendanceAfterEndDate(
 	regName: string | undefined,
 	log: string[],
 ) {
-	const { deletedCount, activityCount, recordCount } = await archiveAttendanceAfterEndDate(registrationId, endDateIso)
+	const { deletedCount, activityCount, recordCount, recordDetachedCount } = await archiveAttendanceAfterEndDate(registrationId, endDateIso)
 	if (deletedCount > 0) {
 		const extra =
-			activityCount || recordCount ? ` (학습활동 ${activityCount}건, 학습기록 ${recordCount}건 함께 삭제)` : ""
+			(activityCount || recordCount ? ` (학습활동 ${activityCount}건, 학습기록 ${recordCount}건 함께 삭제)` : "") +
+			(recordDetachedCount ? ` (다른 학생도 쓰는 학습기록 ${recordDetachedCount}건은 연결만 해제)` : "")
 		log.push(`🗑️ [${regName}] 종료일 이후 출석 ${deletedCount}건 삭제${extra}`)
 	} else {
 		log.push(`✓ [${regName}] 종료일 이후 삭제할 출석 없음`)
