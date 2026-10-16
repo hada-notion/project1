@@ -50,6 +50,7 @@ import {
   withSendingLock,
 } from "../_shared/alimtalkShared.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
+import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 
 const SOLAPI_API_KEY = Deno.env.get("SOLAPI_API_KEY")!
 const SOLAPI_API_SECRET = Deno.env.get("SOLAPI_API_SECRET")!
@@ -112,6 +113,19 @@ Deno.serve(async (req) => {
       status: 401,
       headers: { "Content-Type": "application/json", ...corsHeaders },
     })
+  }
+
+  // (v2.6.24) 교재비 DB 자동화("안내문 전송 상태"가 ⚪ 대기로 바뀌면)가 부르는 경로. 큐에 넣고 바로 202.
+  // process-sync-queue가 한 건씩 보낸다(_shared/noticeQueue.ts). 발송함 [일괄 전송]도 페이지마다 이 경로로 온다.
+  if (new URL(req.url).pathname.split("/").pop() === "queue") {
+    const queuedId = body?.data?.id ?? body?.cartId ?? body?.pageId ?? null
+    if (!queuedId) {
+      return new Response(JSON.stringify({ error: "페이지 id를 찾지 못했어요." }), { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } })
+    }
+    const clickerUserId = body?.data?.properties?.["실행자"]?.people?.[0]?.id ?? null
+    await enqueueSync("notice", { kind: "textbook", pageId: queuedId, clickerUserId })
+    wakeSyncQueueWorker()
+    return respondAccepted({ pageId: queuedId, queued: true })
   }
 
   try {
