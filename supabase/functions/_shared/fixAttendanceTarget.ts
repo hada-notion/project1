@@ -300,6 +300,7 @@ export type FixPlan = {
 	add: { reg: string; att?: string; rec?: string[] }[]
 	del: string[]
 	roster?: string[]
+	makeup?: boolean // (v2.6.17) 수식 "mk":1 — 보강 수업(합치기만)
 }
 export type FixSession = { id: string; classIds: string[]; teacherIds: string[]; start: string | null; end: string | null; makeup: boolean }
 
@@ -330,7 +331,7 @@ export function planFromText(text: unknown): FixPlan | null {
 		roster = raw.roster.map(cleanId)
 		if (roster!.some((x) => !x)) return null
 	}
-	return { v: 1, day: typeof raw.day === "string" ? raw.day : undefined, add, del, roster }
+	return { v: 1, day: typeof raw.day === "string" ? raw.day : undefined, add, del, roster, ...(raw.mk === 1 ? { makeup: true } : {}) }
 }
 
 const propText = (p: any): string => {
@@ -365,34 +366,44 @@ export async function applyFixPlan(session: FixSession, plan: FixPlan, log: stri
 		const all = { ...props, ...extraSessionProps }
 		if (Object.keys(all).length) await updatePageProperties(session.id, all)
 	}
-	if (plan.skip || session.makeup) {
-		log.push(`[skip] ${session.id}: ${plan.skip ?? "보강 수업"}`)
+	if (plan.skip) {
+		log.push(`[skip] ${session.id}: ${plan.skip}`)
 		return await finish({})
 	}
-	if (!session.start || !session.classIds.length) throw new Error("수업일시·클래스가 없어 출석을 맞출 수 없어요.")
+	// (v2.6.17) 보강 수업은 예외로 다룬다: 합치기만 한다. 명단에 있는데 출석이 없으면 만들거나 연결하고(수식이 같은 날
+	// 🔵 보강 출석만 고름), 출석은 있는데 명단에 없으면 수식이 명단(roster)에 더한다. 지우기는 하지 않는다(사람이 직접).
+	// 예전 수식(보강이면 skip)을 쓰는 운영은 위에서 그대로 건너뛴다. 보강 출석에는 과제 마감을 연결하지 않는다
+	// (정규 수업의 다음 출석이 마감이 된다). 보강 수업은 클래스가 없을 수 있다(보강 대기실에서 만든 수업).
+	// 웹훅 본문에 "보강"이 빠져도 수식의 mk 표시로 보강 수업임을 안다(정규 규칙으로 지우는 일이 없게 두 곳에서 확인).
+	const makeup = session.makeup || plan.makeup === true
+	if (makeup && plan.del.length) log.push(`[keep] ${session.id}: 보강 수업이라 출석 ${plan.del.length}건을 지우지 않음`)
+	const del = makeup ? [] : plan.del
+	if (!session.start || (!makeup && !session.classIds.length)) throw new Error("수업일시·클래스가 없어 출석을 맞출 수 없어요.")
 	// 안전장치: 다녀야 할 학생이 0명으로 계산됐는데 출석을 지우라는 계획은 실행하지 않는다(수식 오류일 가능성이 크다 —
 	// 처음 만든 수식이 날짜를 글자로 비교해 모든 출석을 지우라고 계산한 적이 있다). 반 전체 종료는 손으로 정리한다.
-	if (plan.roster && plan.roster.length === 0 && plan.del.length > 0) {
-		throw new Error(`다녀야 할 학생이 0명인데 출석 ${plan.del.length}건을 지우라는 계산이 나왔어요. "출석 조정 정보" 수식을 확인해 주세요. 반 학생이 모두 종료됐다면 출석은 직접 정리해 주세요.`)
+	if (plan.roster && plan.roster.length === 0 && del.length > 0) {
+		throw new Error(`다녀야 할 학생이 0명인데 출석 ${del.length}건을 지우라는 계산이 나왔어요. "출석 조정 정보" 수식을 확인해 주세요. 반 학생이 모두 종료됐다면 출석은 직접 정리해 주세요.`)
 	}
 	const day = plan.day ?? session.start.slice(0, 10)
 	const classId = session.classIds[0]
+	const classRel = classId ? { 클래스: { relation: [{ id: classId }] } } : {}
 	const teacher = session.teacherIds.length ? { 담당강사: { relation: session.teacherIds.map((id) => ({ id })) } } : {}
 
 	// 1) 출석이 없는 등록: 같은 날 수업 없는 출석이 있으면 연결, 없으면 새로 만든다(이 수업 학습기록·대기 과제 백필도 함께).
 	//    대기 과제는 학생 전원을 한 번에 조회한다.
-	const deadlines = plan.add.length ? await pendingDeadlinesForRegistrations(deadlineIO, plan.add.map((a) => a.reg)) : new Map<string, string[]>()
+	const deadlines = plan.add.length && !makeup ? await pendingDeadlinesForRegistrations(deadlineIO, plan.add.map((a) => a.reg)) : new Map<string, string[]>()
 	for (const a of plan.add) {
 		const backfill = backfillProps(deadlines.get(normId(a.reg)))
 		if (a.att) {
-			await updatePageProperties(a.att, { 수업: { relation: [{ id: session.id }] }, 클래스: { relation: [{ id: classId }] }, ...teacher, ...backfill })
+			await updatePageProperties(a.att, { 수업: { relation: [{ id: session.id }] }, ...classRel, ...teacher, ...backfill })
 			log.push(`[linked] ${session.id}: attendance ${a.att} -> reg ${a.reg}`)
 		} else {
 			await createPage(DS_ATTENDANCE, {
-				출석: { title: [{ text: { content: `${day} 출석` } }] },
+				출석: { title: [{ text: { content: `${day} ${makeup ? "보강" : "출석"}` } }] },
 				수업일시: { date: { start: session.start, end: session.end ?? session.start } },
 				수업: { relation: [{ id: session.id }] },
-				클래스: { relation: [{ id: classId }] },
+				...classRel,
+				...(makeup ? { "출석 상태": { select: { name: "🔵 보강" } } } : {}),
 				등록: { relation: [{ id: a.reg }] },
 				...(a.rec?.length ? { 학습기록: { relation: a.rec.map((id) => ({ id })) } } : {}),
 				...teacher,
@@ -403,13 +414,13 @@ export async function applyFixPlan(session: FixSession, plan: FixPlan, log: stri
 	}
 	if ([...deadlines.values()].some((v) => v.length)) wakeDeadlineWorker()
 	// 2) 명단 밖·중복 출석: 삭제 체크 → 출석마다 삭제 자동화(cascade-delete)
-	for (const id of plan.del) {
+	for (const id of del) {
 		await updatePageProperties(id, { [PROP_DELETE_CHECK]: { checkbox: true } })
 		log.push(`[flagged] ${session.id}: attendance ${id}`)
 	}
 	// 3) 수업 명단(수식이 다를 때만 보냄) + 완료를 수업 쓰기 한 번에
 	await finish(plan.roster ? { 등록: { relation: plan.roster.map((id) => ({ id })) } } : {})
-	if (!plan.add.length && !plan.del.length && !plan.roster) log.push(`[ok] ${session.id}: 출석이 명단과 같아요`)
+	if (!plan.add.length && !del.length && !plan.roster) log.push(`[ok] ${session.id}: 출석이 명단과 같아요`)
 }
 
 // 큐 처리(워커가 한 건씩). 계획이 있으면 쓰기만, 없으면 예전 방식으로 수업을 읽어 맞춘다. 실패하면 오류를 쓰고 큐 재시도.

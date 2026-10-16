@@ -322,6 +322,11 @@ export async function finishCreateLearningRecord(sessionId: string): Promise<unk
 // finishCreateLearningRecord와는 완전히 별개로, 이 출석 건 자신의 "등록"(limit 1) 하나만을 대상으로
 // 학습기록을 생성한다. 수업 relation은 비워두고, 생성되는 학습기록마다 "보강" checkbox를 켜서
 // 진도교재의 "진행도" 계산(다른 학생들의 정상 수업 학습기록만 반영하도록)에서 자동으로 제외되게 한다.
+// (v2.6.17) 모든 학습 관리는 수업을 거친다: 수업 없는 출석으로는 학습기록을 만들지 않는다.
+// 아래 finishCreateLearningRecordForAttendance(출석 단독 경로)는 더 이상 부르지 않는다(예전 기록 이해용으로 남김).
+export const MAKEUP_SESSION_REQUIRED =
+	"수업에 연결되지 않은 출석이에요. 수업 관리 보강 대기실에서 보강 수업을 만들어 배정한 뒤, 그 수업에서 학습기록을 만들어 주세요."
+
 export async function finishCreateLearningRecordForAttendance(attendanceId: string): Promise<unknown> {
 	const attendancePage = await getPage(attendanceId)
 	const registrationIds = dedupe(relIds(attendancePage, PROP_ATTENDANCE_REGISTRATION))
@@ -422,9 +427,12 @@ export async function processCreateLearningRecordQueueItem(payload: {
 	const label = payload.sessionId ?? payload.attendanceId ?? "unknown"
 	try {
 		await Promise.all(payload.statusTargetIds.map((id) => setRecordGenRunning(id, true)))
-		const created = payload.attendanceId
-			? await finishCreateLearningRecordForAttendance(payload.attendanceId)
-			: await finishCreateLearningRecord(payload.sessionId as string)
+		// (v2.6.17) 배포 전에 큐에 들어간 수업 없는 출석 항목도 기록을 만들지 않는다(오류로 남기고 재시도하지 않음).
+		if (payload.attendanceId && !payload.sessionId) {
+			await Promise.all(payload.statusTargetIds.map((id) => setRecordGenError(id, MAKEUP_SESSION_REQUIRED)))
+			return
+		}
+		const created = await finishCreateLearningRecord(payload.sessionId as string)
 		await Promise.all(payload.statusTargetIds.map((id) => setRecordGenDone(id)))
 		console.log("create-learning-record (queue) finished", label, created)
 	} catch (err) {
