@@ -326,14 +326,19 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
     .filter((rc) => rc.comment && rc.start && rc.start >= sinceIso)
 
   const logIdSet = new Set<string>()
-  attendanceRows.forEach((r) => r.study_log_ids.forEach((id: string) => logIdSet.add(id)))
+  // (v2.6.19) 학습기록 날짜는 학습기록의 날짜 수식(수업일)이 아니라 이 학생이 그 기록에 연결된 출석의 실제 날짜(수업일시)를 쓴다.
+  const logIsoById = new Map<string, string>()
+  attendanceRows.forEach((r) => r.study_log_ids.forEach((id: string) => {
+    logIdSet.add(id)
+    if (r.class_iso && !logIsoById.has(id)) logIsoById.set(id, r.class_iso)
+  }))
   const logIds = Array.from(logIdSet)
   const logPages = await Promise.all(logIds.map((id) => cachedGetPage(id)))
   const logUnitNames = await unitNamesOf(logPages) // 학습기록 "선택 단원" 이름(v2.5.126)
   const readLogDetail = async (lp: any) => {
     const lprops = lp.properties
     const category = text(lprops["구분"])
-    const iso = dateStartOf(lprops["수업일"])
+    const iso = logIsoById.get(lp.id) ?? null
     const content = text(lprops["내용"])
     const range = text(lprops["범위"])
     const unit = unitTextOf(lp, logUnitNames)
@@ -401,11 +406,18 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
         source = await readLogDetail(await cachedGetPage(learningRecordId))
         logDetailById.set(learningRecordId, source)
       }
+      // (v2.6.19) 과제 마감일도 수식(과제 마감일)이 아니라 마감 출석(과제 마감)의 실제 날짜를 쓴다.
+      let dueIso: string | null = null
+      const dueAttendanceId = firstRelationId(props["과제 마감"])
+      if (dueAttendanceId) {
+        const dueAtt = await cachedGetPage(dueAttendanceId)
+        dueIso = dateStartOf(dueAtt.properties["수업일시"])
+      }
       return {
         id: ap.id,
         learningRecordId,
         category: text(props["구분"]),
-        dueIso: dateStartOf(props["과제 마감일"]),
+        dueIso,
         classIso,
         status: normalizeStatus(text(props["과제상태"])),
         correct: numberOf(props["정답 문항"]) ?? 0,
