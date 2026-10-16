@@ -83,3 +83,16 @@ Deno.test("v2.6.22 큐: 형식이 틀리면 만들지 않고 ⚠️ 오류, 계�
 		assertEquals(t.calls.legacy, 0)
 	} finally { t.restore() }
 })
+
+Deno.test("v2.6.22 큐: 본문 값이 잘렸으면 학습기록을 한 번 읽어 수식 값으로 만든다", async () => {
+	const t = fakeDeps([])
+	const full = planJson("평가", [{ a: A1, r: R1, t: "a" }, { a: A2, r: R2, t: "b" }])
+	assignmentPlanDeps.getPage = async () => { t.calls.reads++; return { properties: { "학습활동 계획": { type: "formula", formula: { string: full } } } } }
+	try {
+		await processAssignmentQueueItem({ recordId: REC, plan: full.slice(0, 80) })
+		assertEquals(t.calls.reads, 1)
+		assertEquals(t.calls.created.length, 2)
+		assertEquals(t.calls.legacy, 0)
+		assertEquals(t.calls.done, 1)
+	} finally { t.restore() }
+})
