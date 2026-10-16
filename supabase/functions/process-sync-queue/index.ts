@@ -82,6 +82,7 @@ import { processDashboardLinkQueueItem } from "../_shared/dashboardLinkTarget.ts
 import { processRegistrationTextbookQueueItem } from "../_shared/registrationTextbookTarget.ts"
 import { processFixAttendanceQueueItem } from "../_shared/fixAttendanceTarget.ts"
 import { processGenerateClassesQueueItem } from "../_shared/generateClassesQueue.ts"
+import { processSessionDateQueueItem } from "../_shared/sessionDateMove.ts"
 
 // target별 실제 처리 함수. 앞으로 다른 "일괄(bulk)" 웹훅 함수나, 사람이 여러 페이지를 동시에 클릭할
 // 수 있는 "개별" 웹훅 함수가 추가되면 여기에 추가한다 (위 2026-09-22 Phase 6 주석 참고).
@@ -114,6 +115,8 @@ const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Pro
   "fix-attendance": processFixAttendanceQueueItem,
   // (v2.6.12) 시간표 DB "상태 ⚪ 대기" 자동화 → generate-classes/queue (메뉴 일괄 생성을 시간표 하나씩)
   "generate-classes": processGenerateClassesQueueItem,
+  // (v2.6.18) 수업 DB "수업일시 편집" 자동화 → fix-attendance/session-date (출석 날짜·기록 제목 날짜 맞추기)
+  "session-date": processSessionDateQueueItem,
 }
 
 // (2026-09-22, Phase 6) 이 워커 한 번의 실행(위 sync_queue_worker_lock으로 항상 한 번에 하나만

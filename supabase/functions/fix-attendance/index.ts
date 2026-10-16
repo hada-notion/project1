@@ -97,6 +97,13 @@ Deno.serve(async (req: Request) => {
 
   // (v2.6.11, 웹훅 재정리 2단계) 수업 DB 자동화 "출석조정 상태가 ⚪ 대기로 바뀌면"이 부르는 경로.
   // 본문의 "출석 조정 정보" 수식(계획)과 클래스·수업일시·담당강사·보강을 큐에 함께 넣는다. 수식이 없으면 워커가 예전 방식으로 처리.
+  // (v2.6.18) 수업 DB 자동화 "수업일시 편집"이 부르는 경로: 출석 날짜를 수업과 맞추고 학습기록·학습활동 제목의 날짜를 바꾼다.
+  // 큐에 넣고 바로 202(워커가 수업을 새로 읽어 마지막 날짜로 맞춘다).
+  if (new URL(req.url).pathname.split("/").pop() === "session-date") {
+    await enqueueSync("session-date", { pageId: classSessionId })
+    wakeSyncQueueWorker()
+    return respondAccepted({ classSessionId, queued: true })
+  }
   if (new URL(req.url).pathname.split("/").pop() === "queue") {
     const parsed = planFromWebhookBody(body, classSessionId)
     await enqueueSync("fix-attendance", { pageId: classSessionId, plan: parsed?.plan ?? null, session: parsed?.session ?? null })
