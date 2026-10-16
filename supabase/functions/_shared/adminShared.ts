@@ -383,7 +383,8 @@ export type AlimtalkConfig = {
 }
 
 const alimtalkConfigCache = new Map<string, { value: AlimtalkConfig; expiresAt: number }>()
-const ALIMTALK_CONFIG_CACHE_MS = 60_000
+// (v2.6.20) 일일 보고서를 큐로 차례로 보낼 때 같은 설정을 다시 읽지 않도록 5분 재사용(설정은 거의 바뀌지 않음).
+const ALIMTALK_CONFIG_CACHE_MS = 5 * 60_000
 
 // [NEW] 주간/월간 보고서는 카카오 템플릿이 하나로 통합되어 있어서, "알림톡 설정(학원) DB"에서는 "보고서" 하나의 행으로 조회합니다.
 // 전송로그의 "발송 구분"(일일/주간/월간/수강료)은 이와 별개로 그대로 유지됩니다.
