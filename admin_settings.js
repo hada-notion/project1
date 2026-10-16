@@ -81,7 +81,7 @@ const CHECKLIST=[
   ['attendance-report-queue','보고서 전송',AUTO,route('send-daily-report'),{path:'/queue',trigger:{when:'속성 편집',select:['보고서 전송 상태','⚪ 대기']},note:'주소 끝의 /queue까지 넣습니다. 출석 [보고서 전송]·수업 [보고서 일괄 전송] 버튼은 상태만 바꿉니다(v2.6.20).'}],
   ['attendance-delete','삭제',AUTO,route('cascade-delete'),DELETE]]],
  ['학습기록(학원)',[
-  ['record-assignment','학습활동 생성',AUTO,route('create-assignment'),{path:'/queue',trigger:{when:'속성 편집',select:['활동 생성 상태','⚪ 대기']},note:'주소 끝의 /queue까지 넣습니다. [학습활동 생성] 버튼은 활동 생성 상태만 ⚪ 대기로 바꿉니다(v2.6.22).'}],
+  ['record-assignment','학습활동 생성',BUTTON,route('create-assignment'),{path:'/queue',note:'주소 끝의 /queue까지 넣습니다. 본문 속성은 학습활동 계획만 고릅니다(v2.6.22).'}],
   ['record-units','단원 입력',BUTTON,route('fill-record-units')],
   ['record-delete','삭제',AUTO,route('cascade-delete'),DELETE]]],
  ['학습활동(학원)',[['assignment-delete','삭제',AUTO,route('cascade-delete'),DELETE]]],
@@ -161,7 +161,7 @@ const DESC={
  'session-attendance-queue':'출석조정 상태가 ⚪ 대기가 되면 이 수업 명단 기준으로 출석을 맞춥니다. 빠진 출석은 연결하거나 만들고, 명단 밖·중복 출석은 삭제 체크합니다. 보강 수업은 합치기만 하고 지우지 않습니다.',
  'session-date-move':'수업 날짜를 옮기면 그 수업의 출석 날짜를 맞추고, 학습기록·학습활동 제목의 날짜를 바꿉니다. 출석 이름은 출석의 이름 자동화가 바꿉니다.',
  'attendance-report-queue':'보고서 전송 상태가 ⚪ 대기가 되면 일일 보고서를 큐에서 한 명씩 보냅니다. 보내기 전에 리포트를 최신 내용으로 맞추고, 이미 보낸 학생은 다시 보내지 않습니다.',
- 'record-assignment':'활동 생성 상태가 ⚪ 대기가 되면 수식 학습활동 계획대로 출석마다 학습활동을 큐에서 만듭니다. 과제는 그 학생의 다음 출석을 마감으로 넣고, 이미 만든 학생은 다시 만들지 않습니다.',
+ 'record-assignment':'버튼을 누르면 수식 학습활동 계획대로 출석마다 학습활동을 큐에서 만듭니다. 과제는 그 학생의 다음 출석을 마감으로 넣고, 이미 만든 학생은 다시 만들지 않습니다.',
  'record-units':'지금 범위(쉼표로 여러 구간)로 교재 단원을 찾아 단원을 새로 채웁니다. 범위를 정한 뒤 누릅니다.',
  'report-send':'이 보고서(주간 또는 월간)를 학부모에게 알림톡으로 보냅니다.',
  'outbox-send':'이 발송함의 구분(주간·월간 보고서 또는 수강료)에 맞는 건 중 "일괄전송 선택"이 체크된 건을 이름순으로 10건씩 차례로 보냅니다. 건수가 많아도 다시 누르지 않고 기다립니다.',
