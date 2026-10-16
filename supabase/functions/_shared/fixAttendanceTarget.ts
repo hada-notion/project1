@@ -301,7 +301,7 @@ export type FixPlan = {
 	del: string[]
 	roster?: string[]
 	makeup?: boolean // (v2.6.17) 수식 "mk":1 — 보강 수업(합치기만)
-	books?: string[] // (v2.6.21) 수식 "books" — 명단 학생들의 진도교재 전부. 있으면 수업 "진도교재"(단방향 관계)를 이 값으로 맞춘다
+	books?: string[] // (v2.6.21) 수식 "books" — 명단 학생들의 진도교재 전부. 있으면 수업 "진도교재"(양방향 관계, 진도교재 쪽 "수업"은 숨김)를 이 값으로 맞춘다
 }
 export type FixSession = { id: string; classIds: string[]; teacherIds: string[]; start: string | null; end: string | null; makeup: boolean }
 
@@ -426,7 +426,7 @@ export async function applyFixPlan(session: FixSession, plan: FixPlan, log: stri
 		log.push(`[flagged] ${session.id}: attendance ${id}`)
 	}
 	// 3) 수업 명단(수식이 다를 때만 보냄) + 진도교재(v2.6.21, 수식이 보낼 때만) + 완료를 수업 쓰기 한 번에.
-	//    진도교재는 수업 → 진도교재 단방향 관계라 진도교재 쪽에 수업이 쌓이지 않는다. 명단이 바뀌는 길은 모두 출석 조정으로
+	//    진도교재는 양방향 관계지만 서버는 수업 쪽만 쓴다(진도교재 쪽 "수업"은 숨김, 수업 페이지 보기 필터용). 명단이 바뀌는 길은 모두 출석 조정으로
 	//    모이므로(수업 생성·수업추가·일괄 생성·등록 수업 생성·종료 처리·간편 보강) 여기서 함께 맞추면 항상 명단과 같다.
 	await finish({
 		...(plan.roster ? { 등록: { relation: plan.roster.map((id) => ({ id })) } } : {}),

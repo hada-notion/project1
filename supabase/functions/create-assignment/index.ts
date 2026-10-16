@@ -45,6 +45,8 @@ import { getPage, relIds as relIdsFromProp, extractPageId } from "../_shared/not
 import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 import { isRunning } from "../_shared/statusTracking.ts"
+import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
+import { PLAN_PROP, planText } from "../_shared/assignmentPlan.ts"
 import {
 	CATEGORY_LEARNING,
 	CATEGORY_ASSIGNMENT,
@@ -97,6 +99,16 @@ async function handleRequest(req: Request): Promise<Response> {
 	if (!recordId) {
 		console.error("Could not extract 학습기록 pageId from payload", body)
 		return new Response(JSON.stringify({ error: "missing_page_id" }), { status: 400 })
+	}
+
+	// (v2.6.22) 학습기록 DB 자동화("활동 생성 상태"가 ⚪ 대기로 바뀌면)가 부르는 경로. 큐에 넣고 바로 202.
+	// 본문에 수식 "학습활동 계획" 값이 있으면 함께 넣는다(없으면 큐가 학습기록을 한 번 읽는다). _shared/assignmentPlan.ts
+	if (new URL(req.url).pathname.split("/").pop() === "queue") {
+		const props = (body.data as JsonRecord | undefined)?.properties as JsonRecord | undefined
+		const plan = planText(props?.[PLAN_PROP]) || null
+		await enqueueSync("create-assignment", { recordId, plan })
+		wakeSyncQueueWorker()
+		return respondAccepted({ recordId, queued: true, plan: !!plan })
 	}
 
 	try {
