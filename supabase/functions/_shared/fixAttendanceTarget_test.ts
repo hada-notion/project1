@@ -51,10 +51,23 @@ Deno.test("계획 적용: 새 출석(학습기록 포함)·미연결 출석 연�
  // Notion 읽기 없음(과제 마감 확인 조회만): 페이지 GET 없음
  assert(!m.calls.some((x) => x.method === "GET" && x.url.includes("api.notion.com")), "no page reads")
 }))
-Deno.test("계획 적용: 보강·skip은 아무것도 만들지 않고 완료만", () => withMock(async (m) => {
- await target.applyFixPlan({ ...session, makeup: true }, { v: 1, add: [{ reg: R1 }], del: [A2] }, [], { "출석조정 상태": { select: { name: "✅ 완료" } } })
+Deno.test("계획 적용: skip(예전 수식의 보강 포함)은 아무것도 만들지 않고 완료만", () => withMock(async (m) => {
+ await target.applyFixPlan({ ...session, makeup: true }, { v: 1, skip: "보강 수업", add: [], del: [] }, [], { "출석조정 상태": { select: { name: "✅ 완료" } } })
  await target.applyFixPlan(session, { v: 1, skip: "시간표·수업일시 없음", add: [], del: [] }, [], { "출석조정 상태": { select: { name: "✅ 완료" } } })
  assert(m.created.length === 0 && m.writes.length === 2 && m.writes.every((w) => w.id === S))
+}))
+Deno.test("v2.6.17 보강 수업: 합치기만 — 출석을 🔵 보강으로 만들고 대기실 출석을 연결, 명단을 합치고 지우지 않는다(클래스 없어도 됨)", () => withMock(async (m) => {
+ const log: string[] = []
+ // 웹훅 본문에 "보강"이 빠져도 수식의 mk 표시로 보강 수업임을 안다.
+ const plan = target.planFromText(JSON.stringify({ v: 1, mk: 1, day: "2026-10-15", add: [{ reg: R1, att: "", rec: [] }, { reg: R2, att: A1, rec: [] }], del: [A2], roster: [R1, R2] }))!
+ assert(plan.makeup === true)
+ await target.applyFixPlan({ ...session, classIds: [], makeup: false }, plan, log, { "출석조정 상태": { select: { name: "✅ 완료" } } })
+ assert(m.created.length === 1 && m.created[0].properties["출석 상태"].select.name === "🔵 보강" && !m.created[0].properties["클래스"] && m.created[0].properties["출석"].title[0].text.content === "2026-10-15 보강", JSON.stringify(m.created[0].properties))
+ const link = m.writes.find((w) => w.id === A1); assert(link && ids(link.body.properties, "수업") === S && !link.body.properties["클래스"] && !link.body.properties["과제마감 백필 대상"], "대기실 출석 연결(과제 마감 연결 없음)")
+ assert(!m.writes.some((w) => w.id === A2), "지우지 않음(삭제 체크 없음)")
+ const sw = m.writes.filter((w) => w.id === S); assert(sw.length === 1 && ids(sw[0].body.properties, "등록") === `${R1},${R2}`, "명단 합치기")
+ assert(!m.calls.some((c) => c.url.includes("/data_sources/activities/")), "보강은 대기 과제 조회 안 함")
+ assert(log.some((l) => l.includes("지우지 않음")))
 }))
 Deno.test("안전장치: 다녀야 할 학생 0명 + 출석 삭제 계획은 아무것도 쓰지 않는다(applyFixPlan은 오류, 큐는 페이지 재읽기 항목으로)", () => withMock(async (m) => {
  let threw = false
