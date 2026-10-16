@@ -301,6 +301,7 @@ export type FixPlan = {
 	del: string[]
 	roster?: string[]
 	makeup?: boolean // (v2.6.17) 수식 "mk":1 — 보강 수업(합치기만)
+	books?: string[] // (v2.6.21) 수식 "books" — 명단 학생들의 진도교재 전부. 있으면 수업 "진도교재"(단방향 관계)를 이 값으로 맞춘다
 }
 export type FixSession = { id: string; classIds: string[]; teacherIds: string[]; start: string | null; end: string | null; makeup: boolean }
 
@@ -331,7 +332,13 @@ export function planFromText(text: unknown): FixPlan | null {
 		roster = raw.roster.map(cleanId)
 		if (roster!.some((x) => !x)) return null
 	}
-	return { v: 1, day: typeof raw.day === "string" ? raw.day : undefined, add, del, roster, ...(raw.mk === 1 ? { makeup: true } : {}) }
+	let books: string[] | undefined
+	if (raw.books !== undefined) {
+		if (!Array.isArray(raw.books)) return null
+		books = [...new Set(raw.books.map(cleanId))] as string[]
+		if (books.some((x) => !x)) return null
+	}
+	return { v: 1, day: typeof raw.day === "string" ? raw.day : undefined, add, del, roster, ...(raw.mk === 1 ? { makeup: true } : {}), ...(books ? { books } : {}) }
 }
 
 const propText = (p: any): string => {
@@ -418,8 +425,13 @@ export async function applyFixPlan(session: FixSession, plan: FixPlan, log: stri
 		await updatePageProperties(id, { [PROP_DELETE_CHECK]: { checkbox: true } })
 		log.push(`[flagged] ${session.id}: attendance ${id}`)
 	}
-	// 3) 수업 명단(수식이 다를 때만 보냄) + 완료를 수업 쓰기 한 번에
-	await finish(plan.roster ? { 등록: { relation: plan.roster.map((id) => ({ id })) } } : {})
+	// 3) 수업 명단(수식이 다를 때만 보냄) + 진도교재(v2.6.21, 수식이 보낼 때만) + 완료를 수업 쓰기 한 번에.
+	//    진도교재는 수업 → 진도교재 단방향 관계라 진도교재 쪽에 수업이 쌓이지 않는다. 명단이 바뀌는 길은 모두 출석 조정으로
+	//    모이므로(수업 생성·수업추가·일괄 생성·등록 수업 생성·종료 처리·간편 보강) 여기서 함께 맞추면 항상 명단과 같다.
+	await finish({
+		...(plan.roster ? { 등록: { relation: plan.roster.map((id) => ({ id })) } } : {}),
+		...(plan.books ? { 진도교재: { relation: plan.books.slice(0, 100).map((id) => ({ id })) } } : {}), // Notion 관계 한 번 쓰기 최대 100개
+	})
 	if (!plan.add.length && !del.length && !plan.roster) log.push(`[ok] ${session.id}: 출석이 명단과 같아요`)
 }
 

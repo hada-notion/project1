@@ -78,7 +78,6 @@ const CHECKLIST=[
   ['session-date-move','수업 날짜 이동',AUTO,route('fix-attendance'),{path:'/session-date',trigger:{when:'수업일시 편집'},note:'주소 끝의 /session-date까지 넣습니다(v2.6.18).'}],
   ['session-delete','삭제',AUTO,route('cascade-delete'),DELETE]]],
  ['출석(학원)',[
-  ['attendance-record','학습기록 생성',BUTTON,route('create-learning-record')],
   ['attendance-report-queue','보고서 전송',AUTO,route('send-daily-report'),{path:'/queue',trigger:{when:'속성 편집',select:['보고서 전송 상태','⚪ 대기']},note:'주소 끝의 /queue까지 넣습니다. 출석 [보고서 전송]·수업 [보고서 일괄 전송] 버튼은 상태만 바꿉니다(v2.6.20).'}],
   ['attendance-delete','삭제',AUTO,route('cascade-delete'),DELETE]]],
  ['학습기록(학원)',[
@@ -161,7 +160,6 @@ const DESC={
  'session-record':'이 수업에 출석한 학생들의 학습기록을 만듭니다.',
  'session-attendance-queue':'출석조정 상태가 ⚪ 대기가 되면 이 수업 명단 기준으로 출석을 맞춥니다. 빠진 출석은 연결하거나 만들고, 명단 밖·중복 출석은 삭제 체크합니다. 보강 수업은 합치기만 하고 지우지 않습니다.',
  'session-date-move':'수업 날짜를 옮기면 그 수업의 출석 날짜를 맞추고, 학습기록·학습활동 제목의 날짜를 바꿉니다. 출석 이름은 출석의 이름 자동화가 바꿉니다.',
- 'attendance-record':'이 출석이 연결된 수업의 학습기록을 만듭니다. 수업 없는 출석(보강 대기실)에서는 만들지 않고 보강 수업 배정을 안내합니다.',
  'attendance-report-queue':'보고서 전송 상태가 ⚪ 대기가 되면 일일 보고서를 큐에서 한 명씩 보냅니다. 보내기 전에 리포트를 최신 내용으로 맞추고, 이미 보낸 학생은 다시 보내지 않습니다.',
  'record-assignment':'이 학습기록의 대상 학생마다 학습활동(과제)을 만듭니다.',
  'record-units':'지금 범위(쉼표로 여러 구간)로 교재 단원을 찾아 단원을 새로 채웁니다. 범위를 정한 뒤 누릅니다.',

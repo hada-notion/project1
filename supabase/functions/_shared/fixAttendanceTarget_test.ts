@@ -115,3 +115,14 @@ Deno.test("v2.6.13 본문 계획으로 실패하면 같은 계획을 되풀이�
  assert(!failing.writes.some((w) => w.id === S && w.body.properties["출석조정 상태"]?.select?.name === "⚠️ 오류"), "no error state, re-queued instead")
  assert(m.calls.length === 0)
 }))
+
+Deno.test("v2.6.21 진도교재: 수식이 books를 보내면 수업 마지막 쓰기 한 번에 진도교재 관계를 맞추고, 없으면 건드리지 않는다", () => withMock(async (m) => {
+ const B1 = "77777777777747778777777777777771", B2 = "77777777777747778777777777777772"
+ const plan = target.planFromText(JSON.stringify({ v: 1, day: "2026-10-15", add: [], del: [], books: [B1, B2, B1] }))!
+ assert(plan.books!.join() === B1 + "," + B2, "중복 제거")
+ await target.applyFixPlan(session, plan, [], { "출석조정 상태": { select: { name: "✅ 완료" } } })
+ const sw = m.writes.filter((w) => w.id === S); assert(sw.length === 1 && ids(sw[0].body.properties, "진도교재") === B1 + "," + B2 && sw[0].body.properties["출석조정 상태"], JSON.stringify(sw))
+ await target.applyFixPlan(session, target.planFromText(JSON.stringify({ v: 1, add: [], del: [] }))!, [], { "출석조정 상태": { select: { name: "✅ 완료" } } })
+ assert(!m.writes.at(-1)!.body.properties["진도교재"], "books 없으면 진도교재 안 씀(속성 없는 운영 보호)")
+ assert(target.planFromText(JSON.stringify({ v: 1, add: [], del: [], books: ["bad"] })) === null, "형식 오류면 예전 방식")
+}))
