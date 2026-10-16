@@ -39,7 +39,7 @@ jobs:
         run: deno test --allow-env supabase/functions/_shared/assignmentDeadline_test.ts supabase/functions/_shared/bulkClassOrder_test.ts supabase/functions/generate-classes/index_test.ts
 
       - name: Test individual textbook ownership and class lookup
-        run: deno test --allow-env supabase/functions/_shared/registrationTextbookTarget_test.ts
+        run: deno test --allow-env supabase/functions/_shared/registrationTextbookTarget_test.ts supabase/functions/_shared/learningRecordShare_test.ts
 
       - name: Test class room reads, saves, records and makeup sessions
         run: deno test --allow-env supabase/functions/_shared/classRoom_test.ts supabase/functions/_shared/classRoomCopy_test.ts supabase/functions/_shared/classRoomRead_test.ts

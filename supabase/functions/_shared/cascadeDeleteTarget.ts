@@ -16,7 +16,7 @@
 // depth===0일 때 이미 호출하므로 여기서 다시 부를 필요는 없다. 마스터플랜:
 // https://app.notion.com/p/903c90386c1d473494c5df6306c53517
 
-import { getPage, queryAllPages, updatePageProperties, archivePage, mapWithConcurrency } from "./notionClient.ts"
+import { getPage, queryAllPages, updatePageProperties, archivePage, mapWithConcurrency, relIds } from "./notionClient.ts"
 import {
 	PROP_DELETE_CHECKBOX,
 	PROP_LAST_ERROR,
@@ -30,6 +30,7 @@ import {
 } from "./constants.ts"
 import { isRunning, markQueued, markRunning, markDone, markError, type StatusSpec } from "./statusTracking.ts"
 import { removeLater } from "./classRoomCopy.ts"
+import { decideRecordRemoval } from "./learningRecordShare.ts"
 // (2026-09-21, 이식성 리팩토링) 위 7개 데이터소스 ID는 이 파일에 직접 하드코딩돼 있었는데, 이제
 // constants.ts 한 곳에서 환경변수로 읽어와 공유한다 (constants.ts 상단 주석 참고). export하지 않아도
 // 되도록 이 파일 밖에서 이 이름들을 가져다 쓰는 곳이 없는지 확인했다.
@@ -149,9 +150,10 @@ async function getStudyRecordProgressType(studyRecordPage: any): Promise<string 
   return textbookPage.properties?.[PROP_PROGRESS_TYPE]?.select?.name
 }
 
-async function disconnectRelation(pageId: string, propName: string, removeId: string): Promise<void> {
-  const page = await getPage(pageId)
-  const current: string[] = (page.properties?.[propName]?.relation ?? []).map((r: any) => r.id)
+// (v2.6.16) 관계 목록은 조회 결과(kid)에서 읽는다. 페이지 읽기는 관계를 25개까지만 줘서, 그대로 다시 쓰면 나머지가 지워진다.
+async function disconnectRelation(kid: any, propName: string, removeId: string): Promise<void> {
+  const pageId = kid.id
+  const current: string[] = (kid.properties?.[propName]?.relation ?? []).map((r: any) => r.id)
   const filtered = current.filter((id: string) => id !== removeId)
   if (filtered.length === current.length) return
   await updatePageProperties(pageId, { [propName]: { relation: filtered.map((id) => ({ id })) } })
@@ -218,8 +220,20 @@ export async function cascadeDelete(
 
             if (child.dataSourceId === DS_STUDY_RECORD) {
               const progressType = await getStudyRecordProgressType(kid)
-              if (progressType === GROUP_PROGRESS_TYPE) {
-                await disconnectRelation(kid.id, child.relationPropOnChild, pageId)
+              // (v2.6.16) 출석을 지울 때: 다른 학생도 쓰는 기록(그룹 진도·주제로 만든 반 전체 기록)은 남기고
+              // 이 출석과 이 학생만 기록에서 뺀다. 이 학생만의 기록(개별 진도)은 아래에서 함께 지운다.
+              if (dataSourceId === DS_ATTENDANCE) {
+                // 수업째 지우는 중이면 그 수업의 기록은 수업 쪽에서 처리한다(여기서 연결을 끊으면 쓸데없는 쓰기·경합).
+                const deleting = new Set([...visited].map((v) => v.replace(/-/g, "")))
+                if (relIds(kid.properties?.["수업"]).some((id: string) => deleting.has(id.replace(/-/g, "")))) return
+                const decision = decideRecordRemoval(kid, [pageId], relIds(page.properties?.["등록"]), progressType)
+                if (decision.action === "detach") {
+                  await updatePageProperties(kid.id, decision.properties)
+                  log.push(`${indent}🔗 [${name}] 다른 학생도 쓰는 학습기록이라 이 출석·학생 연결만 해제함: ${kid.id}`)
+                  return
+                }
+              } else if (progressType === GROUP_PROGRESS_TYPE) {
+                await disconnectRelation(kid, child.relationPropOnChild, pageId)
                 log.push(`${indent}🔗 [${name}] 그룹 진도 학습기록이라 관계만 해제함 (${child.relationPropOnChild}): ${kid.id}`)
                 return
               }
