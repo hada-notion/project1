@@ -28,7 +28,7 @@
 // 조회한 설정 행을 이 관계에 채워둔다 (조회 실패 시에는 조용히 건너뛰고 생성 자체는 계속 진행함).
 
 import { getPage, createPage, archivePage, mapWithConcurrency } from "./notionClient.ts"
-import { makeQueuedBackgroundProcessor } from "./webhookIngest.ts"
+import { ConfigError, makeQueuedBackgroundProcessor } from "./webhookIngest.ts"
 import { getScheduleConfig } from "./adminShared.ts"
 import { PROP_LAST_ERROR } from "./constants.ts"
 import { type StatusSpec } from "./statusTracking.ts"
@@ -39,6 +39,7 @@ import {
 	monthRange,
 	PROP_NOTIFICATION_BATCH_RELATION,
 	PROP_BATCH_PERIOD,
+	PROP_BATCH_TYPE,
 } from "./generateShared.ts"
 
 // (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) "수강료 생성중" 체크박스 -> "수강료 생성 상태"(select)
@@ -64,15 +65,17 @@ export async function processClass(classId: string, log: string[]): Promise<void
 
 	const batchId: string | null = classPage.properties?.[PROP_CLASS_TUITION_TARGET]?.relation?.[0]?.id ?? null
 	if (!batchId) {
-		log.push(`[skip] ${className}: "${PROP_CLASS_TUITION_TARGET}"이 연결되지 않음 (알림톡 발송함을 먼저 연결해주세요)`)
-		return
+		throw new ConfigError(`클래스의 "${PROP_CLASS_TUITION_TARGET}"에 알림톡 발송함이 연결되지 않았습니다. 구분이 "수강료"인 발송함을 연결해 주세요.`)
 	}
 	const batchPage = await getPage(batchId)
+	const batchType: string | undefined = batchPage.properties?.[PROP_BATCH_TYPE]?.select?.name
+	if (batchType !== "수강료") {
+		throw new ConfigError(`"${PROP_CLASS_TUITION_TARGET}"에 연결된 발송함의 구분이 "${batchType || "없음"}"입니다. 구분이 "수강료"인 발송함을 연결해 주세요.`)
+	}
 	const periodProp = batchPage.properties?.[PROP_BATCH_PERIOD]?.date
 	const periodStartRaw: string | undefined = periodProp?.start
 	if (!periodStartRaw) {
-		log.push(`[skip] ${className}: 연결된 발송함(${batchId})에 "${PROP_BATCH_PERIOD}"이 입력되지 않음`)
-		return
+		throw new ConfigError(`연결된 발송함에 "${PROP_BATCH_PERIOD}"이 입력되지 않았습니다.`)
 	}
 	const periodStart = periodStartRaw.slice(0, 10)
 	// 실제 대상 기간: 발송함의 기간에 종료일(end)이 명시돼 있으면 그대로 쓰고, 없으면 시작일이
@@ -85,8 +88,7 @@ export async function processClass(classId: string, log: string[]): Promise<void
 	// 만들어버리는 대신 클래스 설정을 먼저 채우도록 안내하고 건너뛴다.
 	const monthlyTotalQuantity: number | null = classPage.properties?.["월간 수업 총량"]?.number ?? null
 	if (monthlyTotalQuantity == null) {
-		log.push(`[skip] ${className}: "월간 수업 총량"이 설정되지 않음 (클래스 설정에서 먼저 입력해주세요)`)
-		return
+		throw new ConfigError(`클래스의 "월간 수업 총량"이 비어 있습니다. 먼저 입력해 주세요.`)
 	}
 
 	// 클래스 DB "해당월 수강료 생성 내역" 수식과 동일하게, 청구 기간(monthStart~monthEnd)과

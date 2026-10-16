@@ -20,7 +20,7 @@
 // 호출하지 않는다.)
 
 import { getPage, createPage, queryAllPages, archivePage, mapWithConcurrency, relIds } from "./notionClient.ts"
-import { makeQueuedBackgroundProcessor } from "./webhookIngest.ts"
+import { ConfigError, makeQueuedBackgroundProcessor } from "./webhookIngest.ts"
 import { PROP_LAST_ERROR } from "./constants.ts"
 import { type StatusSpec } from "./statusTracking.ts"
 import {
@@ -102,15 +102,15 @@ export async function processClass(classId: string, log: string[]): Promise<void
 
 	const batchId: string | null = classPage.properties?.[PROP_CLASS_REPORT_TARGET]?.relation?.[0]?.id ?? null
 	if (!batchId) {
-		log.push(`[skip] ${className}: "${PROP_CLASS_REPORT_TARGET}"이 연결되지 않음 (알림톡 발송함을 먼저 연결해주세요)`)
-		return
+		throw new ConfigError(`클래스의 "${PROP_CLASS_REPORT_TARGET}"에 알림톡 발송함이 연결되지 않았습니다. 구분이 "주간 보고서" 또는 "월간 보고서"인 발송함을 연결해 주세요.`)
 	}
 	const batchPage = await getPage(batchId)
 	const reportType: string | undefined = batchPage.properties?.[PROP_BATCH_TYPE]?.select?.name
 	const rawStart: string | undefined = batchPage.properties?.[PROP_BATCH_PERIOD]?.date?.start
 	if (!rawStart || (reportType !== "주간 보고서" && reportType !== "월간 보고서")) {
-		log.push(`[skip] ${className}: 연결된 발송함(${batchId})의 "${PROP_BATCH_PERIOD}"/"${PROP_BATCH_TYPE}"이 올바르지 않음 (구분: ${reportType || "없음"})`)
-		return
+		throw new ConfigError(!rawStart
+			? `연결된 발송함에 "${PROP_BATCH_PERIOD}"이 입력되지 않았습니다.`
+			: `"${PROP_CLASS_REPORT_TARGET}"에 연결된 발송함의 구분이 "${reportType || "없음"}"입니다. 구분이 "주간 보고서" 또는 "월간 보고서"인 발송함을 연결해 주세요.`)
 	}
 	const rawStartDate = rawStart.slice(0, 10)
 	const isWeekly = reportType === REPORT_TYPE_WEEKLY
