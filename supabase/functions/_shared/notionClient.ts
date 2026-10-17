@@ -259,11 +259,12 @@ export async function createPage(dataSourceId: string, properties: Record<string
 	return res.json()
 }
 
-export async function archivePage(pageId: string) {
+// (v2.6.31) properties를 주면 휴지통으로 보내면서 그 속성도 한 번에 쓴다(상태 ✅ 완료 쓰기 1번을 줄임).
+export async function archivePage(pageId: string, properties?: Record<string, unknown>) {
 	const res = await fetchWithRetry(`${NOTION_API}/pages/${pageId}`, {
 		method: "PATCH",
 		headers: notionHeaders(),
-		body: JSON.stringify({ archived: true }),
+		body: JSON.stringify(properties ? { properties, archived: true } : { archived: true }),
 	})
 	if (!res.ok) {
 		const text = await res.text()

@@ -51,8 +51,9 @@ function mock(pages: Record<string, any>) {
 async function withMock(pages: Record<string, any>, run: (m: ReturnType<typeof mock>) => Promise<void>) {
  const m = mock(pages), original = globalThis.fetch
  globalThis.fetch = m.fetch as typeof fetch
- ;(globalThis as any).EdgeRuntime = { waitUntil: (p: Promise<unknown>) => p.catch(() => {}) }
- try { await run(m) } finally { globalThis.fetch = original; delete (globalThis as any).EdgeRuntime }
+ const bg: Promise<unknown>[] = []
+ ;(globalThis as any).EdgeRuntime = { waitUntil: (p: Promise<unknown>) => { bg.push(p.catch(() => {})) } }
+ try { await run(m); await Promise.all(bg) } finally { globalThis.fetch = original; delete (globalThis as any).EdgeRuntime }
 }
 const page = (id: string, db: string, properties: any) => ({ id, parent: { data_source_id: db }, archived: false, properties })
 function world() {

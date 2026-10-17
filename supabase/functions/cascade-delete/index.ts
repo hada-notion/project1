@@ -104,7 +104,9 @@ Deno.serve(async (req: Request) => {
   // -- sync_queue의 recoverStaleSyncQueueItems(15분)와 Notion 쪽 워치독(sweepStaleStatus, 15분)이
   // 이미 그 역할을 한다 (위 v13 주석 참고).
   try {
-    const existingPage = await getPage(pageId)
+    // (v2.6.31) 자동화 본문에 "삭제 상태"가 실려 오면 그 값으로 판단하고 페이지를 다시 읽지 않는다.
+    const bodyProps = body?.data?.properties
+    const existingPage = bodyProps && bodyProps["삭제 상태"] ? { properties: bodyProps } : await getPage(pageId)
     if (isDeletingFlagSet(existingPage)) {
       return new Response(JSON.stringify({ ok: true, message: "already_processing", pageId }), {
         status: 200,
