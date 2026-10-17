@@ -68,7 +68,7 @@ const CHECKLIST=[
   ['class-tuition','월 수강료 생성',BUTTON,route('generate-tuition')],
   ['class-textbook-fee','교재비 생성 (예전 방식)',BUTTON,route('sync-textbook-distribution'),{path:'/from-class-carts',note:'v2.6.26부터 [교재비 생성]은 웹훅 없이 등록의 교재비 생성 상태만 바꾸고 등록 DB 자동화가 교재비를 만듭니다. 아직 예전 버튼(웹훅)을 쓰는 경우에만 키를 바꿉니다.'}],
   ['class-report-sync','학생 페이지 동기화',BUTTON,route('sync-class-report-cache')],
-  ['class-report','보고서 생성',BUTTON,route('generate-report')]]],
+  ['class-report','보고서 생성 (예전 방식)',BUTTON,route('generate-report'),{note:'v2.6.27부터 [보고서 생성]은 웹훅 없이 등록의 보고서 생성 상태만 바꾸고 등록 DB 자동화가 보고서를 만듭니다. 아직 예전 버튼(웹훅)을 쓰는 경우에만 키를 바꿉니다.'}]]],
  ['메뉴(학원)',[['menu-bulk-classes','다음주 수업 일괄 생성',BUTTON,route('generate-classes'),{path:'?mode=bulk',note:'주소 끝의 ?mode=bulk까지 넣습니다.'}]],{
   text:'메뉴 DB의 어떤 페이지(예: 수업 HOME)를 열어도 제목 아래 속성 줄에 "다음주 수업 일괄 생성" 버튼이 있습니다. 속성 이름을 클릭하고 "자동화 편집"을 눌러 웹훅 보내기의 값 칸을 바꿉니다. 메뉴 DB에는 "웹훅 등록" 보기가 없어도 됩니다.',
   image:'assets/admin-settings/menu-bulk-button.png',alt:'메뉴 페이지 상단 속성 줄의 다음주 수업 일괄 생성 버튼'}],
