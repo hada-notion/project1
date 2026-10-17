@@ -97,7 +97,7 @@ const CHECKLIST=[
  ['학생(학원)',[
   ['student-inquiry-auto','상담 신청 접수안내',AUTO,route('send-inquiry-receipt'),{trigger:{when:'페이지 추가',check:['개인정보 동의',true]}}],
   ['student-inquiry','접수안내 직접 발송',BUTTON,route('send-inquiry-receipt'),{note:'관리자가 직접 입력한 학생에게 보낼 때 누릅니다.'}]]],
- ['시험정보(학원)',[['exam-scope','응시학생 등록',BUTTON,route('sync-exam-scope')]]],
+ ['시험정보(학원)',[['exam-scope','응시학생 등록 (예전 방식)',BUTTON,route('sync-exam-scope'),{note:'v2.6.30부터 [응시학생 등록]은 웹훅 없이 학생의 응시 등록만 바꾸고 학생 DB 자동화가 성적을 만듭니다. 아직 예전 버튼(웹훅)을 쓰는 경우에만 키를 바꿉니다.'}]]],
  ['학교(학원)',[['school-calendar','학사일정 가져오기',BUTTON,route('sync-school-calendar')]]],
  ['대시보드(학원)',[['dashboard-link','날짜 변경 연결',AUTO,route('sync-dashboard-link'),{trigger:{when:'날짜 속성 편집'}}],
   ['dashboard-link-new','새 대시보드 연결',AUTO,route('sync-dashboard-link'),{trigger:{when:'페이지 추가'}}]]],
