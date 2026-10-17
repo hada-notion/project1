@@ -435,9 +435,38 @@ export async function setCombinedSyncStatus(
 	await updateStatusWithRetry(pageId, properties, "success")
 }
 
+// (v2.6.32) 페이지 읽기와 DB 조회는 관계를 25개까지만 주고 has_more로 잘렸음을 알린다. 그 목록을 고쳐 다시 쓰면
+// 26번째부터가 지워지므로, 잘렸을 때만 속성 항목 API로 끝까지 읽는다(25개 이하면 호출이 늘지 않음).
+export async function fullRelationIds(page: any, propName: string): Promise<string[]> {
+	const prop = page?.properties?.[propName]
+	if (!prop?.has_more || !prop?.id || !page?.id) return relIds(prop)
+	const out: string[] = []
+	let cursor: string | undefined
+	do {
+		const qs = `page_size=100${cursor ? `&start_cursor=${encodeURIComponent(cursor)}` : ""}`
+		const res = await fetchWithRetry(`${NOTION_API}/pages/${page.id}/properties/${encodeURIComponent(prop.id)}?${qs}`, { method: "GET", headers: notionHeaders() })
+		if (!res.ok) throw new Error(`relation ${propName} of ${page.id} read failed: ${res.status} ${await res.text()}`)
+		const data = await res.json()
+		for (const r of data.results ?? []) if (r?.relation?.id) out.push(r.relation.id)
+		cursor = data.has_more ? data.next_cursor : undefined
+	} while (cursor)
+	return out
+}
+
+// 지정한 관계 속성들을 끝까지 채운 복사본(잘리지 않았으면 그대로).
+export async function withFullRelations(page: any, propNames: string[]): Promise<any> {
+	if (!propNames.some((n) => page?.properties?.[n]?.has_more)) return page
+	const properties = { ...page.properties }
+	for (const n of propNames) {
+		if (!properties[n]?.has_more) continue
+		properties[n] = { ...properties[n], relation: (await fullRelationIds(page, n)).map((id) => ({ id })), has_more: false }
+	}
+	return { ...page, properties }
+}
+
 export async function addRelation(pageId: string, propName: string, addIds: string[]) {
 	const page = await getPage(pageId)
-	const existing = relationIds(page, propName)
+	const existing = await fullRelationIds(page, propName)
 	const merged = Array.from(new Set([...existing, ...addIds]))
 	if (merged.length === existing.length) return
 	await updatePageProperties(pageId, { [propName]: { relation: merged.map((id) => ({ id })) } })

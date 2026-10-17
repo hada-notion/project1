@@ -45,6 +45,8 @@ import {
 	createPage,
 	archivePage,
 	relIds,
+	fullRelationIds,
+	withFullRelations,
 	mapWithConcurrency,
 	setCombinedSyncStatus,
 } from "./notionClient.ts"
@@ -107,7 +109,7 @@ export async function archiveAttendanceAfterEndDate(
 
 	// (v2.6.16) 학습기록은 이 학생만의 기록(개별 진도)만 지우고, 다른 학생도 쓰는 기록(그룹 진도·반 전체 주제 기록)은
 	// 이 출석·이 학생 연결만 끊는다(_shared/learningRecordShare.ts). 예전에는 모두 지워서, 한 학생을 종료하면
-	// 반 전체 학습기록이 휴지통으로 갔다. 관계를 다시 쓰므로 기록은 조회 결과(관계 전체)로 읽는다.
+	// 반 전체 학습기록이 휴지통으로 갔다. 관계를 다시 쓰므로 기록은 조회 결과로 읽고, 25개가 넘어 잘렸으면 끝까지 읽는다(v2.6.32).
 	let recordCount = 0
 	let recordDetachedCount = 0
 	if (recordIds.size > 0) {
@@ -120,7 +122,9 @@ export async function archiveAttendanceAfterEndDate(
 		const progressTypeOf = makeProgressTypeReader(getPage)
 		const attIds = data.results.map((a: any) => a.id)
 		await mapWithConcurrency(records, 4, async (record: any) => {
-			const decision = decideRecordRemoval(record, attIds, [registrationId], await progressTypeOf(record))
+			// (v2.6.32) 조회 결과도 관계를 25개까지만 준다. 잘렸으면 끝까지 읽은 뒤 판단·고쳐 쓴다.
+			const full = await withFullRelations(record, ["출석", PROP_RECORD_REGISTRATION])
+			const decision = decideRecordRemoval(full, attIds, [registrationId], await progressTypeOf(record))
 			if (decision.action === "delete") {
 				await archivePage(record.id)
 				recordCount++
@@ -153,7 +157,8 @@ export async function disconnectClassSessionsAfterEndDate(
 	})
 	let disconnectedCount = 0
 	for (const session of data.results) {
-		const remainingIds = relIds(session.properties[PROP_SESSION_REGISTRATION]).filter(
+		// (v2.6.32) 명단이 25명을 넘으면 조회 결과가 잘리므로 끝까지 읽고 고쳐 쓴다.
+		const remainingIds = (await fullRelationIds(session, PROP_SESSION_REGISTRATION)).filter(
 			(id: string) => id !== registrationId,
 		)
 		await updatePageProperties(session.id, {
