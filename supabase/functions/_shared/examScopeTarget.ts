@@ -17,6 +17,7 @@ import {
 	PROP_GRADE_TITLE,
 	PROP_GRADE_STUDENT,
 	PROP_GRADE_SCOPE,
+	PROP_GRADE_SCOPE_LEGACY,
 	PROP_GRADE_GRADE_LEVEL,
 	PROP_GRADE_SCHOOL,
 	PROP_STUDENT_TITLE,
@@ -52,6 +53,20 @@ async function findEligibleStudents(gradeId: string, schoolId: string | null) {
 	return queryAllPages(DS_STUDENT, { and: andFilters })
 }
 
+// (v2.6.30) 성적 DB의 시험정보 관계 이름이 "시험범위" → "시험정보"로 바뀌었다. 이름을 아직 안 바꾼 운영도
+// 그대로 돌도록 새 이름으로 먼저 조회하고, 그 속성이 없다는 오류면 예전 이름으로 한 번 더 조회한다.
+export const examScopeDeps = { queryAllPages }
+export async function queryGradesOfScope(pageId: string): Promise<{ prop: string; rows: any[] }> {
+	for (const prop of [PROP_GRADE_SCOPE, PROP_GRADE_SCOPE_LEGACY]) {
+		try {
+			return { prop, rows: await examScopeDeps.queryAllPages(DS_GRADE, { property: prop, relation: { contains: pageId } }) }
+		} catch (err) {
+			if (prop === PROP_GRADE_SCOPE_LEGACY || !/property/i.test(String((err as Error)?.message ?? err))) throw err
+		}
+	}
+	throw new Error("unreachable")
+}
+
 export async function processExamScope(pageId: string, log: string[]) {
 	const scope = await getPage(pageId)
 	const scopeName = titleText(scope, PROP_SCOPE_TITLE) ?? "(이름 없음)"
@@ -64,10 +79,7 @@ export async function processExamScope(pageId: string, log: string[]) {
 	if (gradeId) {
 		const candidates = await findEligibleStudents(gradeId, schoolId)
 
-		const existingGrades = await queryAllPages(DS_GRADE, {
-			property: PROP_GRADE_SCOPE,
-			relation: { contains: pageId },
-		})
+		const { prop: scopeProp, rows: existingGrades } = await queryGradesOfScope(pageId)
 		const studentsWithGrade = new Set<string>()
 		for (const g of existingGrades) {
 			for (const sid of relIds(g.properties[PROP_GRADE_STUDENT])) studentsWithGrade.add(sid)
@@ -82,7 +94,7 @@ export async function processExamScope(pageId: string, log: string[]) {
 			await createPage(DS_GRADE, {
 				[PROP_GRADE_TITLE]: { title: [{ text: { content: `${studentName} - ${scopeName}` } }] },
 				[PROP_GRADE_STUDENT]: { relation: [{ id: student.id }] },
-				[PROP_GRADE_SCOPE]: { relation: [{ id: pageId }] },
+				[scopeProp]: { relation: [{ id: pageId }] },
 				...(studentGradeIds.length
 					? { [PROP_GRADE_GRADE_LEVEL]: { relation: studentGradeIds.map((id: string) => ({ id })) } }
 					: {}),

@@ -164,7 +164,8 @@ export const PROP_SCOPE_SYNCED_AT = "마지막 동기화"
 // 성적(학원) DB 속성
 export const PROP_GRADE_TITLE = "이름"
 export const PROP_GRADE_STUDENT = "학생" // relation, limit 1
-export const PROP_GRADE_SCOPE = "시험범위" // relation, limit 1 → 시험범위 DB
+export const PROP_GRADE_SCOPE = "시험정보" // relation, limit 1 → 시험정보 DB (v2.6.30, 예전 이름 "시험범위")
+export const PROP_GRADE_SCOPE_LEGACY = "시험범위"
 export const PROP_GRADE_GRADE_LEVEL = "학년" // relation
 export const PROP_GRADE_SCHOOL = "학교" // relation
 export const PROP_GRADE_RANK = "등수" // number
