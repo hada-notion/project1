@@ -70,9 +70,9 @@ export const CLASS_CART_STATUS_SPEC: StatusSpec = {
 // 아니라서, distributeFromCartPage 성공 경로 마지막에 직접 갱신한다(아래, sync-exam-scope와 동일한
 // 패턴). 마스터플랜: https://app.notion.com/p/903c90386c1d473494c5df6306c53517
 export const CART_STATUS_SPEC: StatusSpec = {
-	statusProp: "담기 상태",
+	statusProp: "진도교재 담기 상태",
 	errorProp: PROP_LAST_ERROR,
-	startedAtProp: "담기 처리 시작 시각",
+	startedAtProp: "진도교재 담기 시작 시각",
 }
 
 // 등록 하나에 대해 교재비(장바구니) 페이지를 확보한다: 이미 있으면 재사용하고, 없으면 생성한다.

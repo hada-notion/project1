@@ -44,7 +44,7 @@ Deno.test("v2.6.26 큐: 이미 배부된 교재는 건너뛰고 나머지만 만
 		eq(calls.created[0]["등록"].relation[0].id, REG)
 		eq(calls.created[0]["교재비"].relation[0].id, "cart-1")
 		eq(calls.updates.length, 1)
-		eq(calls.updates[0]["담기 상태"].select.name, "✅ 완료")
+		eq(calls.updates[0]["진도교재 담기 상태"].select.name, "✅ 완료")
 	} finally { restore() }
 })
 
@@ -60,7 +60,7 @@ Deno.test("v2.6.26 큐: 담을 교재가 없으면 조회 없이 완료, 수식�
 		await processCartPlanQueueItem({ cartId: "cart-1", plan: null })
 		eq(t.calls.reads, 1)
 		eq(t.calls.legacy, 1)
-		eq(t.calls.updates[0]["담기 상태"].select.name, "✅ 완료")
+		eq(t.calls.updates[0]["진도교재 담기 상태"].select.name, "✅ 완료")
 	} finally { t.restore() }
 })
 

@@ -67,9 +67,9 @@ const ASSIGNMENT_STATUS_NOT_SUBMITTED = "🔴 미제출"
 const PROP_SHARED_LAST_ERROR = "마지막 오류"
 
 export const ASSIGNMENT_GEN_STATUS_SPEC: StatusSpec = {
-	statusProp: "활동 생성 상태",
+	statusProp: "학습활동 생성 상태",
 	errorProp: PROP_SHARED_LAST_ERROR,
-	startedAtProp: "활동 생성 시작 시각",
+	startedAtProp: "학습활동 생성 시작 시각",
 }
 
 const WEEKDAY_KO = ["일", "월", "화", "수", "목", "금", "토"]

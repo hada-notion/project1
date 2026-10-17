@@ -33,9 +33,9 @@ export const PROP_SHARED_LAST_ERROR = PROP_LAST_ERROR
 const PROP_DELETE_CHECK = "삭제 체크"
 
 export const ATTENDANCE_FIX_STATUS_SPEC: StatusSpec = {
-  statusProp: "출석조정 상태",
+  statusProp: "출석 조정 상태",
   errorProp: PROP_SHARED_LAST_ERROR,
-  startedAtProp: "출석조정 처리 시작 시각",
+  startedAtProp: "출석 조정 시작 시각",
 }
 
 export async function markAttendanceFixRunning(classSessionId: string): Promise<void> {

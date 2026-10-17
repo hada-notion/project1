@@ -103,9 +103,9 @@ import { libraryCopyReady, readBooks } from "./libraryCopy.ts"
 // 라우트 전용) → "교재 상태"(select) + "교재 처리 시작 시각"(date). 마스터플랜:
 // https://app.notion.com/p/903c90386c1d473494c5df6306c53517
 export const TEXTBOOK_STATUS_SPEC: StatusSpec = {
-	statusProp: "교재 상태",
+	statusProp: "교재 생성 상태",
 	errorProp: PROP_LAST_ERROR,
-	startedAtProp: "교재 처리 시작 시각",
+	startedAtProp: "교재 생성 시작 시각",
 }
 
 // (2026-09-22, PART N-8 -> Phase 3 전환) 클래스(학원) DB "교재 생성" 버튼 전용 상태. "교재 생성중"

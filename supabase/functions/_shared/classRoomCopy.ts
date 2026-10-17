@@ -102,7 +102,7 @@ export function recordRow(p: Page, bookNames: Map<string, string>, unitNames: Ma
 		is_makeup: checkboxValue(p, "보강"),
 		registration_ids: rel(p, "등록"),
 		activity_ids: rel(p, "학습활동"),
-		activity_status: selectName(p, "활동 생성 상태") ?? "",
+		activity_status: selectName(p, "학습활동 생성 상태") ?? "",
 		notion_edited_at: p.last_edited_time,
 	}
 }

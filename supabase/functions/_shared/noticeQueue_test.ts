@@ -30,7 +30,7 @@ function fake(page: any, opts: { sendFails?: boolean; refreshFails?: boolean } =
 const reportPage = (status = "⚪ 대기") => ({
 	id: "report-1",
 	properties: {
-		"전송 상태": select(status),
+		"보고서 전송 상태": select(status),
 		"보고서 구분": select("월간 보고서"),
 		등록: rel(REG),
 		"알림톡 발송함": rel("batch-1"),
@@ -53,7 +53,7 @@ Deno.test("v2.6.24 보고서: 한 번 읽고 공용 캐시·토큰 롤업으로 
 		eq(calls.sent[0].vars["#{페이지ID}"].endsWith("?token=tok"), true)
 		eq(calls.logs.map((l) => [l.status, l.reportId, l.senderUserId, l.category]), [["성공", "report-1", "teacher", "월간 보고서"]])
 		eq(calls.patches.length, 1)
-		eq(calls.patches[0]["전송 상태"].select.name, "✅ 완료")
+		eq(calls.patches[0]["보고서 전송 상태"].select.name, "✅ 완료")
 		eq(calls.patches[0]["일괄전송 선택"].checkbox, false)
 	} finally { restore() }
 })
@@ -76,18 +76,18 @@ Deno.test("v2.6.24 발송 전 실패 → 오류만 적고 예외(큐 재시도, 
 		eq(threw, true)
 		eq(calls.sent.length, 0)
 		eq(calls.patches.length, 1)
-		eq("전송 상태" in calls.patches[0], false)
+		eq("보고서 전송 상태" in calls.patches[0], false)
 		eq(calls.patches[0]["마지막 오류"].rich_text[0].text.content, "최신화 실패")
 	} finally { restore() }
 })
 
 Deno.test("v2.6.24 발송 단계 실패 → 다시 보내지 않고 ⚠️ 오류·실패 로그", async () => {
-	const tuition = { id: "tuition-1", properties: { "전송 상태": select("⚪ 대기"), 등록: rel(REG), 학생정보: formula("임현우"), "학부모 연락처": rollup("010-1111-1111"), 청구기간: { date: { start: "2026-10-01", end: "2026-10-31" } } } }
+	const tuition = { id: "tuition-1", properties: { "안내문 전송 상태": select("⚪ 대기"), 등록: rel(REG), 학생정보: formula("임현우"), "학부모 연락처": rollup("010-1111-1111"), 청구기간: { date: { start: "2026-10-01", end: "2026-10-31" } } } }
 	const { calls, restore } = fake(tuition, { sendFails: true })
 	try {
 		await processNoticeQueueItem({ kind: "tuition", pageId: "tuition-1" })
 		eq(calls.logs.map((l) => [l.status, l.tuitionId, l.category, l.senderUserId]), [["실패", "tuition-1", "수강료 안내", "bot"]])
-		eq(calls.patches[0]["전송 상태"].select.name, "⚠️ 오류")
+		eq(calls.patches[0]["안내문 전송 상태"].select.name, "⚠️ 오류")
 		eq(calls.patches[0]["마지막 오류"].rich_text[0].text.content, "발송 실패")
 		eq(calls.recipients[0].primaryPhone, "010-1111-1111")
 	} finally { restore() }
