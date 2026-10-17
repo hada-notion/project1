@@ -65,7 +65,7 @@ const CHECKLIST=[
   ['reg-textbook-queue','교재 생성',AUTO,route('sync-registration-textbook'),{path:'/queue',trigger:{when:'속성 편집',select:['교재 상태','⚪ 대기']},note:'주소 끝의 /queue까지 넣습니다. [교재 생성] 버튼은 교재 상태만 바꾸고, 키는 이 자동화에 있습니다(v2.6.10).'}],
   ['reg-end-cleanup','종료 처리',BUTTON,route('sync-registration-textbook'),{path:'/cleanup-on-end',note:'주소 끝의 /cleanup-on-end까지 넣습니다. 버튼 마지막 단계의 교재 정리 웹훅입니다(v2.6.16).'}]]],
  ['클래스(학원)',[
-  ['class-tuition','월 수강료 생성',BUTTON,route('generate-tuition')],
+  ['class-tuition','월 수강료 생성 (예전 방식)',BUTTON,route('generate-tuition'),{note:'v2.6.28부터 [월 수강료 생성]은 웹훅 없이 등록의 수강료 생성 상태만 바꾸고 등록 DB 자동화가 수강료를 만듭니다. 아직 예전 버튼(웹훅)을 쓰는 경우에만 키를 바꿉니다.'}],
   ['class-textbook-fee','교재비 생성 (예전 방식)',BUTTON,route('sync-textbook-distribution'),{path:'/from-class-carts',note:'v2.6.26부터 [교재비 생성]은 웹훅 없이 등록의 교재비 생성 상태만 바꾸고 등록 DB 자동화가 교재비를 만듭니다. 아직 예전 버튼(웹훅)을 쓰는 경우에만 키를 바꿉니다.'}],
   ['class-report-sync','학생 페이지 동기화',BUTTON,route('sync-class-report-cache')],
   ['class-report','보고서 생성 (예전 방식)',BUTTON,route('generate-report'),{note:'v2.6.27부터 [보고서 생성]은 웹훅 없이 등록의 보고서 생성 상태만 바꾸고 등록 DB 자동화가 보고서를 만듭니다. 아직 예전 버튼(웹훅)을 쓰는 경우에만 키를 바꿉니다.'}]]],
