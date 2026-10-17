@@ -46,6 +46,7 @@ import {
 	getActiveRegistrationsForCarts,
 	distributeFromCartPage,
 } from "../_shared/textbookDistributionTarget.ts"
+import { CART_PLAN_PROP, cartPlanText } from "../_shared/cartPlan.ts"
 
 // 등록(학원) DB 속성: from-class-carts 사전 확인(활성 등록 중 교재비 누락 여부 판정)에서만 쓴다.
 const PROP_REGISTRATION_CART = "교재비" // relation -> 교재비(학원) DB
@@ -80,6 +81,14 @@ Deno.serve(async (req: Request) => {
 	}
 
 	try {
+		// (v2.6.26) 교재비 [진도교재 담기] → /from-cart/queue. 큐에 넣고 바로 202. 본문의 수식 "담기 계획"대로
+		// process-sync-queue가 교재배부만 만든다(_shared/cartPlan.ts). 본문에 값이 없으면 큐가 교재비를 한 번 읽는다.
+		if (route === "queue" && url.pathname.split("/").filter(Boolean).slice(-2)[0] === "from-cart") {
+			const plan = cartPlanText((body as any)?.data?.properties?.[CART_PLAN_PROP]) || null
+			await enqueueSync("cart-plan", { cartId: pageId, plan })
+			wakeSyncQueueWorker()
+			return respondAccepted({ pageId, route: "from-cart/queue", plan: !!plan })
+		}
 		if (route === "from-cart") {
 			// 교재비 페이지 자신이 클릭 대상. 개별 트리거라 큐를 거치지 않고 바로 처리한다.
 			return await runSyncWebhookForPage(pageId, {
