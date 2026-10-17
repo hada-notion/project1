@@ -66,7 +66,7 @@ const CHECKLIST=[
   ['reg-end-cleanup','종료 처리',BUTTON,route('sync-registration-textbook'),{path:'/cleanup-on-end',note:'주소 끝의 /cleanup-on-end까지 넣습니다. 버튼 마지막 단계의 교재 정리 웹훅입니다(v2.6.16).'}]]],
  ['클래스(학원)',[
   ['class-tuition','월 수강료 생성',BUTTON,route('generate-tuition')],
-  ['class-textbook-fee','교재비 생성',BUTTON,route('sync-textbook-distribution'),{path:'/from-class-carts',note:'주소 끝의 /from-class-carts까지 넣습니다.'}],
+  ['class-textbook-fee','교재비 생성 (예전 방식)',BUTTON,route('sync-textbook-distribution'),{path:'/from-class-carts',note:'v2.6.26부터 [교재비 생성]은 웹훅 없이 등록의 교재비 생성 상태만 바꾸고 등록 DB 자동화가 교재비를 만듭니다. 아직 예전 버튼(웹훅)을 쓰는 경우에만 키를 바꿉니다.'}],
   ['class-report-sync','학생 페이지 동기화',BUTTON,route('sync-class-report-cache')],
   ['class-report','보고서 생성',BUTTON,route('generate-report')]]],
  ['메뉴(학원)',[['menu-bulk-classes','다음주 수업 일괄 생성',BUTTON,route('generate-classes'),{path:'?mode=bulk',note:'주소 끝의 ?mode=bulk까지 넣습니다.'}]],{
@@ -90,7 +90,7 @@ const CHECKLIST=[
  ['수강료(학원)',[['tuition-notice','수강료 안내 발송',AUTO,route('send-tuition-notice'),{path:'/queue',trigger:{when:'속성 편집',select:['전송 상태','⚪ 대기']},note:'주소 끝의 /queue까지 넣습니다. [안내문 발송] 버튼과 발송함 [일괄 전송]은 전송 상태만 바꿉니다(v2.6.24).'}]]],
  ['교재비(학원)',[
   ['cart-notice','안내문 전송',AUTO,route('send-textbook-notice'),{path:'/queue',trigger:{when:'속성 편집',select:['안내문 전송 상태','⚪ 대기']},note:'주소 끝의 /queue까지 넣습니다. [안내문 전송] 버튼은 안내문 전송 상태만 바꿉니다(v2.6.24).'}],
-  ['cart-progress-book','진도교재 담기',BUTTON,route('sync-textbook-distribution'),{path:'/from-cart',note:'주소 끝의 /from-cart까지 넣습니다.'}],
+  ['cart-progress-book','진도교재 담기',BUTTON,route('sync-textbook-distribution'),{path:'/from-cart/queue',note:'주소 끝의 /from-cart/queue까지 넣습니다. 본문 속성은 담기 계획만 고릅니다(v2.6.26).'}],
   ['cart-delete','삭제',AUTO,route('cascade-delete'),DELETE]]],
  ['교재배부(학원)',[['distribution-delete','삭제',AUTO,route('cascade-delete'),DELETE]]],
  ['교재결제(학원)',[['payment-delete','삭제',AUTO,route('cascade-delete'),DELETE]]],
@@ -167,7 +167,7 @@ const DESC={
  'outbox-send':'(예전 방식) 이 발송함의 일괄전송 선택이 체크된 건을 10건씩 차례로 보냅니다. v2.6.24 버튼으로 바꾸면 이 웹훅은 쓰지 않습니다.',
  'tuition-notice':'전송 상태가 ⚪ 대기가 되면 이 수강료 안내를 큐에서 보냅니다. 이미 보낸 건은 다시 보내지 않습니다. 발송함 [일괄 전송]도 이 자동화로 처리됩니다.',
  'cart-notice':'안내문 전송 상태가 ⚪ 대기가 되면 이 학생의 미납 교재 안내문을 큐에서 보냅니다. 이미 보낸 건은 다시 보내지 않습니다.',
- 'cart-progress-book':'이 학생의 진도교재 중 "진행 중"인 교재만 모아 교재배부를 한 번에 만듭니다. "다음 교재"는 제외합니다.',
+ 'cart-progress-book':'수식 담기 계획대로 이 학생의 "진행 중" 진도교재 중 아직 배부하지 않은 교재의 교재배부를 큐에서 만듭니다. "다음 교재"와 이미 배부한 교재는 제외합니다.',
  'student-inquiry-auto':'상담 신청서로 학생이 추가되고 개인정보 동의가 체크돼 있으면, 선택한 우선 연락 대상에게 접수안내를 자동으로 보냅니다.',
  'student-inquiry':'관리자가 직접 입력한 학생에게 같은 접수안내를 보냅니다. 개인정보 동의를 확인한 뒤 누릅니다.',
  'exam-scope':'시험과 같은 학년(학교를 지정했으면 같은 학교)이면서 등록 중인 학생 중 아직 성적 행이 없는 학생의 성적 행을 만듭니다. 이미 입력한 점수는 그대로 둡니다.',
