@@ -1,6 +1,11 @@
 import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
-// create-learning-record v8
+// create-learning-record v9
 // Trigger: 수업(세션) DB 또는 출석(학원) DB의 "학습기록 생성" 버튼 웹훅
+//
+// v9 변경 사항 (v2.6.29, 학습기록 계획):
+//   - 수업 버튼 웹훅 본문에 수업 수식 "학습기록 계획"이 실려 오면 클릭된 페이지가 수업이므로 다시 읽지 않고
+//     그 값을 큐에 함께 넣는다. 큐는 계획대로 만들기만 한다(_shared/createLearningRecordTarget.ts 참고).
+//     출석에서 누른 경우와 수식이 없는 운영은 예전처럼 처리한다.
 //
 // v8 변경 사항 (v2.6.17, 수업 중심 원칙):
 //   - 수업 없는 출석에서 누르면 학습기록을 만들지 않고 그 출석의 "마지막 오류"에 안내를 남긴다(보강 대기실에서
@@ -55,6 +60,8 @@ import {
 	setRecordGenQueued,
 	setRecordGenError,
 	MAKEUP_SESSION_REQUIRED,
+	RECORD_PLAN_PROP,
+	recordPlanText,
 } from "../_shared/createLearningRecordTarget.ts"
 
 type JsonRecord = Record<string, unknown>
@@ -106,7 +113,10 @@ async function handleRequest(req: Request): Promise<Response> {
 	// 학생 경로(attendanceId 기반, finishCreateLearningRecordForAttendance)로 보낸다.
 	let sessionId: string | undefined = clickedId
 	let attendanceId: string | undefined
-	try {
+	// (v2.6.29) 수업 버튼이면 본문에 "학습기록 계획"이 있다 → 클릭된 페이지가 수업이므로 읽지 않는다.
+	const bodyProps = ((body.data as JsonRecord | undefined)?.properties ?? {}) as JsonRecord
+	const plan = recordPlanText(bodyProps[RECORD_PLAN_PROP]) || null
+	if (!plan) try {
 		const clickedPage = await getPage(clickedId)
 		const parentDataSourceId = (clickedPage as JsonRecord | undefined)?.parent
 			? ((clickedPage.parent as JsonRecord).data_source_id as string | undefined)
@@ -141,7 +151,7 @@ async function handleRequest(req: Request): Promise<Response> {
 	// Notion의 "웹훅 보내기" 버튼 액션은 이 응답을 동기적으로 기다린다. 실제 생성 작업은
 	// sync_queue에 적재해 process-sync-queue 워커가 순서대로 처리하게 하고, 이 함수는 즉시 202로 응답한다.
 	// 진행 상황은 수업/출석의 "학습기록 생성중" 체크박스(이미 켜져 있음)로 확인할 수 있다.
-	await enqueueSync("create-learning-record", { sessionId, attendanceId, statusTargetIds })
+	await enqueueSync("create-learning-record", { sessionId, attendanceId, statusTargetIds, plan })
 	wakeSyncQueueWorker()
 
 	return respondAccepted({ sessionId, attendanceId })

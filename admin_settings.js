@@ -73,7 +73,7 @@ const CHECKLIST=[
   text:'메뉴 DB의 어떤 페이지(예: 수업 HOME)를 열어도 제목 아래 속성 줄에 "다음주 수업 일괄 생성" 버튼이 있습니다. 속성 이름을 클릭하고 "자동화 편집"을 눌러 웹훅 보내기의 값 칸을 바꿉니다. 메뉴 DB에는 "웹훅 등록" 보기가 없어도 됩니다.',
   image:'assets/admin-settings/menu-bulk-button.png',alt:'메뉴 페이지 상단 속성 줄의 다음주 수업 일괄 생성 버튼'}],
  ['수업(학원)',[
-  ['session-record','학습기록 생성',BUTTON,route('create-learning-record')],
+  ['session-record','학습기록 생성',BUTTON,route('create-learning-record'),{note:'본문 속성은 학습기록 계획만 고릅니다(v2.6.29).'}],
   ['session-attendance-queue','출석 조정',AUTO,route('fix-attendance'),{path:'/queue',trigger:{when:'속성 편집',select:['출석조정 상태','⚪ 대기']},note:'주소 끝의 /queue까지 넣습니다. [출석 조정] 버튼은 상태만 바꿉니다(v2.6.11).'}],
   ['session-date-move','수업 날짜 이동',AUTO,route('fix-attendance'),{path:'/session-date',trigger:{when:'수업일시 편집'},note:'주소 끝의 /session-date까지 넣습니다(v2.6.18).'}],
   ['session-delete','삭제',AUTO,route('cascade-delete'),DELETE]]],
