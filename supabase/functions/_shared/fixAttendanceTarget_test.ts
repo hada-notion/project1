@@ -42,18 +42,18 @@ Deno.test("계획 해석: 형식이 맞지 않으면 null(예전 방식으로)",
 })
 Deno.test("계획 적용: 새 출석(학습기록 포함)·미연결 출석 연결·삭제 체크·명단과 완료는 수업 쓰기 한 번", () => withMock(async (m) => {
  const log: string[] = []
- await target.applyFixPlan(session, { v: 1, day: "2026-10-15", add: [{ reg: R1, rec: [REC] }, { reg: R2, att: A1 }], del: [A2], roster: [R1, R2] }, log, { "출석조정 상태": { select: { name: "✅ 완료" } } })
+ await target.applyFixPlan(session, { v: 1, day: "2026-10-15", add: [{ reg: R1, rec: [REC] }, { reg: R2, att: A1 }], del: [A2], roster: [R1, R2] }, log, { "출석 조정 상태": { select: { name: "✅ 완료" } } })
  const c = m.created[0].properties
  assert(m.created.length === 1 && ids(c, "등록") === R1 && ids(c, "수업") === S && ids(c, "학습기록") === REC && ids(c, "클래스") === CLS && ids(c, "담당강사") === T && c["출석"].title[0].text.content === "2026-10-15 출석")
  const link = m.writes.find((w) => w.id === A1)!; assert(ids(link.body.properties, "수업") === S && ids(link.body.properties, "클래스") === CLS)
  const del = m.writes.find((w) => w.id === A2)!; assert(del.body.properties["삭제 체크"].checkbox === true && !("삭제" in del.body.properties), "uses 삭제 체크")
- const sw = m.writes.filter((w) => w.id === S); assert(sw.length === 1 && ids(sw[0].body.properties, "등록") === `${R1},${R2}` && sw[0].body.properties["출석조정 상태"].select.name === "✅ 완료")
+ const sw = m.writes.filter((w) => w.id === S); assert(sw.length === 1 && ids(sw[0].body.properties, "등록") === `${R1},${R2}` && sw[0].body.properties["출석 조정 상태"].select.name === "✅ 완료")
  // Notion 읽기 없음(과제 마감 확인 조회만): 페이지 GET 없음
  assert(!m.calls.some((x) => x.method === "GET" && x.url.includes("api.notion.com")), "no page reads")
 }))
 Deno.test("계획 적용: skip(예전 수식의 보강 포함)은 아무것도 만들지 않고 완료만", () => withMock(async (m) => {
- await target.applyFixPlan({ ...session, makeup: true }, { v: 1, skip: "보강 수업", add: [], del: [] }, [], { "출석조정 상태": { select: { name: "✅ 완료" } } })
- await target.applyFixPlan(session, { v: 1, skip: "시간표·수업일시 없음", add: [], del: [] }, [], { "출석조정 상태": { select: { name: "✅ 완료" } } })
+ await target.applyFixPlan({ ...session, makeup: true }, { v: 1, skip: "보강 수업", add: [], del: [] }, [], { "출석 조정 상태": { select: { name: "✅ 완료" } } })
+ await target.applyFixPlan(session, { v: 1, skip: "시간표·수업일시 없음", add: [], del: [] }, [], { "출석 조정 상태": { select: { name: "✅ 완료" } } })
  assert(m.created.length === 0 && m.writes.length === 2 && m.writes.every((w) => w.id === S))
 }))
 Deno.test("v2.6.17 보강 수업: 합치기만 — 출석을 🔵 보강으로 만들고 대기실 출석을 연결, 명단을 합치고 지우지 않는다(클래스 없어도 됨)", () => withMock(async (m) => {
@@ -61,7 +61,7 @@ Deno.test("v2.6.17 보강 수업: 합치기만 — 출석을 🔵 보강으로 �
  // 웹훅 본문에 "보강"이 빠져도 수식의 mk 표시로 보강 수업임을 안다.
  const plan = target.planFromText(JSON.stringify({ v: 1, mk: 1, day: "2026-10-15", add: [{ reg: R1, att: "", rec: [] }, { reg: R2, att: A1, rec: [] }], del: [A2], roster: [R1, R2] }))!
  assert(plan.makeup === true)
- await target.applyFixPlan({ ...session, classIds: [], makeup: false }, plan, log, { "출석조정 상태": { select: { name: "✅ 완료" } } })
+ await target.applyFixPlan({ ...session, classIds: [], makeup: false }, plan, log, { "출석 조정 상태": { select: { name: "✅ 완료" } } })
  assert(m.created.length === 1 && m.created[0].properties["출석 상태"].select.name === "🔵 보강" && !m.created[0].properties["클래스"] && m.created[0].properties["출석"].title[0].text.content === "2026-10-15 보강", JSON.stringify(m.created[0].properties))
  const link = m.writes.find((w) => w.id === A1); assert(link && ids(link.body.properties, "수업") === S && !link.body.properties["클래스"] && !link.body.properties["과제마감 백필 대상"], "대기실 출석 연결(과제 마감 연결 없음)")
  assert(!m.writes.some((w) => w.id === A2), "지우지 않음(삭제 체크 없음)")
@@ -81,7 +81,7 @@ Deno.test("큐 처리 실패(페이지를 읽은 경우): 오류 상태를 쓰�
  ;(globalThis as any).mockPages = { [S]: { id: S, properties: { "출석 조정 정보": formula(JSON.stringify({ v: 1, add: [{ reg: R1 }], del: [] })), "클래스": rel(CLS), "담당강사": rel(T), "수업일시": { date: { start: null } }, "보강": { checkbox: false } } } }
  let threw = false
  try { await target.processFixAttendanceQueueItem({ pageId: S, plan: null, session: null }) } catch { threw = true } finally { delete (globalThis as any).mockPages }
- assert(threw && m.writes.some((w) => w.id === S && w.body.properties["출석조정 상태"]?.select?.name === "⚠️ 오류") && !m.calls.some((c) => c.url.endsWith("/rest/v1/sync_queue")))
+ assert(threw && m.writes.some((w) => w.id === S && w.body.properties["출석 조정 상태"]?.select?.name === "⚠️ 오류") && !m.calls.some((c) => c.url.endsWith("/rest/v1/sync_queue")))
 }))
 Deno.test("큐 경로: 인증, 본문의 수식 계획을 Notion 읽기 없이 큐에 넣음", () => withMock(async (m) => {
  const plan = JSON.stringify({ v: 1, day: "2026-10-15", add: [{ reg: R1, att: "", rec: [] }], del: [] })
@@ -103,7 +103,7 @@ Deno.test("큐 처리: 본문에 계획이 없으면 수업 페이지를 한 번
  try {
   await target.processFixAttendanceQueueItem({ pageId: S, plan: null, session: null })
   assert(m.calls.filter((c) => c.method === "GET" && c.url.includes("/pages/")).length === 1, "one page read")
-  assert(m.created.length === 1 && ids(m.created[0].properties, "등록") === R1 && m.writes.some((w) => w.id === S && w.body.properties["출석조정 상태"]?.select?.name === "✅ 완료"))
+  assert(m.created.length === 1 && ids(m.created[0].properties, "등록") === R1 && m.writes.some((w) => w.id === S && w.body.properties["출석 조정 상태"]?.select?.name === "✅ 완료"))
  } finally { delete (globalThis as any).mockPages }
 }))
 Deno.test("v2.6.13 본문 계획으로 실패하면 같은 계획을 되풀이하지 않고 페이지를 새로 읽는 항목을 넣는다", () => withMock(async (m) => {
@@ -112,7 +112,7 @@ Deno.test("v2.6.13 본문 계획으로 실패하면 같은 계획을 되풀이�
  await target.processFixAttendanceQueueItem({ pageId: S, plan: { v: 1, add: [{ reg: R1 }], del: [] }, session })
  const q = failing.calls.filter((c) => c.url.endsWith("/rest/v1/sync_queue")).map((c) => c.body[0])
  assert(q.length === 1 && q[0].target === "fix-attendance" && q[0].payload.pageId === S && !("plan" in q[0].payload), JSON.stringify(q))
- assert(!failing.writes.some((w) => w.id === S && w.body.properties["출석조정 상태"]?.select?.name === "⚠️ 오류"), "no error state, re-queued instead")
+ assert(!failing.writes.some((w) => w.id === S && w.body.properties["출석 조정 상태"]?.select?.name === "⚠️ 오류"), "no error state, re-queued instead")
  assert(m.calls.length === 0)
 }))
 
@@ -120,9 +120,9 @@ Deno.test("v2.6.21 진도교재: 수식이 books를 보내면 수업 마지막 �
  const B1 = "77777777777747778777777777777771", B2 = "77777777777747778777777777777772"
  const plan = target.planFromText(JSON.stringify({ v: 1, day: "2026-10-15", add: [], del: [], books: [B1, B2, B1] }))!
  assert(plan.books!.join() === B1 + "," + B2, "중복 제거")
- await target.applyFixPlan(session, plan, [], { "출석조정 상태": { select: { name: "✅ 완료" } } })
- const sw = m.writes.filter((w) => w.id === S); assert(sw.length === 1 && ids(sw[0].body.properties, "진도교재") === B1 + "," + B2 && sw[0].body.properties["출석조정 상태"], JSON.stringify(sw))
- await target.applyFixPlan(session, target.planFromText(JSON.stringify({ v: 1, add: [], del: [] }))!, [], { "출석조정 상태": { select: { name: "✅ 완료" } } })
+ await target.applyFixPlan(session, plan, [], { "출석 조정 상태": { select: { name: "✅ 완료" } } })
+ const sw = m.writes.filter((w) => w.id === S); assert(sw.length === 1 && ids(sw[0].body.properties, "진도교재") === B1 + "," + B2 && sw[0].body.properties["출석 조정 상태"], JSON.stringify(sw))
+ await target.applyFixPlan(session, target.planFromText(JSON.stringify({ v: 1, add: [], del: [] }))!, [], { "출석 조정 상태": { select: { name: "✅ 완료" } } })
  assert(!m.writes.at(-1)!.body.properties["진도교재"], "books 없으면 진도교재 안 씀(속성 없는 운영 보호)")
  assert(target.planFromText(JSON.stringify({ v: 1, add: [], del: [], books: ["bad"] })) === null, "형식 오류면 예전 방식")
 }))

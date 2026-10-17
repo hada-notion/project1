@@ -49,7 +49,7 @@ Deno.test("실제 버튼 핸들러: 월수금 날짜순 수업 생성 → 출석
   for(const p of sessions)p.properties["출석 조정 정보"]={type:"formula",formula:{type:"string",string:JSON.stringify({v:1,day:p.properties["수업일시"].date.start.slice(0,10),add:[{reg:"a",att:"",rec:[]},{reg:"b",att:"",rec:[]}],del:[]})}}
   for(const q of queued)await processFixAttendanceQueueItem(q.payload)
   const attends=f.created.filter(p=>p.db==="attendance");assert(attends.length===6)
-  assert(sessions.every(p=>p.properties["출석조정 상태"].select.name==="✅ 완료"))
+  assert(sessions.every(p=>p.properties["출석 조정 상태"].select.name==="✅ 완료"))
   // 대기 과제는 수업마다 한 번에 조회(학생마다 조회하지 않음)
   assert(f.calls.filter(c=>c.url.includes("/data_sources/activities/query")).length===3,"one deadline query per session")
   for(const p of attends)assert(p.properties["과제마감 백필 대상"].relation.map((r:any)=>r.id).join()==="task-"+p.properties["등록"].relation[0].id,"cross-student queue target")
@@ -109,10 +109,10 @@ Deno.test("v2.6.13 큐 재시도: 기준일이 이미 지났으면(앞선 시도
 })
 const U=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,"0")}`
 const planText=(o:any)=>({type:"formula",formula:{type:"string",string:JSON.stringify({v:1,start:"20:00",end:"21:00",name:"중1 A",tch:[U(9)],reg:[U(1),U(2)],...o})}})
-Deno.test("v2.6.14 수업추가 정보 해석: 형식·기준일·클래스가 맞을 때만 쓴다",async()=>{
+Deno.test("v2.6.14 수업 추가 정보 해석: 형식·기준일·클래스가 맞을 때만 쓴다",async()=>{
  const { sessionPlanFromTimetable, sessionPlanFromText, sessionTitle } = await import("../_shared/timetableSessionPlan.ts")
  const base=(d:string)=>({type:"formula",formula:{type:"date",date:{start:d}}})
- const ok={"클래스":rel(U(7)),"기준일":base("2026-10-26"),"수업추가 정보":planText({date:"2026-10-26",cls:U(7)})}
+ const ok={"클래스":rel(U(7)),"기준일":base("2026-10-26"),"수업 추가 정보":planText({date:"2026-10-26",cls:U(7)})}
  const p=sessionPlanFromTimetable(ok);assert(p&&p.date==="2026-10-26"&&p.regIds.length===2&&p.teacherIds[0]===U(9)&&p.className==="중1 A",JSON.stringify(p))
  assert(!sessionPlanFromTimetable({...ok,"기준일":base("2026-11-02")}),"기준일과 날짜가 다르면 안 씀")
  assert(!sessionPlanFromTimetable({...ok,"클래스":rel(U(8))}),"클래스가 다르면 안 씀")
@@ -122,12 +122,12 @@ Deno.test("v2.6.14 수업추가 정보 해석: 형식·기준일·클래스가 �
  assert(sessionPlanFromText('{"v":1,"date":"2026-10-26","cls":"'+U(7).replace(/-/g,"")+'","reg":[]}')?.regIds.length===0,"하이픈 없는 id·빈 명단 허용")
  assert(sessionTitle("중1 A","2026-10-26")==="중1 A 10.26(월)")
 })
-Deno.test("v2.6.14 메뉴 일괄 생성 + 수업추가 정보: 큐 항목에 값을 담고, 워커는 Notion 호출 1번(만들기)으로 수업을 만든다",async()=>{
+Deno.test("v2.6.14 메뉴 일괄 생성 + 수업 추가 정보: 큐 항목에 값을 담고, 워커는 Notion 호출 1번(만들기)으로 수업을 만든다",async()=>{
  const f=mock(),originalFetch=globalThis.fetch;globalThis.fetch=f.fetch as typeof fetch;(globalThis as any).EdgeRuntime={waitUntil:(p:Promise<unknown>)=>f.tasks.push(p)}
  try{
   const { processGenerateClassesQueueItem } = await import("../_shared/generateClassesQueue.ts")
   const base=(d:string)=>({type:"formula",formula:{type:"date",date:{start:d}}})
-  for(const [id,d] of [["mon","2026-10-26"],["wed","2026-11-04"],["fri","2026-10-30"]]){f.pages[id].properties["클래스"]=rel(U(7));f.pages[id].properties["기준일"]=base(d);f.pages[id].properties["수업추가 정보"]=planText({date:d,cls:U(7)})}
+  for(const [id,d] of [["mon","2026-10-26"],["wed","2026-11-04"],["fri","2026-10-30"]]){f.pages[id].properties["클래스"]=rel(U(7));f.pages[id].properties["기준일"]=base(d);f.pages[id].properties["수업 추가 정보"]=planText({date:d,cls:U(7)})}
   const r=await handler(new Request("https://mock.supabase/functions/v1/generate-classes?mode=bulk",{method:"POST",headers:{"x-admin-key":"test-only"},body:JSON.stringify({id:"menu"})}));assert(r.status===202);await f.drain()
   const enq=f.calls.filter(c=>c.url.endsWith("/rest/v1/sync_queue")).map(c=>c.body[0])
   assert(enq.length===2&&enq.every(q=>q.payload.plan&&q.payload.plan.date===q.payload.date),JSON.stringify(enq))
@@ -145,7 +145,7 @@ Deno.test("v2.6.14 메뉴 일괄 생성 + 수업추가 정보: 큐 항목에 값
   assert(f.pages.mon.properties["상태"].select.name==="⚪ 대기","timetable status untouched")
  }finally{globalThis.fetch=originalFetch;delete(globalThis as any).EdgeRuntime}
 })
-Deno.test("v2.6.14 수업추가 정보로 만들기 실패: 같은 값으로 다시 하지 않고 시간표를 새로 읽는 항목으로 넣는다",async()=>{
+Deno.test("v2.6.14 수업 추가 정보로 만들기 실패: 같은 값으로 다시 하지 않고 시간표를 새로 읽는 항목으로 넣는다",async()=>{
  const f=mock(),originalFetch=globalThis.fetch
  globalThis.fetch=(async(input:any,init:any={})=>{if(String(input).endsWith("/v1/pages")&&init.method==="POST")return new Response("bad gateway",{status:502});return f.fetch(input,init)}) as typeof fetch
  try{
@@ -157,11 +157,11 @@ Deno.test("v2.6.14 수업추가 정보로 만들기 실패: 같은 값으로 다
   assert(enq.length===1&&enq[0].target==="generate-classes"&&enq[0].payload.timetableId==="mon"&&enq[0].payload.date==="2026-10-26"&&!enq[0].payload.plan,JSON.stringify(enq))
  }finally{globalThis.fetch=originalFetch}
 })
-Deno.test("v2.6.14 버튼·재시도 경로(시간표를 읽음): 수업추가 정보가 있으면 클래스 읽기·등록 조회를 건너뛴다",async()=>{
+Deno.test("v2.6.14 버튼·재시도 경로(시간표를 읽음): 수업 추가 정보가 있으면 클래스 읽기·등록 조회를 건너뛴다",async()=>{
  const f=mock(),originalFetch=globalThis.fetch;globalThis.fetch=f.fetch as typeof fetch;(globalThis as any).EdgeRuntime={waitUntil:(p:Promise<unknown>)=>f.tasks.push(p)}
  try{
   const { processGenerateClassesQueueItem } = await import("../_shared/generateClassesQueue.ts")
-  f.pages.mon.properties["클래스"]=rel(U(7));f.pages.mon.properties["기준일"]={type:"formula",formula:{type:"date",date:{start:"2026-10-26"}}};f.pages.mon.properties["수업추가 정보"]=planText({date:"2026-10-26",cls:U(7)})
+  f.pages.mon.properties["클래스"]=rel(U(7));f.pages.mon.properties["기준일"]={type:"formula",formula:{type:"date",date:{start:"2026-10-26"}}};f.pages.mon.properties["수업 추가 정보"]=planText({date:"2026-10-26",cls:U(7)})
   const before=f.calls.length
   await processGenerateClassesQueueItem({timetableId:"mon",date:"2026-10-26"})
   const used=f.calls.slice(before).filter(c=>c.url.includes("api.notion.com"))
@@ -172,7 +172,7 @@ Deno.test("v2.6.14 버튼·재시도 경로(시간표를 읽음): 수업추가 �
 Deno.test("v2.6.14 generate-classes/queue: 자동화 본문에 수업추가 정보가 오면 큐 항목에 담는다",async()=>{
  const f=mock(),originalFetch=globalThis.fetch;globalThis.fetch=f.fetch as typeof fetch;(globalThis as any).EdgeRuntime={waitUntil:(p:Promise<unknown>)=>f.tasks.push(p)}
  try{
-  const props={"클래스":rel(U(7)),"기준일":{type:"formula",formula:{type:"date",date:{start:"2026-10-26"}}},"수업추가 정보":planText({date:"2026-10-26",cls:U(7)})}
+  const props={"클래스":rel(U(7)),"기준일":{type:"formula",formula:{type:"date",date:{start:"2026-10-26"}}},"수업 추가 정보":planText({date:"2026-10-26",cls:U(7)})}
   const q=await handler(new Request("https://mock.supabase/functions/v1/generate-classes/queue",{method:"POST",headers:{"x-admin-key":"test-only"},body:JSON.stringify({source:{type:"automation"},data:{object:"page",id:"mon",properties:props}})}))
   assert(q.status===202)
   const enq=f.calls.filter(c=>c.url.endsWith("/rest/v1/sync_queue")).map(c=>c.body[0]);assert(enq.length===1&&enq[0].payload.plan?.date==="2026-10-26"&&enq[0].payload.date==="2026-10-26",JSON.stringify(enq))

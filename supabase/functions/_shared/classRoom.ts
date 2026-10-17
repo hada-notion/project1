@@ -451,7 +451,7 @@ function recordSummary(r: Page, unitNames: Map<string, string> = new Map()) {
 		makeup: checkboxValue(r, "보강"),
 		registrationIds: rel(r, "등록"),
 		activities: rel(r, "학습활동").length,
-		activityStatus: selectName(r, "활동 생성 상태") ?? "",
+		activityStatus: selectName(r, "학습활동 생성 상태") ?? "",
 	}
 }
 

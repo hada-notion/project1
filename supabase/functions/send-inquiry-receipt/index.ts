@@ -16,11 +16,12 @@ import {
   resolveAdminKeyFromRequest,
 } from "../_shared/adminShared.ts"
 import { normalizePhone } from "../_shared/alimtalkShared.ts"
+import { pickProp } from "../_shared/notionClient.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 
 const FUNCTION_NAME = "send-inquiry-receipt"
 const CONFIG_CODE = "상담 신청 접수 안내"
-const STATUS_PROP = "접수안내 상태"
+const STATUS_PROP = "접수안내 전송 상태"
 const ERROR_PROP = "접수안내 마지막 오류"
 
 const SOLAPI_API_KEY = Deno.env.get("SOLAPI_API_KEY")!
@@ -71,7 +72,8 @@ async function getKvStore(): Promise<Deno.Kv | null> {
 }
 
 function property(page: any, propertyName: string): any {
-  return page?.properties?.[propertyName]
+  // (v2.7) 웹훅 본문의 페이지는 이름 정규화를 거치지 않으므로 예전 속성 이름도 본다.
+  return pickProp(page?.properties, propertyName)
 }
 
 function plainText(value: any): string {

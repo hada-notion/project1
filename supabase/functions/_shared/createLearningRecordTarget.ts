@@ -64,9 +64,9 @@ const PROP_RECORD_MAKEUP = "보강"
 // + "학습기록 처리 시작 시각"(date)로 전환. 수업/출석/진도교재(학원) 3개 DB 모두 같은 속성 이름을
 // 쓰므로 하나의 스펙(RECORD_GEN_STATUS_SPEC)을 그대로 재사용한다. 기존 checkbox는 폐기. 마스터플랜 참고.
 export const RECORD_GEN_STATUS_SPEC: StatusSpec = {
-	statusProp: "학습기록 상태",
+	statusProp: "학습기록 생성 상태",
 	errorProp: PROP_LAST_ERROR,
-	startedAtProp: "학습기록 처리 시작 시각",
+	startedAtProp: "학습기록 생성 시작 시각",
 }
 
 const GROUP_PROGRESS_TYPE = "그룹 진도"

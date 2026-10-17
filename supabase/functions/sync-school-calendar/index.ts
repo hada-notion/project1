@@ -21,7 +21,7 @@ async function checkedSchool(id: string) {
 }
 async function markSchool(pageId: string, status: string, progress: string, error = "", done = false) {
   const properties: Record<string, unknown> = {
-    "학사일정 처리 상태": {select:{name:status}},
+    "학사일정 가져오기 상태": {select:{name:status}},
     "학사일정 처리 현황": richText(progress), "학사일정 오류": richText(error),
   }
   if (done) properties["학사일정 마지막 동기화"] = { date:{start:new Date().toISOString()} }

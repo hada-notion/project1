@@ -18,7 +18,7 @@
 // "교재비 안내"가 빠져 있었다. send-textbook-notice가 이 카테고리로 로그를 남기려다 타입체크가
 // 또 실패했음 -- 아래에 다시 추가한다.
 
-import { fetchWithRetry } from "./notionClient.ts"
+import { fetchWithRetry, normalizeProps, sendWithPropAliases } from "./notionClient.ts"
 import { securityEnabled, currentInternalKey, authorizeKey } from "./adminSecurity.ts"
 export { authorizeKey } from "./adminSecurity.ts"
 
@@ -161,15 +161,16 @@ export async function notionQueryDatabaseAll(databaseId: string, body: Record<st
 export async function notionGetPage(pageId: string): Promise<any> {
   const res = await fetchWithRetry(NOTION_API_BASE + "/pages/" + pageId, { headers: notionHeaders() })
   if (!res.ok) throw new Error("Notion page fetch failed: " + res.status + " " + (await res.text()))
-  return res.json()
+  return normalizeProps(await res.json())
 }
 
 export async function notionPatchPageProperties(pageId: string, properties: Record<string, unknown>): Promise<any> {
-  const res = await fetchWithRetry(NOTION_API_BASE + "/pages/" + pageId, {
+  // (v2.7) 새 속성 이름이 없으면 예전 이름으로 다시 보낸다(notionClient의 PROP_ALIASES).
+  const res = await sendWithPropAliases(properties, (props) => fetchWithRetry(NOTION_API_BASE + "/pages/" + pageId, {
     method: "PATCH",
     headers: notionHeaders(),
-    body: JSON.stringify({ properties }),
-  })
+    body: JSON.stringify({ properties: props }),
+  }))
   if (!res.ok) throw new Error("Notion page update failed: " + res.status + " " + (await res.text()))
   return res.json()
 }

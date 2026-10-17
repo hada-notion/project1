@@ -39,8 +39,8 @@ export type NoticeKind = "report" | "tuition" | "textbook"
 export type NoticePayload = { kind: NoticeKind; pageId: string; clickerUserId?: string | null }
 
 export const NOTICE_STATUS_PROP: Record<NoticeKind, string> = {
-	report: "전송 상태",
-	tuition: "전송 상태",
+	report: "보고서 전송 상태",
+	tuition: "안내문 전송 상태",
 	textbook: "안내문 전송 상태",
 }
 const WAITING = "⚪ 대기"

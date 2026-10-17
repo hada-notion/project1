@@ -2,11 +2,11 @@
 // 수식이 기준일·등원/하원 시간·클래스·클래스 이름·담당강사·그날 수강 중인 명단을 JSON 한 줄로 계산하므로,
 // 서버는 시간표·클래스 페이지 읽기와 등록 조회를 하지 않는다. 메뉴 일괄 생성은 시간표 DB를 한 번 조회할 때
 // 수식 값이 함께 오므로 그 값을 큐 항목에 담고, 워커는 그 값으로 바로 만든다. 출석은 출석 조정 큐가 만든다.
-import { createPage, relIds } from "./notionClient.ts"
+import { createPage, pickProp, relIds } from "./notionClient.ts"
 import { DS_CLASS_SESSION } from "./constants.ts"
 import { STATUS_DONE } from "./statusTracking.ts"
 
-export const PROP_SESSION_PLAN = "수업추가 정보"
+export const PROP_SESSION_PLAN = "수업 추가 정보"
 
 export type SessionPlan = {
 	date: string // YYYY-MM-DD (기준일)
@@ -55,7 +55,7 @@ const propText = (p: any): string => {
 
 // 시간표 속성(조회 결과·페이지·웹훅 본문)에서 계획을 읽는다. 기준일 수식 값이 함께 있으면 날짜가 같아야 쓴다.
 export function sessionPlanFromTimetable(props: any): SessionPlan | null {
-	const plan = sessionPlanFromText(propText(props?.[PROP_SESSION_PLAN]))
+	const plan = sessionPlanFromText(propText(pickProp(props, PROP_SESSION_PLAN)))
 	if (!plan) return null
 	const base = props?.["기준일"]?.formula?.date?.start ?? props?.["기준일"]?.date?.start
 	if (typeof base === "string" && base.slice(0, 10) !== plan.date) return null

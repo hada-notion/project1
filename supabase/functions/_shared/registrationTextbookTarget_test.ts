@@ -19,7 +19,7 @@ function fixture() {
   regular: { id: "regular", db: "regulars", properties: { "교재명": title("쎈 중등 수학 3-2"), "과목": rel("math") } },
   template: book("template"),
  }
- for (const id of ["a", "b"]) pages[id] = { id, db: "registrations", properties: { "이름": title(id === "a" ? "김철수 중3 A" : "박영희 중3 A"), "클래스": rel("class"), "진도교재": rel(), "수강상태": { formula: { type: "string", string: "🟢 수강 중" } }, "교재 상태": { select: { name: "⚪ 대기" } } } }
+ for (const id of ["a", "b"]) pages[id] = { id, db: "registrations", properties: { "이름": title(id === "a" ? "김철수 중3 A" : "박영희 중3 A"), "클래스": rel("class"), "진도교재": rel(), "수강상태": { formula: { type: "string", string: "🟢 수강 중" } }, "교재 생성 상태": { select: { name: "⚪ 대기" } } } }
  const calls: any[] = [], writes: any[] = [], created: any[] = [], tasks: Promise<unknown>[] = []
  let pageLimit = 100, createFailure = false
  function matches(p: any, f: any): boolean {
@@ -107,7 +107,7 @@ Deno.test("인스턴스는 있지만 등록 쪽 연결 누락: 재실행으로 �
  await target.createIndividualBooksForRegistration("a"); assert(f.created.length===0 && ids(f.pages.a,"진도교재")==="existing")
 }))
 Deno.test("새 기준 추가: 상태 완료라도 실제 누락을 찾아 생성", () => withMock(async f => {
- await target.createIndividualBooksForRegistration("a"); f.pages.a.properties["교재 상태"].select.name="✅ 완료"; f.pages.template2=book("template2")
+ await target.createIndividualBooksForRegistration("a"); f.pages.a.properties["교재 생성 상태"].select.name="✅ 완료"; f.pages.template2=book("template2")
  assert((await target.getPendingClassTextbookRegistrations("class")).some(p=>p.id==="a")); await target.createIndividualBooksForRegistration("a"); assert(f.created.length===2)
 }))
 Deno.test("직접 만든 개별교재 보존·기준으로 재배포하지 않음", () => withMock(async f => {
@@ -164,7 +164,7 @@ Deno.test("옛 속성 이름 정규교재도 읽고 같은 이름으로 쓴다(N
 Deno.test("등록 버튼 핸들러: 인증 유지·202·처리 상태 완료", () => withMock(async f => {
  useUuidIds(f)
  assert((await handler(request("create-individual","a",false))).status===401 && f.created.length===0)
- assert((await handler(request("create-individual","a"))).status===202); await f.drain(); assert(f.created.length===1 && f.pages.a.properties["교재 상태"].select.name==="✅ 완료")
+ assert((await handler(request("create-individual","a"))).status===202); await f.drain(); assert(f.created.length===1 && f.pages.a.properties["교재 생성 상태"].select.name==="✅ 완료")
 }))
 Deno.test("클래스 버튼 핸들러: 순차 이어달리기·두 학생 생성·재실행 중복 없음", () => withMock(async f => {
  useUuidIds(f)
@@ -173,7 +173,7 @@ Deno.test("클래스 버튼 핸들러: 순차 이어달리기·두 학생 생성
 }))
 Deno.test("등록 생성 실패: 완료로 숨기지 않고 오류 상태 표시", () => withMock(async f => {
  useUuidIds(f)
- f.failCreate(); await handler(request("create-individual","a")); await f.drain(); assert(f.pages.a.properties["교재 상태"].select.name==="⚠️ 오류" && f.created.length===0)
+ f.failCreate(); await handler(request("create-individual","a")); await f.drain(); assert(f.pages.a.properties["교재 생성 상태"].select.name==="⚠️ 오류" && f.created.length===0)
 }))
 Deno.test("학습기록: 클래스 없는 복사/직접 교재는 해당 등록·출석에만 연결", () => withMock(async f => {
  for(const direct of [false,true]){
@@ -235,7 +235,7 @@ Deno.test("v2.6.10 큐 경로: 웹훅 본문의 클래스·이름으로 페이�
  // 클래스 교재 조회 1 + 이 등록 교재 조회 1 + 라이브러리 1 + 개별교재 생성 2 + 등록 쓰기 1 = 6 (페이지 조회 없음)
  assert(!used.some((c: any) => c.method === "GET" && c.url.includes("/pages/" + a.id)), "no registration page read")
  assert(notionCalls(f) - before === 6, "calls " + (notionCalls(f) - before) + " " + used.map((c: any) => c.method + " " + c.url.replace("https://api.notion.com/v1", "")).join(" | "))
- const regWrites = f.writes.filter((w: any) => w.id === a.id); assert(regWrites.length === 1 && regWrites[0].body.properties["교재 상태"].select.name === "✅ 완료")
+ const regWrites = f.writes.filter((w: any) => w.id === a.id); assert(regWrites.length === 1 && regWrites[0].body.properties["교재 생성 상태"].select.name === "✅ 완료")
  assert(f.created.length === 2 && ids(a, "진도교재").split(",").length === 3 && ids(f.pages.group, "등록") === a.id)
  // 다시 실행: 만들 것이 없으면 완료 쓰기 1번만
  const n = f.writes.length; await target.processRegistrationTextbookQueueItem(q.body[0].payload); assert(f.created.length === 2 && f.writes.length === n + 1)
@@ -243,7 +243,7 @@ Deno.test("v2.6.10 큐 경로: 웹훅 본문의 클래스·이름으로 페이�
 Deno.test("v2.6.10 큐 경로 실패: 오류 상태를 쓰고 큐 재시도를 위해 예외를 다시 던짐", () => withMock(async f => {
  f.failCreate(); let threw = false
  try { await target.processRegistrationTextbookQueueItem({ pageId: "a", snapshot: { id: "a", classId: "class", name: "김철수 중3 A" } }) } catch { threw = true }
- assert(threw && f.pages.a.properties["교재 상태"].select.name === "⚠️ 오류")
+ assert(threw && f.pages.a.properties["교재 생성 상태"].select.name === "⚠️ 오류")
 }))
 Deno.test("v2.6.10 본문에 클래스·이름이 없으면 페이지를 읽는다", () => withMock(async f => {
  assert(target.snapshotFromWebhookBody({ pageId: "a" }, "a") === null)
