@@ -16,7 +16,7 @@
 // depth===0일 때 이미 호출하므로 여기서 다시 부를 필요는 없다. 마스터플랜:
 // https://app.notion.com/p/903c90386c1d473494c5df6306c53517
 
-import { getPage, queryAllPages, updatePageProperties, archivePage, mapWithConcurrency, relIds } from "./notionClient.ts"
+import { getPage, queryAllPages, updatePageProperties, archivePage, mapWithConcurrency, relIds, fullRelationIds, withFullRelations } from "./notionClient.ts"
 import {
 	PROP_LAST_ERROR,
 	DS_CLASS_SESSION,
@@ -149,10 +149,10 @@ async function getStudyRecordProgressType(studyRecordPage: any): Promise<string 
   return textbookPage.properties?.[PROP_PROGRESS_TYPE]?.select?.name
 }
 
-// (v2.6.16) 관계 목록은 조회 결과(kid)에서 읽는다. 페이지 읽기는 관계를 25개까지만 줘서, 그대로 다시 쓰면 나머지가 지워진다.
+// (v2.6.32) 조회 결과도 관계를 25개까지만 준다. 잘렸으면 끝까지 읽은 뒤 고쳐 쓴다(fullRelationIds).
 async function disconnectRelation(kid: any, propName: string, removeId: string): Promise<void> {
   const pageId = kid.id
-  const current: string[] = (kid.properties?.[propName]?.relation ?? []).map((r: any) => r.id)
+  const current: string[] = await fullRelationIds(kid, propName)
   const filtered = current.filter((id: string) => id !== removeId)
   if (filtered.length === current.length) return
   await updatePageProperties(pageId, { [propName]: { relation: filtered.map((id) => ({ id })) } })
@@ -232,7 +232,9 @@ export async function cascadeDelete(
                 // 수업째 지우는 중이면 그 수업의 기록은 수업 쪽에서 처리한다(여기서 연결을 끊으면 쓸데없는 쓰기·경합).
                 const deleting = new Set([...visited].map((v) => v.replace(/-/g, "")))
                 if (relIds(kid.properties?.["수업"]).some((id: string) => deleting.has(id.replace(/-/g, "")))) return
-                const decision = decideRecordRemoval(kid, [pageId], relIds(page.properties?.["등록"]), progressType)
+                // (v2.6.32) 반 전체 기록의 출석·등록이 25개를 넘으면 끝까지 읽고 판단·고쳐 쓴다.
+                const full = await withFullRelations(kid, ["출석", "등록"])
+                const decision = decideRecordRemoval(full, [pageId], relIds(page.properties?.["등록"]), progressType)
                 if (decision.action === "detach") {
                   await updatePageProperties(kid.id, decision.properties)
                   log.push(`${indent}🔗 [${name}] 다른 학생도 쓰는 학습기록이라 이 출석·학생 연결만 해제함: ${kid.id}`)
