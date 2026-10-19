@@ -21,6 +21,7 @@ Notion 워크스페이스의 "📘 하다 학원관리 구조·실행 설명서"
 | 워크플로 | `deploy-supabase-functions.yml`(함수·마이그레이션 자동 배포), `web-checks.yml`(화면·문서 PR 검사), `sync-attendance-incremental.yml`·`sync-attendance-reconcile.yml`(출석 전체 동기화, 수동 실행만) |
 | 검사 | `scripts/check-known-regressions.sh`(회귀 가드), `tests/design-lint.cjs`(디자인 규칙·공용 파일 버전), `tests/admin-security-sql.cjs`, 함수별 `*_test.ts` |
 | 이식 도구 | `scripts/setup-new-academy.py`(원본 주소 초기 치환), `scripts/reset-admin-password.py`(관리자 비밀번호 0000 초기화) |
+| Notion 기준 도구 | `scripts/notion-scan.js`(브라우저에서 Notion 구성 읽기 전용 스캔), `scripts/notion-diff.py`(원본 지문과 비교), `scripts/notion-spec.py`·`scripts/notion-extract.py`(원본 전용: 명세·지문 만들기, 요청 항목 뽑기) |
 
 운영 웹앱 기준 주소: `https://hada-notion.github.io/project1/`
 
@@ -32,19 +33,23 @@ GitHub Actions가 자동으로: 전체 함수 `deno check` → 회귀 가드 스
 화면(`*.html`, `*.js`, `assets/`)과 Pages는 `main` 푸시 때 GitHub Pages가 다시 빌드합니다. 화면·문서만 바꾼 PR은
 `web-checks.yml`이 디자인 규칙·체크리스트 대조·회귀 가드를 확인합니다.
 
-이 저장소를 새 학원(고객)에게 이식할 때 필요한 GitHub Actions Secrets와 Supabase Edge Function
-Secrets 전체 목록, 하드코딩 값 자동 치환 스크립트 사용법은
-[`docs/새-학원-이식-체크리스트.md`](docs/새-학원-이식-체크리스트.md)를 참고하세요.
+## 기준 문서
 
-학습기록·학습활동 본문 공유, PDF·첨부파일 열기 API와 보안·테스트 기준은
-[`docs/학생-보고서-본문-첨부파일.md`](docs/학생-보고서-본문-첨부파일.md)를 참고하세요.
+주제마다 기준은 한 곳이다. 다른 문서는 이 문서들을 가리키고, 같은 내용을 따로 적지 않는다.
 
-법정 서류의 최신 데이터 기준·웹/PDF/XLSX 규칙·번호 부작용·미구현 기능은
-[`LEGAL_DOCUMENTS.md`](LEGAL_DOCUMENTS.md)를 참고하세요. 운영 사용법은 Notion 메뉴얼의
-**법정 서류**, 데이터 흐름·접근 경계는 **구조도**에 있습니다.
+| 주제 | 기준 |
+| --- | --- |
+| Notion 구성(속성·수식·버튼·자동화·보기·레이아웃)과 맞추는 순서 | [`docs/기준/적용-절차.md`](docs/기준/적용-절차.md). 전체 명세는 원본 Notion(비공개), 공개는 지문 [`docs/기준/노션-지문.json`](docs/기준/노션-지문.json) |
+| Notion 이름·레이아웃 원칙(버튼·상태 속성·자동화 이름, 예전 이름) | [`docs/이름-규칙.md`](docs/이름-규칙.md) |
+| 버튼·자동화가 부르는 서버 함수, 인증, Notion 자동화 원칙 | [`docs/버튼-웹훅-매핑.md`](docs/버튼-웹훅-매핑.md) |
+| 화면 디자인 | [`docs/DESIGN.md`](docs/DESIGN.md) |
+| 변경 이력과 버전별 지침 | [`CHANGELOG.md`](CHANGELOG.md), `docs/updates/` (양식 [`_TEMPLATE.md`](docs/updates/_TEMPLATE.md)) |
+| 원본 패치 작업 흐름 | [`docs/패치-이슈-관리.md`](docs/패치-이슈-관리.md) |
+| 새 학원 이식(Secrets·환경값) | [`docs/새-학원-이식-체크리스트.md`](docs/새-학원-이식-체크리스트.md) |
+| 기능별 구조 | [`docs/키오스크-처리-흐름.md`](docs/키오스크-처리-흐름.md), [`docs/설계-수업관리-복사본.md`](docs/설계-수업관리-복사본.md)·[`docs/화면-데이터-목록.md`](docs/화면-데이터-목록.md), [`docs/학교-학사일정-연결.md`](docs/학교-학사일정-연결.md), [`docs/학생-보고서-본문-첨부파일.md`](docs/학생-보고서-본문-첨부파일.md), [`LEGAL_DOCUMENTS.md`](LEGAL_DOCUMENTS.md) |
 
-## 히스토리 / 과거 작업 로그
+운영 사용법은 Notion 메뉴얼이 기준이다. 저장소 문서와 Notion 메뉴얼이 다르면 Notion을 따르고 차이를 보고한다.
 
-리팩토링 이력, 발견된 버그와 수정 내역 같은 과거 작업 로그는 이 저장소가 아니라 Notion
-워크스페이스에서 관리합니다. 현재 상태를 파악하려면 Notion 메뉴얼과 실제 코드를 먼저
-확인하세요.
+## 히스토리
+
+과거 작업 경과는 Git 이력과 Notion `패치·이슈 관리` DB에 있다. 문서에는 현재 기준만 남긴다.
