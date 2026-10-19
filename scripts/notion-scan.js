@@ -246,7 +246,9 @@
   const viewOf = (v, cid) => {
     const f = v.format || {};
     const vcid = f.collection_pointer?.id || cid;
-    const pk = Object.keys(f).find((k) => /_properties$/.test(k) && Array.isArray(f[k]));
+    // 보기 형식을 바꾸면 예전 형식의 속성 목록(table_properties 등)이 남는다. 지금 형식 것을 먼저 쓴다
+    const pk = Array.isArray(f[v.type + '_properties']) ? v.type + '_properties'
+      : Object.keys(f).find((k) => /_properties$/.test(k) && Array.isArray(f[k]));
     const visible = pk ? f[pk].filter((x) => x.visible !== false).map((x) => pname(vcid, x.property)).filter(Boolean) : [];
     const vname = (val) => pname(vcid, val) || '(지운 속성)';
     const query = JSON.parse(JSON.stringify(v.query2 || {}, (k, val) => {
