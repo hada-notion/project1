@@ -64,6 +64,23 @@
     Object.assign(cols, await REQ('collection', [root.parent_id]));
   }
   if (root?.parent_table === 'collection') collIds.add(root.parent_id);
+  // 속성이 많은 DB는 일부 속성을 schema 밖(additional_property_ids → collection_property_schema)에 둔다. schema에 합친다
+  const mergeExtraProps = async (list) => {
+    const ptrs = [];
+    list.forEach((c) => (c.additional_property_ids || []).forEach((id) => ptrs.push({ table: 'collection_property_schema', id, spaceId: c.space_id })));
+    for (let i = 0; i < ptrs.length; i += 50) {
+      const r = await fetch('/api/v3/syncRecordValuesMain', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ requests: ptrs.slice(i, i + 50).map((p) => ({ pointer: p, version: -1 })) }),
+      });
+      for (const x of Object.values((await r.json()).recordMap?.collection_property_schema || {})) {
+        const v = x?.value?.value || x?.value;
+        const c = v && v.alive !== false && v.parent_table === 'collection' && cols[v.parent_id];
+        if (c && v.property_short_id && v.property_schema) c.schema = { ...(c.schema || {}), [v.property_short_id]: v.property_schema };
+      }
+    }
+  };
+  await mergeExtraProps(Object.values(cols));
   const cname = (id) => (cols[id] ? text(cols[id].name) : '(밖의 DB)');
   const pname = (cid, pid) => {
     const s = cols[cid]?.schema || {};
@@ -88,6 +105,7 @@
   });
   if (actTargets.size) {
     Object.entries(await REQ('collection', [...actTargets])).forEach(([t, c]) => { if (c.space_id === space) cols[t] = c; });
+    await mergeExtraProps([...actTargets].map((t) => cols[t]).filter(Boolean));
     actTargets.forEach((t) => {
       if (!cols[t]) return;
       collIds.add(t);
