@@ -222,13 +222,19 @@
   const tabBlocks = await REQP(tabBlockPtrs, 'block');
   const tabViewIds = []; Object.values(tabBlocks).forEach((b) => (b.view_ids || []).forEach((v) => tabViewIds.push(v)));
   const tabViews = await REQ('collection_view', tabViewIds);
+  // 대시보드 보기: 위젯 배치(layout)와 위젯 보기(차트 등)
+  const dashPtrs = [...Object.values(views), ...Object.values(tabViews)]
+    .map((v) => v.format?.dashboard_layout_pointer).filter(Boolean);
+  const dashLayouts = await REQP(dashPtrs, 'layout');
+  const widgetIds = [];
+  JSON.stringify(Object.values(dashLayouts), (k, val) => { if (k === 'collection_view_id') widgetIds.push(val); return val; });
+  const widgetViews = await REQ('collection_view', widgetIds);
   const viewOf = (v, cid) => {
     const f = v.format || {};
     const vcid = f.collection_pointer?.id || cid;
     const pk = Object.keys(f).find((k) => /_properties$/.test(k) && Array.isArray(f[k]));
     const visible = pk ? f[pk].filter((x) => x.visible !== false).map((x) => pname(vcid, x.property)).filter(Boolean) : [];
-    // 대시보드 보기의 필터는 위젯이 보여 주는 다른 DB의 속성을 가리킨다
-    const vname = (val) => pname(vcid, val) || (v.type === 'dashboard' && anyPname(val)) || '(지운 속성)';
+    const vname = (val) => pname(vcid, val) || '(지운 속성)';
     const query = JSON.parse(JSON.stringify(v.query2 || {}, (k, val) => {
       if (k === 'property' && typeof val === 'string') return vname(val);
       if (k === 'id' || k === 'spaceId') return undefined;
@@ -245,6 +251,24 @@
     }
     if (f.board_columns_by || f.collection_group_by) out.groupBy = JSON.parse(JSON.stringify(f.collection_group_by || f.board_columns_by, (k, val) => (k === 'property' ? pname(vcid, val) : val)));
     if (v.format?.view_icon || v.icon) out.icon = v.format?.view_icon || v.icon;
+    // 차트: X축·Y축·그룹 속성과 날짜 묶음 단위(일·주·월)
+    if (f.chart_config) {
+      out.chart = JSON.parse(JSON.stringify(f.chart_config, (k, val) => {
+        if (k === 'property' && typeof val === 'string') return vname(val);
+        if (k === 'id') return undefined;
+        return val;
+      }));
+    }
+    // 대시보드: 공통 필터(위젯 DB별 대상 속성)와 위젯 줄·칸
+    if (v.type === 'dashboard') {
+      out.globalFilters = (f.dashboard_global_filters || []).map((g) => ({
+        filter: g.filter,
+        targets: (g.targets || []).map((t) => ({ db: cname(t.collection_id), property: pname(t.collection_id, t.property) || '(지운 속성)' })),
+      }));
+      const DL = dashLayouts[f.dashboard_layout_pointer?.id];
+      out.widgets = (DL?.modules?.dashboard_layout_schema || []).map((row) => (row.modules || [])
+        .map((w) => (widgetViews[w.collection_view_id] ? viewOf(widgetViews[w.collection_view_id], cid) : { missing: true })));
+    }
     return out;
   };
   const layoutOf = (c, cid) => {
