@@ -17,3 +17,32 @@ export function decideStamp(mode: KioskCheckMode, existingIso: string | null | u
   if (Number.isFinite(at) && nowMs - at >= 0 && nowMs - at < RECENT_REPEAT_MS) return "recent"
   return mode === "every" ? "write" : "already"
 }
+
+// 정규 수업이 없는 날 방문(보강)으로 출석을 새로 만들 때 넣을 속성(v2.7.9).
+// 출석 `클래스`는 원본처럼 `등록`을 거친 롤업일 수도, 운영 학원처럼 직접 관계일 수도 있다. 롤업에는 값을 쓸 수 없으므로
+// 먼저 클래스를 넣어 만들고, Notion이 `클래스` 때문에 거절하면(isClassPropertyError) 클래스 없이 다시 만든다.
+export function walkInAttendanceProperties(o: {
+  title: string
+  registrationId: string
+  nowIso: string
+  stampProp: string
+  classIds: string[]
+  teacherIds: string[]
+  includeClass: boolean
+}): Record<string, unknown> {
+  const properties: Record<string, unknown> = {
+    "출석": { title: [{ text: { content: o.title.slice(0, 200) } }] },
+    "등록": { relation: [{ id: o.registrationId }] },
+    "출석 상태": { select: { name: "🔵 보강" } },
+    "수업일시": { date: { start: o.nowIso } },
+  }
+  if (o.includeClass && o.classIds.length) properties["클래스"] = { relation: o.classIds.map((id) => ({ id })) }
+  if (o.teacherIds.length) properties["담당강사"] = { relation: o.teacherIds.map((id) => ({ id })) }
+  properties[o.stampProp] = { date: { start: o.nowIso } }
+  return properties
+}
+
+// notionCreatePage 오류 문구가 `클래스` 속성 때문에 거절된 400인지
+export function isClassPropertyError(message: string): boolean {
+  return /\b400\b/.test(message) && message.includes("클래스")
+}

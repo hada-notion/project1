@@ -62,7 +62,7 @@ import { normalizePhone, resolveParentPhone, resolveAlimtalkRecipients } from ".
 
 import { resolveKioskHint, queryAllKioskPages, ACTIVE_KIOSK_STATUS } from "../_shared/kioskIdentity.ts"
 import { runAfterResponse } from "../_shared/afterResponse.ts"
-import { decideStamp, kioskCheckMode } from "../_shared/kioskPolicy.ts"
+import { decideStamp, isClassPropertyError, kioskCheckMode, walkInAttendanceProperties } from "../_shared/kioskPolicy.ts"
 import { StepTiming } from "../_shared/stepTiming.ts"
 import { patchAttendanceStampLater } from "../_shared/classRoomCopy.ts"
 import { hashPhone, kstDate, markKioskTodayStamp, readKioskPrepared, readKioskTodayRow, type KioskPrepared, type KioskTodayRow } from "../_shared/kioskToday.ts"
@@ -340,17 +340,14 @@ Deno.serve(async (req: Request) => {
         }
         timing.mark("class")
         const title = `${studentName} ${today} 보강(${type === "checkin" ? "등원" : "하원"})`
-        const properties: Record<string, unknown> = {
-          "출석": { title: [{ text: { content: title.slice(0, 200) } }] },
-          "등록": { relation: [{ id: registrationId }] },
-          "출석 상태": { select: { name: "🔵 보강" } },
-          "수업일시": { date: { start: nowIso } },
+        const walkIn = { title, registrationId, nowIso, stampProp, classIds, teacherIds }
+        // 출석 `클래스`가 롤업인 학원(원본)에서는 클래스를 쓸 수 없어 Notion이 거절한다 → 클래스 없이 다시 만든다(롤업이 등록에서 채운다).
+        try {
+          attendance = await notionCreatePage(attendanceDbId, walkInAttendanceProperties({ ...walkIn, includeClass: true }))
+        } catch (err) {
+          if (!classIds.length || !isClassPropertyError((err as Error).message)) throw err
+          attendance = await notionCreatePage(attendanceDbId, walkInAttendanceProperties({ ...walkIn, includeClass: false }))
         }
-        if (classIds.length) properties["클래스"] = { relation: classIds.map((id) => ({ id })) }
-        if (teacherIds.length) properties["담당강사"] = { relation: teacherIds.map((id) => ({ id })) }
-        properties[stampProp] = { date: { start: nowIso } }
-
-        attendance = await notionCreatePage(attendanceDbId, properties)
         timing.mark("attendance_write")
         stateChanged = true
         // 새로 만든 보강 출석을 준비 표에 연결해 다음 등원·하원부터 빠른 경로로 처리한다.
