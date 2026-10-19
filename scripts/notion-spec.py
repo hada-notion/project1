@@ -112,6 +112,10 @@ def norm_action(a):
     cfg.pop("apiVersion", None)
     if cfg.get("template_page_id"):  # 템플릿 페이지 id는 학원마다 다르다
         cfg["template_page_id"] = "(템플릿 지정)"
+    # 관계 값 [context("이 페이지")]와 context("이 페이지")는 같은 뜻이라 대괄호를 뗀다
+    if isinstance(cfg.get("values"), dict):
+        cfg["values"] = {k: (re.sub(r'^(\((?:add|append|remove)\) )?\[(context\("[^"]+"\))\]$', r"\1\2", v)
+                             if isinstance(v, str) else v) for k, v in cfg["values"].items()}
     # 버튼이 여는 페이지 같은 페이지 id도 학원마다 다르다
     cfg = json.loads(UUID.sub("(페이지 지정)", json.dumps(cfg, ensure_ascii=False)))
     # 버튼이 실제로 쓰는 속성은 properties 목록이다. 목록 밖 값은 지운 속성의 흔적이라 화면에도 안 보인다
