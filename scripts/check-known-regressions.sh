@@ -239,7 +239,7 @@ RETIRED_WEBHOOKS='sync-registration-timetable|sync-student-report|mark-report-so
 retired_hits=$(grep -rnE "$RETIRED_WEBHOOKS" \
   --include='*.ts' --include='*.js' --include='*.html' --include='*.md' --include='*.sql' \
   --include='*.yml' --include='*.py' --include='*.cjs' \
-  --exclude-dir=updates --exclude-dir=node_modules --exclude-dir=.git --exclude=CHANGELOG.md \
+  --exclude-dir=updates --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.local --exclude=CHANGELOG.md \
   --exclude=check-known-regressions.sh . || true)
 if [ -n "$retired_hits" ]; then
   echo "❌ 폐기한 웹훅 함수 이름이 다시 들어왔습니다. 되살리려면 이 검사부터 고치세요:"
