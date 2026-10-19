@@ -28,7 +28,8 @@
   const HOST = (s) => s.replace(/[A-Za-z0-9-]+\.supabase\.co/g, '<HOST>');
 
   // 1) 페이지 트리에서 데이터베이스 블록 찾기: 지금 페이지와 그 하위(공개 DB 페이지에서 실행 권장)
-  const pageId = (location.pathname.match(/[0-9a-f]{32}/) || [])[0];
+  // 페이지 대신 다른 app.notion.com 주소에서 실행할 때는 window.HADA_SCAN_PAGE에 공개 DB 페이지 id를 넣는다
+  const pageId = (window.HADA_SCAN_PAGE || location.pathname.match(/[0-9a-f]{32}/)?.[0] || '').replace(/-/g, '');
   const dashed = (h) => h.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, '$1-$2-$3-$4-$5');
   const collIds = new Set();
   const seen = new Set();
@@ -47,13 +48,17 @@
 
   // 2) 컬렉션과 관계 대상까지
   let cols = await REQ('collection', [...collIds]);
+  // 이 워크스페이스의 DB만 대상. 복제본 롤업에 남은 원본 DB 번호(collection_id)는 관계가 아니다
+  const space = Object.values(cols)[0]?.space_id;
   const relTargets = new Set();
   Object.values(cols).forEach((c) => Object.values(c.schema || {}).forEach((p) => {
+    if (p.type !== 'relation') return;
     const t = p.collection_id || p.collection_pointer?.id; if (t && !cols[t]) relTargets.add(t);
   }));
-  Object.assign(cols, await REQ('collection', [...relTargets]));
   // 관계로 이어진 DB(예: 다른 곳에 있는 수강료)와 시작 페이지가 속한 DB(메뉴)도 대상
-  relTargets.forEach((t) => cols[t] && collIds.add(t));
+  Object.entries(await REQ('collection', [...relTargets])).forEach(([t, c]) => {
+    if (c.space_id === space) { cols[t] = c; collIds.add(t); }
+  });
   const root = (await REQ('block', [dashed(pageId)]))[dashed(pageId)];
   if (root?.parent_table === 'collection' && !cols[root.parent_id]) {
     Object.assign(cols, await REQ('collection', [root.parent_id]));
@@ -82,7 +87,7 @@
     if (t && !cols[t]) actTargets.add(t);
   });
   if (actTargets.size) {
-    Object.assign(cols, await REQ('collection', [...actTargets]));
+    Object.entries(await REQ('collection', [...actTargets])).forEach(([t, c]) => { if (c.space_id === space) cols[t] = c; });
     actTargets.forEach((t) => {
       if (!cols[t]) return;
       collIds.add(t);
@@ -115,7 +120,8 @@
     const [t, a] = s;
     if (t === '‣' && a) {
       const [k, d = {}] = a[0];
-      if (k === 'fpp') return 'prop("' + (d.name || pname(d.collection?.id || cid, d.property) || d.property) + '")';
+      // 수식에 저장된 이름(d.name)은 작성 당시 이름이라 지금 속성 이름을 먼저 쓴다
+      if (k === 'fpp') return 'prop("' + (pname(d.collection?.id || cid, d.property) || d.name || d.property) + '")';
       if (k === 'fv') return VAR(d.id);
       if (k === 'p') return '[페이지 지정]';
       return '{' + k + ':' + (d.name || '') + '}';
@@ -126,6 +132,12 @@
   const clean = (o, cid) => {
     const walk = (v, k) => {
       if (k === 'customHeaders' && Array.isArray(v)) return v.map((h) => h.key);
+      // 웹훅에 실을 속성 목록은 속성 id라 이름으로 바꾼다
+      if (k === 'selectedProperties' && v && typeof v === 'object') {
+        const o2 = {};
+        for (const [kk, ids] of Object.entries(v)) o2[kk] = Array.isArray(ids) ? ids.map((x) => pname(cid, x) || anyPname(x) || x).sort() : ids;
+        return o2;
+      }
       if (typeof v === 'string') return HOST(v);
       if (isSeg(v)) return HOST(seg(v, cid));
       if (Array.isArray(v)) return v.map((x) => walk(x));
@@ -153,7 +165,9 @@
           ? '변수 ' + (val?.name || pid)
           : (pname(targetCid, pid) || pname(cid, pid) || anyPname(pid) || pid);
         const v = val?.value?.value ?? val?.value;
-        nv[key] = v === undefined ? '(비움)' : v;
+        // 관계·여러 값 속성은 바꾸기 말고 더하기(add)·빼기(remove)일 수 있다
+        const mode = val?.action && val.action !== 'replace' ? `(${val.action}) ` : '';
+        nv[key] = v === undefined ? '(비움)' : (mode && typeof v === 'string' ? mode + v : v);
       }
       cfg.values = nv;
     }
