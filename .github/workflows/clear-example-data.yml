@@ -1,0 +1,80 @@
+# 새 학원 최초 설치 전용: 원본 템플릿에서 따라온 예시 데이터를 비운다.
+# 모든 연결(GitHub·Supabase·Notion DB·Secrets·함수)과 발송 없는 버튼 확인을 마친 뒤, 알림톡 키를 넣기 전에 실행한다.
+# - 워크스페이스 이름을 비워 두고 실행하면 확인만 한다(Notion DB별 건수, Supabase 사본 건수).
+# - 확인 모드에서 나온 워크스페이스 이름을 그대로 넣고 실행하면 비운다.
+# - 성공하면 이 작업은 스스로 꺼진다(Actions 목록에서 비활성). 원본 저장소에서는 실행되지 않는다.
+# 필요한 GitHub Secrets: NOTION_TOKEN(이 학원 Notion 인테그레이션 토큰), SUPABASE_PROJECT_ID, SUPABASE_DB_PASSWORD.
+name: 예시 데이터 비우기 (최초 설치 전용)
+
+on:
+  workflow_dispatch:
+    inputs:
+      workspace:
+        description: "Notion 워크스페이스 이름. 비워 두면 확인만 한다"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  clear:
+    if: github.repository != 'hada-notion/project1'
+    runs-on: ubuntu-latest
+    env:
+      WORKSPACE: ${{ inputs.workspace }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check secrets
+        run: |
+          missing=""
+          [ -n "$NOTION_TOKEN" ] || missing="$missing NOTION_TOKEN"
+          [ -n "$SUPABASE_PROJECT_ID" ] || missing="$missing SUPABASE_PROJECT_ID"
+          [ -n "$SUPABASE_DB_PASSWORD" ] || missing="$missing SUPABASE_DB_PASSWORD"
+          if [ -n "$missing" ]; then echo "::error::GitHub Secrets가 없습니다:$missing"; exit 1; fi
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+      - name: Prepare database URL
+        run: |
+          ENCODED=$(python3 -c "import urllib.parse, os; print(urllib.parse.quote(os.environ['SUPABASE_DB_PASSWORD'].strip(), safe=''))")
+          echo "::add-mask::$ENCODED"
+          echo "DB_URL=postgresql://postgres.${SUPABASE_PROJECT_ID}:${ENCODED}@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres" >> "$GITHUB_ENV"
+        env:
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+      - name: Supabase copies before
+        run: |
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f scripts/clear-example-data-count.sql
+
+      - name: Notion example data
+        run: |
+          if [ -z "$WORKSPACE" ]; then
+            python3 -I scripts/clear-example-data.py
+          else
+            python3 -I scripts/clear-example-data.py --apply --confirm-workspace "$WORKSPACE"
+          fi
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+
+      - name: Supabase copies
+        if: env.WORKSPACE != ''
+        run: |
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f scripts/clear-example-data.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f scripts/clear-example-data-count.sql
+
+      - name: Turn this workflow off
+        if: env.WORKSPACE != ''
+        run: |
+          gh workflow disable clear-example-data.yml --repo "$GITHUB_REPOSITORY"
+          echo "예시 데이터를 비웠고 이 작업을 껐습니다."
+          echo "이제 GitHub Secrets의 NOTION_TOKEN을 지워도 됩니다(Supabase Secrets의 NOTION_TOKEN은 그대로 둡니다)."
+          echo "이 작업 파일은 설치가 끝난 운영에서 다시 켜거나 다시 추가하지 않습니다."
+        env:
+          GH_TOKEN: ${{ github.token }}

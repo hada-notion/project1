@@ -201,6 +201,8 @@ def main():
         left += n
         print(f"  {name}: {n}건 남음")
     print("완료: 남은 건수 0" if left == 0 else f"남은 건수 {left}건. 다시 실행하면 남은 것만 지웁니다.")
+    if left:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
