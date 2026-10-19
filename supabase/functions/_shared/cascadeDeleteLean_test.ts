@@ -55,6 +55,28 @@ Deno.test("v2.6.31 수업 삭제: 하위는 읽지 않고 삭제 체크·상태 
 	assert(rootWrites[1].body.archived && rootWrites[1].body.properties["삭제 상태"].select.name === "✅ 완료", "완료와 휴지통을 한 번에")
 })
 
+Deno.test("v2.7.10 수업 삭제: 이 수업에만 달린 그룹 진도 학습기록과 그 학습활동도 지운다", async () => {
+	const pages = world()
+	pages.book = page("book", "books", { 진도방식: { select: { name: "그룹 진도" } } })
+	pages.rec = page("rec", "records", { 학습: { title: [] }, 수업: rel("sess"), 진도교재: rel("book"), 출석: rel("att1", "att2", "att3") })
+	pages.act13 = page("act13", "activities", { 학습활동: { title: [] }, 출석: rel("att1"), 학습기록: rel("rec") })
+	await run(pages, "sess")
+	assert(pages.rec.archived, "그룹 진도 학습기록도 휴지통")
+	assert(pages.act13.archived, "그 학습활동도 휴지통")
+	assert(!pages.book.archived, "진도교재는 남김")
+})
+
+Deno.test("v2.7.10 수업 삭제: 다른 수업에도 연결된 그룹 진도 학습기록은 이 수업 연결만 끊는다", async () => {
+	const pages = world()
+	pages.book = page("book", "books", { 진도방식: { select: { name: "그룹 진도" } } })
+	pages.sess2 = page("sess2", "sessions", { 이름: { title: [] } })
+	pages.rec = page("rec", "records", { 학습: { title: [] }, 수업: rel("sess", "sess2"), 진도교재: rel("book") })
+	await run(pages, "sess")
+	assert(!pages.rec.archived, "기록은 남김")
+	const ids = pages.rec.properties.수업.relation.map((r: any) => r.id)
+	assert(ids.length === 1 && ids[0] === "sess2", "이 수업 연결만 끊음: " + ids.join(","))
+})
+
 Deno.test("v2.6.31 다시 시도: 이미 휴지통에 간 하위는 건너뛰고 남은 것만 지운다", async () => {
 	const pages = world()
 	pages.att1.archived = true; pages.act11.archived = true; pages.act12.archived = true
