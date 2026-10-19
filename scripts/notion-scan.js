@@ -227,12 +227,22 @@
     const vcid = f.collection_pointer?.id || cid;
     const pk = Object.keys(f).find((k) => /_properties$/.test(k) && Array.isArray(f[k]));
     const visible = pk ? f[pk].filter((x) => x.visible !== false).map((x) => pname(vcid, x.property)).filter(Boolean) : [];
+    // 대시보드 보기의 필터는 위젯이 보여 주는 다른 DB의 속성을 가리킨다
+    const vname = (val) => pname(vcid, val) || (v.type === 'dashboard' && anyPname(val)) || '(지운 속성)';
     const query = JSON.parse(JSON.stringify(v.query2 || {}, (k, val) => {
-      if (k === 'property' && typeof val === 'string') return pname(vcid, val) || '(지운 속성)';
+      if (k === 'property' && typeof val === 'string') return vname(val);
       if (k === 'id' || k === 'spaceId') return undefined;
       return val;
     }));
     const out = { name: v.name || '', type: v.type, db: cname(vcid), visible, query };
+    // 보기 위 빠른 필터(칩)도 조건이다. query2와 따로 저장된다
+    if ((f.property_filters || []).length) {
+      out.quickFilters = JSON.parse(JSON.stringify(f.property_filters.map((x) => x.filter), (k, val) => {
+        if (k === 'property' && typeof val === 'string') return vname(val);
+        if (k === 'id') return undefined;
+        return val;
+      }));
+    }
     if (f.board_columns_by || f.collection_group_by) out.groupBy = JSON.parse(JSON.stringify(f.collection_group_by || f.board_columns_by, (k, val) => (k === 'property' ? pname(vcid, val) : val)));
     if (v.format?.view_icon || v.icon) out.icon = v.format?.view_icon || v.icon;
     return out;
