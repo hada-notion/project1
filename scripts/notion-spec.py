@@ -5,6 +5,7 @@
 출력(출력 폴더):
 - 노션-명세.json, 노션-명세.md: 전체 명세. 비공개(원본 Notion "Notion 기준 명세" 페이지에 올린다)
 - 노션-지문.json: 항목별 지문만. 공개(docs/기준/노션-지문.json으로 커밋한다)
+- 노션-레이아웃.md: DB별 페이지 레이아웃(수식·버튼 동작 없음). 공개(docs/기준/노션-레이아웃.md로 커밋한다)
 
     python -I scripts/notion-spec.py <scan.json> <출력 폴더>
 
@@ -61,6 +62,8 @@ def norm_view(v):
     for k in ("db", "groupBy", "icon"):
         if v.get(k):
             o[k] = v[k]
+    if v.get("quickFilters"):
+        o["quickFilters"] = norm_query(v["quickFilters"])
     return o
 
 
@@ -93,6 +96,10 @@ def norm_action(a):
     cfg.pop("apiVersion", None)
     if cfg.get("template_page_id"):  # 템플릿 페이지 id는 학원마다 다르다
         cfg["template_page_id"] = "(템플릿 지정)"
+    # 버튼이 실제로 쓰는 속성은 properties 목록이다. 목록 밖 값은 지운 속성의 흔적이라 화면에도 안 보인다
+    if isinstance(cfg.get("properties"), list) and isinstance(cfg.get("values"), dict):
+        keep = set(cfg["properties"]) | {"title"}
+        cfg["values"] = {k: v for k, v in cfg["values"].items() if k in keep or k == "이름"}
     return {"type": a.get("type"), "cfg": cfg}
 
 
@@ -333,12 +340,17 @@ def query_text(q):
     return cell("; ".join(parts))
 
 
+def quick_text(v):
+    q = v.get("quickFilters")
+    return cell("; 빠른 필터 `" + json.dumps(q, ensure_ascii=False) + "`") if q else ""
+
+
 def view_row(v, with_db=False):
     vis = cell("·".join(v.get("visible") or []))
     name = v.get("name") or "(이름 없음)"
     extra = f" · 그룹 `{json.dumps(v['groupBy'], ensure_ascii=False)}`" if v.get("groupBy") else ""
     db = f" | {v.get('db', '')}" if with_db else ""
-    return f"| `{cell(name)}` | {v.get('type')}{db} | {vis} | {query_text(v.get('query'))}{cell(extra)} |"
+    return f"| `{cell(name)}` | {v.get('type')}{db} | {vis} | {query_text(v.get('query'))}{quick_text(v)}{cell(extra)} |"
 
 
 def render_layout(L):
@@ -388,6 +400,162 @@ def render_layout(L):
     return out
 
 
+MODULE = {"editor": "본문(페이지 내용)", "discussions": "댓글", "properties": "속성 묶음",
+          "relationsGroup": "관계 묶음"}
+VIEW = {"page": "페이지", "table": "표", "board": "보드", "calendar": "캘린더", "gallery": "갤러리",
+        "list": "리스트", "timeline": "타임라인", "dashboard": "대시보드", "chart": "차트"}
+OP = {"relation_contains": "포함", "enum_is": "=", "enum_is_not": "≠", "enum_contains": "포함",
+      "checkbox_is": "=", "date_is_within": "기간", "date_is": "=", "string_is": "=",
+      "string_contains": "포함", "is_empty": "비어 있음", "is_not_empty": "비어 있지 않음",
+      "status_is": "=", "status_is_not": "≠", "number_equals": "=", "date_is_on_or_after": "이후",
+      "date_is_on_or_before": "이전"}
+
+
+def cond_text(f):
+    """보기 필터를 사람이 읽는 문장으로 바꾼다(같은 조건이 겹치면 한 번만)."""
+    if not f:
+        return ""
+    if "filters" in f:
+        parts = []
+        for x in f["filters"]:
+            t = cond_text(x)
+            if t and t not in parts:
+                parts.append(t)
+        join = " 그리고 " if f.get("operator", "and") == "and" else " 또는 "
+        s = join.join(parts)
+        return f"({s})" if len(parts) > 1 and f.get("operator") == "or" else s
+    prop, flt = f.get("property"), f.get("filter") or {}
+    if flt.get("subfilter"):
+        flt = flt["subfilter"]
+    op, val = flt.get("operator"), flt.get("value")
+    if isinstance(val, dict) and val.get("type") == "relative" and val.get("unit"):
+        unit = {"day": "일", "week": "주", "month": "개월", "year": "년"}.get(val["unit"], val["unit"])
+        side = {"past": "지난", "future": "다음"}.get(val.get("direction"), val.get("direction") or "")
+        return f"`{prop}` {side} {val.get('count')}{unit}"
+    if isinstance(val, dict) and val.get("type") == "relative":
+        inner = val.get("value")
+        v = "이 페이지" if isinstance(inner, dict) and inner.get("type") == "current_page_in_related_collection" \
+            else json.dumps(inner, ensure_ascii=False)
+    elif isinstance(val, list):
+        v = " 또는 ".join(str(x.get("value") if isinstance(x, dict) else x) for x in val)
+    elif isinstance(val, dict) and "value" in val:
+        v = val["value"]
+        v = json.dumps(v, ensure_ascii=False) if not isinstance(v, str) else v
+    else:
+        v = "" if val is None else json.dumps(val, ensure_ascii=False)
+    if op == "relation_contains":
+        return f"`{prop}`에 {v} 포함"
+    return f"`{prop}` {OP.get(op, op)} {v}".strip()
+
+
+def tab_cond(t):
+    q = t.get("query") or {}
+    bits = []
+    if q.get("filter"):
+        bits.append(cond_text(q["filter"]))
+    for f in t.get("quickFilters") or []:
+        bits.append(cond_text(f) + " (빠른 필터)")
+    if q.get("sort"):
+        bits.append("정렬 " + ", ".join(
+            f"`{s.get('property')}` {'↑' if s.get('direction') == 'ascending' else '↓'}" for s in q["sort"]))
+    return cell(" · ".join(b for b in bits if b))
+
+
+def render_layouts(spec, scanned_at):
+    """공개용 DB별 페이지 레이아웃. 수식·버튼 동작은 넣지 않는다."""
+    out = [
+        "# Notion 페이지 레이아웃 (DB별)",
+        "",
+        "> `scripts/notion-spec.py`가 원본 스캔으로 만든다. 손으로 고치지 않는다. "
+        "원본 레이아웃을 바꾸면 다시 스캔해 생성하고 지문과 함께 커밋한다. "
+        "레이아웃 원칙은 [이름 규칙](../이름-규칙.md) 7장, 적용 순서는 [적용 절차](적용-절차.md).",
+        "",
+        f"- 원본 스캔: {scanned_at}",
+        "- 각 DB는 세 부분으로 적는다. **1. 상단**(제목 아래 고정 속성), **2. 콘텐츠 탭**(첫 탭에 놓는 속성·블록과 "
+        "나머지 탭), **3. 세부 정보 보기**(오른쪽 패널, 섹션별).",
+        "- 표시 방식: 보임 = 항상 표시, 빈 값 숨김 = 비어 있으면 숨김, 숨김 = 항상 숨김(패널 맨 아래 '숨김'에 모임).",
+        "- 상단·콘텐츠 탭·패널 위에 고정한 속성은 패널 섹션에 다시 나오지 않는다.",
+        "- 바꾸는 곳: 상단·패널·첫 탭 내용은 커넥터(`page_layout`)로, 탭(연결 보기)과 탭 필터는 화면 "
+        "\"레이아웃 사용자 지정\"에서 바꾼다.",
+        "",
+        "## 목차",
+        "",
+    ]
+    names = [n for n, d in spec.items() if d.get("layout") and d["layout"]["main"]]
+    out += [f"- [{n}](#{n.lower().replace(' ', '-').replace('(', '').replace(')', '')})" for n in names]
+    short = {"show": "보임", "hide_if_empty": "빈 값 숨김", "hide": "숨김"}
+    for name in names:
+        L = spec[name]["layout"]
+        vis = L.get("visibility") or {}
+        allp = [p["name"] for p in spec[name]["props"] if p["type"] != "title"]
+        out += ["", f"## {name}", ""]
+        header = next((m.get("props") or [] for m in L["main"] if m["type"] == "titleWithIcon"), [])
+        out += ["### 1. 상단", "", (" · ".join(f"`{p}`" for p in header) if header else "(고정 속성 없음)"), ""]
+        shown = set(header)
+        tabs_mod = next((m for m in L["main"] if m["type"] == "viewsMain"), None)
+        body = [m for m in L["main"] if m["type"] not in ("cover", "titleWithIcon", "viewsMain")]
+        out += ["### 2. 콘텐츠 탭", ""]
+        if tabs_mod:
+            tabs = tabs_mod.get("tabs") or []
+            first = tabs[0]["name"] if tabs else ""
+            out.append(f"첫 탭 `{first}`에 놓는 것(위에서부터):")
+            out.append("")
+            mods = tabs_mod.get("firstTabModules") or []
+        else:
+            out.append("탭 없음. 본문에 놓는 것(위에서부터):")
+            out.append("")
+            mods = body
+        for i, m in enumerate(mods, 1):
+            if m.get("prop"):
+                shown.add(m["prop"])
+                style = (m.get("config") or {}).get("property_formula", {}).get("style")
+                out.append(f"{i}. `{m['prop']}`" + (" (작게)" if style == "small" else ""))
+            else:
+                out.append(f"{i}. {MODULE.get(m['type'], m['type'])}")
+        if tabs_mod and len(tabs_mod.get("tabs") or []) > 1:
+            out += ["", "| 탭 | 보기 | DB | 보이는 속성 | 조건 |", "| --- | --- | --- | --- | --- |"]
+            for t in tabs_mod["tabs"][1:]:
+                out.append(f"| `{cell(t.get('name') or '(이름 없음)')}` | {VIEW.get(t.get('type'), t.get('type'))} | "
+                           f"{t.get('db', '')} | {cell(' · '.join(t.get('visible') or []))} | {tab_cond(t)} |")
+        out += ["", "### 3. 세부 정보 보기", ""]
+        side = L.get("sidebar") or []
+        pinned = [m["prop"] for m in side if m.get("type") == "property" and m.get("prop")]
+        if pinned:
+            out.append("- 패널 위 고정: " + " · ".join(f"`{p}`" for p in pinned))
+            shown.update(pinned)
+        hidden = []
+        secs = L.get("sections") or []
+        if any(m.get("type") == "properties" for m in side):
+            for s in secs:
+                items, seen_here = [], False
+                for p in s["props"]:
+                    if p in shown:
+                        continue
+                    seen_here = True
+                    v = vis.get(p)
+                    if v == "hide":
+                        hidden.append(p)
+                    else:
+                        items.append(f"`{p}`" + (f" ({short[v]})" if v in ("hide_if_empty",) else ""))
+                if seen_here:
+                    out.append(f"- 섹션 `{s['title'] or '(이름 없음)'}`: " + (", ".join(items) if items else "(보이는 속성 없음)"))
+            in_sec = {p for s in secs for p in s["props"]}
+            rest = [p for p in allp if p not in shown and p not in in_sec]
+            items = [f"`{p}`" + (" (빈 값 숨김)" if vis.get(p) == "hide_if_empty" else "")
+                     for p in rest if vis.get(p) != "hide"]
+            hidden += [p for p in rest if vis.get(p) == "hide"]
+            if items:
+                out.append(("- 섹션 밖: " if secs else "- 속성(섹션 없음): ") + ", ".join(items))
+        elif not side:
+            out.append("(패널 사용 안 함)")
+        for m in side:
+            if m.get("type") not in ("property", "properties"):
+                out.append(f"- {MODULE.get(m['type'], m['type'])}")
+        if hidden:
+            out.append(f"- 숨김 {len(hidden)}개: " + ", ".join(f"`{p}`" for p in hidden))
+    return "\n".join(out) + "\n"
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
@@ -403,6 +571,8 @@ def main():
     (out_dir / "노션-명세.json").write_text(
         json.dumps(spec, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     (out_dir / "노션-명세.md").write_text(render_md(spec, scan.get("scannedAt", "")), encoding="utf-8")
+    (out_dir / "노션-레이아웃.md").write_text(
+        render_layouts(spec, scan.get("scannedAt", "")), encoding="utf-8")
     fp = fingerprint(spec, scan.get("scannedAt", ""))
     (out_dir / "노션-지문.json").write_text(
         json.dumps(fp, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
