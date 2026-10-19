@@ -99,11 +99,23 @@ def norm_layout(L):
             o["tabs"] = [norm_view(t) for t in m["tabs"] if not t.get("missing")]
             o["firstTabModules"] = [x for x in (mod(x) for x in m.get("firstTabModules") or []) if x]
         return o
+    main = [x for x in (mod(m) for m in L.get("main") or []) if x]
+    sidebar = [x for x in (mod(m) for m in L.get("sidebar") or []) if x]
+    # 헤더·패널 위 고정·첫 탭(본문)에 놓인 속성은 패널 묶음에 나오지 않고 표시 방식도 적용되지 않는다.
+    # 그 속성의 표시 방식·섹션 소속은 Notion 안에만 남은 값이라 비교에서 뺀다
+    placed = set()
+    for m in main + sidebar:
+        for x in [m] + (m.get("firstTabModules") or []):
+            placed.update(x.get("props") or [])
+            if x.get("prop"):
+                placed.add(x["prop"])
+    sections = [{**s, "props": [p for p in s.get("props") or [] if p not in placed]}
+                for s in L.get("sections") or []]
     return {
-        "main": [x for x in (mod(m) for m in L.get("main") or []) if x],
-        "sidebar": [x for x in (mod(m) for m in L.get("sidebar") or []) if x],
-        "sections": L.get("sections") or [],
-        "visibility": dict(sorted((L.get("visibility") or {}).items())),
+        "main": main,
+        "sidebar": sidebar,
+        "sections": sections,
+        "visibility": dict(sorted((k, v) for k, v in (L.get("visibility") or {}).items() if k not in placed)),
     }
 
 
