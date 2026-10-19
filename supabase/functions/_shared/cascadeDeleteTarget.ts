@@ -241,9 +241,15 @@ export async function cascadeDelete(
                   return
                 }
               } else if (progressType === GROUP_PROGRESS_TYPE) {
-                await disconnectRelation(kid, child.relationPropOnChild, pageId)
-                log.push(`${indent}🔗 [${name}] 그룹 진도 학습기록이라 관계만 해제함 (${child.relationPropOnChild}): ${kid.id}`)
-                return
+                // (v2.7.10) 학습기록은 수업 기준이라 이 수업에만 달린 그룹 진도 기록은 아래에서 함께 지운다.
+                // 다른 수업에도 연결된 옛 기록만 이 수업 연결을 끊고 남긴다.
+                const sessions = await fullRelationIds(kid, child.relationPropOnChild)
+                const self = pageId.replace(/-/g, "")
+                if (sessions.some((id: string) => id.replace(/-/g, "") !== self)) {
+                  await disconnectRelation(kid, child.relationPropOnChild, pageId)
+                  log.push(`${indent}🔗 [${name}] 다른 수업에도 연결된 그룹 진도 학습기록이라 관계만 해제함 (${child.relationPropOnChild}): ${kid.id}`)
+                  return
+                }
               }
             }
 

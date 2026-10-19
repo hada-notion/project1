@@ -103,7 +103,7 @@ Deno.test("v2.6.16 삭제 자동화: 수업째 지울 때는 출석 쪽에서 �
   await cascadeDelete("sess", log, new Set())
   assert(pages.sess.archived && pages.att.archived, log.join("\n"))
   assert(pages["rec-mine"].archived && pages["rec-topic"].archived, "그룹 진도가 아닌 수업 기록은 수업과 함께 삭제(예전과 같음)")
-  assert(!pages["rec-group"].archived && ids(pages["rec-group"].properties, "수업") === "", "그룹 진도는 수업 연결만 해제(예전과 같음)")
+  assert(pages["rec-group"].archived, "그룹 진도도 이 수업에만 달렸으면 수업과 함께 삭제(v2.7.10)")
   assert(!m.writes.some((w) => w.id === "rec-topic" && w.body.properties?.["등록"]), "출석 쪽에서 등록을 고치지 않음")
  })
 })
