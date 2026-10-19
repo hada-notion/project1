@@ -18,6 +18,9 @@ import sys
 from pathlib import Path
 
 HOST = re.compile(r"[A-Za-z0-9-]+\.supabase\.co")
+# 학원마다 다른 GitHub Pages 주소(학교 검색·학생 페이지 링크 수식)
+UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+PAGES = re.compile(r"https?://[A-Za-z0-9-]+\.github\.io/[A-Za-z0-9._-]+")
 # 학원 환경마다 다른 DB: 모양만 기준, 행 데이터는 학원별
 CONFIG_DBS = {"웹페이지(학원) DB", "알림톡 설정(학원) DB", "자동화 로그(학원) DB"}
 # 원본에만 있는 관리용 DB와 이름 없는 인라인 보기는 명세에서 뺀다
@@ -32,7 +35,7 @@ GLOBALS = {
 
 def mask(value):
     if isinstance(value, str):
-        s = HOST.sub("<HOST>", value).replace("[{p:}]", "[페이지 지정]").replace("{p:}", "[페이지 지정]")
+        s = PAGES.sub("<PAGES>", HOST.sub("<HOST>", value)).replace("[{p:}]", "[페이지 지정]").replace("{p:}", "[페이지 지정]")
         for raw, nice in GLOBALS.items():
             s = s.replace(raw, nice)
         if s.endswith("속성 편집: "):
@@ -109,6 +112,8 @@ def norm_action(a):
     cfg.pop("apiVersion", None)
     if cfg.get("template_page_id"):  # 템플릿 페이지 id는 학원마다 다르다
         cfg["template_page_id"] = "(템플릿 지정)"
+    # 버튼이 여는 페이지 같은 페이지 id도 학원마다 다르다
+    cfg = json.loads(UUID.sub("(페이지 지정)", json.dumps(cfg, ensure_ascii=False)))
     # 버튼이 실제로 쓰는 속성은 properties 목록이다. 목록 밖 값은 지운 속성의 흔적이라 화면에도 안 보인다
     if isinstance(cfg.get("properties"), list) and isinstance(cfg.get("values"), dict):
         keep = set(cfg["properties"]) | {"title"}
@@ -146,7 +151,10 @@ def build(scan):
         spec[name] = {
             "config": name in CONFIG_DBS,
             "props": props,
-            "automations": sorted((norm_auto(a) for a in db.get("automations") or []),
+            # 버튼 동작은 버튼 속성으로 본다. DB 자동화 목록의 트리거 "button" 항목은
+            # 예전 버튼의 흔적일 수 있어(원본에 남아 있음) 기준에서 뺀다
+            "automations": sorted((norm_auto(a) for a in db.get("automations") or []
+                                   if (a or {}).get("trigger") != "button"),
                                   key=lambda a: a.get("name") or ""),
             "views": [norm_view(v) for v in db.get("views") or []],
             "layout": norm_layout(db.get("layout")),
