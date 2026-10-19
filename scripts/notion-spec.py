@@ -62,8 +62,21 @@ def norm_view(v):
     for k in ("db", "groupBy", "icon"):
         if v.get(k):
             o[k] = v[k]
-    if v.get("quickFilters"):
+    # 대시보드의 빠른 필터는 공통 필터(globalFilters)와 같은 것이라 공통 필터로만 본다
+    if v.get("quickFilters") and v.get("type") != "dashboard":
         o["quickFilters"] = norm_query(v["quickFilters"])
+    if v.get("chart"):
+        o["chart"] = norm_query(v["chart"])
+    # 대시보드 공통 필터: 원본 밖(옛 복사본) DB를 가리키는 대상은 위젯에 쓰이지 않는 흔적이라 뺀다
+    gfs = []
+    for g in v.get("globalFilters") or []:
+        targets = [t for t in g.get("targets") or [] if t.get("db") != "(밖의 DB)"]
+        if targets:
+            gfs.append({**g, "targets": targets})
+    if gfs:
+        o["globalFilters"] = norm_query(gfs)
+    if v.get("widgets"):
+        o["widgets"] = [[norm_view(w) for w in row if not w.get("missing")] for row in v["widgets"]]
     return o
 
 
@@ -461,6 +474,32 @@ def tab_cond(t):
     return cell(" · ".join(b for b in bits if b))
 
 
+CHART = {"line": "선", "bar": "세로 막대", "horizontal_bar": "가로 막대", "donut": "도넛", "number": "숫자"}
+AGG = {"average": "평균", "sum": "합계", "count": "개수", "count_values": "값 개수", "min": "최소", "max": "최대",
+       "median": "중앙값", "percent_per_group": "그룹별 비율"}
+UNIT = {"day": "일별", "week": "주별", "month": "월별", "year": "연별", "relative": "상대 날짜"}
+
+
+def chart_text(c):
+    """차트 설정을 한 줄로: 종류 · X축(속성, 날짜 단위) · Y축(집계) · 그룹."""
+    d = c.get("dataConfig") or {}
+    bits = [CHART.get(c.get("type"), c.get("type") or "")]
+    g = d.get("groupBy") or {}
+    if g.get("property"):
+        # 날짜 묶음은 바로 있거나(날짜 속성) 한 단계 안에 있다(수식 속성)
+        inner = g if g.get("type") == "date" else (g.get("groupBy") if isinstance(g.get("groupBy"), dict) else {})
+        unit = UNIT.get(inner.get("groupBy"), inner.get("groupBy")) if inner.get("type") == "date" else ""
+        bits.append(f"X `{g['property']}`" + (f" {unit}" if unit else ""))
+    agg = (d.get("aggregationConfig") or {}).get("aggregation") or {}
+    if agg:
+        bits.append(f"Y {AGG.get(agg.get('aggregator'), agg.get('aggregator'))}"
+                    + (f" `{agg['property']}`" if agg.get("property") and agg.get("property") != "title" else ""))
+    stack = ((d.get("aggregationConfig") or {}).get("stackOptions") or {}).get("groupBy") or {}
+    if stack.get("property"):
+        bits.append(f"그룹 `{stack['property']}`")
+    return " · ".join(b for b in bits if b)
+
+
 def render_layouts(spec, scanned_at):
     """공개용 DB별 페이지 레이아웃. 수식·버튼 동작은 넣지 않는다."""
     out = [
@@ -517,6 +556,19 @@ def render_layouts(spec, scanned_at):
             for t in tabs_mod["tabs"][1:]:
                 out.append(f"| `{cell(t.get('name') or '(이름 없음)')}` | {VIEW.get(t.get('type'), t.get('type'))} | "
                            f"{t.get('db', '')} | {cell(' · '.join(t.get('visible') or []))} | {tab_cond(t)} |")
+            for t in tabs_mod["tabs"][1:]:
+                if t.get("type") != "dashboard":
+                    continue
+                out += ["", f"대시보드 탭 `{t.get('name')}`:", ""]
+                for gf in t.get("globalFilters") or []:
+                    tg = ", ".join(f"{x['db']} `{x['property']}`" for x in gf.get("targets") or [])
+                    out.append(f"- 공통 필터: 이 페이지 포함 → {tg}")
+                for i, row in enumerate(t.get("widgets") or [], 1):
+                    for w in row:
+                        cond = tab_cond(w)
+                        out.append(f"- {i}줄 `{w.get('name')}` ({w.get('db')}): "
+                                   + (chart_text(w["chart"]) if w.get("chart") else VIEW.get(w.get("type"), w.get("type")))
+                                   + (f" · {cond}" if cond else ""))
         out += ["", "### 3. 세부 정보 보기", ""]
         side = L.get("sidebar") or []
         pinned = [m["prop"] for m in side if m.get("type") == "property" and m.get("prop")]
