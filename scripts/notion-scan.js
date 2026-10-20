@@ -295,6 +295,9 @@
     }
     // 대시보드: 공통 필터(위젯 DB별 대상 속성)와 위젯 줄·칸
     if (v.type === 'dashboard') {
+      // 다른 형식에서 대시보드로 바꾸면 예전 보기의 필터·빠른 필터·정렬·그룹·열이 그대로 남지만 화면에는 쓰이지 않는다.
+      // 화면의 공통 필터는 dashboard_global_filters 하나뿐이므로 남은 값은 기준에 넣지 않는다.
+      out.visible = []; out.query = {}; delete out.quickFilters; delete out.groupBy;
       out.globalFilters = (f.dashboard_global_filters || []).map((g) => ({
         filter: g.filter,
         targets: (g.targets || []).map((t) => ({ db: cname(t.collection_id), property: pname(t.collection_id, t.property) || '(지운 속성)' })),
