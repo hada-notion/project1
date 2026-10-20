@@ -13,10 +13,12 @@
 // (2026-09-22, PART N-4: 개별 트리거 버튼 동기화 전환) from-cart는 교재비 페이지 1건만 대상으로
 // 하는 개별 트리거라 큐를 거칠 필요가 없다고 판단했다. processFromCartQueueItem(process-sync-queue
 // 전용 진입점)은 제거하고 대신 distributeFromCartPage(pageId만 받는 얇은 래퍼)를 추가했다 --
-// index.ts가 이제 이 함수를 직접 호출한다. from-class-carts는 반 전체(여러 등록)를 대상으로 하는
-// 명시적인 일괄 버튼이라 processFromClassCartsQueueItem은 그대로 두고 계속 큐를 쓴다.
+// index.ts가 이제 이 함수를 직접 호출한다.
+//
+// (v2.7.11) 예전 /from-cart·/from-class-carts 경로와 반 전체 교재비 큐(processFromClassCartsQueueItem)를 지웠다.
+// 지금은 cartPlan.ts(교재비 [진도교재 담기] 큐)만 distributeFromCartPage를 쓴다.
 
-import { PROP_LAST_ERROR, PROP_SYNCED_AT, DS_REGISTRATION, PROP_CLASS, PROP_STATUS } from "./constants.ts"
+import { PROP_LAST_ERROR, PROP_SYNCED_AT } from "./constants.ts"
 import { LIBRARY_PROP, libraryIds, libraryPropOf } from "./libraryProp.ts"
 import {
 	getPage,
@@ -26,11 +28,10 @@ import {
 	relIds,
 	relationIds,
 	statusName,
-	formulaString,
 	anyTitleText,
 	todaySeoulDate,
 } from "./notionClient.ts"
-import { markRunning, markDone, markError, type StatusSpec } from "./statusTracking.ts"
+import type { StatusSpec } from "./statusTracking.ts"
 import { getScheduleConfig } from "./adminShared.ts"
 
 const DATA_SOURCE_TEXTBOOK_CART = Deno.env.get("DATA_SOURCE_TEXTBOOK_CART_ID")! // 교재비(학원) DB
@@ -49,16 +50,6 @@ const STATUS_ELIGIBLE = "진행 중"
 
 const PROP_REGISTRATION_BOOKS = "진도교재"
 const PROP_REGISTRATION_CART = "교재비"
-const STATUS_ACTIVE = "🟢 수강 중"
-
-// (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) "교재비 생성중" 체크박스 -> "교재비 생성 상태"(select)
-// + "교재비 생성 처리 시작 시각"(date). index.ts(락 확인+시작)와 이 파일(완료/오류 반영) 양쪽에서
-// 써서 export한다. 마스터플랜: https://app.notion.com/p/903c90386c1d473494c5df6306c53517
-export const CLASS_CART_STATUS_SPEC: StatusSpec = {
-	statusProp: "교재비 생성 상태",
-	errorProp: PROP_LAST_ERROR,
-	startedAtProp: "교재비 생성 처리 시작 시각",
-}
 
 // (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) 기존 setCartStatus(makeSyncStatusSetter(PROP_CART_RUNNING),
 // 체크박스 잠금 + setStatus 콜백)를 상태(select)+처리 시작 시각 방식으로 전환했다. 이 DB에는 이미
@@ -162,15 +153,7 @@ export async function distributeForRegistration(
 	}
 }
 
-export async function getActiveRegistrationsForCarts(classId: string): Promise<any[]> {
-	const registrations = await queryAllPages(DS_REGISTRATION, {
-		property: PROP_CLASS,
-		relation: { contains: classId },
-	})
-	return registrations.filter((reg: any) => formulaString(reg, PROP_STATUS) === STATUS_ACTIVE)
-}
-
-// index.ts의 from-cart 라우트가 직접 호출하는 진입점 (2026-09-22, PART N-4: 개별 트리거 동기화 전환).
+// 교재비 1건 담기. (v2.7.11부터) cartPlan.ts가 본문에 "담기 계획"이 없을 때만 부른다.
 export async function distributeFromCartPage(cartId: string): Promise<void> {
 	const cart = await getPage(cartId)
 	const registrationIds = relationIds(cart, PROP_CART_REGISTRATION)
@@ -184,30 +167,4 @@ export async function distributeFromCartPage(cartId: string): Promise<void> {
 	await updatePageProperties(cartId, {
 		[PROP_SYNCED_AT]: { date: { start: new Date().toISOString() } },
 	})
-}
-
-// process-sync-queue 워커가 target: "sync-textbook-distribution:from-class-carts" 작업을 처리할 때 호출하는 진입점.
-// 대상 등록 목록은 대기열에 쉬는 동안 바눐을 수 있으니 index.ts의 사전 확인에서 재사용하지 않고 실행 시점에 다시 조회한다.
-// (2026-09-22, Phase 6) index.ts는 이제 접수 시점에 markQueued만 호출한다 -- 이 항목을 실제로 집어서
-// 처리를 시작하는 지금 여기서 markRunning을 호출해야 "🔄 작업중"이 실제 동시 처리 중인 개수만큼만
-// 보인다.
-export async function processFromClassCartsQueueItem(payload: { classId: string }): Promise<void> {
-	try {
-		await markRunning(payload.classId, CLASS_CART_STATUS_SPEC)
-		const activeRegistrations = await getActiveRegistrationsForCarts(payload.classId)
-		let createdCount = 0
-		for (const reg of activeRegistrations) {
-			const result = await ensureCartForRegistration(reg.id, reg)
-			if (result.cartCreated) createdCount++
-		}
-		await markDone(payload.classId, CLASS_CART_STATUS_SPEC)
-		console.log("[sync-textbook-distribution] (queue) from-class-carts finished:", payload.classId, {
-			activeCount: activeRegistrations.length,
-			createdCount,
-		})
-	} catch (err) {
-		console.error("[sync-textbook-distribution] (queue) from-class-carts ERROR:", err)
-		await markError(payload.classId, CLASS_CART_STATUS_SPEC, (err as Error)?.message ?? String(err))
-		throw err
-	}
 }

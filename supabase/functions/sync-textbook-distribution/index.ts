@@ -30,26 +30,14 @@ import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 // runSyncWebhookForPage를 써서 버튼 클릭과 동시에 끝나도록 한다. from-class-carts는 반 전체(여러
 // 등록)를 대상으로 하는 명시적인 일괄 버튼이라 계속 큐를 쓴다 (변경 없음).
 //
-// 라우트:
-//   POST /sync-textbook-distribution/from-cart         <- 교재비(학원) DB "진도교재 담기" 버튼 (학생 1명, 담기까지 수행)
-//   POST /sync-textbook-distribution/from-class-carts   <- 클래스(학원) DB "교재비 생성" 버튼 (반 전체, 교재비 페이지만 일괄 생성 - 교재 배부는 하지 않음)
+// 라우트 (v2.7.11부터 이것 하나):
+//   POST /sync-textbook-distribution/from-cart/queue   <- 교재비(학원) DB "진도교재 담기" 버튼 (수식 "담기 계획"대로 큐가 교재배부만 만든다)
 
-import { getPage, extractPageId, relationIds, describeBody } from "../_shared/notionClient.ts"
+import { extractPageId, describeBody } from "../_shared/notionClient.ts"
 import { respondAccepted } from "../_shared/backgroundTask.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
-import { runSyncWebhookForPage } from "../_shared/webhookIngest.ts"
 import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
-import { isRunning, markQueued, markDone } from "../_shared/statusTracking.ts"
-import {
-	CLASS_CART_STATUS_SPEC,
-	CART_STATUS_SPEC,
-	getActiveRegistrationsForCarts,
-	distributeFromCartPage,
-} from "../_shared/textbookDistributionTarget.ts"
 import { CART_PLAN_PROP, cartPlanText } from "../_shared/cartPlan.ts"
-
-// 등록(학원) DB 속성: from-class-carts 사전 확인(활성 등록 중 교재비 누락 여부 판정)에서만 쓴다.
-const PROP_REGISTRATION_CART = "교재비" // relation -> 교재비(학원) DB
 
 Deno.serve(async (req: Request) => {
 	const url = new URL(req.url)
@@ -89,58 +77,9 @@ Deno.serve(async (req: Request) => {
 			wakeSyncQueueWorker()
 			return respondAccepted({ pageId, route: "from-cart/queue", plan: !!plan })
 		}
-		if (route === "from-cart") {
-			// 교재비 페이지 자신이 클릭 대상. 개별 트리거라 큐를 거치지 않고 바로 처리한다.
-			return await runSyncWebhookForPage(pageId, {
-				functionName: "sync-textbook-distribution:from-cart",
-				statusSpec: CART_STATUS_SPEC,
-				process: distributeFromCartPage,
-			})
-		} else if (route === "from-class-carts") {
-			// 클래스 페이지 자신이 클릭 대상.
-			// 먼저 실제 데이터(활성 등록 중 교재비 누락 여부)부터 계산한다. 체크박스 값만 보고 바로
-			// 처리중/거부를 판단하지 않고, 항상 실제 상태를 기준으로 판단한다 (2차 수정).
-			const classForLock = await getPage(pageId)
-			const activeRegistrations = await getActiveRegistrationsForCarts(pageId)
-			const missingRegistrations = activeRegistrations.filter(
-				(reg: any) => relationIds(reg, PROP_REGISTRATION_CART).length === 0,
-			)
-
-			if (missingRegistrations.length === 0) {
-				// (2026-09-17, 즉시 완료 단축 경로) 만들 게 하나도 없다 -- 이미 실수로 두 번 눌렀거나,
-				// 이전 실행이 실제로는 다 끝났는데 체크박스만 고착된 경우다. 큐에 전혀 적재하지 않고
-				// 이 요청 자체에서 바로 응답한다: 켜져 있었으면 그 자리에서 꺼주고, 이미 꺼져
-				// 있었으면 아무 쓰기도 하지 않고 즉시 반환한다 (고착될 여지 자체가 없다).
-				if (isRunning(classForLock, CLASS_CART_STATUS_SPEC)) {
-					await markDone(pageId, CLASS_CART_STATUS_SPEC)
-					return new Response(
-						JSON.stringify({ ok: true, message: "recovered_already_completed", pageId, route }),
-						{ status: 200, headers: { "Content-Type": "application/json" } },
-					)
-				}
-				return new Response(JSON.stringify({ ok: true, message: "already_completed", pageId, route }), {
-					status: 200,
-					headers: { "Content-Type": "application/json" },
-				})
-			}
-
-			// 아직 누락이 있다: 체크박스가 켜져 있어도(진짜 처리 중이든 멈춘 것이든) 거부하지 않고
-			// 안전하게 새로 이어서 진행한다 -- ensureCartForRegistration은 이미 카트가 있는 학생은
-			// 건드리지 않는 멱등 작업이라 중복 생성 위험이 없다.
-			// (2026-09-22, Phase 6) 여기서는 markQueued만 표시한다 -- 실제 markRunning은
-			// processFromClassCartsQueueItem이 이 항목을 집어서 처리를 시작할 때 호출한다.
-			await markQueued(pageId, CLASS_CART_STATUS_SPEC)
-
-			// 대상 등록 목록은 대기열에 쉬는 동안 바뀔 수 있으니, 워커가 실행 시점에 다시 조회한다
-			// (processFromClassCartsQueueItem 참고) -- 여기서 이미 계산한 activeRegistrations는
-			// 잠금 판단에만 쓰고, payload에는 classId만 넘긴다.
-			await enqueueSync("sync-textbook-distribution:from-class-carts", { classId: pageId })
-			wakeSyncQueueWorker()
-
-			return respondAccepted({ pageId, route })
-		} else {
-			return new Response(JSON.stringify({ error: `알 수 없는 경로: ${route}` }), { status: 404 })
-		}
+		// (v2.7.11) 예전 /from-cart(바로 처리)·/from-class-carts(반 전체 교재비) 경로는 지웠다. 버튼이 v2.7부터
+		// 큐 경로와 Notion 자동화만 쓴다.
+		return new Response(JSON.stringify({ error: `알 수 없는 경로: ${route}` }), { status: 404 })
 	} catch (err) {
 		console.error(err)
 		return new Response(JSON.stringify({ error: String(err) }), { status: 400 })

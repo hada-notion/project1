@@ -1,11 +1,10 @@
 // Server-only owner authentication. Never return internal or webhook keys to a browser.
 export const SECURITY_WEBHOOK_ROUTES = new Set([
   'cascade-delete','create-assignment','create-learning-record','fill-record-units','fix-attendance',
-  'generate-classes','generate-report','generate-tuition',
-  'send-report','send-daily-report','send-class-daily-reports','send-tuition-notice',
-  'send-textbook-notice','send-selected-notifications','send-inquiry-receipt',
-  'sync-attendance','sync-class-report-cache','sync-class-room-copy','sync-dashboard-link','sync-exam-scope',
-  'sync-registration-class-session','sync-registration-end','sync-registration-enroll',
+  'generate-classes',
+  'send-report','send-daily-report','send-tuition-notice',
+  'send-textbook-notice','send-inquiry-receipt',
+  'sync-attendance','sync-class-report-cache','sync-class-room-copy','sync-dashboard-link',
   'sync-registration-textbook','sync-report-cache',
   'sync-school-calendar','sync-textbook-distribution','toggle-report-link',
 ]);
