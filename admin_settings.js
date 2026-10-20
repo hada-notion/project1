@@ -47,20 +47,20 @@ function copyButton(label,title,onClick){
 }
 let webhook={rotating:false,usage:[],checks:{}},unchecked=0;
 // Every Notion button/automation that sends the webhook key, grouped by database (docs/버튼-웹훅-매핑.md).
-// Each item: [id, name, kind, route, extra]. extra.path is appended to the webhook URL (sub-route or query) and
-// extra.header is an additional Notion webhook header. adminSecurity_test.ts checks that the routes here are exactly
+// Each item: [id, name, kind, route, extra]. extra.path is appended to the webhook URL (sub-route or query, e.g. ?action=regenerate).
+// No item needs an extra header: the original template carries the action in the URL. adminSecurity_test.ts checks that the routes here are exactly
 // SECURITY_WEBHOOK_ROUTES, so a new webhook function cannot be left out of the checklist.
 const BUTTON='버튼',AUTO='자동화';
 // extra.trigger: {when, check:[property, checked]} draws the automation trigger as Notion-like chips. extra.note is one
-// short line for a button that differs from the usual (sub-route, extra header, unusual place).
+// short line for a button that differs from the usual (sub-route or query, unusual place).
 // 삭제: the 삭제 button only ticks "삭제 체크"; the automation on that checkbox sends the webhook and the server works
 // through the child pages one relay step at a time.
 const DELETE={trigger:{check:['삭제 체크',true]},note:'삭제 버튼은 체크만 합니다. 키는 "삭제 체크" 자동화에 있습니다.'};
 const CHECKLIST=[
  ['등록(학원)',[
-  ['reg-link-regenerate','링크 재발급',BUTTON,route('toggle-report-link'),{header:['x-link-action','regenerate'],note:'추가 헤더가 하나 더 있습니다. 헤더 버튼으로 값을 복사합니다.'}],
-  ['reg-link-disable','[웹훅] 링크 비활성화',AUTO,route('toggle-report-link'),{header:['x-link-action','disable'],trigger:{check:['링크 비활성화',true]}}],
-  ['reg-link-enable','[웹훅] 링크 활성화',AUTO,route('toggle-report-link'),{header:['x-link-action','enable'],trigger:{check:['링크 비활성화',false]}}],
+  ['reg-link-regenerate','링크 재발급',BUTTON,route('toggle-report-link'),{path:'?action=regenerate',note:'주소 끝의 ?action=regenerate까지 넣습니다.'}],
+  ['reg-link-disable','[웹훅] 링크 비활성화',AUTO,route('toggle-report-link'),{path:'?action=disable',note:'주소 끝의 ?action=disable까지 넣습니다.',trigger:{check:['링크 비활성화',true]}}],
+  ['reg-link-enable','[웹훅] 링크 활성화',AUTO,route('toggle-report-link'),{path:'?action=enable',note:'주소 끝의 ?action=enable까지 넣습니다.',trigger:{check:['링크 비활성화',false]}}],
   ['reg-report-sync','학생 페이지 동기화',BUTTON,route('sync-report-cache')],
   ['reg-textbook-queue','[웹훅] 교재 생성',AUTO,route('sync-registration-textbook'),{path:'/queue',trigger:{when:'속성 편집',select:['교재 생성 상태','⚪ 대기']},note:'주소 끝의 /queue까지 넣습니다. [교재 생성] 버튼은 교재 생성 상태만 바꾸고, 키는 이 자동화에 있습니다(v2.7).'}],
   ['reg-end-cleanup','종료 처리',BUTTON,route('sync-registration-textbook'),{path:'/cleanup-on-end',note:'주소 끝의 /cleanup-on-end까지 넣습니다. 버튼 마지막 단계의 교재 정리 웹훅입니다(v2.7).'}]]],
@@ -232,10 +232,9 @@ function renderChecklist(){
    const meta=el('div','meta');
    // No call yet is the normal state, so only an actual call record is shown.
    meta.append(el('code','',routeName+(extra.path||'')));if(msg)meta.append(el('span','hint '+tone,msg));
-   // Webhook URL (and extra header) for this button, built from this academy's Supabase address.
+   // Webhook URL for this button, built from this academy's Supabase address.
    const copies=el('div','copies');const url=base+'/functions/v1/'+routeName+(extra.path||'');
    copies.append(copyButton('웹훅','웹훅 URL 복사: '+url,b=>copyText(url,'웹훅 URL을 복사했습니다',b).catch(e=>error(e.message))));
-   if(extra.header){const [hn,hv]=extra.header;copies.append(copyButton('헤더',`추가 헤더 값 복사: ${hn}: ${hv}`,b=>copyText(hv,`추가 헤더 값(${hn}: ${hv})을 복사했습니다`,b).catch(e=>error(e.message))));}
    li.append(label,meta,copies);list.append(li);
   }
   card.append(list);box.append(card);

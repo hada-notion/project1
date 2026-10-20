@@ -5,6 +5,10 @@
 
 Notion 구성은 버전과 상관없이 [적용 절차](docs/기준/적용-절차.md)의 같은 순서(스캔 → 비교 → 적용 → 재스캔 → 기록)로 원본 기준에 맞춥니다. 버전 지침은 무엇이 바뀌었는지 알리는 이력입니다.
 
+## v2.7.12 — 2026-10-20
+
+- 관리자 설정 웹훅 체크리스트: 링크 재발급·링크 비활성화·링크 활성화의 웹훅 복사 주소에 `?action=regenerate|disable|enable`을 포함하고 "헤더" 복사 버튼을 없앰. 원본 템플릿처럼 헤더는 `x-admin-key` 하나뿐이다(예전 안내대로 넣은 `x-link-action` 헤더도 서버는 받는다). **AI 자동**(관리자 설정 화면 파일 교체). 지침: `docs/updates/v2.7.12.md`
+
 ## v2.7.11 — 2026-10-20
 
 - 쓰지 않는 옛 웹훅 함수 정리: v2.7에서 버튼이 Notion 안 동작·큐로 바뀐 뒤 아무 곳에서도 부르지 않던 `generate-tuition`·`generate-report`·`sync-exam-scope`·`send-selected-notifications`·`sync-registration-enroll`·`sync-registration-class-session`·`sync-registration-end`·`send-class-daily-reports`와 교재비 옛 경로(`/from-cart` 바로 처리·`/from-class-carts`), 그 큐 처리기·상태 감시를 지운다. 관리자 설정 웹훅 체크리스트에서 "(예전 방식)" 5개가 빠진다(34개). **AI 자동**(코드 반영·배포) + **운영자 직접**(서버에 남은 옛 함수 삭제). **선행 조건: 운영 버튼이 v2.7 방식**(아니면 v2.7부터). 지침: `docs/updates/v2.7.11.md`
