@@ -44,7 +44,11 @@ jobs:
         run: |
           ENCODED=$(python3 -c "import urllib.parse, os; print(urllib.parse.quote(os.environ['SUPABASE_DB_PASSWORD'].strip(), safe=''))")
           echo "::add-mask::$ENCODED"
-          echo "DB_URL=postgresql://postgres.${SUPABASE_PROJECT_ID}:${ENCODED}@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres" >> "$GITHUB_ENV"
+          # 학원마다 Supabase 리전이 다르다. 이 학원의 배포 작업이 쓰는 pooler 주소를 그대로 따른다.
+          POOLER=$(grep -oE 'aws-[0-9]+-[a-z0-9-]+\.pooler\.supabase\.com' .github/workflows/deploy-supabase-functions.yml | head -1)
+          if [ -z "$POOLER" ]; then echo "::error::deploy-supabase-functions.yml에서 pooler 주소를 찾지 못했습니다."; exit 1; fi
+          echo "pooler: $POOLER"
+          echo "DB_URL=postgresql://postgres.${SUPABASE_PROJECT_ID}:${ENCODED}@${POOLER}:5432/postgres" >> "$GITHUB_ENV"
         env:
           SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
