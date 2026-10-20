@@ -62,6 +62,12 @@ def norm_query(q):
 def norm_view(v):
     o = {"name": v.get("name", ""), "type": v.get("type"), "visible": v.get("visible", []),
          "query": norm_query(v.get("query"))}
+    # 조건을 다 지운 빈 필터 묶음과 집계 순서는 화면에 차이가 없어 비교에서 뺀다
+    q = o["query"]
+    if isinstance(q.get("filter"), dict) and not q["filter"].get("filters"):
+        del q["filter"]
+    if isinstance(q.get("aggregations"), list):
+        q["aggregations"] = sorted(q["aggregations"], key=lambda a: json.dumps(a, sort_keys=True, ensure_ascii=False))
     for k in ("db", "groupBy", "icon"):
         if v.get(k):
             o[k] = v[k]
