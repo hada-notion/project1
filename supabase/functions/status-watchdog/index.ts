@@ -44,11 +44,12 @@ import { CLASS_REPORT_SYNC_STATUS_SPEC } from "../_shared/classReportCacheTarget
 import { CART_STATUS_SPEC } from "../_shared/textbookDistributionTarget.ts"
 import { CASCADE_DELETE_STATUS_SPEC } from "../_shared/cascadeDeleteTarget.ts"
 import { ASSIGNMENT_GEN_STATUS_SPEC } from "../_shared/createAssignmentTarget.ts"
+import { resolveMenuDataSourceId } from "../_shared/menuDataSource.ts"
 
-// 메뉴(학원) DB는 다른 함수들이 DS.xxx 형태로 쿼리한 적이 없어서 전용 환경변수가 없다.
-// 이 워치독은 메뉴 DB 전체가 아니라 그 안의 "시간표" 단일 행 하나만 상태 관리 대상이므로,
-// 새 환경변수를 추가하는 대신 데이터소스 id를 여기 직접 적었다 (변경 시 여기만 고치면 됨).
-const DS_MENU = "0dcba040-586b-83c8-9974-07588b9ab04d" // 메뉴(학원) DB
+// 메뉴(학원) DB는 전용 Secret이 없다. 이 워치독은 그 안의 "시간표" 단일 행만 상태 관리 대상이다.
+// 예전에는 원본 데이터소스 id를 여기 직접 적어 운영 학원에서는 매번 실패했다. 이제 실행할 때
+// 이 학원 워크스페이스에서 이름으로 찾는다(_shared/menuDataSource.ts, v2.7.14).
+const MENU_LABEL = "메뉴"
 
 const TIMETABLE_STATUS_SPEC: StatusSpec = {
 	statusProp: "상태",
@@ -72,9 +73,9 @@ const ATTENDANCE_BACKFILL_STATUS_SPEC: StatusSpec = {
 	startedAtProp: "과제마감 백필 처리 시작 시각",
 }
 
-const TARGETS: Array<{ label: string; dataSourceId: string; spec: StatusSpec }> = [
+const TARGETS: Array<{ label: string; dataSourceId: string | (() => Promise<string | null>); spec: StatusSpec }> = [
 	{ label: "시간표", dataSourceId: DS_TIMETABLE, spec: TIMETABLE_STATUS_SPEC },
-	{ label: "메뉴", dataSourceId: DS_MENU, spec: TIMETABLE_STATUS_SPEC },
+	{ label: MENU_LABEL, dataSourceId: resolveMenuDataSourceId, spec: TIMETABLE_STATUS_SPEC },
 	// 등록(학원) DB 상태. (v2.7.11) 종료·수업·등록 상태는 v2.7부터 Notion 버튼만 쓰므로 뺐다.
 	{ label: "등록:교재", dataSourceId: DS_REGISTRATION, spec: TEXTBOOK_STATUS_SPEC },
 	// (2026-09-22, Phase 3) 수업(학원) DB 4개 상태 + 학습기록 상태가 함께 걸린 출석/진도교재 DB.
@@ -131,11 +132,17 @@ Deno.serve(async (req) => {
 		// 바디 없음 -> 각 대상 기본값(15분) 사용
 	}
 
-	const results: Array<{ label: string; recovered: number; ids: string[] }> = []
+	const results: Array<{ label: string; recovered: number; ids: string[]; skipped?: string }> = []
 	for (const target of TARGETS) {
 		try {
+			const dataSourceId = typeof target.dataSourceId === "function" ? await target.dataSourceId() : target.dataSourceId
+			if (!dataSourceId) {
+				console.warn(`[status-watchdog] ${target.label}: 데이터소스를 찾지 못해 건너뜀`)
+				results.push({ label: target.label, recovered: 0, ids: [], skipped: "data_source_not_found" })
+				continue
+			}
 			const { recovered, ids } = await sweepStaleStatus(
-				target.dataSourceId,
+				dataSourceId,
 				target.spec,
 				staleMinutesOverride ?? 15,
 			)
