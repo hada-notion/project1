@@ -5,6 +5,10 @@
 
 Notion 구성은 버전과 상관없이 [적용 절차](docs/기준/적용-절차.md)의 같은 순서(스캔 → 비교 → 적용 → 재스캔 → 기록)로 원본 기준에 맞춥니다. 버전 지침은 무엇이 바뀌었는지 알리는 이력입니다.
 
+## v2.7.11 — 2026-10-20
+
+- 쓰지 않는 옛 웹훅 함수 정리: v2.7에서 버튼이 Notion 안 동작·큐로 바뀐 뒤 아무 곳에서도 부르지 않던 `generate-tuition`·`generate-report`·`sync-exam-scope`·`send-selected-notifications`·`sync-registration-enroll`·`sync-registration-class-session`·`sync-registration-end`·`send-class-daily-reports`와 교재비 옛 경로(`/from-cart` 바로 처리·`/from-class-carts`), 그 큐 처리기·상태 감시를 지운다. 관리자 설정 웹훅 체크리스트에서 "(예전 방식)" 5개가 빠진다(34개). **AI 자동**(코드 반영·배포) + **운영자 직접**(서버에 남은 옛 함수 삭제). **선행 조건: 운영 버튼이 v2.7 방식**(아니면 v2.7부터). 지침: `docs/updates/v2.7.11.md`
+
 ## v2.7.10 — 2026-10-20
 
 - 수업 [삭제]: 그 수업에만 달린 그룹 진도 학습기록(과 그 학습활동)도 함께 지운다. 예전에는 수업 연결만 끊어 수업·출석 없는 학습기록이 남았다. 다른 수업에도 연결된 옛 기록만 연결을 끊는다. **AI 자동**(cascade-delete 재배포). 지침: `docs/updates/v2.7.10.md`

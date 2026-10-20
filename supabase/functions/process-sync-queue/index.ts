@@ -73,11 +73,8 @@ import {
 import { CORS_HEADERS, makePageCache } from "../_shared/reportCacheShared.ts"
 import { requireAdminKey } from "../_shared/adminShared.ts"
 import { processCreateLearningRecordQueueItem } from "../_shared/createLearningRecordTarget.ts"
-import { processFromClassCartsQueueItem } from "../_shared/textbookDistributionTarget.ts"
 import { processSyncClassReportCacheQueueItem } from "../_shared/classReportCacheTarget.ts"
 import { processCascadeDeleteQueueItem } from "../_shared/cascadeDeleteTarget.ts"
-import { processGenerateReportQueueItem } from "../_shared/generateReportTarget.ts"
-import { processGenerateTuitionQueueItem } from "../_shared/generateTuitionTarget.ts"
 import { processDashboardLinkQueueItem } from "../_shared/dashboardLinkTarget.ts"
 import { processRegistrationTextbookQueueItem } from "../_shared/registrationTextbookTarget.ts"
 import { processFixAttendanceQueueItem } from "../_shared/fixAttendanceTarget.ts"
@@ -105,13 +102,12 @@ import { processCartPlanQueueItem } from "../_shared/cartPlan.ts"
 // [정리, 2026-09-26] 대시보드 관련 자동화가 완전히 제거되어 이 target으로는 더 이상 새 작업이
 // 적재되지 않는다. 혹시 남은 옛 항목을 계속 처리할 수 있도록 핸들러는 그대로 두되, 전용 레인
 // 분리는 아래에서 되돌렸다.
+// (v2.7.11) 예전 진입 함수(generate-report·generate-tuition·교재비 /from-class-carts)와 함께 그 큐 처리기를 지웠다.
+// v2.7부터 그 버튼들은 Notion 자동화만 써서 새 항목이 쌓이지 않는다. 혹시 남은 옛 항목은 "알 수 없는 target"으로 끝난다.
 const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Promise<any>) => Promise<void>> = {
   "create-learning-record": processCreateLearningRecordQueueItem,
-  "sync-textbook-distribution:from-class-carts": processFromClassCartsQueueItem,
   "sync-class-report-cache": processSyncClassReportCacheQueueItem,
   "cascade-delete": processCascadeDeleteQueueItem,
-  "generate-report": processGenerateReportQueueItem,
-  "generate-tuition": processGenerateTuitionQueueItem,
   "sync-dashboard-link": processDashboardLinkQueueItem,
   // (v2.6.10) 등록 DB "교재 상태 ⚪ 대기" 자동화 → sync-registration-textbook/queue
   "sync-registration-textbook": processRegistrationTextbookQueueItem,

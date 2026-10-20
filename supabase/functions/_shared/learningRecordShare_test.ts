@@ -2,7 +2,6 @@
 function assert(value: unknown, message = "assertion failed") { if (!value) throw new Error(message) }
 for (const [key, value] of Object.entries({ NOTION_TOKEN: "test-only", ADMIN_SECRET: "test-only", SB_URL: "https://mock.supabase", SB_SERVICE_ROLE_KEY: "test-only", DATA_SOURCE_ATTENDANCE_ID: "attendance", DATA_SOURCE_STUDY_ACTIVITY_ID: "activities", DATA_SOURCE_REGISTRATION_ID: "registrations", DATA_SOURCE_CLASS_SESSION_ID: "sessions", DATA_SOURCE_LEARNING_RECORD_ID: "records", DATA_SOURCE_TIMETABLE_ID: "timetables" })) Deno.env.set(key, value)
 const { decideRecordRemoval } = await import("./learningRecordShare.ts")
-const { archiveAttendanceAfterEndDate } = await import("./registrationSync.ts")
 const { cascadeDelete } = await import("./cascadeDeleteTarget.ts")
 
 const rel = (...ids: string[]) => ({ relation: ids.map((id) => ({ id })) })
@@ -66,21 +65,6 @@ function world() {
   "book-group": page("book-group", "books", { 진도방식: { select: { name: "그룹 진도" } } }),
  } as Record<string, any>
 }
-
-Deno.test("v2.6.16 예전 종료 처리 경로: 종료일 이후 출석을 지울 때 반 전체 학습기록은 남기고 연결만 끊는다", async () => {
- const pages = world()
- await withMock(pages, async (m) => {
-  const r = await archiveAttendanceAfterEndDate(ME, "2026-10-20")
-  assert(r.deletedCount === 1 && r.recordCount === 1 && r.recordDetachedCount === 2, JSON.stringify(r))
-  assert(pages.att.archived && pages["rec-mine"].archived, "출석·나만의 기록 삭제")
-  for (const id of ["rec-topic", "rec-group"]) {
-   assert(!pages[id].archived, id + " 남음")
-   assert(ids(pages[id].properties, "등록") === OTHER && ids(pages[id].properties, "출석") === "att-other", id + " 연결만 해제")
-  }
-  assert(m.queries.filter((q) => q.db === "records").length === 1, "기록은 학생 기준으로 한 번 조회")
-  assert(m.writes.filter((w) => w.id === "book-ind" || w.id === "book-group").length === 0)
- })
-})
 
 Deno.test("v2.6.16 삭제 자동화: 출석을 지우면 나만의 기록은 지우고 반 전체·그룹 진도 기록은 연결만 끊는다", async () => {
  const pages = world()
