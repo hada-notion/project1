@@ -781,15 +781,26 @@ function computeTestTrendPoints(tests, periodType, baseOffset) {
   }
   return points
 }
+// 일일 보고서: 최근 평가가 있던 날 count일. 같은 날 평가가 여럿이면 점수(정답 ÷ 전체 문항)의 평균 한 점으로 그린다.
 function computeRecentTestPoints(tests, asOfDate, count) {
-  const past = tests.filter((t) => t.date <= asOfDate).slice().sort((a, b) => (a.date || "").localeCompare(b.date || ""))
-  const recent = past.slice(-count)
-  return recent.map((t) => ({
-    label: (t.date || "").slice(0, 10).slice(5).replace("-", "."),
-    avg: t.total ? Math.round((t.correct / t.total) * 1000) / 10 : null,
-    count: 1,
-    items: [t],
-  }))
+  const byDay = new Map()
+  tests.forEach((t) => {
+    const day = String(t.date || "").slice(0, 10)
+    if (!day || day > String(asOfDate).slice(0, 10)) return
+    if (!byDay.has(day)) byDay.set(day, [])
+    byDay.get(day).push(t)
+  })
+  const days = [...byDay.keys()].sort().slice(-count)
+  return days.map((day) => {
+    const items = byDay.get(day)
+    const scored = items.filter((t) => t.total)
+    return {
+      label: day.slice(5).replace("-", "."),
+      avg: scored.length ? Math.round(scored.reduce((s, t) => s + (t.correct / t.total) * 100, 0) / scored.length * 10) / 10 : null,
+      count: items.length,
+      items,
+    }
+  })
 }
 function buildTestTrendChartHtml(points) {
   testChartPoints = points
@@ -937,10 +948,13 @@ function formatDateLabel(date) {
 function findNextHomeworkItems(r, date) {
   // 아직 수업일이 되지 않은(=아직 내주지 않은) 과제는 "다음과제"에 나오면 안 된다. classDate가 없는
   // 옛 캐시 데이터는(수업일 정보가 없던 시절 기록) 하위호환을 위해 그대로 포함시킨다.
-  const upcoming = (r.homework || []).filter((h) => h.due && h.due > date && (!h.classDate || h.classDate <= date))
+  // 마감·출제일은 시각이 붙은 값("2026-10-21T19:00…")일 수 있어 날짜만 비교한다. 그대로 비교하면 이날 마감인
+  // 과제가 "날짜 뒤"로 판정되어 지난 과제와 이번 과제에 함께 나왔다(v2.7.16).
+  const day = (v) => String(v || "").slice(0, 10)
+  const upcoming = (r.homework || []).filter((h) => day(h.due) > date && (!h.classDate || day(h.classDate) <= date))
   if (!upcoming.length) return []
-  const minDue = upcoming.reduce((min, h) => (h.due < min ? h.due : min), upcoming[0].due)
-  return upcoming.filter((h) => h.due === minDue)
+  const minDue = upcoming.reduce((min, h) => (day(h.due) < min ? day(h.due) : min), day(upcoming[0].due))
+  return upcoming.filter((h) => day(h.due) === minDue)
 }
 
 function findLatestComment(r, date) {
