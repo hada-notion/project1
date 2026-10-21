@@ -781,15 +781,26 @@ function computeTestTrendPoints(tests, periodType, baseOffset) {
   }
   return points
 }
+// 일일 보고서: 최근 평가가 있던 날 count일. 같은 날 평가가 여럿이면 점수(정답 ÷ 전체 문항)의 평균 한 점으로 그린다.
 function computeRecentTestPoints(tests, asOfDate, count) {
-  const past = tests.filter((t) => t.date <= asOfDate).slice().sort((a, b) => (a.date || "").localeCompare(b.date || ""))
-  const recent = past.slice(-count)
-  return recent.map((t) => ({
-    label: (t.date || "").slice(0, 10).slice(5).replace("-", "."),
-    avg: t.total ? Math.round((t.correct / t.total) * 1000) / 10 : null,
-    count: 1,
-    items: [t],
-  }))
+  const byDay = new Map()
+  tests.forEach((t) => {
+    const day = String(t.date || "").slice(0, 10)
+    if (!day || day > String(asOfDate).slice(0, 10)) return
+    if (!byDay.has(day)) byDay.set(day, [])
+    byDay.get(day).push(t)
+  })
+  const days = [...byDay.keys()].sort().slice(-count)
+  return days.map((day) => {
+    const items = byDay.get(day)
+    const scored = items.filter((t) => t.total)
+    return {
+      label: day.slice(5).replace("-", "."),
+      avg: scored.length ? Math.round(scored.reduce((s, t) => s + (t.correct / t.total) * 100, 0) / scored.length * 10) / 10 : null,
+      count: items.length,
+      items,
+    }
+  })
 }
 function buildTestTrendChartHtml(points) {
   testChartPoints = points
