@@ -948,10 +948,13 @@ function formatDateLabel(date) {
 function findNextHomeworkItems(r, date) {
   // 아직 수업일이 되지 않은(=아직 내주지 않은) 과제는 "다음과제"에 나오면 안 된다. classDate가 없는
   // 옛 캐시 데이터는(수업일 정보가 없던 시절 기록) 하위호환을 위해 그대로 포함시킨다.
-  const upcoming = (r.homework || []).filter((h) => h.due && h.due > date && (!h.classDate || h.classDate <= date))
+  // 마감·출제일은 시각이 붙은 값("2026-10-21T19:00…")일 수 있어 날짜만 비교한다. 그대로 비교하면 이날 마감인
+  // 과제가 "날짜 뒤"로 판정되어 지난 과제와 이번 과제에 함께 나왔다(v2.7.16).
+  const day = (v) => String(v || "").slice(0, 10)
+  const upcoming = (r.homework || []).filter((h) => day(h.due) > date && (!h.classDate || day(h.classDate) <= date))
   if (!upcoming.length) return []
-  const minDue = upcoming.reduce((min, h) => (h.due < min ? h.due : min), upcoming[0].due)
-  return upcoming.filter((h) => h.due === minDue)
+  const minDue = upcoming.reduce((min, h) => (day(h.due) < min ? day(h.due) : min), day(upcoming[0].due))
+  return upcoming.filter((h) => day(h.due) === minDue)
 }
 
 function findLatestComment(r, date) {

@@ -1110,7 +1110,8 @@ function closeHomeworkDayModal() {
 function showHomeworkPeriodModal(rangeStart, rangeEnd, label) {
   const r = STUDENT.registrations.find((x) => x.token === selectedToken)
   if (!r) return
-  const items = (r.homework || []).filter((h) => h.due && h.due >= rangeStart && h.due <= rangeEnd)
+  // 마감에 시각이 붙어 있어("…T17:00") 날짜만 비교한다. 그대로 비교하면 기간 마지막 날 마감 과제가 빠진다(v2.7.16).
+  const items = (r.homework || []).filter((h) => { const d = String(h.due || "").slice(0, 10); return d && d >= rangeStart && d <= rangeEnd })
   document.getElementById("homework-detail-modal-title").textContent = label
   document.getElementById("homework-detail-modal-body").innerHTML = items.length
     ? items.map((h) => `
