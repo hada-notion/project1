@@ -157,7 +157,8 @@ Deno.serve(async (req) => {
       await setAttendanceReportCompleteFlag(attendanceId, true)
       await setAttendanceReportSendingFlag(attendanceId, false)
 
-      console.log("send-daily-report finished:", attendanceId, JSON.stringify({ access_token, reportUrl, sendResult }))
+      // 리포트 토큰·링크·발송 응답(수신 번호가 들어 있을 수 있음)은 로그에 남기지 않는다(v2.7.19).
+      console.log("send-daily-report finished:", attendanceId)
     } catch (err) {
       console.error("send-daily-report background 처리 실패:", attendanceId, (err as Error).message)
       await setAttendanceReportLastError(attendanceId, extractErrorMessage(err))

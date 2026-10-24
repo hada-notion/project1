@@ -6,6 +6,10 @@ on:
   # 학부모 화면에 자동으로 내보내지 않는다. 필요할 때만 Actions 탭에서 수동 실행한다.
   workflow_dispatch: {}
 
+# 저장소 읽기만 한다. 배포·호출에 쓰는 값은 Secrets에서 읽는다(v2.7.19).
+permissions:
+  contents: read
+
 jobs:
   sync:
     runs-on: ubuntu-latest
