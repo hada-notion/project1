@@ -118,8 +118,9 @@ function setCalMode(mode) {
 // 화면에서도 최신 상태를 바로 확인하고 싶다는 요청에 따라 우측 하단 플로팅 버튼(FAB)으로 옮겼다.
 // 특정 등록 화면(캘린더 탭이 아니어도 상관없이 등록이 열려 있으면)에서는 그 등록만, 등록을 선택하지 않은
 // 인트로 화면에서는 학생의 모든 등록을 한 번에 동기화한다.
-async function requestSyncForRegistrationId(registrationId) {
-  if (!registrationId) return
+// (v2.7.19) 서버는 키 없는 요청을 자기 리포트 토큰으로만 받는다. 등록마다 그 등록의 토큰을 함께 보낸다.
+async function requestSyncForRegistrationId(registrationId, token) {
+  if (!registrationId || !token) return
   await fetch(`${SUPABASE_URL}/functions/v1/sync-report-cache`, {
     method: "POST",
     headers: {
@@ -127,7 +128,7 @@ async function requestSyncForRegistrationId(registrationId) {
       "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ registrationId }),
+    body: JSON.stringify({ registrationId, token }),
   })
 }
 function setGlobalSyncFabState(syncing) {
@@ -155,11 +156,12 @@ async function requestGlobalSync() {
   try {
     const r = currentReg()
     const targets = r ? [r] : (STUDENT?.registrations || [])
-    const ids = [...new Set(targets.map((t) => t.registration_id).filter(Boolean))]
+    const seen = new Set()
+    const pairs = targets.filter((t) => t.registration_id && t.token && !seen.has(t.registration_id) && seen.add(t.registration_id))
     // registrationId를 명시한 웹앱 요청은 토큰·출석 원본·학습기록·학습활동·완성 캐시까지
     // 동기로 최신화한 뒤 응답한다. 모든 등록이 끝난 뒤 최신 데이터를 다시 불러온다.
     // 학생의 여러 등록을 한꺼번에 열지 않고 하나씩 처리해 Notion API 부하를 분산한다.
-    for (const id of ids) await requestSyncForRegistrationId(id)
+    for (const t of pairs) await requestSyncForRegistrationId(t.registration_id, t.token)
     await loadReportFromServer()
     renderApp()
     renderGlobalSyncToast('<span class="inline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg></span>최신 정보로 갱신했어요')
@@ -504,7 +506,7 @@ function buildHomeTabHtml(r) {
       <div class="card">${pending.length ? pending.slice(0, 3).map((h) => kindBlockHtml("과제", { title: [h.book, h.range].filter(Boolean).join(" · ") || "과제", pill: h.status, pillTone: homeworkPillTone(h.status), sub: `마감 ${shortDateDow(h.due)}` })).join("") : `<div class="empty">남은 과제가 없어요.</div>`}</div>
       <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></span>교재 진도</h3>
       <div class="card">${books.length ? books.map((b) => `
-        <div class="home-progress-row" onclick="openBookStudy('${esc(b.title).replace(/'/g, "&#39;")}')" style="cursor:pointer">
+        <div class="home-progress-row" onclick="openBookStudy(${jsArg(b.title)})" style="cursor:pointer">
           <div class="home-progress-title">${esc(b.title)}</div>
           <div class="progress-line"><div class="track"><div class="fill" style="width:${b.progress ?? 0}%"></div></div><b>${b.progress ?? 0}%</b></div>
         </div>`).join("") : `<div class="empty">진행 중인 교재가 없어요.</div>`}</div>
@@ -537,7 +539,7 @@ function buildBooksTabHtml(r) {
       <div class="book-list">${filtered.length ? filtered.map((b) => {
         const recent = latestBookRange(r, b.title)
         return `
-        <div class="book-row" onclick="openBookStudy('${esc(b.title).replace(/'/g, "&#39;")}')">
+        <div class="book-row" onclick="openBookStudy(${jsArg(b.title)})">
           <div class="book-row-cover">${b.cover ? `<img src="${esc(b.cover)}" alt="${esc(b.title)}">` : `<span>${esc(b.title)}</span>`}</div>
           <div class="book-row-body">
             <div class="book-row-title">${esc(b.title)}</div>

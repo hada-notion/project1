@@ -15,6 +15,7 @@
 // 실제 캐시 조립 로직은 _shared/reportCacheBuilder.ts에 있다.
 
 import { requireAdminKey, CORS_HEADERS as ADMIN_CORS } from "../_shared/adminShared.ts"
+import { selectReportCacheByToken } from "../_shared/reportCacheShared.ts"
 import { queryAllPages, mapWithConcurrency, extractPageId } from "../_shared/notionClient.ts"
 import { makePageCache } from "../_shared/reportCacheShared.ts"
 import { upsertReportCacheRows, type ReportCacheRow } from "../_shared/reportCacheShared.ts"
@@ -37,6 +38,10 @@ function isRegistrationPage(page: any): boolean {
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: ADMIN_CORS })
 
+  // 키 없이 오는 요청(학부모 리포트 화면, 라이브러리·일정 자동화)은 할 수 있는 일을 좁힌다(v2.7.19).
+  // 학부모 화면은 자기 리포트 토큰으로 자기 등록만, 자동화는 라이브러리·일정 페이지만 갱신한다.
+  // 키가 없는데 등록 페이지를 직접 지정하면 거절한다. 오류 문구도 키가 없으면 일반 문구로만 돌려준다.
+  const keyed = req.headers.has("x-admin-key") && (await requireAdminKey(req)) === null
   try {
     const body = await req.json().catch(() => ({}))
     const cachedGetPage = makePageCache()
@@ -59,6 +64,14 @@ Deno.serve(async (req: Request) => {
     const rawId = (typeof body?.registrationId === "string" && body.registrationId) || extractPageId(body)
     if (!rawId) throw new Error("registrationId를 찾을 수 없습니다.")
 
+    const plainId = (id: string) => String(id || "").replace(/-/g, "").toLowerCase()
+    if (!keyed && typeof body?.registrationId === "string") {
+      const row = typeof body?.token === "string" && body.token ? await selectReportCacheByToken(body.token) : null
+      if (!row || plainId(row.registration_id) !== plainId(rawId)) {
+        return new Response(JSON.stringify({ error: "인증 실패" }), { status: 401, headers: { ...ADMIN_CORS, "Content-Type": "application/json" } })
+      }
+    }
+
     if (body?.awaitCompletion === true) {
       const authError = await requireAdminKey(req)
       if (authError) return authError
@@ -66,6 +79,10 @@ Deno.serve(async (req: Request) => {
 
     const sourcePage = await cachedGetPage(rawId)
     const registrationIds = await resolveRegistrationIds(rawId, cachedGetPage)
+
+    if (!keyed && typeof body?.registrationId !== "string" && isRegistrationPage(sourcePage)) {
+      return new Response(JSON.stringify({ error: "인증 실패" }), { status: 401, headers: { ...ADMIN_CORS, "Content-Type": "application/json" } })
+    }
 
     if (isRegistrationPage(sourcePage)) {
       const doFullRefresh = async (fanOutSharedLearning = false) => {
@@ -121,7 +138,8 @@ Deno.serve(async (req: Request) => {
       headers: { ...ADMIN_CORS, "Content-Type": "application/json" },
     })
   } catch (err) {
-    return new Response(JSON.stringify({ error: String((err as any)?.message ?? err) }), {
+    console.error("sync-report-cache 실패:", (err as any)?.message ?? err)
+    return new Response(JSON.stringify({ error: keyed ? String((err as any)?.message ?? err) : "동기화하지 못했습니다." }), {
       status: 500,
       headers: { ...ADMIN_CORS, "Content-Type": "application/json" },
     })

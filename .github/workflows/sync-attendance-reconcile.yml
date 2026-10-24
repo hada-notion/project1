@@ -6,6 +6,10 @@ on:
   # 전체 출석 원자료를 한 번에 대조해야 할 때만 Actions 탭에서 수동 실행한다.
   workflow_dispatch: {}
 
+# 저장소 읽기만 한다. 배포·호출에 쓰는 값은 Secrets에서 읽는다(v2.7.19).
+permissions:
+  contents: read
+
 jobs:
   reconcile:
     runs-on: ubuntu-latest

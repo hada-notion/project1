@@ -12,6 +12,10 @@ on:
       - 'tests/class-room-copy-cron-sql.cjs'
   workflow_dispatch: {}
 
+# 저장소 읽기만 한다. 배포·호출에 쓰는 값은 Secrets에서 읽는다(v2.7.19).
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest

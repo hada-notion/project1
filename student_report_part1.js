@@ -197,7 +197,7 @@ function renderFeedSpans(spans) {
       if (s.strikethrough) html = `<s>${html}</s>`
       if (s.underline) html = `<u>${html}</u>`
       if (s.color) html = `<span class="feed-color-${esc(s.color).replace(/[^a-z_]/g, "")}">${html}</span>`
-      if (s.href) html = `<a href="${esc(s.href)}" target="_blank" rel="noopener noreferrer">${html}</a>`
+      if (safeUrl(s.href)) html = `<a href="${esc(safeUrl(s.href))}" target="_blank" rel="noopener noreferrer">${html}</a>`
       return html
     })
     .join("")
@@ -214,7 +214,7 @@ function buildFeedVideoHtml(vid) {
   } else if (vimeo) {
     inner = `<iframe src="https://player.vimeo.com/video/${esc(vimeo[1])}" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>`
   } else {
-    inner = `<video src="${esc(url)}" controls preload="metadata"></video>`
+    inner = `<video src="${esc(safeUrl(url))}" controls preload="metadata"></video>`
   }
   return `<div class="feed-video">${inner}${vid.caption ? `<div class="feed-video-caption">${esc(vid.caption)}</div>` : ""}</div>`
 }
@@ -241,7 +241,7 @@ async function openReportFile(blockId, button) {
       body: JSON.stringify({ token: REPORT_ACCESS_TOKEN, blockId: safeBlockId }),
     })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok || !data.url) throw new Error(data.error || `HTTP ${res.status}`)
+    if (!res.ok || !safeUrl(data.url)) throw new Error(data.error || `HTTP ${res.status}`)
     if (popup) popup.location.replace(data.url)
     else window.location.href = data.url
   } catch (err) {
@@ -262,7 +262,7 @@ function buildFeedFileHtml(file) {
   const actionLabel = isPdf ? "PDF 열기·인쇄" : "파일 열기·다운로드"
   const action = safeBlockId
     ? `<button type="button" class="feed-file-action" onclick="openReportFile('${safeBlockId}', this)">${actionLabel}</button>`
-    : `<a class="feed-file-action" href="${esc(file.url)}" target="_blank" rel="noopener noreferrer">${actionLabel}</a>`
+    : `<a class="feed-file-action" href="${esc(safeUrl(file.url))}" target="_blank" rel="noopener noreferrer">${actionLabel}</a>`
   return `<div class="feed-file-card"><div class="feed-file-icon ${isPdf ? "pdf" : ""}">${icon}</div><div class="feed-file-info"><div class="feed-file-name">${esc(file.name)}</div>${file.caption && file.caption !== file.name ? `<div class="feed-file-caption">${esc(file.caption)}</div>` : ""}${action}</div></div>`
 }
 
@@ -281,7 +281,7 @@ function buildFeedBodyHtml(body) {
     if (!imageBuffer.length) return
     const cls = imageBuffer.length === 1 ? "feed-images single" : "feed-images"
     parts.push(`<div class="${cls}">${imageBuffer
-      .map((img) => `<figure class="feed-figure"><img class="feed-img" src="${esc(img.url)}" loading="lazy" onclick="openFeedImage('${esc(img.url).replace(/'/g, "&#39;")}')" />${img.caption ? `<figcaption>${esc(img.caption)}</figcaption>` : ""}</figure>`)
+      .map((img) => `<figure class="feed-figure"><img class="feed-img" src="${esc(safeUrl(img.url))}" loading="lazy" onclick="openFeedImage(${jsArg(safeUrl(img.url))})" />${img.caption ? `<figcaption>${esc(img.caption)}</figcaption>` : ""}</figure>`)
       .join("")}</div>`)
     imageBuffer = []
   }
@@ -393,7 +393,7 @@ function openFeedImage(url) {
   if (!url) return
   const layer = document.createElement("div")
   layer.className = "feed-lightbox"
-  layer.innerHTML = `<img src="${esc(url)}" />`
+  layer.innerHTML = `<img src="${esc(safeUrl(url))}" />`
   layer.onclick = () => layer.remove()
   document.body.appendChild(layer)
 }
@@ -596,6 +596,15 @@ const MAX_LOOKBACK_MONTHS = 6
 function esc(s) {
   if (s === null || s === undefined) return ""
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]))
+}
+// (v2.7.19) Notion 본문에서 온 주소는 http(s)·mailto·tel만 쓴다. javascript: 같은 주소는 빈 값으로 바꾼다.
+function safeUrl(u) {
+  const s = String(u ?? "").trim()
+  return /^(https?:|mailto:|tel:)/i.test(s) ? s : ""
+}
+// (v2.7.19) onclick="함수(...)" 안에 넣는 글자. HTML이 &#39;를 따옴표로 되돌려도 JS 문자열 밖으로 나가지 않게 JSON 문자열로 넣는다.
+function jsArg(v) {
+  return esc(JSON.stringify(String(v ?? "")))
 }
 
 function openMenu() { renderMenuBody(); document.getElementById("menu").classList.add("active") }
