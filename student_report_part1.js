@@ -90,6 +90,11 @@ function testEvalRow(t) {
   const period = t.standalone && s ? (e && e !== s ? `${md(s)} ~ ${md(e)}` : md(s)) : ""
   return [type, period].filter(Boolean).join(" · ")
 }
+// (v2.8.0) 평가 구분 묶음(서버 testKindOf와 같음): 주간·월간·종합은 그 이름, 나머지는 일일 평가.
+// 보고서는 구분마다 같은 구분의 평가만 추이로 그린다(일간=일일, 주간=주간, 월간=월간).
+function testKind(t) {
+  return t && ["주간 평가", "월간 평가", "종합 평가"].includes(t.evalType) ? t.evalType : "일일 평가"
+}
 // (v2.8.0) 클래스 '리포트 구성'이 "평가만"인 반: 출결·과제·일간 보고서를 숨기고 평가 중심으로 보여 준다.
 function isTestsOnly(r) {
   return !!r && r.report_mode === "tests_only"
@@ -1110,10 +1115,11 @@ function showTestDetailModal(i) {
   document.getElementById("test-detail-modal").classList.add("active")
 }
 // (v2.5.98) 보고서 위 "평가 현황"(일간)·"평가 평균"(주간·월간) 칸을 누르면 그 날짜·기간의 평가 목록을 과제 모달과 같은 카드로 보여준다.
-function showTestPeriodModal(rangeStart, rangeEnd, label) {
+function showTestPeriodModal(rangeStart, rangeEnd, label, kind) {
   const r = STUDENT.registrations.find((x) => x.token === selectedToken)
   if (!r) return
-  const items = (r.tests || []).filter((t) => { const d = String(t.date || "").slice(0, 10); return d && d >= rangeStart && d <= rangeEnd })
+  // (v2.8.0) kind가 있으면 그 평가 구분만(주간·월간 보고서의 평가 평균이 그 구분으로 계산될 때와 같게).
+  const items = (r.tests || []).filter((t) => { const d = String(t.date || "").slice(0, 10); return d && d >= rangeStart && d <= rangeEnd && (!kind || testKind(t) === kind) })
     .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
   document.getElementById("test-detail-modal-title").textContent = label
   document.getElementById("test-detail-modal-body").innerHTML = items.length

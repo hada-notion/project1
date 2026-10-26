@@ -56,3 +56,40 @@ Deno.test("v2.8.0 리포트 캐시: 출석 없는 평가가 평가 기간 끝 �
 		globalThis.fetch = realFetch
 	}
 })
+
+Deno.test("v2.8.0 리포트 캐시: 평가는 구분마다 최근 6개씩(일일 평가가 많아도 주간 평가가 밀리지 않음)", async () => {
+	const { testKindOf } = await import("./reportCacheBuilder.ts")
+	eq([testKindOf("주간 평가"), testKindOf("월간 평가"), testKindOf("종합 평가"), testKindOf("일일 평가"), testKindOf("기타"), testKindOf("")], ["주간 평가", "월간 평가", "종합 평가", "일일 평가", "일일 평가", "일일 평가"])
+	const sel = (name: string) => ({ type: "select", select: { name } })
+	const pages: Record<string, any> = { "cls-1": { id: "cls-1", properties: { "담당강사": { type: "relation", relation: [] } } } }
+	const acts: any[] = []
+	for (let i = 1; i <= 8; i++) {
+		const rec = `d-rec-${i}`, att = `att-${i}`
+		pages[rec] = { id: rec, properties: { "구분": sel("평가"), "평가 구분": sel("일일 평가"), "학습활동": { type: "relation", relation: [] } } }
+		pages[att] = { id: att, properties: { "수업일시": { type: "date", date: { start: `${daysAgo(i)}T16:00:00+09:00` } } } }
+		acts.push({ id: `d-act-${i}`, properties: { "구분": sel("평가"), "학습기록": { type: "relation", relation: [{ id: rec }] }, "출석": { type: "relation", relation: [{ id: att }] }, "정답 문항": { type: "number", number: 8 }, "전체 문항": { type: "number", number: 10 } } })
+	}
+	for (let i = 1; i <= 2; i++) {
+		const rec = `w-rec-${i}`
+		pages[rec] = { id: rec, properties: { "구분": sel("평가"), "평가 구분": sel("주간 평가"), "평가 기간": { type: "date", date: { start: daysAgo(7 * i + 6), end: daysAgo(7 * i) } }, "학습활동": { type: "relation", relation: [] } } }
+		acts.push({ id: `w-act-${i}`, properties: { "구분": sel("평가"), "학습기록": { type: "relation", relation: [{ id: rec }] }, "출석": { type: "relation", relation: [] }, "정답 문항": { type: "number", number: 7 }, "전체 문항": { type: "number", number: 10 } } })
+	}
+	const realFetch = globalThis.fetch
+	globalThis.fetch = (async (input: Request | URL | string) => {
+		const url = String(input instanceof Request ? input.url : input)
+		const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { "Content-Type": "application/json" } })
+		if (url.startsWith("https://mock.supabase")) return json([])
+		if (url.includes("/data_sources/activities/query")) return json({ results: acts, has_more: false })
+		if (url.includes("/query") || url.includes("/blocks/")) return json({ results: [], has_more: false })
+		throw new Error(`unexpected fetch ${url}`)
+	}) as typeof fetch
+	try {
+		const detail: any = await buildRegistrationDetail({ id: "reg-1", properties: { "클래스": { type: "relation", relation: [{ id: "cls-1" }] } } }, async (id: string) => pages[id] ?? { id, properties: {} })
+		const kinds = detail.tests.map((t: any) => t.eval_type)
+		eq(kinds.filter((k: string) => k === "일일 평가").length, 6)
+		eq(kinds.filter((k: string) => k === "주간 평가").length, 2)
+		eq(detail.tests[0].iso >= detail.tests[detail.tests.length - 1].iso, true)
+	} finally {
+		globalThis.fetch = realFetch
+	}
+})
