@@ -28,7 +28,7 @@ Deno.test("v2.8.0 수업 안내: 같은 시각 비교(표기 차이 무시)", ()
 Deno.test("v2.8.0 수업 안내: 보강이면 수업구분 보강 수업, 일반은 정규 수업, 전달사항은 메모 또는 없음, 날짜 26.10.30(금) 17:00", () => {
 	const p1: any = m.planLessonNotice(att(), ses(true))
 	eq(p1.kind, "수업 안내")
-	eq(p1.variables, { "#{수업구분}": "보강 수업", "#{학생이름}": "김하윤", "#{클래스}": "고1 A", "#{전달사항}": "없음", "#{수업일시}": "26.10.30(금) 17:00" })
+	eq(p1.variables, { "#{수업구분}": "보강 수업", "#{학생이름}": "김하윤", "#{클래스}": "고1 A", "#{수업일시}": "26.10.30(금) 17:00", "#{전달사항}": "없음" })
 	const p2: any = m.planLessonNotice(att(), ses(false, "선거일이지만 정상 수업합니다."))
 	eq([p2.variables["#{수업구분}"], p2.variables["#{전달사항}"]], ["정규 수업", "선거일이지만 정상 수업합니다."])
 	eq((m.planLessonNotice(att(), ses(false)) as any).variables["#{전달사항}"], "없음")
@@ -37,6 +37,12 @@ Deno.test("v2.8.0 수업 안내: 보강이면 수업구분 보강 수업, 일반
 	eq(m.noteText(null), "없음")
 	eq([m.formatClassTime("2026-11-03T19:05:00+09:00"), m.formatClassTime("2026-01-04"), m.formatClassTime("2026-10-30T23:30:00.000Z")], ["26.11.03(화) 19:05", "26.01.04(일)", "26.10.31(토) 08:30"])
 	eq((m.planLessonNotice(att(), null) as any).variables["#{수업구분}"], "정규 수업")
+	// 출석의 (수업안내) 수식이 있으면 그 값을 그대로 보낸다(다른 알림톡과 같은 규칙).
+	const withF: any = att()
+	withF.properties["수업구분(수업안내)"] = { type: "formula", formula: { type: "string", string: "보강 수업" } }
+	withF.properties["전달사항(수업안내)"] = { type: "formula", formula: { type: "string", string: "수식 값" } }
+	const pf: any = m.planLessonNotice(withF, ses(false, "메모"))
+	eq([pf.variables["#{수업구분}"], pf.variables["#{전달사항}"], pf.variables["#{수업일시}"]], ["보강 수업", "수식 값", "26.10.30(금) 17:00"])
 })
 
 Deno.test("v2.8.0 수업 안내: 받은 뒤 일시가 바뀌면 새 시간으로 수업 안내를 다시, 같으면 건너뜀, 결석·일시 없음은 안 보냄", () => {

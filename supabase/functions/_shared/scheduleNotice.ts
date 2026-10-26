@@ -13,7 +13,7 @@
 // 큐 모양은 반별 보고서와 같다: 반(일정) 1건이 학생 1건씩을 다시 넣고, 마지막 학생이 상태를 마친다(✅, 중간 실패가 있으면 ⚠️).
 // 발송 규칙은 수업 안내와 같다(설정 행이 꺼졌거나 비면 ⚠️, 연락처 없음 ⚠️, 발송 단계 실패는 다시 보내지 않음). 전송로그는 등록에.
 import { createSendLogEntry, extractErrorMessage, getBotUserId } from "./adminShared.ts"
-import { syncStudentReport } from "./alimtalkShared.ts"
+import { getFormulaText, syncStudentReport } from "./alimtalkShared.ts"
 import { fullRelationIds, getPage, queryAllPages, relIds, updatePageProperties } from "./notionClient.ts"
 import { DS_REGISTRATION, DS_SCHEDULE_EVENT, PROP_LAST_ERROR } from "./constants.ts"
 import { enqueueSync } from "./syncQueue.ts"
@@ -339,11 +339,13 @@ export async function processScheduleEventItem(p: EventPayload): Promise<void> {
 			targets.push(r)
 		}
 		if (!targets.length) return await deps.markError(p.eventId, "일정에 학생이나 클래스를 연결해 주세요(수강 중인 학생이 없습니다).")
+		// 다른 알림톡처럼 일정 페이지의 (일정안내) 수식 값을 보낸다. 수식이 없거나 비면 같은 규칙으로 계산한다.
+		const f = (name: string, fallback: string) => getFormulaText(ev, name).trim() || fallback
 		const vars = {
-			"#{일정구분}": eventLabel(ev),
-			"#{일정명}": textOf(ev.properties?.["이름"]?.title).trim() || eventLabel(ev),
-			"#{일정일시}": eventTimeText(ev),
-			"#{전달사항}": noteText(textOf(ev.properties?.["메모"]?.rich_text)),
+			"#{일정구분}": f("일정구분(일정안내)", eventLabel(ev)),
+			"#{일정명}": f("일정명(일정안내)", textOf(ev.properties?.["이름"]?.title).trim() || eventLabel(ev)),
+			"#{일정일시}": f("일정일시(일정안내)", eventTimeText(ev)),
+			"#{전달사항}": f("전달사항(일정안내)", noteText(textOf(ev.properties?.["메모"]?.rich_text))),
 		}
 		console.log(`[schedule-event] event=${p.eventId} 대상 ${targets.length}`)
 		for (let i = 0; i < targets.length; i++) {

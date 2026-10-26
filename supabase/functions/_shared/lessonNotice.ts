@@ -11,6 +11,8 @@
 //   - 결석으로 표시된 학생은 보내지 않는다. 수업구분은 수업 "보강" 체크면 "보강 수업", 아니면 "정규 수업".
 //     수업일시는 "26.10.30(금) 17:00". 전달사항은 수업 "수업 안내 메모"(50자까지, 비면 "없음").
 //     템플릿 제목은 고정이고 자유 문장 변수는 전달사항 하나다(카카오 심사: 간헐적 공지 통로로 보이지 않게).
+//   - 다른 알림톡처럼 변수 값은 보내는 페이지(출석)의 수식에서 읽는다: 수업구분(수업안내)·수업일시(수업안내)·전달사항(수업안내),
+//     학생이름(보고서)·클래스(보고서). 수식이 아직 없거나 비면 같은 규칙으로 서버가 계산한다(운영에 수식을 넣기 전에도 동작).
 //   - 알림톡 설정의 "수업 안내" 행이 꺼져 있거나 템플릿 ID가 비면 보내지 않고 ⚠️(다른 템플릿으로 잘못 나가지 않게).
 //   - 오류는 출석 "수업 안내 오류"에만 적는다(보고서의 "마지막 오류"는 건드리지 않음).
 //   - 전송 로그는 등록에만 연결한다(출석의 전송 내역·발송 횟수는 일일 보고서용이라 섞지 않음). 보낸 뒤 출석 "수업 안내 일시"를 적는다.
@@ -81,13 +83,18 @@ export function planLessonNotice(attendance: any, session: any | null): LessonNo
   const makeup = session?.properties?.["보강"]?.checkbox === true
   const label = makeup ? "보강 수업" : "정규 수업"
   const memo = (session?.properties?.[LESSON_MEMO_PROP]?.rich_text ?? []).map((t: any) => t.plain_text ?? "").join("").trim()
-  const common = {
-    "#{수업구분}": label,
-    "#{학생이름}": getFormulaText(attendance, "학생이름(보고서)"),
-    "#{클래스}": getFormulaText(attendance, "클래스(보고서)"),
-    "#{전달사항}": noteText(memo),
+  const f = (name: string, fallback: string) => getFormulaText(attendance, name).trim() || fallback
+  return {
+    kind: "수업 안내",
+    classIso,
+    variables: {
+      "#{수업구분}": f("수업구분(수업안내)", label),
+      "#{학생이름}": getFormulaText(attendance, "학생이름(보고서)"),
+      "#{클래스}": getFormulaText(attendance, "클래스(보고서)"),
+      "#{수업일시}": f("수업일시(수업안내)", formatClassTime(classIso)),
+      "#{전달사항}": f("전달사항(수업안내)", noteText(memo)),
+    },
   }
-  return { kind: "수업 안내", classIso, variables: { ...common, "#{수업일시}": formatClassTime(classIso) } }
 }
 
 const SOLAPI_API_KEY = Deno.env.get("SOLAPI_API_KEY") ?? ""
