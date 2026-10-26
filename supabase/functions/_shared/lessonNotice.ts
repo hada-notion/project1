@@ -7,8 +7,8 @@
 // 한 건 처리:
 //   - 출석 "수업 안내 일시"가 비었으면 "수업 안내", 있고 지금 수업일시와 다르면 "수업 변경 안내"(기존 → 변경), 같으면 보내지 않는다
 //     (이미 안내한 학생). 다시 보내려면 "수업 안내 일시"를 비우고 누른다(일일 보고서의 전송완료 체크와 같다).
-//   - 결석으로 표시된 학생은 보내지 않는다. 안내구분은 수업 "보강" 체크면 "보강 수업", 아니면 "수업".
-//     안내내용은 수업 "수업 안내 메모"(비면 보강은 "보강 수업이 잡혔습니다", 일반은 "-").
+//   - 결석으로 표시된 학생은 보내지 않는다. 안내구분은 수업 "보강" 체크면 "보강 수업", 아니면 "정규 수업".
+//     참고사항은 수업 "수업 안내 메모"(50자까지, 비면 "없음"). 템플릿 제목은 고정이고 자유 문장 변수는 이것 하나다(심사 대비).
 //   - 알림톡 설정의 "수업 안내"·"수업 변경 안내" 행이 꺼져 있거나 템플릿 ID가 비면 보내지 않고 ⚠️(다른 템플릿으로 잘못 나가지 않게).
 //   - 오류는 출석 "수업 안내 오류"에만 적는다(보고서의 "마지막 오류"는 건드리지 않음).
 //   - 전송 로그는 등록에만 연결한다(출석의 전송 내역·발송 횟수는 일일 보고서용이라 섞지 않음). 보낸 뒤 출석 "수업 안내 일시"를 적는다.
@@ -35,6 +35,14 @@ export const TARGET_LESSON_NOTICE = "lesson-notice"
 export type LessonNoticeKind = "수업 안내" | "수업 변경 안내"
 
 const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"]
+
+// 템플릿의 참고사항(자유 문장 하나): 공백을 한 칸으로, 50자를 넘으면 자르고 "…", 비면 "없음".
+export function noteText(value: string | null | undefined, max = 50): string {
+  const t = String(value ?? "").replace(/\s+/g, " ").trim()
+  if (!t) return "없음"
+  const chars = Array.from(t)
+  return chars.length > max ? chars.slice(0, max - 1).join("") + "…" : t
+}
 
 // "10월 30일(목) 오후 5:00" (서울). 시각이 없는 날짜면 "10월 30일(목)".
 export function formatLessonTime(value: string | null | undefined): string {
@@ -73,13 +81,13 @@ export function planLessonNotice(attendance: any, session: any | null): LessonNo
   const sentIso = String(p[LESSON_NOTICE_SENT_PROP]?.date?.start ?? "")
   if (sentIso && sameInstant(sentIso, classIso)) return { skip: "" }
   const makeup = session?.properties?.["보강"]?.checkbox === true
-  const label = makeup ? "보강 수업" : "수업"
+  const label = makeup ? "보강 수업" : "정규 수업"
   const memo = (session?.properties?.[LESSON_MEMO_PROP]?.rich_text ?? []).map((t: any) => t.plain_text ?? "").join("").trim()
   const common = {
     "#{안내구분}": label,
     "#{학생이름}": getFormulaText(attendance, "학생이름(보고서)"),
     "#{클래스}": getFormulaText(attendance, "클래스(보고서)"),
-    "#{안내내용}": memo || (makeup ? "보강 수업이 잡혔습니다" : "-"),
+    "#{참고사항}": noteText(memo),
   }
   if (!sentIso) return { kind: "수업 안내", classIso, variables: { ...common, "#{수업일시}": formatLessonTime(classIso) } }
   return { kind: "수업 변경 안내", classIso, variables: { ...common, "#{기존일시}": formatLessonTime(sentIso), "#{변경일시}": formatLessonTime(classIso) } }

@@ -2,12 +2,13 @@
 //
 // (v2.8.0) 일정 안내 알림톡 두 가지.
 //   1) 월간 일정 안내(반별): 클래스 [월간 일정 안내] → send-schedule-notice/class → 큐. 다음 달(서울) 일정을 그 반 수강 중
-//      학생마다 한 통으로. 담는 일정 = 그 반에 연결된 공개 일정 + 학원 전체 공개 일정(클래스·학생·학교·학년이 모두 빈 것).
-//      학원 전체 일정은 그 학생이 이미 받았으면 뺀다(Supabase schedule_notice_sent, 두 반 수강생 중복 방지). 학사 일정
-//      (학교·학년 대상)은 넣지 않는다(학부모 리포트 캘린더에서 본다). 일정이 0건인 학생은 보내지 않는다.
+//      학생마다 한 통으로. 담는 일정 = 그 반에 연결된 공개 일정 + 학원 전체 공개 일정(클래스·학생·학교·학년이 모두 빈 것)
+//      + 그 학생 학교·학년의 공개 일정(리포트와 같은 규칙: 일정의 학교·학년이 비었거나 학생 것과 같을 때). 일정 "구분"으로
+//      휴원·학원·학교 세 구역(변수)으로 나눠 보내고, 빈 구역은 "없음". 학원 전체·학교 일정은 학생 기준이라 그 학생이 이미
+//      받았으면 뺀다(Supabase schedule_notice_sent, 두 반 수강생 중복 방지). 보낼 일정이 0건인 학생은 보내지 않는다.
 //      같은 달을 다시 누르면 보내지 않는다(클래스 "일정 안내 월"). 다시 보내려면 비우고 누른다.
 //   2) 일정 안내(한 건): 일정 [일정 안내 전송] → send-schedule-notice/event → 큐. 일정에 연결된 학생, 연결된 클래스의 수강 중
-//      학생에게. 일정구분 = 일정 "안내 구분"(비면 구분에서: 💤 휴원 → 휴원 안내, 📆 → 학원 일정 안내, 🏫 → 학사 일정 안내).
+//      학생에게. 일정구분 = 일정 "안내 구분"(비면 구분에서: 💤 휴원 → 휴원, 📆 → 학원 일정, 🏫 → 학사 일정). 참고사항 = 메모.
 //      보낸 뒤 일정 "일정 안내 일시" = 그때 날짜. 다시 누르면 날짜가 바뀌었을 때만 보낸다.
 // 큐 모양은 반별 보고서와 같다: 반(일정) 1건이 학생 1건씩을 다시 넣고, 마지막 학생이 상태를 마친다(✅, 중간 실패가 있으면 ⚠️).
 // 발송 규칙은 수업 안내와 같다(설정 행이 꺼졌거나 비면 ⚠️, 연락처 없음 ⚠️, 발송 단계 실패는 다시 보내지 않음). 전송로그는 등록에.
@@ -19,7 +20,7 @@ import { enqueueSync } from "./syncQueue.ts"
 import { markDone, markError, markRunning, type StatusSpec } from "./statusTracking.ts"
 import { isParentPublicEvent } from "./scheduleVisibility.ts"
 import { seoulDay } from "./classReportPlan.ts"
-import { formatLessonTime, LessonConfigError, sameInstant, sendConfiguredAlimtalk } from "./lessonNotice.ts"
+import { formatLessonTime, LessonConfigError, noteText, sameInstant, sendConfiguredAlimtalk } from "./lessonNotice.ts"
 import { fetchSupabaseWithRetry } from "./reportCacheShared.ts"
 
 export const SCHEDULE_NOTICE_STATUS_SPEC: StatusSpec = {
@@ -48,6 +49,17 @@ export function nextMonthKey(now = new Date()): string {
 	return `${y}-${String(m).padStart(2, "0")}`
 }
 const monthLabel = (month: string) => `${Number(month.slice(5, 7))}월`
+// 그 달 일정만 읽는 조회 조건(공개·숨김 해제·그 달 안).
+function monthFilter(month: string): Record<string, unknown>[] {
+	let y = Number(month.slice(0, 4)), m = Number(month.slice(5, 7)) + 1
+	if (m > 12) { m = 1; y++ }
+	return [
+		{ property: "학부모 공개", checkbox: { equals: true } },
+		{ property: "숨김", checkbox: { equals: false } },
+		{ property: "날짜", date: { on_or_after: `${month}-01` } },
+		{ property: "날짜", date: { before: `${y}-${String(m).padStart(2, "0")}-01` } },
+	]
+}
 const inMonth = (day: string | null, month: string) => !!day && day.slice(0, 7) === month
 
 function shortDay(day: string): string {
@@ -79,16 +91,29 @@ export function isAcademyWide(event: any): boolean {
 	return ["클래스", "학생", "학교", "학년"].every((n) => relIds(p[n]).length === 0)
 }
 
-// 일정 안내 구분: "안내 구분" 칸 → 없으면 구분으로.
+// 일정 안내의 구분 줄: "안내 구분" 칸 → 없으면 구분으로(템플릿 본문 "📌 구분: …"이라 "안내"를 붙이지 않는다).
 export function eventLabel(event: any): string {
 	const p = event?.properties ?? {}
 	const custom = textOf(p[PROP_EVENT_LABEL]?.rich_text).trim()
 	if (custom) return custom
 	const cat = String(p["구분"]?.select?.name ?? "")
-	if (cat.includes("휴원")) return "휴원 안내"
-	if (cat.includes("학사")) return "학사 일정 안내"
-	if (cat.includes("학원 일정")) return "학원 일정 안내"
-	return "일정 안내"
+	if (cat.includes("휴원")) return "휴원"
+	if (cat.includes("학사")) return "학사 일정"
+	if (cat.includes("학원 일정")) return "학원 일정"
+	return "일정"
+}
+
+// 월간 일정 안내의 구역: 💤 휴원 → 휴원, 🏫 학사 일정 → 학교, 그 밖(📆 학원 일정) → 학원.
+export type Section = "휴원" | "학원" | "학교"
+export function sectionOf(event: any): Section {
+	const cat = String(event?.properties?.["구분"]?.select?.name ?? "")
+	return cat.includes("휴원") ? "휴원" : cat.includes("학사") ? "학교" : "학원"
+}
+
+// 한 구역 목록(최대 5줄 + 외 N건), 비면 "없음".
+export function sectionText(lines: { day: string; line: string; sec: Section }[], sec: Section): string {
+	const own = lines.filter((l) => l.sec === sec)
+	return own.length ? summarize(own) : "없음"
 }
 
 // 일정일시: 하루면 "11월 3일(월)"(시각이 있으면 "오후 2:00"까지), 기간이면 "11월 3일(월) ~ 11월 5일(수)".
@@ -147,7 +172,7 @@ export const scheduleDeps = {
 	markError: (id: string, message: string) => markError(id, SCHEDULE_NOTICE_STATUS_SPEC, message),
 }
 
-type Line = { id: string; day: string; line: string }
+type Line = { id: string; day: string; line: string; sec: Section }
 
 async function activeRegsOfClass(classId: string): Promise<any[]> {
 	return (await scheduleDeps.queryAllPages(DS_REGISTRATION, { property: "클래스", relation: { contains: classId } })).filter(isActiveReg)
@@ -155,7 +180,31 @@ async function activeRegsOfClass(classId: string): Promise<any[]> {
 
 // ── 1) 월간 일정 안내 ─────────────────────────────────────────────────────────
 export type MonthClassPayload = { classId: string; month: string }
+// academyEvents = 학원 전체 + 그 학생 학교·학년 일정(학생 기준, 이미 받은 것은 학생 단계에서 뺀다).
 export type MonthStudentPayload = { classId: string; className: string; month: string; regId: string; classEvents: Line[]; academyEvents: Line[]; last?: boolean }
+
+// 학생의 학교·학년 공개 일정(그 달). 같은 학교·학년은 한 번만 조회한다(cache).
+async function schoolLines(studentId: string, month: string, cache: Map<string, Promise<any[]>>, toLines: (pages: any[]) => Line[]): Promise<Line[]> {
+	const deps = scheduleDeps
+	const st: any = studentId ? await deps.getPage(studentId).catch(() => null) : null
+	const schoolId = relIds(st?.properties?.["학교"])[0]
+	const gradeId = relIds(st?.properties?.["학년"])[0]
+	const fetch = (prop: "학교" | "학년", id: string) => {
+		const k = `${prop}:${key(id)}`
+		if (!cache.has(k)) cache.set(k, deps.queryAllPages(DS_SCHEDULE_EVENT, { and: [{ property: prop, relation: { contains: id } }, ...monthFilter(month)] }))
+		return cache.get(k)!
+	}
+	const pages = [...(schoolId ? await fetch("학교", schoolId) : []), ...(gradeId ? await fetch("학년", gradeId) : [])]
+	const byId = new Map<string, any>()
+	for (const e of pages) {
+		const sch = relIds(e?.properties?.["학교"]).map(key), grd = relIds(e?.properties?.["학년"]).map(key)
+		if (!sch.length && !grd.length) continue
+		if (sch.length && !(schoolId && sch.includes(key(schoolId)))) continue
+		if (grd.length && !(gradeId && grd.includes(key(gradeId)))) continue
+		byId.set(String(e.id), e)
+	}
+	return toLines(Array.from(byId.values()))
+}
 
 export async function processScheduleMonthClassItem(p: MonthClassPayload): Promise<void> {
 	const deps = scheduleDeps
@@ -167,26 +216,25 @@ export async function processScheduleMonthClassItem(p: MonthClassPayload): Promi
 		const className = textOf(cls?.properties?.["클래스명"]?.title).trim()
 		const toLines = (pages: any[]): Line[] => pages
 			.filter((e) => isParentPublicEvent(e))
-			.map((e) => ({ id: String(e.id), ...eventLine(e)! }))
+			.map((e) => ({ id: String(e.id), ...eventLine(e)!, sec: sectionOf(e) }))
 			.filter((l) => l.line && inMonth(l.day, p.month))
 		const classEventPages = await Promise.all((await deps.fullRelationIds(cls, "일정")).map((id: string) => deps.getPage(id)))
 		const classEvents = toLines(classEventPages)
-		const academyPages = (await deps.queryAllPages(DS_SCHEDULE_EVENT, {
-			and: [
-				{ property: "학부모 공개", checkbox: { equals: true } },
-				{ property: "숨김", checkbox: { equals: false } },
-				{ property: "날짜", date: { on_or_after: `${p.month}-01` } },
-			],
-		})).filter(isAcademyWide)
+		const academyPages = (await deps.queryAllPages(DS_SCHEDULE_EVENT, { and: monthFilter(p.month) })).filter(isAcademyWide)
 		const academyEvents = toLines(academyPages)
-		if (!classEvents.length && !academyEvents.length) return await deps.markError(p.classId, `${monthLabel(p.month)}에 이 반이나 학원 전체의 학부모 공개 일정이 없습니다.`)
 		const regs = await activeRegsOfClass(p.classId)
-		console.log(`[schedule-month] class=${p.classId} ${p.month} 반 일정 ${classEvents.length}, 학원 전체 ${academyEvents.length}, 학생 ${regs.length}`)
 		if (!regs.length) return await deps.markError(p.classId, "수강 중인 학생이 없습니다.")
-		for (let i = 0; i < regs.length; i++) {
-			const item: MonthStudentPayload = { classId: p.classId, className, month: p.month, regId: String(regs[i].id), classEvents, academyEvents, ...(i === regs.length - 1 ? { last: true } : {}) }
-			await deps.enqueue(TARGET_SCHEDULE_MONTH_STUDENT, item)
+		// 학생마다 학교·학년 일정을 더한다(반·학원 전체 일정과 겹치면 뺀다).
+		const known = new Set([...classEvents, ...academyEvents].map((l) => key(l.id)))
+		const cache = new Map<string, Promise<any[]>>()
+		const items: MonthStudentPayload[] = []
+		for (const r of regs) {
+			const school = (await schoolLines(relIds(r.properties?.["학생정보"])[0] ?? "", p.month, cache, toLines)).filter((l) => !known.has(key(l.id)))
+			items.push({ classId: p.classId, className, month: p.month, regId: String(r.id), classEvents, academyEvents: [...academyEvents, ...school] })
 		}
+		console.log(`[schedule-month] class=${p.classId} ${p.month} 반 일정 ${classEvents.length}, 학원 전체 ${academyEvents.length}, 학생 ${regs.length}`)
+		if (!items.some((it) => it.classEvents.length || it.academyEvents.length)) return await deps.markError(p.classId, `${monthLabel(p.month)}에 이 반·학원 전체·학생 학교의 학부모 공개 일정이 없습니다.`)
+		for (let i = 0; i < items.length; i++) await deps.enqueue(TARGET_SCHEDULE_MONTH_STUDENT, { ...items[i], ...(i === items.length - 1 ? { last: true } : {}) })
 	} catch (err) {
 		await deps.markError(p.classId, (err as Error).message).catch(() => {})
 		throw err
@@ -248,11 +296,12 @@ export async function processScheduleMonthStudentItem(p: MonthStudentPayload): P
 		const REPORT_PATH = Deno.env.get("REPORT_PATH") ?? "/project1/student_report.html"
 		const token = await deps.token(p.regId)
 		const ok = await sendOne("월간 일정 안내", p.classId, p.regId, studentName, {
-			"#{안내월}": monthLabel(p.month),
-			"#{클래스}": p.className,
 			"#{학생이름}": studentName,
-			"#{일정건수}": String(lines.length),
-			"#{일정요약}": summarize(lines),
+			"#{클래스}": p.className,
+			"#{안내월}": monthLabel(p.month),
+			"#{휴원일정}": sectionText(lines, "휴원"),
+			"#{학원일정}": sectionText(lines, "학원"),
+			"#{학교일정}": sectionText(lines, "학교"),
 			"#{페이지ID}": `${REPORT_PATH}?token=${token}`,
 		})
 		if (ok) await deps.markSent(studentId, academy.map((e) => e.id), p.month).catch((err) => console.warn("[schedule-month] 기록 실패:", (err as Error).message))
@@ -294,7 +343,7 @@ export async function processScheduleEventItem(p: EventPayload): Promise<void> {
 			"#{일정구분}": eventLabel(ev),
 			"#{일정명}": textOf(ev.properties?.["이름"]?.title).trim() || eventLabel(ev),
 			"#{일정일시}": eventTimeText(ev),
-			"#{일정내용}": textOf(ev.properties?.["메모"]?.rich_text).trim() || "-",
+			"#{참고사항}": noteText(textOf(ev.properties?.["메모"]?.rich_text)),
 		}
 		console.log(`[schedule-event] event=${p.eventId} 대상 ${targets.length}`)
 		for (let i = 0; i < targets.length; i++) {

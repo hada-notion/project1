@@ -32,11 +32,14 @@ Deno.test("v2.8.0 수업 안내: 일시 표기(서울, 오전·오후, 날짜만
 Deno.test("v2.8.0 수업 안내: 처음이면 수업 안내, 보강이면 안내구분·기본 문구, 일반은 메모 또는 -", () => {
 	const p1: any = m.planLessonNotice(att(), ses(true))
 	eq(p1.kind, "수업 안내")
-	eq(p1.variables, { "#{안내구분}": "보강 수업", "#{학생이름}": "김하윤", "#{클래스}": "고1 A", "#{안내내용}": "보강 수업이 잡혔습니다", "#{수업일시}": "10월 30일(금) 오후 5:00" })
+	eq(p1.variables, { "#{안내구분}": "보강 수업", "#{학생이름}": "김하윤", "#{클래스}": "고1 A", "#{참고사항}": "없음", "#{수업일시}": "10월 30일(금) 오후 5:00" })
 	const p2: any = m.planLessonNotice(att(), ses(false, "선거일이지만 정상 수업합니다."))
-	eq([p2.variables["#{안내구분}"], p2.variables["#{안내내용}"]], ["수업", "선거일이지만 정상 수업합니다."])
-	eq((m.planLessonNotice(att(), ses(false)) as any).variables["#{안내내용}"], "-")
-	eq((m.planLessonNotice(att(), null) as any).variables["#{안내구분}"], "수업")
+	eq([p2.variables["#{안내구분}"], p2.variables["#{참고사항}"]], ["정규 수업", "선거일이지만 정상 수업합니다."])
+	eq((m.planLessonNotice(att(), ses(false)) as any).variables["#{참고사항}"], "없음")
+	eq(m.noteText("  교재를\n 꼭  챙겨 주세요 "), "교재를 꼭 챙겨 주세요")
+	eq(m.noteText("가".repeat(60)), "가".repeat(49) + "…")
+	eq(m.noteText(null), "없음")
+	eq((m.planLessonNotice(att(), null) as any).variables["#{안내구분}"], "정규 수업")
 })
 
 Deno.test("v2.8.0 수업 안내: 받은 뒤 일시가 바뀌면 변경 안내, 같으면 건너뜀, 결석·일시 없음은 안 보냄", () => {
