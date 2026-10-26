@@ -71,7 +71,7 @@ function shiftDay(day: string, days: number): string {
 // 문제가 있으면 선생님이 고칠 수 있는 문장으로 Error를 던진다(만들지 않고 ⚠️ 오류).
 export function reportRequestFromProps(props: any): ReportRequest {
 	const kind = String(props?.[PROP_CLASS_KIND]?.select?.name ?? "").trim()
-	if (!REPORT_KINDS.includes(kind)) throw new Error(`클래스 '${PROP_CLASS_KIND}'를 주간 보고서나 월간 보고서로 골라 주세요.`)
+	if (!REPORT_KINDS.includes(kind)) throw new Error(`클래스 '${PROP_CLASS_KIND}'을 주간 보고서나 월간 보고서로 골라 주세요.`)
 	const date = props?.[PROP_CLASS_PERIOD]?.date
 	const start = seoulDay(date?.start), end = seoulDay(date?.end)
 	if (!start || !end) throw new Error(`클래스 '${PROP_CLASS_PERIOD}'에 시작일과 종료일을 모두 넣어 주세요(주간은 월~일, 월간은 1일~말일).`)
