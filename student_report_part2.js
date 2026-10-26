@@ -779,9 +779,14 @@ function computeTestTrendPoints(tests, periodType, baseOffset) {
     }
     const items = tests.filter((t) => t.date >= rangeStart && t.date <= rangeEnd)
     const avg = items.length ? Math.round(items.reduce((s, t) => s + (t.total ? (t.correct / t.total) * 100 : 0), 0) / items.length) : null
-    points.push({ label, avg, count: items.length, items })
+    points.push({ label, avg, classAvg: classAvgOf(items), count: items.length, items })
   }
   return points
+}
+// 반 평균: 각 평가에 붙은 class_avg(같은 학습기록에 묶인 학생들의 평가 점수 평균)를 한 점으로 모은다. 없으면 null.
+function classAvgOf(items) {
+  const vals = items.map((t) => t.classAvg).filter((v) => typeof v === "number")
+  return vals.length ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length * 10) / 10 : null
 }
 // 일일 보고서: 최근 평가가 있던 날 count일. 같은 날 평가가 여럿이면 점수(정답 ÷ 전체 문항)의 평균 한 점으로 그린다.
 function computeRecentTestPoints(tests, asOfDate, count) {
@@ -799,6 +804,7 @@ function computeRecentTestPoints(tests, asOfDate, count) {
     return {
       label: day.slice(5).replace("-", "."),
       avg: scored.length ? Math.round(scored.reduce((s, t) => s + (t.correct / t.total) * 100, 0) / scored.length * 10) / 10 : null,
+      classAvg: classAvgOf(items),
       count: items.length,
       items,
     }
@@ -822,9 +828,18 @@ function buildTestTrendChartHtml(points) {
     <text x="2" y="${yFor(v) + 4}" font-size="9" fill="#bbb">${v}</text>
   `).join("")
   const xLabels = points.map((p, i) => `<text x="${xFor(i)}" y="${height - 10}" font-size="10" fill="#999" text-anchor="middle">${esc(p.label)}</text>`).join("")
+  // 반 평균은 점선으로 아이 점수 선 아래에 깔고, 반 평균이 하나라도 있을 때만 범례를 붙인다.
+  const classPoints = points.map((p, i) => ({ ...p, i })).filter((p) => p.classAvg !== null && p.classAvg !== undefined)
+  const classPath = classPoints.map((p) => `${xFor(p.i)},${yFor(p.classAvg)}`).join(" ")
+  const classLine = classPoints.length > 1 ? `<polyline points="${classPath}" fill="none" stroke="#b9ab98" stroke-width="1.5" stroke-dasharray="4 3" />` : ""
+  const classDots = classPoints.map((p) => `<circle cx="${xFor(p.i)}" cy="${yFor(p.classAvg)}" r="3" fill="#fff" stroke="#b9ab98" stroke-width="1.5" style="pointer-events:none" />`).join("")
+  const legend = classPoints.length
+    ? `<div class="chart-legend"><span class="legend-item"><span class="dot" style="background:#6b5d4d"></span>우리 아이</span><span class="legend-item"><span class="dot" style="background:#fff;border:1.5px solid #b9ab98"></span>반 평균</span></div>`
+    : ""
   const emptyOverlay = validPoints.length ? "" : '<div class="empty">해당 기간 평가 기록이 없습니다.</div>'
   return `
-    <div class="chart-wrap"><svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">${gridLines}<polyline points="${path}" fill="none" stroke="#6b5d4d" stroke-width="2" />${dots}${valueLabels}${xLabels}</svg></div>
+    ${legend}
+    <div class="chart-wrap"><svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">${gridLines}${classLine}${classDots}<polyline points="${path}" fill="none" stroke="#6b5d4d" stroke-width="2" />${dots}${valueLabels}${xLabels}</svg></div>
     ${emptyOverlay}
   `
 }

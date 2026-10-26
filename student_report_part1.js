@@ -468,7 +468,7 @@ function mapRegistration(reg) {
     // 마감일이 아니라 수업일(그 과제를 실제로 내준 날) 기준으로 판단하려면 이 값이 있어야 한다.
     homework: (reg.homework || []).map((h) => ({ type: "과제", title: h.title || "", book: h.book || "", range: h.range || "", unit: h.unit || "", note: h.note || "", due: h.due_iso || null, classDate: isoToKstDate(h.iso) || null, status: h.status || "미제출", sourceBody: normalizeFeedBody(h.source_body), activityBody: normalizeFeedBody(h.activity_body) })),
     homework_days: (reg.homework_days || []).map((h) => ({ date: h.date || null, status: h.status || "미완료", submitted: h.submitted ?? 0, total: h.total ?? 0 })),
-    tests: (reg.tests || []).map((t) => ({ type: "평가", title: t.title || "", book: t.book || "", range: t.range || "", unit: t.unit || "", note: t.note || "", date: isoToKstDate(t.iso) || (t.iso ? String(t.iso).slice(0, 10) : null), correct: t.correct ?? 0, total: t.total ?? 0, sourceBody: normalizeFeedBody(t.source_body), activityBody: normalizeFeedBody(t.activity_body) })),
+    tests: (reg.tests || []).map((t) => ({ type: "평가", title: t.title || "", book: t.book || "", range: t.range || "", unit: t.unit || "", note: t.note || "", date: isoToKstDate(t.iso) || (t.iso ? String(t.iso).slice(0, 10) : null), correct: t.correct ?? 0, total: t.total ?? 0, classAvg: typeof t.class_avg === "number" ? t.class_avg : null, sourceBody: normalizeFeedBody(t.source_body), activityBody: normalizeFeedBody(t.activity_body) })),
     teacher_comments: (reg.teacher_comments || []).map((c) => ({ text: c.text || "", date: c.iso || null, by: c.by || "" })),
     // 주간/월간 보고서: 보고서(학원) DB 자체의 "선생님 한마디"를 보고서 구분·학습 기간과 함께 보관한다.
     report_comments: (reg.report_comments || []).map((c) => ({ kind: c.kind || "", start: c.start || null, end: c.end || c.start || null, comment: c.comment || "" })),
@@ -1070,7 +1070,7 @@ function showTestDetailModal(i) {
     ? items.map((t) => `
       <div class="log-row 평가">
         <div class="log-title-row"><div class="log-title">${esc([t.book, t.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${scorePillTone(t.correct ?? 0, t.total ?? 0)}">${scorePillText(t.correct ?? 0, t.total ?? 0)}</span></div>
-        ${renderLogMetaRows(t.unit, t.note, [`날짜: ${t.date ? String(t.date).slice(0, 10) : "-"}`])}
+        ${renderLogMetaRows(t.unit, t.note, [`날짜: ${t.date ? String(t.date).slice(0, 10) : "-"}`, t.classAvg !== null && t.classAvg !== undefined ? `반 평균: ${t.classAvg.toFixed(1)}점` : null].filter(Boolean))}
       </div>
     `).join("")
     : `<div class="log-row 평가"><div class="log-note">해당 기간 평가 기록이 없습니다.</div></div>`
