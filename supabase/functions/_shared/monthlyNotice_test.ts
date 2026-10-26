@@ -22,7 +22,7 @@ const ev = (id: string, o: { name: string; cat?: string; start: string; end?: st
 	"클래스": rel(...(o.cls ?? [])), "학생": rel(...(o.stu ?? [])), "학교": rel(...(o.school ?? [])), "학년": rel(...(o.grade ?? [])),
 } })
 const batch = (id: string, o: { student?: string; tuitions?: string[]; tuitionSent?: string; scheduleSent?: string } = {}) => ({ id, properties: {
-	"이름": title("26.12 이도윤 월간 안내"), "구분": { type: "select", select: { name: "월간 안내" } }, "기간": date("2026-12-01", "2026-12-31"),
+	"이름": title("26.12 이도윤 가정통신문"), "구분": { type: "select", select: { name: "가정통신문" } }, "기간": date("2026-12-01", "2026-12-31"),
 	"학생": rel(...(o.student ? [o.student] : [])), "수강료": rel(...(o.tuitions ?? [])), "마지막 오류": rt(""),
 	"수강료 안내 일시": date(o.tuitionSent ?? null), "일정 안내 일시": date(o.scheduleSent ?? null),
 } })
@@ -61,14 +61,20 @@ const relFilter = (filter: any) => {
 	return f ? `${f.property}:${f.relation.contains}` : ""
 }
 
-Deno.test("v2.8.0 학생 월간 안내: 달 범위·이름", () => {
+Deno.test("v2.8.0 가정통신문: 달 범위·이름", () => {
 	eq(m.monthRange("2026-12"), { start: "2026-12-01", end: "2026-12-31" })
 	eq(m.monthRange("2027-02"), { start: "2027-02-01", end: "2027-02-28" })
-	eq(m.batchTitle("2026-12", "이도윤"), "26.12 이도윤 월간 안내")
+	eq(m.batchTitle("2026-12", "이도윤"), "26.12 이도윤 가정통신문")
 	eq(m.tuitionTitle("2026-12", "이도윤"), "26.12 이도윤 수강료")
+	// 클래스 '안내 기간': 비면 다음 달, 있으면 시작일의 달, 두 달에 걸치면 고칠 곳을 알림
+	eq(m.monthFromClass({ properties: {} }, new Date("2026-11-27T03:00:00Z")), "2026-12")
+	eq(m.monthFromClass({ properties: { "안내 기간": date("2026-11-01", "2026-11-30") } }), "2026-11")
+	let msg = ""
+	try { m.monthFromClass({ properties: { "안내 기간": date("2026-11-20", "2026-12-05") } }) } catch (e) { msg = (e as Error).message }
+	eq(msg.includes("한 달 안"), true)
 })
 
-Deno.test("v2.8.0 학생 월간 안내 [월 수강료 생성]: 월간 수업 총량이 없으면 ⚠️, 그 달 다니는 등록마다 큐", async () => {
+Deno.test("v2.8.0 가정통신문 [월 수강료 생성]: 월간 수업 총량이 없으면 ⚠️, 그 달 다니는 등록마다 큐", async () => {
 	const c0 = mock({ cls: { id: "cls", properties: { "월간 수업 총량": { type: "number", number: null } } } })
 	await m.processMonthlyCreateClassItem({ classId: "cls", month: "2026-12" })
 	eq(c0.marks[1].includes("월간 수업 총량"), true)
@@ -82,7 +88,7 @@ Deno.test("v2.8.0 학생 월간 안내 [월 수강료 생성]: 월간 수업 총
 	eq(c.enq.map((e) => [e.target, e.payload.regId, e.payload.amount, e.payload.last ?? false]), [["monthly-create-reg", "r1", 8, false], ["monthly-create-reg", "r3", 8, true]])
 })
 
-Deno.test("v2.8.0 학생 월간 안내 [월 수강료 생성] 등록 1건: 월간 안내·수강료를 만들고 일정을 묶음, 다시 하면 연결만", async () => {
+Deno.test("v2.8.0 가정통신문 [월 수강료 생성] 등록 1건: 가정통신문·수강료를 만들고 일정을 묶음, 다시 하면 연결만", async () => {
 	const r1 = reg("r1", { student: "s1", name: "이도윤", cls: "cls", clsName: "중1 A 수학" })
 	const pages: Record<string, any> = { r1, s1: { id: "s1", properties: { "학교": rel(), "학년": rel() } }, cls: { id: "cls", properties: { "마지막 오류": rt("") } } }
 	let batches: any[] = [], tuitions: any[] = []
@@ -96,13 +102,13 @@ Deno.test("v2.8.0 학생 월간 안내 [월 수강료 생성] 등록 1건: 월�
 	const c = mock(pages, q)
 	await m.processMonthlyCreateRegItem({ classId: "cls", month: "2026-12", regId: "r1", amount: 8, last: true })
 	eq(c.created[0].ds, "batches")
-	eq([c.created[0].props["구분"].select.name, c.created[0].props["기간"].date, c.created[0].props["학생"].relation], ["월간 안내", { start: "2026-12-01", end: "2026-12-31" }, [{ id: "s1" }]])
+	eq([c.created[0].props["구분"].select.name, c.created[0].props["기간"].date, c.created[0].props["학생"].relation], ["가정통신문", { start: "2026-12-01", end: "2026-12-31" }, [{ id: "s1" }]])
 	const t = c.created[1]
 	eq(t.ds, "tuitions")
 	eq([t.props["청구명"].title[0].text.content, t.props["청구기간"].date, t.props["실제 수업량"].number, t.props["알림톡 발송함"].relation, t.props["알림톡 설정"].relation, t.props["일괄전송 선택"].checkbox], ["26.12 이도윤 수강료", { start: "2026-12-01", end: "2026-12-31" }, 8, [{ id: "new1" }], [{ id: "cfg-row" }], true])
 	eq(c.updates.find((u) => u.props["일정"])?.props["일정"].relation, [{ id: "e1" }])
 	eq(c.marks, ["done:cls"])
-	// 다시: 월간 안내는 찾아 쓰고, 그 달 수강료가 있으면 만들지 않는다(발송함이 비었으면 연결만).
+	// 다시: 가정통신문은 찾아 쓰고, 그 달 수강료가 있으면 만들지 않는다(발송함이 비었으면 연결만).
 	batches = [pages.new1]
 	tuitions = [{ id: "t-old", properties: { "청구기간": date("2026-12-01", "2026-12-31"), "알림톡 발송함": rel() } }, { id: "t-nov", properties: { "청구기간": date("2026-11-01", "2026-11-30"), "알림톡 발송함": rel() } }]
 	const c2 = mock(pages, q)
@@ -111,7 +117,7 @@ Deno.test("v2.8.0 학생 월간 안내 [월 수강료 생성] 등록 1건: 월�
 	eq(c2.updates[0], { id: "t-old", props: { "알림톡 발송함": { relation: [{ id: "new1" }] } } })
 })
 
-Deno.test("v2.8.0 학생 월간 안내 [수강료 안내]: 반별 금액 줄·합계 한 통, 수강료마다 로그·✅, 보낸 일시, 이미 보냈으면 건너뜀", async () => {
+Deno.test("v2.8.0 가정통신문 [수강료 안내]: 반별 금액 줄·합계 한 통, 수강료마다 로그·✅, 보낸 일시, 이미 보냈으면 건너뜀", async () => {
 	const pages: Record<string, any> = {
 		b1: batch("b1", { student: "s1", tuitions: ["t2", "t1"] }),
 		t1: tuition("t1", "r1", "중1 A 수학", 250000), t2: tuition("t2", "r2", "중1 영어 B", 100000),
@@ -130,7 +136,7 @@ Deno.test("v2.8.0 학생 월간 안내 [수강료 안내]: 반별 금액 줄·�
 	eq(c.updates.filter((u) => u.props["안내문 전송 상태"]).map((u) => [u.id, u.props["안내문 전송 상태"].select.name, u.props["일괄전송 선택"].checkbox]), [["t2", "✅ 완료", false], ["t1", "✅ 완료", false]])
 	eq(c.updates.at(-1), { id: "b1", props: { "수강료 안내 일시": { date: { start: "2026-11-28" } } } })
 	eq(c.marks, ["running:b1", "done:b1"])
-	// 월간 안내의 (수강료안내) 수식이 있으면 그 값을 쓴다.
+	// 가정통신문의 (수강료안내) 수식이 있으면 그 값을 쓴다.
 	pages.b1.properties["수강내역(수강료안내)"] = fx("수식 내역")
 	const cf = mock(pages)
 	await m.processMonthlySendBatchItem({ kind: "tuition", batchId: "b1" })
@@ -153,7 +159,7 @@ Deno.test("v2.8.0 학생 월간 안내 [수강료 안내]: 반별 금액 줄·�
 	eq([c5.logs.map((l) => l.status), c5.updates.find((u) => u.id === "t1")?.props["안내문 전송 상태"].select.name, c5.marks[1]], [["실패"], "⚠️ 오류", "error:b1:solapi 500"])
 })
 
-Deno.test("v2.8.0 학생 월간 안내 [월간 일정 안내]: 학생 개인·두 반·학원 전체·학교 일정을 세 구역으로, 다른 학교 일정은 뺌, 0건이면 안 보냄", async () => {
+Deno.test("v2.8.0 가정통신문 [월간 일정 안내]: 학생 개인·두 반·학원 전체·학교 일정을 세 구역으로, 다른 학교 일정은 뺌, 0건이면 안 보냄", async () => {
 	const regs = [reg("r1", { student: "s1", name: "이도윤", cls: "c1", clsName: "중1 A 수학" }), reg("r2", { student: "s1", name: "이도윤", cls: "c2", clsName: "중1 영어 B" })]
 	const pages: Record<string, any> = { b1: batch("b1", { student: "s1" }), s1: { id: "s1", properties: { "학교": rel("sch"), "학년": rel("g1") } } }
 	const byLink: Record<string, any[]> = {
@@ -180,7 +186,7 @@ Deno.test("v2.8.0 학생 월간 안내 [월간 일정 안내]: 학생 개인·�
 	eq([c2.sends.length, c2.marks[1].includes("공개 일정이 없어")], [0, true])
 })
 
-Deno.test("v2.8.0 학생 월간 안내 클래스 일괄: 학생마다 1건(겹치면 한 번), 월간 안내가 없으면 클래스 오류에 남기고 마지막에 ⚠️", async () => {
+Deno.test("v2.8.0 가정통신문 클래스 일괄: 학생마다 1건(겹치면 한 번), 가정통신문이 없으면 클래스 오류에 남기고 마지막에 ⚠️", async () => {
 	const regs = [reg("r1", { student: "s1", name: "이도윤", cls: "cls", clsName: "중1 A" }), reg("r1b", { student: "s1", name: "이도윤", cls: "cls", clsName: "중1 A" }), reg("r2", { student: "s2", name: "박서준", cls: "cls", clsName: "중1 A" })]
 	const c = mock({}, (ds) => ds === "registrations" ? regs : [])
 	await m.processMonthlySendClassItem({ kind: "tuition", classId: "cls", month: "2026-12" })
@@ -189,7 +195,7 @@ Deno.test("v2.8.0 학생 월간 안내 클래스 일괄: 학생마다 1건(겹�
 	const c2 = mock(pages, () => [])
 	await m.processMonthlySendStudentItem({ kind: "tuition", classId: "cls", month: "2026-12", studentId: "s2", studentName: "박서준", last: true })
 	eq(c2.marks.length, 1)
-	eq(c2.marks[0].startsWith("error:cls:박서준: 12월 월간 안내가 없습니다"), true)
+	eq(c2.marks[0].startsWith("error:cls:박서준: 12월 가정통신문이 없습니다"), true)
 	// 이미 받은 학생은 조용히 건너뛰고 ✅
 	const sent = batch("b1", { student: "s1", tuitions: ["t1"], tuitionSent: "2026-11-27" })
 	const c3 = mock({ cls: { id: "cls", properties: { "마지막 오류": rt("") } } }, (ds) => ds === "batches" ? [sent] : [])

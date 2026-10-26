@@ -1,15 +1,15 @@
 // _shared/monthlyNotice.ts
 //
-// (v2.8.0) 학생 월간 안내: 수강료와 월간 일정은 학생 단위로 보낸다(보고서는 등록 단위 반 발송함 그대로).
-// 알림톡 발송함 DB의 구분 "월간 안내" 페이지 = 학생 × 달. 그 학생의 그 달 수강료(반마다 한 장)와 그 달 학부모 공개 일정을 묶는다.
-//   1) 클래스 [월 수강료 생성] → send-monthly-notice/create → 큐. 다음 달(서울)에 그 반을 다니는 등록마다: 그 학생의 월간 안내를
+// (v2.8.0) 가정통신문: 수강료와 월간 일정은 학생 단위로 보낸다(보고서는 등록 단위 반 발송함 그대로).
+// 알림톡 발송함 DB의 구분 "가정통신문" 페이지 = 학생 × 달. 그 학생의 그 달 수강료(반마다 한 장)와 그 달 학부모 공개 일정을 묶는다.
+//   1) 클래스 [월 수강료 생성] → send-monthly-notice/create → 큐. 클래스 `안내 기간`의 달(비면 누른 날의 다음 달, 서울)에 그 반을 다니는 등록마다: 그 학생의 가정통신문을
 //      찾거나 만들고, 그 등록의 그 달 수강료가 없으면 만들어 연결한다(v2.7 등록 자동화 [생성] 수강료를 대신한다, 값은 같다).
-//      그 달 일정도 월간 안내 `일정`에 묶어 둔다(미리보기용). 두 반을 듣는 학생은 두 반 수강료가 같은 월간 안내에 모인다.
-//   2) 보내기: 월간 안내 [수강료 안내]·[월간 일정 안내] → /tuition·/schedule(그 학생 한 명),
-//      클래스 [수강료 안내 일괄]·[월간 일정 안내] → /class-tuition·/class-schedule(그 반 학생들의 다음 달 월간 안내).
-//      이미 보낸 것은 건너뛴다(월간 안내 `수강료 안내 일시`·`일정 안내 일시`). 다시 보내려면 그 칸을 비우고 누른다.
+//      그 달 일정도 가정통신문 `일정`에 묶어 둔다(미리보기용). 두 반을 듣는 학생은 두 반 수강료가 같은 가정통신문에 모인다.
+//   2) 보내기: 가정통신문 [수강료 안내]·[월간 일정 안내] → /tuition·/schedule(그 학생 한 명),
+//      클래스 [수강료 안내 일괄]·[월간 일정 안내] → /class-tuition·/class-schedule(그 반 학생들의 그 달 가정통신문, 달은 위와 같음).
+//      이미 보낸 것은 건너뛴다(가정통신문 `수강료 안내 일시`·`일정 안내 일시`). 다시 보내려면 그 칸을 비우고 누른다.
 //      그래서 두 반을 듣는 학생은 두 반에서 눌러도 한 번만 받는다.
-//   수강료 안내 = 한 통에 반별 금액 줄(#{수강내역})과 합계(#{청구금액}). 다른 알림톡처럼 월간 안내 페이지의 (수강료안내) 수식 값을
+//   수강료 안내 = 한 통에 반별 금액 줄(#{수강내역})과 합계(#{청구금액}). 다른 알림톡처럼 가정통신문 페이지의 (수강료안내) 수식 값을
 //   먼저 쓰고, 없거나 비면 같은 규칙으로 계산한다. 보낸 뒤 각 수강료의 안내문 전송 상태를 ✅로, 전송로그는 수강료마다 하나.
 //   월간 일정 안내 = 학생 개인·그 달 다니는 반 전부·학교·학년·학원 전체 공개 일정을 휴원·학원·학교 세 구역으로(리포트와 같은 규칙).
 //   보낼 때 일정을 다시 묶는다(묶은 뒤 생긴 일정도 들어간다). 그 달 일정이 0건이면 보내지 않는다.
@@ -23,11 +23,11 @@ import { markDone, markError, markRunning, type StatusSpec } from "./statusTrack
 import { isParentPublicEvent } from "./scheduleVisibility.ts"
 import { inPeriodRegistration, resolveBatchDataSourceId, seoulDay, studentNameOf } from "./classReportPlan.ts"
 import { LessonConfigError, sendConfiguredAlimtalk } from "./lessonNotice.ts"
-import { eventLine, inMonth, isAcademyWide, monthFilter, monthLabel, SCHEDULE_NOTICE_STATUS_SPEC, type Section, sectionOf, sectionText } from "./scheduleNotice.ts"
+import { eventLine, inMonth, isAcademyWide, monthFilter, monthLabel, nextMonthKey, SCHEDULE_NOTICE_STATUS_SPEC, type Section, sectionOf, sectionText } from "./scheduleNotice.ts"
 
-export const KIND_MONTHLY = "월간 안내"
-// 월간 안내(발송함) 한 명 보내기
-export const MONTHLY_STATUS_SPEC: StatusSpec = { statusProp: "월간 안내 상태", errorProp: PROP_LAST_ERROR, startedAtProp: "월간 안내 처리 시작 시각" }
+export const KIND_MONTHLY = "가정통신문"
+// 가정통신문(발송함) 한 명 보내기
+export const MONTHLY_STATUS_SPEC: StatusSpec = { statusProp: "가정통신문 상태", errorProp: PROP_LAST_ERROR, startedAtProp: "가정통신문 처리 시작 시각" }
 // 클래스 [월 수강료 생성]
 export const CLASS_TUITION_GEN_STATUS_SPEC: StatusSpec = { statusProp: "수강료 생성 상태", errorProp: PROP_LAST_ERROR, startedAtProp: "수강료 생성 처리 시작 시각" }
 // 클래스 [수강료 안내 일괄]. 클래스 [월간 일정 안내]는 일정 안내 상태(SCHEDULE_NOTICE_STATUS_SPEC)를 쓴다.
@@ -49,6 +49,8 @@ const PROP_TUITION_SENT = "수강료 안내 일시"
 const PROP_SCHEDULE_SENT = "일정 안내 일시"
 // 수강료(학원) DB
 const PROP_TUITION_BATCH = "알림톡 발송함"
+// 클래스(학원) DB: 가정통신문의 달(1일~말일). 비면 누른 날의 다음 달.
+export const PROP_CLASS_NOTICE_PERIOD = "안내 기간"
 
 export type NoticeKind = "tuition" | "schedule"
 export type CreateClassPayload = { classId: string; month: string }
@@ -63,6 +65,17 @@ const key = (id: string) => String(id ?? "").replace(/-/g, "").toLowerCase()
 const alive = (p: any) => !!p && !p.in_trash && !p.archived
 const won = (n: number) => `${Math.round(n).toLocaleString("en-US")}원`
 
+// 클래스 버튼의 대상 달: 클래스 '안내 기간'의 시작일이 있는 달, 비면 누른 날의 다음 달(서울).
+// 시작과 끝이 다른 달이면 고칠 곳을 문장으로 알린다(보고서 기간과 같은 방식).
+export function monthFromClass(cls: any, now = new Date()): string {
+	const d = cls?.properties?.[PROP_CLASS_NOTICE_PERIOD]?.date
+	const start = seoulDay(d?.start)
+	if (!start) return nextMonthKey(now)
+	const end = seoulDay(d?.end)
+	if (end && end.slice(0, 7) !== start.slice(0, 7)) throw new Error(`클래스 '${PROP_CLASS_NOTICE_PERIOD}'은 한 달 안(1일~말일)으로 넣어 주세요. 비우면 다음 달입니다.`)
+	return start.slice(0, 7)
+}
+
 // "2026-12" → { start: "2026-12-01", end: "2026-12-31" }
 export function monthRange(month: string): { start: string; end: string } {
 	const y = Number(month.slice(0, 4)), m = Number(month.slice(5, 7))
@@ -70,7 +83,7 @@ export function monthRange(month: string): { start: string; end: string } {
 	return { start: `${month}-01`, end: `${month}-${String(last).padStart(2, "0")}` }
 }
 const yymmdd = (day: string) => `${day.slice(2, 4)}.${day.slice(5, 7)}.${day.slice(8, 10)}`
-// 월간 안내 이름: "26.12 김하윤 월간 안내"(발송함 이름 자동화가 덮어쓰면 그 이름을 따른다)
+// 가정통신문 이름: "26.12 김하윤 가정통신문"(발송함 이름 자동화가 덮어쓰면 그 이름을 따른다)
 export const batchTitle = (month: string, studentName: string) => `${month.slice(2, 4)}.${month.slice(5, 7)} ${studentName} ${KIND_MONTHLY}`
 // 수강료 이름: "26.12 김하윤 수강료"(v2.7 [생성] 수강료 자동화의 청구명과 같다)
 export const tuitionTitle = (month: string, studentName: string) => `${month.slice(2, 4)}.${month.slice(5, 7)} ${studentName} 수강료`
@@ -120,7 +133,7 @@ async function finishParent(pageId: string, spec: StatusSpec): Promise<void> {
 	else await deps.markDone(pageId, spec)
 }
 
-// 그 학생의 그 달 월간 안내를 찾고, create면 없을 때 만든다. 발송함 DB에 '학생' 관계가 없으면 알아볼 수 있는 오류로.
+// 그 학생의 그 달 가정통신문을 찾고, create면 없을 때 만든다. 발송함 DB에 '학생' 관계가 없으면 알아볼 수 있는 오류로.
 export async function findStudentBatch(studentId: string, month: string, create: { studentName: string } | null): Promise<any | null> {
 	const deps = monthlyDeps
 	const ds = await deps.batchDataSourceId()
@@ -186,7 +199,7 @@ export async function studentMonthEvents(studentId: string, month: string, class
 		.sort((a, b) => a.day.localeCompare(b.day))
 }
 
-// 월간 안내 `일정`을 그 학생의 그 달 일정으로 다시 묶는다.
+// 가정통신문 `일정`을 그 학생의 그 달 일정으로 다시 묶는다.
 async function bundleEvents(batchId: string, studentId: string, month: string, classIds: string[]): Promise<Line[]> {
 	const lines = await studentMonthEvents(studentId, month, classIds)
 	await monthlyDeps.update(batchId, { [PROP_BATCH_EVENTS]: { relation: lines.slice(0, 100).map((l) => ({ id: l.id })) } })
@@ -221,7 +234,7 @@ export async function processMonthlyCreateClassItem(p: CreateClassPayload): Prom
 	}
 }
 
-// 등록 1건: 학생 월간 안내를 찾거나 만들고, 그 등록의 그 달 수강료가 없으면 만든다(있으면 월간 안내에 연결만). 다시 해도 같다.
+// 등록 1건: 가정통신문를 찾거나 만들고, 그 등록의 그 달 수강료가 없으면 만든다(있으면 가정통신문에 연결만). 다시 해도 같다.
 export async function processMonthlyCreateRegItem(p: CreateRegPayload): Promise<void> {
 	const deps = monthlyDeps
 	try {
@@ -274,10 +287,10 @@ export async function sendTuitionNotice(batch: any): Promise<SendResult> {
 	const deps = monthlyDeps
 	if (batch?.properties?.[PROP_TUITION_SENT]?.date?.start) return "skipped"
 	const month = String(seoulDay(batch?.properties?.[PROP_BATCH_PERIOD]?.date?.start) ?? "").slice(0, 7)
-	if (!month) throw new MonthlyBlocked("월간 안내 '기간'이 비어 있습니다.")
+	if (!month) throw new MonthlyBlocked("가정통신문 '기간'이 비어 있습니다.")
 	const range = monthRange(month)
 	const tuitions = (await Promise.all((await deps.fullRelationIds(batch, PROP_BATCH_TUITION)).map((id: string) => deps.getPage(id)))).filter(alive)
-	if (!tuitions.length) throw new MonthlyBlocked("이 월간 안내에 수강료가 없습니다. 클래스 [월 수강료 생성]을 먼저 누르세요.")
+	if (!tuitions.length) throw new MonthlyBlocked("이 가정통신문에 수강료가 없습니다. 클래스 [월 수강료 생성]을 먼저 누르세요.")
 	const rows: { name: string; line: string; amount: number; regId: string }[] = []
 	for (const t of tuitions) {
 		const regId = relIds(t?.properties?.["등록"])[0] ?? ""
@@ -294,7 +307,7 @@ export async function sendTuitionNotice(batch: any): Promise<SendResult> {
 	const regId = rows.find((r) => r.regId)?.regId ?? ""
 	const studentName = getFormulaText(first, "학생정보").trim()
 	const config = await deps.config("수강료 안내", { pfId: "", templateId: "", senderNumber: "" })
-	// 다른 알림톡처럼 월간 안내 페이지의 (수강료안내) 수식 값을 먼저 쓰고, 없거나 비면 같은 규칙으로 계산한다.
+	// 다른 알림톡처럼 가정통신문 페이지의 (수강료안내) 수식 값을 먼저 쓰고, 없거나 비면 같은 규칙으로 계산한다.
 	const f = (name: string, fallback: string) => getFormulaText(batch, name).trim() || fallback
 	const variables = {
 		"#{청구년월}": f("청구년월(수강료안내)", getFormulaText(first, "청구년월(보고서)").trim() || monthLabel(month)),
@@ -335,9 +348,9 @@ export async function sendScheduleNotice(batch: any): Promise<SendResult> {
 	const deps = monthlyDeps
 	if (batch?.properties?.[PROP_SCHEDULE_SENT]?.date?.start) return "skipped"
 	const month = String(seoulDay(batch?.properties?.[PROP_BATCH_PERIOD]?.date?.start) ?? "").slice(0, 7)
-	if (!month) throw new MonthlyBlocked("월간 안내 '기간'이 비어 있습니다.")
+	if (!month) throw new MonthlyBlocked("가정통신문 '기간'이 비어 있습니다.")
 	const studentId = relIds(batch?.properties?.[PROP_BATCH_STUDENT])[0]
-	if (!studentId) throw new MonthlyBlocked("월간 안내에 '학생'이 연결되어 있지 않습니다.")
+	if (!studentId) throw new MonthlyBlocked("가정통신문에 '학생'이 연결되어 있지 않습니다.")
 	const regs = await studentRegsInMonth(studentId, month)
 	if (!regs.length) throw new MonthlyBlocked(`${monthLabel(month)}에 다니는 등록이 없습니다.`)
 	const lines = await bundleEvents(String(batch.id), studentId, month, regs.flatMap((r: any) => relIds(r?.properties?.["클래스"])))
@@ -375,7 +388,7 @@ const sentProp = (kind: NoticeKind) => (kind === "tuition" ? PROP_TUITION_SENT :
 const kindLabel = (kind: NoticeKind) => (kind === "tuition" ? "수강료 안내" : "월간 일정 안내")
 export const classSpecOf = (kind: NoticeKind) => (kind === "tuition" ? CLASS_TUITION_NOTICE_STATUS_SPEC : SCHEDULE_NOTICE_STATUS_SPEC)
 
-// 월간 안내 [수강료 안내]·[월간 일정 안내] — 그 학생 한 명.
+// 가정통신문 [수강료 안내]·[월간 일정 안내] — 그 학생 한 명.
 export async function processMonthlySendBatchItem(p: SendBatchPayload): Promise<void> {
 	const deps = monthlyDeps
 	const spec = MONTHLY_STATUS_SPEC
@@ -393,7 +406,7 @@ export async function processMonthlySendBatchItem(p: SendBatchPayload): Promise<
 	}
 }
 
-// 클래스 [수강료 안내 일괄]·[월간 일정 안내] — 그 반에 다음 달 다니는 학생마다 1건.
+// 클래스 [수강료 안내 일괄]·[월간 일정 안내] — 그 반에 그 달 다니는 학생마다 1건.
 export async function processMonthlySendClassItem(p: SendClassPayload): Promise<void> {
 	const deps = monthlyDeps
 	const spec = classSpecOf(p.kind)
@@ -422,7 +435,7 @@ export async function processMonthlySendStudentItem(p: SendStudentPayload): Prom
 	const spec = classSpecOf(p.kind)
 	try {
 		const batch = await findStudentBatch(p.studentId, p.month, p.kind === "schedule" ? { studentName: p.studentName } : null)
-		if (!batch) await appendError(p.classId, `${p.studentName}: ${monthLabel(p.month)} 월간 안내가 없습니다(클래스 [월 수강료 생성]을 먼저).`)
+		if (!batch) await appendError(p.classId, `${p.studentName}: ${monthLabel(p.month)} 가정통신문이 없습니다(클래스 [월 수강료 생성]을 먼저).`)
 		else {
 			try {
 				await sendOf(p.kind)(batch)

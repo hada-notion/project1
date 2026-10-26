@@ -98,7 +98,7 @@ const TARGETS: Array<{ label: string; dataSourceId: string | (() => Promise<stri
 	// (v2.8.0) 일정 안내(클래스 월간 일정 일괄·일정 한 건).
 	{ label: "클래스:일정안내", dataSourceId: DS_CLASS, spec: SCHEDULE_NOTICE_STATUS_SPEC },
 	{ label: "일정:일정안내", dataSourceId: DS_SCHEDULE_EVENT, spec: SCHEDULE_NOTICE_STATUS_SPEC },
-	// (v2.8.0) 학생 월간 안내(클래스 수강료 생성·수강료 안내 일괄, 월간 안내 한 명 보내기).
+	// (v2.8.0) 가정통신문(클래스 수강료 생성·수강료 안내 일괄, 가정통신문 한 명 보내기).
 	{ label: "클래스:수강료생성", dataSourceId: DS_CLASS, spec: CLASS_TUITION_GEN_STATUS_SPEC },
 	{ label: "클래스:수강료안내", dataSourceId: DS_CLASS, spec: CLASS_TUITION_NOTICE_STATUS_SPEC },
 	{ label: "발송함:월간안내", dataSourceId: resolveBatchDataSourceId, spec: MONTHLY_STATUS_SPEC },
