@@ -301,7 +301,7 @@ export async function processScheduleMonthStudentItem(p: MonthStudentPayload): P
 			"#{안내월}": monthLabel(p.month),
 			"#{휴원일정}": sectionText(lines, "휴원"),
 			"#{학원일정}": sectionText(lines, "학원"),
-			"#{학교일정}": sectionText(lines, "학교"),
+			"#{학사일정}": sectionText(lines, "학교"),
 			"#{페이지ID}": `${REPORT_PATH}?token=${token}`,
 		})
 		if (ok) await deps.markSent(studentId, academy.map((e) => e.id), p.month).catch((err) => console.warn("[schedule-month] 기록 실패:", (err as Error).message))

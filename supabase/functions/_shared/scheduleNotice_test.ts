@@ -119,7 +119,7 @@ Deno.test("v2.8.0 월간 일정 안내(학생): 이미 받은 학원 전체 일�
 	await m.processScheduleMonthStudentItem({ ...base, regId: "r1", last: true })
 	eq(c.sends.length, 1)
 	eq(c.sends[0].code, "월간 일정 안내")
-	eq(c.sends[0].vars, { "#{학생이름}": "김하윤", "#{클래스}": "중2 B", "#{안내월}": "11월", "#{휴원일정}": "없음", "#{학원일정}": "11/14(토) 보충\n11/20(금) 설명회", "#{학교일정}": "11/9(월)~11/11(수) A중 기말고사", "#{페이지ID}": "/r.html?token=tok" })
+	eq(c.sends[0].vars, { "#{학생이름}": "김하윤", "#{클래스}": "중2 B", "#{안내월}": "11월", "#{휴원일정}": "없음", "#{학원일정}": "11/14(토) 보충\n11/20(금) 설명회", "#{학사일정}": "11/9(월)~11/11(수) A중 기말고사", "#{페이지ID}": "/r.html?token=tok" })
 	eq(c.sent, [{ s: "s1", ids: ["a2", "x1"], month: "2026-11" }])
 	eq(c.logs, [{ cat: "월간 일정 안내", status: "성공", reg: "r1" }])
 	eq(c.updates.at(-1), { id: "cls", props: { "일정 안내 월": { rich_text: [{ text: { content: "2026-11" } }] } } })
