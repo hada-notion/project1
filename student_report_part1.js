@@ -78,6 +78,22 @@ function scorePillText(correct, total) {
   const pct = Math.round(((correct ?? 0) / total) * 100)
   return `${pct}점 (${correct ?? 0}/${total})`
 }
+// (v2.8.0) 평가 구분·기간 한 줄(평가 카드 아래 줄). 일일 평가(수업에서 본 평가)는 날짜 묶음과 같아 적지 않고,
+// 출석 없이 만든 평가만 평가 기간을 적는다. 교재·범위가 없어 제목이 평가 구분이면 아래 줄에는 기간만 적는다.
+function testTitle(t) {
+  return [t.book, t.range].filter(Boolean).join(" · ") || t.evalType || "평가"
+}
+function testEvalRow(t) {
+  const type = t.evalType && t.evalType !== "일일 평가" && testTitle(t) !== t.evalType ? t.evalType : ""
+  const md = (d) => String(d).slice(5, 10).replace("-", ".")
+  const s = String(t.evalStart || "").slice(0, 10), e = String(t.evalEnd || "").slice(0, 10)
+  const period = t.standalone && s ? (e && e !== s ? `${md(s)} ~ ${md(e)}` : md(s)) : ""
+  return [type, period].filter(Boolean).join(" · ")
+}
+// (v2.8.0) 클래스 '리포트 구성'이 "평가만"인 반: 출결·과제·일간 보고서를 숨기고 평가 중심으로 보여 준다.
+function isTestsOnly(r) {
+  return !!r && r.report_mode === "tests_only"
+}
 // (v2.8.0) 평가 점수를 가로 막대로 보여 준다. 위 줄은 "OOO 학생" 점수, 반 평균이 있으면 아래 줄에 반 평균을 더한다.
 function studentLabel() {
   const name = (STUDENT && STUDENT.student_name) || ""
@@ -480,10 +496,11 @@ function mapRegistration(reg) {
     // 마감일이 아니라 수업일(그 과제를 실제로 내준 날) 기준으로 판단하려면 이 값이 있어야 한다.
     homework: (reg.homework || []).map((h) => ({ type: "과제", title: h.title || "", book: h.book || "", range: h.range || "", unit: h.unit || "", note: h.note || "", due: h.due_iso || null, classDate: isoToKstDate(h.iso) || null, status: h.status || "미제출", sourceBody: normalizeFeedBody(h.source_body), activityBody: normalizeFeedBody(h.activity_body) })),
     homework_days: (reg.homework_days || []).map((h) => ({ date: h.date || null, status: h.status || "미완료", submitted: h.submitted ?? 0, total: h.total ?? 0 })),
-    tests: (reg.tests || []).map((t) => ({ type: "평가", title: t.title || "", book: t.book || "", range: t.range || "", unit: t.unit || "", note: t.note || "", date: isoToKstDate(t.iso) || (t.iso ? String(t.iso).slice(0, 10) : null), correct: t.correct ?? 0, total: t.total ?? 0, classAvg: typeof t.class_avg === "number" ? t.class_avg : null, sourceBody: normalizeFeedBody(t.source_body), activityBody: normalizeFeedBody(t.activity_body) })),
+    tests: (reg.tests || []).map((t) => ({ type: "평가", title: t.title || "", book: t.book || "", range: t.range || "", unit: t.unit || "", note: t.note || "", date: isoToKstDate(t.iso) || (t.iso ? String(t.iso).slice(0, 10) : null), correct: t.correct ?? 0, total: t.total ?? 0, classAvg: typeof t.class_avg === "number" ? t.class_avg : null, evalType: t.eval_type || "", evalStart: t.eval_start || null, evalEnd: t.eval_end || null, standalone: !!t.standalone, sourceBody: normalizeFeedBody(t.source_body), activityBody: normalizeFeedBody(t.activity_body) })),
     teacher_comments: (reg.teacher_comments || []).map((c) => ({ text: c.text || "", date: c.iso || null, by: c.by || "" })),
     // 주간/월간 보고서: 보고서(학원) DB 자체의 "선생님 한마디"를 보고서 구분·학습 기간과 함께 보관한다.
     report_comments: (reg.report_comments || []).map((c) => ({ kind: c.kind || "", start: c.start || null, end: c.end || c.start || null, comment: c.comment || "" })),
+    report_mode: reg.report_mode === "tests_only" ? "tests_only" : "all",
   }
 }
 
@@ -553,6 +570,7 @@ async function loadReportFromServer() {
               tests: detail.tests,
               teacher_comments: detail.teacher_comments,
               report_comments: detail.report_comments,
+              report_mode: detail.report_mode,
             }
           : r
       ))
@@ -672,13 +690,15 @@ function normBookTitle(v) {
   return String(v || "").trim()
 }
 function regTabsList() {
+  // (v2.8.0) 평가만 보는 반은 출결·과제 달력이 없어 캘린더 탭을 뺀다.
+  const testsOnly = typeof currentReg === "function" && isTestsOnly(currentReg())
   return [
     { id: "home", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>`, label: "홈" },
     { id: "books", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>`, label: "교재" },
     { id: "calendar", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`, label: "캘린더" },
     { id: "study", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`, label: "학습기록" },
     { id: "report", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>`, label: "보고서" },
-  ]
+  ].filter((t) => !(testsOnly && t.id === "calendar"))
 }
 function regTabbarHtml(activeId, fromBook) {
   const tabs = regTabsList()

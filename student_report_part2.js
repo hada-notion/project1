@@ -416,7 +416,7 @@ function logCardHtml(l) {
                 ${l.compare || ""}
                 ${(() => {
                   // (v2.5.98) 날짜로 묶인 목록이라 출제일은 묶음 날짜와 같아 빼고 마감만 보인다.
-                  const meta = renderLogMetaRows(l.unit, l.note, l.type === "과제" && l.due ? [`마감: ${withDow(l.due)}`] : [])
+                  const meta = renderLogMetaRows(l.unit, l.note, [...(l.type === "과제" && l.due ? [`마감: ${withDow(l.due)}`] : []), ...(l.extraRows || [])])
                   const bodyHtml = buildLogBodyHtml(l)
                   const hasExtra = l.photo || !!bodyHtml
                   const chevronBtn = hasExtra ? `<button type="button" class="log-extra-chevron" onclick="toggleLogExtra(this)" aria-label="펼치기"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>` : ""
@@ -432,7 +432,7 @@ const logItemOfStudy = (l) => ({ type: "학습", icon: KIND_ICONS["학습"], dat
 const logItemOfHomework = (h) => ({ type: "과제", icon: KIND_ICONS["과제"], date: h.classDate || h.due, due: h.due, classDate: h.classDate, title: [h.book, h.range].filter(Boolean).join(" · "), unit: h.unit, note: h.note, pill: h.status, pillTone: homeworkPillTone(h.status), book: h.book, sourceBody: h.sourceBody, activityBody: h.activityBody })
 // 평가 아이콘은 학습기록 탭이 써 온 Feather file-text 그대로(KIND_ICONS 평가와 줄 하나 다름)
 const LOG_TEST_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`
-const logItemOfTest = (t) => ({ type: "평가", icon: LOG_TEST_ICON, date: t.date, title: [t.book, t.range].filter(Boolean).join(" · "), unit: t.unit, note: t.note, pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), book: t.book, sourceBody: t.sourceBody, activityBody: t.activityBody , compare: testCompareBarsHtml(t) })
+const logItemOfTest = (t) => ({ type: "평가", icon: LOG_TEST_ICON, date: t.date, title: testTitle(t), extraRows: testEvalRow(t) ? [testEvalRow(t)] : [], unit: t.unit, note: t.note, pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), book: t.book, sourceBody: t.sourceBody, activityBody: t.activityBody , compare: testCompareBarsHtml(t) })
 // 고른 날짜의 기록: 출석 상태 + 그날 학습·그날 낸 과제·그날 평가. v2.5.101부터 한 카드에 구분선으로 잇지 않고 학습기록 탭과 같은 독립 카드.
 function buildCalDayPanelHtml(r, date) {
   const att = (r.attendance_rows || []).find((a) => a.date === date)
@@ -493,8 +493,15 @@ function buildHomeTabHtml(r) {
     .sort((a, b) => a.due.localeCompare(b.due))
   const books = (r.books || []).filter((b) => normalizeBookStatus(b.status) === "진행중")
   const comment = (r.teacher_comments || []).filter((c) => c.text).slice().sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))[0]
+  // (v2.8.0) 평가만 보는 반: 오늘(출석·남은 과제·다음 수업)과 남은 과제 대신 최근 평가와 최근 평가 추이를 보여 준다.
+  const recentTests = (r.tests || []).filter((t) => t.date && t.date <= MOCK_TODAY).slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 3)
+  const topHtml = isTestsOnly(r) ? `
+      <h3 class="sec-title"><span class="sec-icon">${KIND_ICONS["평가"]}</span>최근 평가</h3>
+      <div class="card">${recentTests.length ? recentTests.map((t) => kindBlockHtml("평가", { title: testTitle(t), pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), sub: [shortDateDow(t.date), testEvalRow(t)].filter(Boolean).join(" · ") })).join("") : `<div class="empty">아직 평가 기록이 없어요.</div>`}</div>
+      <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span>최근 평가 추이</h3>
+      <div class="card">${buildTestTrendChartHtml(computeRecentTestPoints(r.tests || [], MOCK_TODAY, 5))}</div>` : ""
   return `
-    <div class="feed-narrow-wrap">
+    <div class="feed-narrow-wrap">${topHtml}${isTestsOnly(r) ? "" : `
       <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line></svg></span>오늘 ${esc(formatDateLabel(MOCK_TODAY).replace(/^\d+년 /, ""))}</h3>
       <div class="card">
         <div class="home-stats">
@@ -504,7 +511,7 @@ function buildHomeTabHtml(r) {
         </div>
       </div>
       <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></span>남은 과제</h3>
-      <div class="card">${pending.length ? pending.slice(0, 3).map((h) => kindBlockHtml("과제", { title: [h.book, h.range].filter(Boolean).join(" · ") || "과제", pill: h.status, pillTone: homeworkPillTone(h.status), sub: `마감 ${shortDateDow(h.due)}` })).join("") : `<div class="empty">남은 과제가 없어요.</div>`}</div>
+      <div class="card">${pending.length ? pending.slice(0, 3).map((h) => kindBlockHtml("과제", { title: [h.book, h.range].filter(Boolean).join(" · ") || "과제", pill: h.status, pillTone: homeworkPillTone(h.status), sub: `마감 ${shortDateDow(h.due)}` })).join("") : `<div class="empty">남은 과제가 없어요.</div>`}</div>`}
       <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></span>교재 진도</h3>
       <div class="card">${books.length ? books.map((b) => `
         <div class="home-progress-row" onclick="openBookStudy(${jsArg(b.title)})" style="cursor:pointer">
@@ -845,6 +852,9 @@ function buildTestTrendChartHtml(points) {
   `
 }
 function buildReportTabHtml(r) {
+  // (v2.8.0) 평가만 보는 반은 일간 보고서가 없다(출석이 없음). 주간부터 보여 준다.
+  const testsOnly = isTestsOnly(r)
+  if (testsOnly && reportPeriod === "day") reportPeriod = "week"
   const homework = r.homework || []
   const tests = r.tests || []
   const reportComments = r.report_comments || []
@@ -865,7 +875,7 @@ function buildReportTabHtml(r) {
   const periodLabel = reportPeriodButtonLabel()
   const segToggleHtml = `
     <div class="seg-toggle">
-      <button class="${reportPeriod === "day" ? "active" : ""}" onclick="setReportPeriod('day')">일간 보고서</button>
+      ${testsOnly ? "" : `<button class="${reportPeriod === "day" ? "active" : ""}" onclick="setReportPeriod('day')">일간 보고서</button>`}
       <button class="${reportPeriod === "week" ? "active" : ""}" onclick="setReportPeriod('week')">주간 보고서</button>
       <button class="${reportPeriod === "month" ? "active" : ""}" onclick="setReportPeriod('month')">월간 보고서</button>
     </div>
@@ -891,7 +901,7 @@ function buildReportTabHtml(r) {
   }
   return `
     <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg></span>보고서</h2>
-    <div class="section-hint">일간·주간·월간 보고서를 볼 수 있어요</div>
+    <div class="section-hint">${testsOnly ? "주간·월간" : "일간·주간·월간"} 보고서를 볼 수 있어요</div>
     <div class="feed-narrow-wrap">
     ${segToggleHtml}
     <div class="cal-month-nav">
@@ -902,8 +912,8 @@ function buildReportTabHtml(r) {
         <button class="cal-nav-btn" ${reportOffset === 0 ? "disabled" : ""} onclick="navigateReportPeriod(-1)">›</button>
       </div>
     </div>
-    <div class="report-donut-row three">
-      <div class="donut-card">
+    <div class="report-donut-row${testsOnly ? "" : " three"}">
+      ${testsOnly ? "" : `<div class="donut-card">
         <div class="donut-title"><span class="inline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg></span>출석률</div>
         <div class="donut" style="background: conic-gradient(${bandChartColor(attRate)} 0% ${attRate}%, var(--brand-soft) ${attRate}% 100%)"><div class="donut-hole">${attRate}%</div></div>
         <div class="donut-count-below">(${presentCount}/${countedAttendanceRows.length})</div>
@@ -912,7 +922,7 @@ function buildReportTabHtml(r) {
         <div class="donut-title"><span class="inline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg></span>과제이행률</div>
         <div class="donut" style="background: conic-gradient(${bandChartColor(hwRate)} 0% ${hwRate}%, var(--brand-soft) ${hwRate}% 100%)"><div class="donut-hole">${hwRate}%</div></div>
         <div class="donut-count-below">(${doneHomework}/${homeworkItems.length})</div>
-      </div>
+      </div>`}
       <div class="donut-card${testItems.length ? " clickable" : ""}"${testItems.length ? ` onclick="showTestPeriodModal('${rangeStart}','${rangeEnd}','${esc(periodLabel)} 평가')"` : ""}>
         <div class="donut-title"><span class="inline-icon">${KIND_ICONS["평가"]}</span>평가 평균</div>
         <div class="donut" style="background: conic-gradient(${bandChartColor(testAvg ?? 0)} 0% ${testAvg ?? 0}%, var(--brand-soft) ${testAvg ?? 0}% 100%)"><div class="donut-hole">${testAvg !== null ? testAvg.toFixed(1) + "점" : "–"}</div></div>
@@ -1094,20 +1104,21 @@ function renderDetail() {
     `,
     study: `
       <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg></span>학습기록</h2>
-      <div class="section-hint">학습 · 과제 · 평가 기록을 최근 순서로 보여줘요</div>
-      <div class="seg-toggle">
+      <div class="section-hint">${isTestsOnly(r) ? "평가 기록을 최근 순서로 보여줘요" : "학습 · 과제 · 평가 기록을 최근 순서로 보여줘요"}</div>
+      ${isTestsOnly(r) ? "" : `<div class="seg-toggle">
         <button class="${studyLogFilter === "전체" ? "active" : ""}" onclick="setStudyLogFilter('전체')">전체</button>
         <button class="${studyLogFilter === "학습" ? "active" : ""}" onclick="setStudyLogFilter('학습')">학습</button>
         <button class="${studyLogFilter === "과제" ? "active" : ""}" onclick="setStudyLogFilter('과제')">과제</button>
         <button class="${studyLogFilter === "평가" ? "active" : ""}" onclick="setStudyLogFilter('평가')">평가</button>
-      </div>
+      </div>`}
       <div class="feed-narrow-wrap">
       ${(() => {
         const items = []
         studyLogs.forEach((l) => items.push(logItemOfStudy(l)))
         homework.forEach((h) => items.push(logItemOfHomework(h)))
         tests.forEach((t) => items.push(logItemOfTest(t)))
-        const filtered = studyLogFilter === "전체" ? items : items.filter((it) => it.type === studyLogFilter)
+        const filter = isTestsOnly(r) ? "평가" : studyLogFilter
+        const filtered = filter === "전체" ? items : items.filter((it) => it.type === filter)
         // (v2.5.103) 오늘이 맨 위 → 지난 날짜 최근부터 → 앞으로 날짜는 가까운 날부터 맨 아래
         const rank = (d) => (d === MOCK_TODAY ? 0 : d < MOCK_TODAY ? 1 : 2)
         const sorted = filtered.slice().sort((a, b) => rank(a.date) - rank(b.date) || (rank(a.date) === 2 ? (a.date < b.date ? -1 : a.date > b.date ? 1 : 0) : (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)))
