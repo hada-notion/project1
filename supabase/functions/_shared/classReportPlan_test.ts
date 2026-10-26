@@ -1,5 +1,5 @@
 // All network calls are mocked. No live Notion/Supabase writes or secret values are used.
-for (const [key, value] of Object.entries({ NOTION_TOKEN: "test-only", ADMIN_SECRET: "test-only", SB_URL: "https://mock.supabase", SB_SERVICE_ROLE_KEY: "test-only", DATA_SOURCE_REGISTRATION_ID: "registrations", DATA_SOURCE_REPORT_ID: "reports", DATA_SOURCE_ATTENDANCE_ID: "attendance", DATA_SOURCE_LEARNING_RECORD_ID: "records", DATA_SOURCE_STUDY_ACTIVITY_ID: "activities" })) Deno.env.set(key, value)
+for (const [key, value] of Object.entries({ NOTION_TOKEN: "test-only", ADMIN_SECRET: "test-only", SB_URL: "https://mock.supabase", SB_SERVICE_ROLE_KEY: "test-only", DATA_SOURCE_REGISTRATION_ID: "registrations", DATA_SOURCE_REPORT_ID: "reports", DATA_SOURCE_ATTENDANCE_ID: "attendance", DATA_SOURCE_LEARNING_RECORD_ID: "records", DATA_SOURCE_STUDY_ACTIVITY_ID: "activities", DATA_SOURCE_PROGRESS_BOOK_ID: "books" })) Deno.env.set(key, value)
 const eq = (a: unknown, b: unknown) => { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error(`expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`) }
 const throwsWith = (fn: () => unknown, part: string) => { try { fn() } catch (e) { if (!(e as Error).message.includes(part)) throw new Error(`message ${(e as Error).message}`); return } throw new Error("expected throw") }
 const m = await import("./classReportPlan.ts")
@@ -38,12 +38,13 @@ Deno.test("v2.8.0 반별 보고서: 기간 안에 다니는 등록, 학생 이�
 })
 
 type Calls = { created: any[]; updates: any[]; enqueued: any[]; marks: string[] }
-function mock(data: { batches?: any[]; regs?: any[]; reports?: any[]; atts?: any[]; evals?: any[]; evalActs?: any[]; classError?: string; createFails?: boolean }): Calls {
+function mock(data: { books?: any[]; batches?: any[]; regs?: any[]; reports?: any[]; atts?: any[]; evals?: any[]; evalActs?: any[]; classError?: string; createFails?: boolean }): Calls {
 	const calls: Calls = { created: [], updates: [], enqueued: [], marks: [] }
 	Object.assign(deps, {
 		batchDataSourceId: async () => "batches",
 		queryAllPages: async (ds: string, filter: any) => {
 			if (ds === "batches") return data.batches ?? []
+			if (ds === "books") return data.books ?? []
 			if (ds === "registrations") return data.regs ?? []
 			if (ds === "reports") return data.reports ?? []
 			if (ds === "attendance") return data.atts ?? []
@@ -71,14 +72,19 @@ Deno.test("v2.8.0 반별 보고서: 같은 반·구분·기간 발송함을 다�
 	const calls = mock({
 		batches: [
 			{ id: "b-old", properties: { "기간": range("2026-10-12", "2026-10-18") } },
-			{ id: "b-same", properties: { "기간": range("2026-10-19", "2026-10-25") } },
+			{ id: "b-same", properties: { "기간": range("2026-10-19", "2026-10-25"), "진도교재": rel("bk0") } },
 		],
+		books: [{ id: "bk0" }, { id: "bk1" }],
 		regs: [regPage("r1", "2026-09-01"), regPage("r2", "2026-09-01"), regPage("r3", "2026-10-27"), regPage("r4", "2026-09-01", "2026-10-10")],
 		reports: [{ id: "rep", properties: { "등록": rel("r2") } }],
 	})
 	await m.processClassReportsQueueItem(P)
 	eq(calls.created.length, 0)
-	eq(calls.updates, [{ id: "cls", props: { "보고서 생성 대상": { relation: [{ id: "b-same" }] } } }])
+	// (v2.8.0) 반의 진행 중 진도교재를 발송함에 더한다(이미 있던 bk0은 그대로, bk1만 추가).
+	eq(calls.updates, [
+		{ id: "b-same", props: { "진도교재": { relation: [{ id: "bk0" }, { id: "bk1" }] } } },
+		{ id: "cls", props: { "보고서 생성 대상": { relation: [{ id: "b-same" }] } } },
+	])
 	eq(calls.enqueued, [{ target: "registration-report", payload: { ...P, batchId: "b-same", regId: "r1", last: true } }])
 	eq(calls.marks, ["running:cls"])
 })

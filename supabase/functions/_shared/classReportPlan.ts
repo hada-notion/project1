@@ -16,7 +16,7 @@
 // (예전 generate-report가 그랬다, process-sync-queue/index.ts 주석). 학생 1건은 Notion 호출 몇 번이면 끝난다.
 // 건너뛰기: 큐 재시도·다시 누르기·같은 학생 작업이 두 번 들어와도 이 등록·이 발송함 보고서는 하나만 남는다.
 import { createPage, fetchWithRetry, fullRelationIds, getPage, notionHeaders, queryAllPages, queryDataSource, relIds, updatePageProperties } from "./notionClient.ts"
-import { DS_ATTENDANCE, DS_LEARNING_RECORD, DS_REGISTRATION, DS_REPORT, DS_STUDY_ACTIVITY, NOTION_API, PROP_LAST_ERROR } from "./constants.ts"
+import { DS_ATTENDANCE, DS_LEARNING_RECORD, DS_PROGRESS_BOOK, DS_REGISTRATION, DS_REPORT, DS_STUDY_ACTIVITY, NOTION_API, PROP_LAST_ERROR } from "./constants.ts"
 import { enqueueSync } from "./syncQueue.ts"
 import { markDone, markError, markRunning, type StatusSpec } from "./statusTracking.ts"
 
@@ -40,6 +40,7 @@ const PROP_BATCH_TITLE = "이름"
 const PROP_BATCH_KIND = "구분"
 const PROP_BATCH_PERIOD = "기간"
 const PROP_BATCH_CLASS = "클래스"
+const PROP_BATCH_BOOKS = "진도교재"
 // 보고서(학원) DB
 const PROP_REPORT_BATCH = "알림톡 발송함"
 
@@ -162,7 +163,7 @@ export async function resolveBatchDataSourceId(): Promise<string> {
 }
 
 // 같은 반·구분·기간 발송함을 찾고, 없으면 만든다. 발송함 DB에 '클래스' 관계가 없으면 알아볼 수 있는 오류로.
-async function findOrCreateBatch(p: ClassReportsPayload): Promise<{ id: string; created: boolean }> {
+async function findOrCreateBatch(p: ClassReportsPayload): Promise<{ id: string; created: boolean; page?: any }> {
 	const deps = classReportDeps
 	const ds = await deps.batchDataSourceId()
 	let found: any[]
@@ -183,7 +184,7 @@ async function findOrCreateBatch(p: ClassReportsPayload): Promise<{ id: string; 
 		const d = b?.properties?.[PROP_BATCH_PERIOD]?.date
 		return !b?.in_trash && !b?.archived && seoulDay(d?.start) === p.start && seoulDay(d?.end) === p.end
 	})
-	if (same) return { id: String(same.id), created: false }
+	if (same) return { id: String(same.id), created: false, page: same }
 	const page: any = await deps.createPage(ds, {
 		[PROP_BATCH_TITLE]: { title: [{ text: { content: batchTitle(p) } }] },
 		[PROP_BATCH_KIND]: { select: { name: p.kind } },
@@ -193,6 +194,27 @@ async function findOrCreateBatch(p: ClassReportsPayload): Promise<{ id: string; 
 	return { id: String(page.id), created: true }
 }
 
+// (v2.8.0) 발송함 "진도교재" 탭: 이 반의 진행 중 진도교재(반별 교재·그룹 교재, 학생별 개별교재 인스턴스는 제외)를 발송함 `진도교재`에
+// 더한다. 다시 누르면 새로 진행 중이 된 교재가 더해진다(이미 있던 것은 빼지 않는다). 발송함에 `진도교재` 칸이 아직 없는
+// 운영(항목 9 Notion 작업 전)에서는 건너뛰고 보고서 생성은 계속한다.
+async function linkClassBooks(batch: { id: string; page?: any }, classId: string): Promise<void> {
+	const deps = classReportDeps
+	try {
+		const books = (await deps.queryAllPages(DS_PROGRESS_BOOK, {
+			and: [
+				{ property: "클래스", relation: { contains: classId } },
+				{ property: "진행상태", status: { equals: "진행 중" } },
+				{ property: "반별교재", relation: { is_empty: true } },
+			],
+		})).filter((b: any) => !b?.in_trash && !b?.archived).map((b: any) => String(b.id))
+		const current = batch.page ? await deps.fullRelationIds(batch.page, PROP_BATCH_BOOKS) : []
+		const add = books.filter((id) => !current.some((c) => key(c) === key(id)))
+		if (add.length) await deps.update(batch.id, { [PROP_BATCH_BOOKS]: { relation: [...current, ...add].map((id) => ({ id })) } })
+	} catch (err) {
+		console.warn(`[create-class-reports] 발송함 진도교재 연결 건너뜀: ${(err as Error).message}`)
+	}
+}
+
 // 큐 "반 1건".
 export async function processClassReportsQueueItem(payload: ClassReportsPayload): Promise<void> {
 	const deps = classReportDeps
@@ -200,6 +222,7 @@ export async function processClassReportsQueueItem(payload: ClassReportsPayload)
 	try {
 		await deps.markRunning(p.classId)
 		const batch = await findOrCreateBatch(p)
+		await linkClassBooks(batch, p.classId)
 		// 클래스 화면의 '해당기간 보고서 생성 내역' 수식이 이 발송함으로 누락·중복을 보여 주도록 연결해 둔다.
 		await deps.update(p.classId, { [PROP_CLASS_BATCH]: { relation: [{ id: batch.id }] } })
 		const regs = (await deps.queryAllPages(DS_REGISTRATION, { property: "클래스", relation: { contains: p.classId } }))
