@@ -65,7 +65,8 @@ const CHECKLIST=[
   ['reg-textbook-queue','[웹훅] 교재 생성',AUTO,route('sync-registration-textbook'),{path:'/queue',trigger:{when:'속성 편집',select:['교재 생성 상태','⚪ 대기']},note:'주소 끝의 /queue까지 넣습니다. [교재 생성] 버튼은 교재 생성 상태만 바꾸고, 키는 이 자동화에 있습니다(v2.7).'}],
   ['reg-end-cleanup','종료 처리',BUTTON,route('sync-registration-textbook'),{path:'/cleanup-on-end',note:'주소 끝의 /cleanup-on-end까지 넣습니다. 버튼 마지막 단계의 교재 정리 웹훅입니다(v2.7).'}]]],
  ['클래스(학원)',[
-  ['class-report-sync','학생 페이지 동기화',BUTTON,route('sync-class-report-cache')]]],
+  ['class-report-sync','학생 페이지 동기화',BUTTON,route('sync-class-report-cache')],
+  ['class-report-create','보고서 생성',BUTTON,route('create-class-reports'),{note:'본문 속성은 보고서 구분·보고서 기간·클래스명을 고릅니다(v2.8.0).'}]]],
  ['메뉴(학원)',[['menu-bulk-classes','다음주 수업 일괄 생성',BUTTON,route('generate-classes'),{path:'?mode=bulk',note:'주소 끝의 ?mode=bulk까지 넣습니다.'}]],{
   text:'메뉴 DB의 어떤 페이지(예: 수업 HOME)를 열어도 제목 아래 속성 줄에 "다음주 수업 일괄 생성" 버튼이 있습니다. 속성 이름을 클릭하고 "자동화 편집"을 눌러 웹훅 보내기의 값 칸을 바꿉니다. 메뉴 DB에는 "웹훅 등록" 보기가 없어도 됩니다.',
   image:'assets/admin-settings/menu-bulk-button.png',alt:'메뉴 페이지 상단 속성 줄의 다음주 수업 일괄 생성 버튼'}],

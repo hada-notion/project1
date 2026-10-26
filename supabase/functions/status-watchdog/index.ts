@@ -44,6 +44,7 @@ import { CLASS_REPORT_SYNC_STATUS_SPEC } from "../_shared/classReportCacheTarget
 import { CART_STATUS_SPEC } from "../_shared/textbookDistributionTarget.ts"
 import { CASCADE_DELETE_STATUS_SPEC } from "../_shared/cascadeDeleteTarget.ts"
 import { ASSIGNMENT_GEN_STATUS_SPEC } from "../_shared/createAssignmentTarget.ts"
+import { CLASS_REPORT_GEN_STATUS_SPEC } from "../_shared/classReportPlan.ts"
 import { resolveMenuDataSourceId } from "../_shared/menuDataSource.ts"
 
 // 메뉴(학원) DB는 전용 Secret이 없다. 이 워치독은 그 안의 "시간표" 단일 행만 상태 관리 대상이다.
@@ -86,6 +87,8 @@ const TARGETS: Array<{ label: string; dataSourceId: string | (() => Promise<stri
 	{ label: "진도교재:학습기록", dataSourceId: DS_PROGRESS_BOOK, spec: RECORD_GEN_STATUS_SPEC },
 	// 클래스(학원) DB 상태. (v2.7.11) 보고서·수강료·교재비 생성 상태는 Notion 자동화만 쓰므로 뺐다.
 	{ label: "클래스:학생페이지동기화", dataSourceId: DS_CLASS, spec: CLASS_REPORT_SYNC_STATUS_SPEC },
+	// (v2.8.0) 보고서 생성은 다시 서버(create-class-reports, 큐)가 한다. 마지막 학생이 끝나지 못하고 멈추면 회수.
+	{ label: "클래스:보고서생성", dataSourceId: DS_CLASS, spec: CLASS_REPORT_GEN_STATUS_SPEC },
 	{ label: "클래스:교재생성", dataSourceId: DS_CLASS, spec: CLASS_TEXTBOOK_STATUS_SPEC },
 	// (2026-09-22, Phase 3) cascade-delete가 공유하는 "삭제 처리중" 상태 — 7개 DB(원래 마스터플랜
 	// 표엔 4개만 있었으나 코드 확인 후 교재비 계열 3개까지 범위 확장, cascadeDeleteTarget.ts 참고).

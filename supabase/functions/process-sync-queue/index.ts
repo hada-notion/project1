@@ -84,6 +84,7 @@ import { processDailyReportQueueItem } from "../_shared/dailyReportQueue.ts"
 import { processAssignmentQueueItem } from "../_shared/assignmentPlan.ts"
 import { processNoticeQueueItem } from "../_shared/noticeQueue.ts"
 import { processCartPlanQueueItem } from "../_shared/cartPlan.ts"
+import { processClassReportsQueueItem, processRegistrationReportQueueItem } from "../_shared/classReportPlan.ts"
 
 // target별 실제 처리 함수. 앞으로 다른 "일괄(bulk)" 웹훅 함수나, 사람이 여러 페이지를 동시에 클릭할
 // 수 있는 "개별" 웹훅 함수가 추가되면 여기에 추가한다 (위 2026-09-22 Phase 6 주석 참고).
@@ -125,6 +126,9 @@ const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Pro
   "notice": processNoticeQueueItem,
   // (v2.6.26) 교재비 [진도교재 담기] → sync-textbook-distribution/from-cart/queue (수식 "담기 계획"대로 배부만)
   "cart-plan": processCartPlanQueueItem,
+  // (v2.8.0) 클래스 [보고서 생성] → create-class-reports. 반 1건(발송함 찾기·만들기)이 학생 1건씩을 다시 넣는다.
+  "class-reports": processClassReportsQueueItem,
+  "registration-report": processRegistrationReportQueueItem,
 }
 
 // (2026-09-22, Phase 6) 이 워커 한 번의 실행(위 sync_queue_worker_lock으로 항상 한 번에 하나만
