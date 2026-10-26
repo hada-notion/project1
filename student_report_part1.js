@@ -78,6 +78,14 @@ function scorePillText(correct, total) {
   const pct = Math.round(((correct ?? 0) / total) * 100)
   return `${pct}점 (${correct ?? 0}/${total})`
 }
+// (v2.7.20) 반 평균이 있는 평가는 "우리 아이 / 반 평균" 가로 막대 두 줄로 비교한다(반 평균이 없으면 그리지 않는다).
+function testCompareBarsHtml(t) {
+  const avg = t && t.classAvg
+  if (typeof avg !== "number" || !t.total) return ""
+  const mine = Math.round(((t.correct ?? 0) / t.total) * 100)
+  const row = (label, value, cls) => `<div class="score-compare-row ${cls}"><span class="score-compare-label">${label}</span><span class="score-compare-track"><span class="score-compare-fill" style="width:${Math.max(0, Math.min(100, value))}%"></span></span><span class="score-compare-value">${value}점</span></div>`
+  return `<div class="score-compare">${row("우리 아이", mine, "mine")}${row("반 평균", Math.round(avg * 10) / 10, "class")}</div>`
+}
 // 학습기록 카드의 단원·내용은 각각 독립된 줄로 표시한다.
 // 단원은 "1-1." 같은 번호 패턴 앞에서 잘라 하나씩 별도 줄(불릿)로 보여준다 (단원이 하나뿐이어도 동일하게 처리).
 // 마감/날짜에도 같은 불릿 스타일을 쓰고, 내용은 원문만 그대로 보여준다.
@@ -1070,7 +1078,8 @@ function showTestDetailModal(i) {
     ? items.map((t) => `
       <div class="log-row 평가">
         <div class="log-title-row"><div class="log-title">${esc([t.book, t.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${scorePillTone(t.correct ?? 0, t.total ?? 0)}">${scorePillText(t.correct ?? 0, t.total ?? 0)}</span></div>
-        ${renderLogMetaRows(t.unit, t.note, [`날짜: ${t.date ? String(t.date).slice(0, 10) : "-"}`, t.classAvg !== null && t.classAvg !== undefined ? `반 평균: ${t.classAvg.toFixed(1)}점` : null].filter(Boolean))}
+        ${testCompareBarsHtml(t)}
+        ${renderLogMetaRows(t.unit, t.note, [`날짜: ${t.date ? String(t.date).slice(0, 10) : "-"}`])}
       </div>
     `).join("")
     : `<div class="log-row 평가"><div class="log-note">해당 기간 평가 기록이 없습니다.</div></div>`
@@ -1087,6 +1096,7 @@ function showTestPeriodModal(rangeStart, rangeEnd, label) {
     ? items.map((t) => `
       <div class="log-row 평가">
         <div class="log-title-row"><div class="log-title">${esc([t.book, t.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${scorePillTone(t.correct ?? 0, t.total ?? 0)}">${scorePillText(t.correct ?? 0, t.total ?? 0)}</span></div>
+        ${testCompareBarsHtml(t)}
         ${renderLogMetaRows(t.unit, t.note, rangeStart === rangeEnd ? [] : [`날짜: ${withDow(String(t.date).slice(0, 10))}`])}
       </div>
     `).join("")
