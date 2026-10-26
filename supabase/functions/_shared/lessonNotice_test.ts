@@ -29,23 +29,24 @@ Deno.test("v2.8.0 수업 안내: 일시 표기(서울, 오전·오후, 날짜만
 	eq(m.sameInstant("2026-10-30T17:00:00+09:00", "2026-10-30T18:00:00+09:00"), false)
 })
 
-Deno.test("v2.8.0 수업 안내: 처음이면 수업 안내, 보강이면 안내구분·기본 문구, 일반은 메모 또는 -", () => {
+Deno.test("v2.8.0 수업 안내: 보강이면 수업구분 보강 수업, 일반은 정규 수업, 전달사항은 메모 또는 없음, 날짜 26.10.30(금) 17:00", () => {
 	const p1: any = m.planLessonNotice(att(), ses(true))
 	eq(p1.kind, "수업 안내")
-	eq(p1.variables, { "#{안내구분}": "보강 수업", "#{학생이름}": "김하윤", "#{클래스}": "고1 A", "#{참고사항}": "없음", "#{수업일시}": "10월 30일(금) 오후 5:00" })
+	eq(p1.variables, { "#{수업구분}": "보강 수업", "#{학생이름}": "김하윤", "#{클래스}": "고1 A", "#{전달사항}": "없음", "#{수업일시}": "26.10.30(금) 17:00" })
 	const p2: any = m.planLessonNotice(att(), ses(false, "선거일이지만 정상 수업합니다."))
-	eq([p2.variables["#{안내구분}"], p2.variables["#{참고사항}"]], ["정규 수업", "선거일이지만 정상 수업합니다."])
-	eq((m.planLessonNotice(att(), ses(false)) as any).variables["#{참고사항}"], "없음")
+	eq([p2.variables["#{수업구분}"], p2.variables["#{전달사항}"]], ["정규 수업", "선거일이지만 정상 수업합니다."])
+	eq((m.planLessonNotice(att(), ses(false)) as any).variables["#{전달사항}"], "없음")
 	eq(m.noteText("  교재를\n 꼭  챙겨 주세요 "), "교재를 꼭 챙겨 주세요")
 	eq(m.noteText("가".repeat(60)), "가".repeat(49) + "…")
 	eq(m.noteText(null), "없음")
-	eq((m.planLessonNotice(att(), null) as any).variables["#{안내구분}"], "정규 수업")
+	eq([m.formatClassTime("2026-11-03T19:05:00+09:00"), m.formatClassTime("2026-01-04"), m.formatClassTime("2026-10-30T23:30:00.000Z")], ["26.11.03(화) 19:05", "26.01.04(일)", "26.10.31(토) 08:30"])
+	eq((m.planLessonNotice(att(), null) as any).variables["#{수업구분}"], "정규 수업")
 })
 
 Deno.test("v2.8.0 수업 안내: 받은 뒤 일시가 바뀌면 새 시간으로 수업 안내를 다시, 같으면 건너뜀, 결석·일시 없음은 안 보냄", () => {
 	const ch: any = m.planLessonNotice(att({ sent: "2026-10-29T17:00:00.000+09:00" }), ses(true))
 	eq(ch.kind, "수업 안내")
-	eq(ch.variables["#{수업일시}"], "10월 30일(금) 오후 5:00")
+	eq(ch.variables["#{수업일시}"], "26.10.30(금) 17:00")
 	eq(ch.variables["#{기존일시}"], undefined)
 	eq(m.planLessonNotice(att({ sent: "2026-10-30T08:00:00.000Z" }), ses(true)), { skip: "" })
 	eq((m.planLessonNotice(att({ status: "🔴 결석" }), ses(true)) as any).skip.includes("결석"), true)
