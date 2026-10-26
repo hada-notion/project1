@@ -784,7 +784,7 @@ function computeTestTrendPoints(tests, periodType, baseOffset) {
   }
   return points
 }
-// (v2.7.20) 반 평균: 각 평가에 붙은 class_avg(같은 학습기록에 묶인 학생들의 평가 점수 평균)를 한 점으로 모은다. 없으면 null.
+// (v2.8.0) 반 평균: 각 평가에 붙은 class_avg(같은 학습기록에 묶인 학생들의 평가 점수 평균)를 한 점으로 모은다. 없으면 null.
 function classAvgOf(items) {
   const vals = items.map((t) => t.classAvg).filter((v) => typeof v === "number")
   return vals.length ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length * 10) / 10 : null

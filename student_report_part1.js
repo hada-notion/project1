@@ -78,7 +78,7 @@ function scorePillText(correct, total) {
   const pct = Math.round(((correct ?? 0) / total) * 100)
   return `${pct}점 (${correct ?? 0}/${total})`
 }
-// (v2.7.20) 평가 점수를 가로 막대로 보여 준다. 위 줄은 "OOO 학생" 점수, 반 평균이 있으면 아래 줄에 반 평균을 더한다.
+// (v2.8.0) 평가 점수를 가로 막대로 보여 준다. 위 줄은 "OOO 학생" 점수, 반 평균이 있으면 아래 줄에 반 평균을 더한다.
 function studentLabel() {
   const name = (STUDENT && STUDENT.student_name) || ""
   return name ? `${name} 학생` : "학생"
