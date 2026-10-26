@@ -66,7 +66,8 @@ const CHECKLIST=[
   ['reg-end-cleanup','종료 처리',BUTTON,route('sync-registration-textbook'),{path:'/cleanup-on-end',note:'주소 끝의 /cleanup-on-end까지 넣습니다. 버튼 마지막 단계의 교재 정리 웹훅입니다(v2.7).'}]]],
  ['클래스(학원)',[
   ['class-report-sync','학생 페이지 동기화',BUTTON,route('sync-class-report-cache')],
-  ['class-report-create','보고서 생성',BUTTON,route('create-class-reports'),{note:'본문 속성은 보고서 구분·보고서 기간·클래스명을 고릅니다(v2.8.0).'}]]],
+  ['class-report-create','보고서 생성',BUTTON,route('create-class-reports'),{note:'본문 속성은 보고서 구분·보고서 기간·클래스명을 고릅니다(v2.8.0).'}],
+  ['class-schedule-month','월간 일정 안내',BUTTON,route('send-schedule-notice'),{path:'/class',note:'주소 끝의 /class까지 넣습니다. 다음 달 일정을 이 반 학생들에게 보냅니다(v2.8.0).'}]]],
  ['알림톡 발송함(학원)',[
   ['batch-eval-create','평가 생성',BUTTON,route('create-class-reports'),{path:'/evaluations',note:'주소 끝의 /evaluations까지 넣습니다. 진도교재 탭 안의 버튼, 본문 속성은 평가 계획만 고릅니다(v2.8.0).'}]]],
  ['메뉴(학원)',[['menu-bulk-classes','다음주 수업 일괄 생성',BUTTON,route('generate-classes'),{path:'?mode=bulk',note:'주소 끝의 ?mode=bulk까지 넣습니다.'}]],{
@@ -103,7 +104,8 @@ const CHECKLIST=[
  ['라이브러리(학원)',[['book-report-sync','[웹훅] 리포트 반영 · 속성 편집',AUTO,route('sync-report-cache'),{trigger:{when:'속성 편집'}}],
   ['book-report-sync-new','[웹훅] 리포트 반영 · 페이지 추가',AUTO,route('sync-report-cache'),{trigger:{when:'페이지 추가'}}]]],
  ['일정(학원)',[['schedule-report-sync','[웹훅] 리포트 반영 · 속성 편집',AUTO,route('sync-report-cache'),{trigger:{when:'속성 편집'}}],
-  ['schedule-report-sync-new','[웹훅] 리포트 반영 · 페이지 추가',AUTO,route('sync-report-cache'),{trigger:{when:'페이지 추가'}}]]],
+  ['schedule-report-sync-new','[웹훅] 리포트 반영 · 페이지 추가',AUTO,route('sync-report-cache'),{trigger:{when:'페이지 추가'}}],
+  ['schedule-event-notice','일정 안내 전송',BUTTON,route('send-schedule-notice'),{path:'/event',note:'주소 끝의 /event까지 넣습니다. 이 일정에 연결된 학생·반에 일정 안내를 보냅니다(v2.8.0).'}]]],
 ];
 // Webhook routes with no Notion button or automation, so they are not checklist items:
 // sync-attendance and sync-class-room-copy (GitHub Actions manual runs; their GitHub Secret is noted below the checklist).

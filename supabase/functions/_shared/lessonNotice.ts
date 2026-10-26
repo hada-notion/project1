@@ -19,6 +19,7 @@ import {
   getBotUserId,
   notionGetPage,
   notionPatchPageProperties,
+  type SendLogCategory,
 } from "./adminShared.ts"
 import { getFormulaText, normalizePhone, resolveAlimtalkRecipients } from "./alimtalkShared.ts"
 import { relIds } from "./notionClient.ts"
@@ -86,7 +87,8 @@ const SOLAPI_API_SECRET = Deno.env.get("SOLAPI_API_SECRET") ?? ""
 const SOLAPI_SENDER_NUMBER_FALLBACK = Deno.env.get("SOLAPI_SENDER_NUMBER") ?? ""
 
 // 템플릿 ID·채널 기본값(Secrets)을 쓰지 않는다: 설정 행이 꺼졌거나 비었으면 다른 템플릿으로 나가지 않게 막는다.
-async function sendLessonAlimtalk(kind: LessonNoticeKind, registrationId: string, primaryPhone: string, variables: Record<string, string>) {
+// (v2.8.0) 일정 안내(_shared/scheduleNotice.ts)도 같은 규칙으로 이 함수를 쓴다. primaryPhone이 비면 등록의 우선 연락처를 읽는다.
+export async function sendConfiguredAlimtalk(kind: SendLogCategory, registrationId: string, primaryPhone: string, variables: Record<string, string>) {
   const config = await getAlimtalkConfig(kind, { pfId: "", templateId: "", senderNumber: SOLAPI_SENDER_NUMBER_FALLBACK })
   if (!config.templateId || !config.pfId) throw new LessonConfigError(`알림톡 설정의 '${kind}' 행을 켜고(활성 여부) 카카오 채널 ID·템플릿 ID를 넣어 주세요.`)
   const recipients = await resolveAlimtalkRecipients({ registrationId, primaryPhone, recipientTarget: config.recipientTarget })
@@ -110,7 +112,7 @@ export class LessonConfigError extends Error {}
 export const lessonNoticeDeps = {
   getPage: notionGetPage,
   patch: notionPatchPageProperties,
-  send: sendLessonAlimtalk,
+  send: sendConfiguredAlimtalk,
   log: createSendLogEntry,
   botUser: getBotUserId,
 }

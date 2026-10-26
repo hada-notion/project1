@@ -19,7 +19,7 @@ import {
 } from "./reportCacheShared.ts"
 import { isParentPublicEvent, NOTICE_VISIBILITY_POLICY } from "./scheduleVisibility.ts"
 import { selectAttendanceByRegistrationId } from "./attendanceSyncShared.ts"
-import { DS_STUDY_ACTIVITY, DS_REPORT } from "./constants.ts"
+import { DS_STUDY_ACTIVITY, DS_REPORT, DS_SCHEDULE_EVENT } from "./constants.ts"
 import { libraryIds } from "./libraryProp.ts"
 import { libraryCopyReady, readUnits } from "./libraryCopy.ts"
 import { unitNamesOf, unitTextOf } from "./selectedUnits.ts"
@@ -48,6 +48,23 @@ function stripLeadingEmoji(s: string): string {
 async function shareQueriedPages(pages: any[], cachedGetPage: (id: string) => Promise<any>): Promise<any[]> {
   const seed = (cachedGetPage as ((id: string) => Promise<any>) & { seed?: (page: any) => Promise<any> }).seed
   return seed ? await Promise.all(pages.map((page) => seed(page))) : pages
+}
+
+// (v2.8.0) 학원 전체 일정: 클래스·학생·학교·학년이 모두 빈 학부모 공개 일정. 어느 학생에게도 연결되지 않아 예전에는 리포트에
+// 나오지 않았다(월간 일정 안내와 같은 기준으로 모든 학생에게 보이게 한다). 같은 실행 안에서는 한 번만 조회한다(1분).
+let academyWideCache: { at: number; since: string; pages: any[] } | null = null
+async function academyWideEvents(sinceIso: string): Promise<any[]> {
+  if (academyWideCache && academyWideCache.since === sinceIso && Date.now() - academyWideCache.at < 60_000) return academyWideCache.pages
+  const pages = (await queryAllPages(DS_SCHEDULE_EVENT, {
+    and: [
+      { property: "학부모 공개", checkbox: { equals: true } },
+      { property: "숨김", checkbox: { equals: false } },
+      { property: "날짜", date: { on_or_after: sinceIso.slice(0, 10) } },
+    ],
+  }).catch((err) => { console.warn("[report-cache] 학원 전체 일정 조회 건너뜀:", (err as Error).message); return [] }))
+    .filter((n: any) => ["클래스", "학생", "학교", "학년"].every((k) => relationIds(n.properties?.[k]).length === 0))
+  academyWideCache = { at: Date.now(), since: sinceIso, pages }
+  return pages
 }
 
 export async function buildStudentNotices(
@@ -79,12 +96,17 @@ export async function buildStudentNotices(
   const classPages = await Promise.all(activeClassIds.map((id: string) => cachedGetPage(id)))
   const classNoticeIds = classPages.flatMap((c: any) => relationIds(c.properties["일정"]))
 
-  const directIds = new Set<string>([...studentNoticeIds, ...classNoticeIds])
-  const candidateIds = Array.from(new Set<string>([...directIds, ...schoolNoticeIds, ...gradeNoticeIds]))
-  if (!candidateIds.length) return []
-
   const sinceIso = sinceIsoMonthsAgo(DETAIL_LOOKBACK_MONTHS)
-  const noticePages = await Promise.all(candidateIds.map((id: string) => cachedGetPage(id)))
+  const academyPages = await academyWideEvents(sinceIso)
+  const directIds = new Set<string>([...studentNoticeIds, ...classNoticeIds, ...academyPages.map((n: any) => n.id)])
+  const candidateIds = Array.from(new Set<string>([...studentNoticeIds, ...classNoticeIds, ...schoolNoticeIds, ...gradeNoticeIds]))
+  if (!candidateIds.length && !academyPages.length) return []
+
+  const academyById = new Map(academyPages.map((n: any) => [n.id, n]))
+  const noticePages = [
+    ...await Promise.all(candidateIds.filter((id) => !academyById.has(id)).map((id: string) => cachedGetPage(id))),
+    ...academyPages,
+  ]
 
   return noticePages
     .filter((n: any) => {
