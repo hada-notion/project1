@@ -8,7 +8,7 @@
 // 그대로 큐에 담는다. 본문에 없으면 잠금 확인 때 읽은 클래스 페이지 값을 쓴다. 값이 틀리면 만들지 않고 ⚠️ 오류와
 // '마지막 오류'에 고칠 곳을 남긴다. x-admin-key(웹훅 키) 필요.
 //
-// (v2.8.0) 경로 /evaluations: 알림톡 발송함 [평가 만들기]. 본문의 발송함 수식 '평가 계획'(체크한 진도교재마다 평가 1개)을
+// (v2.8.0) 경로 /evaluations: 알림톡 발송함 [평가 생성]. 본문의 발송함 수식 '평가 계획'(체크한 진도교재마다 평가 1개)을
 // 큐에 넣는다. 처리는 _shared/evaluationPlan.ts. 상태는 발송함 '평가 생성 상태'.
 import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 import { getCurrentAdminKey, resolveAdminKeyFromRequest } from "../_shared/adminShared.ts"
@@ -60,7 +60,7 @@ Deno.serve(async (req: Request) => {
 	}
 })
 
-// 발송함 [평가 만들기]: 잠금 확인 → ⏳ 대기열 → 큐. 계획 검사·발송함 구분 확인은 큐가 한다(발송함을 이미 읽으므로).
+// 발송함 [평가 생성]: 잠금 확인 → ⏳ 대기열 → 큐. 계획 검사·발송함 구분 확인은 큐가 한다(발송함을 이미 읽으므로).
 async function queueEvaluations(body: Record<string, unknown>): Promise<Response> {
 	const batchId = extractPageId(body)
 	if (!batchId) return json({ error: "pageId를 찾을 수 없음" }, 400)

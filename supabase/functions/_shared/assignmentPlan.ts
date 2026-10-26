@@ -6,7 +6,7 @@
 //   {"v":1,"c":"과제","s":"수업","items":[{"a":"출석","r":"등록","d":"다음 출석(과제만)","t":"[과제] 학생 MM.DD(요일)"}]}
 // 서버가 학생마다 하던 출석 읽기·등록 읽기(이름)·다음 출석 찾기가 없어지고, 학습활동 만들기만 남는다.
 // 원칙: 학습활동은 출석 기준(학생 한 명·출석 한 건). 과제 마감도 그 학생 등록의 다음 출석이다.
-// (v2.8.0) 예외: 출석 없이 만든 평가(클래스 [평가 만들기], 평가 전용 반)는 "a"가 비어 있고 등록만 있다.
+// (v2.8.0) 예외: 출석 없이 만든 평가(클래스 [평가 생성], 평가 전용 반)는 "a"가 비어 있고 등록만 있다.
 //   그런 학습활동은 출석 없이 만들고, 리포트는 학습기록 '평가 기간'으로 날짜를 잡는다.
 //   출석·수업으로 만든 평가는 학습기록 '평가 구분'이 비어 있으면 '일일 평가'로 채운다.
 //
@@ -96,7 +96,7 @@ export const assignmentPlanDeps = {
 	markDone: (id: string) => markDone(id, ASSIGNMENT_GEN_STATUS_SPEC),
 	markError: (id: string, message: string) => markError(id, ASSIGNMENT_GEN_STATUS_SPEC, message),
 	legacy: finishCreateAssignment,
-	// (v2.8.0) 발송함 [평가 만들기]로 만든 출석 없는 평가 → 학생별 학습활동을 그 발송함 보고서에 붙인다(_shared/evaluationPlan.ts).
+	// (v2.8.0) 발송함 [평가 생성]로 만든 출석 없는 평가 → 학생별 학습활동을 그 발송함 보고서에 붙인다(_shared/evaluationPlan.ts).
 	linkBatch: (recordId: string) => linkRecordToBatchReports(recordId),
 }
 

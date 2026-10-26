@@ -130,7 +130,7 @@ const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Pro
   // (v2.8.0) 클래스 [보고서 생성] → create-class-reports. 반 1건(발송함 찾기·만들기)이 학생 1건씩을 다시 넣는다.
   "class-reports": processClassReportsQueueItem,
   "registration-report": processRegistrationReportQueueItem,
-  // (v2.8.0) 알림톡 발송함 [평가 만들기] → create-class-reports/evaluations. 교재마다 평가 기록 → create-assignment 큐.
+  // (v2.8.0) 알림톡 발송함 [평가 생성] → create-class-reports/evaluations. 교재마다 평가 기록 → create-assignment 큐.
   "batch-evaluations": processBatchEvaluationsQueueItem,
 }
 

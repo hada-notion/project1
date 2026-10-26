@@ -47,7 +47,7 @@ function mock(data: { kind?: string; books?: Record<string, boolean>; existing?:
 	return calls
 }
 
-Deno.test("v2.8.0 발송함 평가 만들기: 체크된 교재마다 평가 학습기록, 체크 해제, 학습활동 큐", async () => {
+Deno.test("v2.8.0 발송함 평가 생성: 체크된 교재마다 평가 학습기록, 체크 해제, 학습활동 큐", async () => {
 	const calls = mock({ books: { [B1]: true, [B2]: true } })
 	await m.processBatchEvaluationsQueueItem({ batchId: BATCH, plan: planJson([
 		{ b: B1, l: L1, s: [S1], r: [R1, R2], t: "[주간 평가] 수학 · 중2 B 10.19~10.25" },
@@ -72,7 +72,7 @@ Deno.test("v2.8.0 발송함 평가 만들기: 체크된 교재마다 평가 학�
 	eq(calls.marks, [`running:${BATCH}`, `done:${BATCH}`])
 })
 
-Deno.test("v2.8.0 발송함 평가 만들기: 체크가 풀린 교재·이미 평가가 있는 교재는 건너뛰고, 본문에 계획이 없으면 발송함 수식을 읽는다", async () => {
+Deno.test("v2.8.0 발송함 평가 생성: 체크가 풀린 교재·이미 평가가 있는 교재는 건너뛰고, 본문에 계획이 없으면 발송함 수식을 읽는다", async () => {
 	const calls = mock({
 		books: { [B1]: false, [B2]: true },
 		existing: [{ id: "old", properties: { "진도교재": rel(B2) } }],
@@ -85,7 +85,7 @@ Deno.test("v2.8.0 발송함 평가 만들기: 체크가 풀린 교재·이미 �
 	eq(calls.marks, [`running:${BATCH}`, `done:${BATCH}`])
 })
 
-Deno.test("v2.8.0 발송함 평가 만들기: 수강료 발송함·체크 없음·대상 학생 없음은 만들지 않고 ⚠️ 오류(재시도 없음)", async () => {
+Deno.test("v2.8.0 발송함 평가 생성: 수강료 발송함·체크 없음·대상 학생 없음은 만들지 않고 ⚠️ 오류(재시도 없음)", async () => {
 	let calls = mock({ kind: "수강료" })
 	await m.processBatchEvaluationsQueueItem({ batchId: BATCH, plan: planJson([{ b: B1, r: [R1] }]) })
 	eq(calls.created.length, 0)
