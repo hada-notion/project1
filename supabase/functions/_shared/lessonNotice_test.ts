@@ -20,11 +20,7 @@ const att = (o: { status?: string; at?: string | null; sent?: string | null; reg
 })
 const ses = (makeup: boolean, memo = "") => ({ id: "ses-1", properties: { "보강": { type: "checkbox", checkbox: makeup }, "수업 안내 메모": { type: "rich_text", rich_text: memo ? [{ plain_text: memo }] : [] } } })
 
-Deno.test("v2.8.0 수업 안내: 일시 표기(서울, 오전·오후, 날짜만)", () => {
-	eq(m.formatLessonTime("2026-10-30T17:00:00.000+09:00"), "10월 30일(금) 오후 5:00")
-	eq(m.formatLessonTime("2026-10-30T00:30:00.000Z"), "10월 30일(금) 오전 9:30")
-	eq(m.formatLessonTime("2026-06-03T12:05:00+09:00"), "6월 3일(수) 오후 12:05")
-	eq(m.formatLessonTime("2026-10-30"), "10월 30일(금)")
+Deno.test("v2.8.0 수업 안내: 같은 시각 비교(표기 차이 무시)", () => {
 	eq(m.sameInstant("2026-10-30T17:00:00.000+09:00", "2026-10-30T08:00:00.000Z"), true)
 	eq(m.sameInstant("2026-10-30T17:00:00+09:00", "2026-10-30T18:00:00+09:00"), false)
 })

@@ -8,7 +8,7 @@
 //      받았으면 뺀다(Supabase schedule_notice_sent, 두 반 수강생 중복 방지). 보낼 일정이 0건인 학생은 보내지 않는다.
 //      같은 달을 다시 누르면 보내지 않는다(클래스 "일정 안내 월"). 다시 보내려면 비우고 누른다.
 //   2) 일정 안내(한 건): 일정 [일정 안내 전송] → send-schedule-notice/event → 큐. 일정에 연결된 학생, 연결된 클래스의 수강 중
-//      학생에게. 일정구분 = 일정 "안내 구분"(비면 구분에서: 💤 휴원 → 휴원, 📆 → 학원 일정, 🏫 → 학사 일정). 참고사항 = 메모.
+//      학생에게. 일정구분 = 일정 "안내 구분"(비면 구분에서: 💤 휴원 → 휴원, 📆 → 학원 일정, 🏫 → 학사 일정). 전달사항 = 메모(50자, 비면 "없음").
 //      보낸 뒤 일정 "일정 안내 일시" = 그때 날짜. 다시 누르면 날짜가 바뀌었을 때만 보낸다.
 // 큐 모양은 반별 보고서와 같다: 반(일정) 1건이 학생 1건씩을 다시 넣고, 마지막 학생이 상태를 마친다(✅, 중간 실패가 있으면 ⚠️).
 // 발송 규칙은 수업 안내와 같다(설정 행이 꺼졌거나 비면 ⚠️, 연락처 없음 ⚠️, 발송 단계 실패는 다시 보내지 않음). 전송로그는 등록에.
@@ -20,7 +20,7 @@ import { enqueueSync } from "./syncQueue.ts"
 import { markDone, markError, markRunning, type StatusSpec } from "./statusTracking.ts"
 import { isParentPublicEvent } from "./scheduleVisibility.ts"
 import { seoulDay } from "./classReportPlan.ts"
-import { formatLessonTime, LessonConfigError, noteText, sameInstant, sendConfiguredAlimtalk } from "./lessonNotice.ts"
+import { formatClassTime, LessonConfigError, noteText, sameInstant, sendConfiguredAlimtalk } from "./lessonNotice.ts"
 import { fetchSupabaseWithRetry } from "./reportCacheShared.ts"
 
 export const SCHEDULE_NOTICE_STATUS_SPEC: StatusSpec = {
@@ -116,16 +116,16 @@ export function sectionText(lines: { day: string; line: string; sec: Section }[]
 	return own.length ? summarize(own) : "없음"
 }
 
-// 일정일시: 하루면 "11월 3일(월)"(시각이 있으면 "오후 2:00"까지), 기간이면 "11월 3일(월) ~ 11월 5일(수)".
+// 일정일시(수업 안내와 같은 표기): 하루면 "26.11.03(화)", 시각이 있으면 "26.11.03(화) 14:00~16:00",
+// 기간이면 "26.11.09(월)~26.11.11(수)"(시각이 있으면 각 끝에 시각).
 export function eventTimeText(event: any): string {
 	const d = event?.properties?.["날짜"]?.date
 	if (!d?.start) return ""
-	const start = formatLessonTime(d.start)
+	const start = formatClassTime(d.start)
 	if (!d.end) return start
-	const end = formatLessonTime(d.end)
-	// 같은 날 시각 범위면 끝은 시각만("11월 3일(화) 오후 2:00 ~ 오후 4:00").
-	if (seoulDay(d.end) === seoulDay(d.start)) return /T/.test(String(d.end)) ? `${start} ~ ${end.split(") ")[1] ?? end}` : start
-	return `${start} ~ ${end}`
+	const end = formatClassTime(d.end)
+	if (seoulDay(d.end) === seoulDay(d.start)) return /T/.test(String(d.end)) ? `${start}~${end.split(" ")[1] ?? end}` : start
+	return `${start}~${end}`
 }
 
 const isActiveReg = (r: any) => {
@@ -343,7 +343,7 @@ export async function processScheduleEventItem(p: EventPayload): Promise<void> {
 			"#{일정구분}": eventLabel(ev),
 			"#{일정명}": textOf(ev.properties?.["이름"]?.title).trim() || eventLabel(ev),
 			"#{일정일시}": eventTimeText(ev),
-			"#{참고사항}": noteText(textOf(ev.properties?.["메모"]?.rich_text)),
+			"#{전달사항}": noteText(textOf(ev.properties?.["메모"]?.rich_text)),
 		}
 		console.log(`[schedule-event] event=${p.eventId} 대상 ${targets.length}`)
 		for (let i = 0; i < targets.length; i++) {

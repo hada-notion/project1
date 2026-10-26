@@ -38,9 +38,9 @@ Deno.test("v2.8.0 일정 안내: 다음 달, 한 줄·요약(5줄+외 N건), 학
 	eq(m.eventLabel(ev("e", { start: "2026-11-03", label: "휴강" })), "휴강")
 	eq([m.sectionOf(ev("e", { cat: "💤 휴원", start: "2026-11-03" })), m.sectionOf(ev("e", { cat: "🏫 학사 일정", start: "2026-11-03" })), m.sectionOf(ev("e", { start: "2026-11-03" }))], ["휴원", "학교", "학원"])
 	eq(m.sectionText([{ day: "2026-11-03", line: "11/3(화) 휴원", sec: "휴원" }], "학교"), "없음")
-	eq(m.eventTimeText(ev("e", { start: "2026-11-03" })), "11월 3일(화)")
-	eq(m.eventTimeText(ev("e", { start: "2026-11-03T14:00:00+09:00", end: "2026-11-03T16:00:00+09:00" })), "11월 3일(화) 오후 2:00 ~ 오후 4:00")
-	eq(m.eventTimeText(ev("e", { start: "2026-11-09", end: "2026-11-11" })), "11월 9일(월) ~ 11월 11일(수)")
+	eq(m.eventTimeText(ev("e", { start: "2026-11-03" })), "26.11.03(화)")
+	eq(m.eventTimeText(ev("e", { start: "2026-11-03T14:00:00+09:00", end: "2026-11-03T16:00:00+09:00" })), "26.11.03(화) 14:00~16:00")
+	eq(m.eventTimeText(ev("e", { start: "2026-11-09", end: "2026-11-11" })), "26.11.09(월)~26.11.11(수)")
 })
 
 type Calls = { enq: any[]; sends: any[]; logs: any[]; marks: string[]; updates: any[]; sent: any[] }
@@ -148,7 +148,7 @@ Deno.test("v2.8.0 일정 안내(한 건): 연결된 학생·반의 수강 중 �
 	const c = mock(pages, { regs: [reg("r1", "s1", "김하윤"), reg("r2", "s2", "박지민")] })
 	await m.processScheduleEventItem({ eventId: "e1" })
 	eq(c.enq.map((e) => e.payload.regId), ["r1", "r2"])
-	eq(c.enq[0].payload.vars, { "#{일정구분}": "휴강", "#{일정명}": "휴강", "#{일정일시}": "11월 3일(화)", "#{참고사항}": "선생님 사정" })
+	eq(c.enq[0].payload.vars, { "#{일정구분}": "휴강", "#{일정명}": "휴강", "#{일정일시}": "26.11.03(화)", "#{전달사항}": "선생님 사정" })
 	eq(c.enq[1].payload.last, true)
 	const c2 = mock({ e1: ev("e1", { start: "2026-11-03", cls: ["cls"], sent: "2026-11-03" }) })
 	await m.processScheduleEventItem({ eventId: "e1" })
@@ -162,7 +162,7 @@ Deno.test("v2.8.0 일정 안내(한 건): 연결된 학생·반의 수강 중 �
 Deno.test("v2.8.0 일정 안내(학생): 학생 이름을 넣어 보내고, 마지막이면 일정 안내 일시를 적고 ✅", async () => {
 	const pages: Record<string, any> = { r1: reg("r1", "s1", "김하윤"), e1: { id: "e1", properties: { "마지막 오류": rt("") } } }
 	const c = mock(pages)
-	await m.processScheduleEventStudentItem({ eventId: "e1", regId: "r1", vars: { "#{일정구분}": "휴강", "#{일정명}": "휴강", "#{일정일시}": "11월 3일(화)", "#{참고사항}": "없음" }, dateStart: "2026-11-03", last: true })
+	await m.processScheduleEventStudentItem({ eventId: "e1", regId: "r1", vars: { "#{일정구분}": "휴강", "#{일정명}": "휴강", "#{일정일시}": "26.11.03(화)", "#{전달사항}": "없음" }, dateStart: "2026-11-03", last: true })
 	eq(c.sends[0].code, "일정 안내")
 	eq(c.sends[0].vars["#{학생이름}"], "김하윤")
 	eq(c.updates.at(-1), { id: "e1", props: { "일정 안내 일시": { date: { start: "2026-11-03" } } } })

@@ -38,7 +38,7 @@ export type LessonNoticeKind = "수업 안내"
 
 const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"]
 
-// 템플릿의 자유 문장 변수(수업 안내 전달사항·일정 안내 참고사항): 공백을 한 칸으로, 50자를 넘으면 자르고 "…", 비면 "없음".
+// 템플릿의 자유 문장 변수(수업 안내·일정 안내의 전달사항): 공백을 한 칸으로, 50자를 넘으면 자르고 "…", 비면 "없음".
 export function noteText(value: string | null | undefined, max = 50): string {
   const t = String(value ?? "").replace(/\s+/g, " ").trim()
   if (!t) return "없음"
@@ -57,23 +57,6 @@ export function formatClassTime(value: string | null | undefined): string {
   const dayIdx = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(parts.weekday)
   const head = `${parts.year}.${parts.month}.${parts.day}(${WEEKDAY[dayIdx]})`
   return dateOnly ? head : `${head} ${parts.hour}:${parts.minute}`
-}
-
-// "10월 30일(목) 오후 5:00" (서울). 시각이 없는 날짜면 "10월 30일(목)".
-export function formatLessonTime(value: string | null | undefined): string {
-  const v = String(value ?? "")
-  if (!v) return ""
-  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(v)
-  const t = new Date(dateOnly ? `${v}T00:00:00+09:00` : v)
-  if (Number.isNaN(t.getTime())) return ""
-  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit", hourCycle: "h23", weekday: "short" }).formatToParts(t).map((p) => [p.type, p.value]))
-  const dayIdx = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(parts.weekday)
-  const head = `${parts.month}월 ${parts.day}일(${WEEKDAY[dayIdx]})`
-  if (dateOnly) return head
-  const h = Number(parts.hour)
-  const ampm = h < 12 ? "오전" : "오후"
-  const h12 = h % 12 === 0 ? 12 : h % 12
-  return `${head} ${ampm} ${h12}:${parts.minute}`
 }
 
 // 같은 시각인지(표기 차이 무시). 둘 다 비면 같다.
