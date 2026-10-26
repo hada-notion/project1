@@ -42,11 +42,11 @@ Deno.test("v2.8.0 수업 안내: 처음이면 수업 안내, 보강이면 안내
 	eq((m.planLessonNotice(att(), null) as any).variables["#{안내구분}"], "정규 수업")
 })
 
-Deno.test("v2.8.0 수업 안내: 받은 뒤 일시가 바뀌면 변경 안내, 같으면 건너뜀, 결석·일시 없음은 안 보냄", () => {
+Deno.test("v2.8.0 수업 안내: 받은 뒤 일시가 바뀌면 새 시간으로 수업 안내를 다시, 같으면 건너뜀, 결석·일시 없음은 안 보냄", () => {
 	const ch: any = m.planLessonNotice(att({ sent: "2026-10-29T17:00:00.000+09:00" }), ses(true))
-	eq(ch.kind, "수업 변경 안내")
-	eq([ch.variables["#{기존일시}"], ch.variables["#{변경일시}"]], ["10월 29일(목) 오후 5:00", "10월 30일(금) 오후 5:00"])
-	eq(ch.variables["#{수업일시}"], undefined)
+	eq(ch.kind, "수업 안내")
+	eq(ch.variables["#{수업일시}"], "10월 30일(금) 오후 5:00")
+	eq(ch.variables["#{기존일시}"], undefined)
 	eq(m.planLessonNotice(att({ sent: "2026-10-30T08:00:00.000Z" }), ses(true)), { skip: "" })
 	eq((m.planLessonNotice(att({ status: "🔴 결석" }), ses(true)) as any).skip.includes("결석"), true)
 	eq((m.planLessonNotice(att({ at: null }), ses(true)) as any).skip.includes("수업일시"), true)

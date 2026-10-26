@@ -236,7 +236,6 @@ export type SendLogCategory =
   | "키오스크 알림톡"
   // (v2.8.0) 수업 안내 알림톡(보강·예외 수업). _shared/lessonNotice.ts
   | "수업 안내"
-  | "수업 변경 안내"
   // (v2.8.0) 일정 안내 알림톡. _shared/scheduleNotice.ts
   | "일정 안내"
   | "월간 일정 안내"

@@ -5,11 +5,12 @@
 // 바꾸고, 출석 DB 자동화 [웹훅] 수업 안내가 send-lesson-notice/queue로 출석마다 웹훅을 보낸다. 큐가 한 건씩 보낸다.
 //
 // 한 건 처리:
-//   - 출석 "수업 안내 일시"가 비었으면 "수업 안내", 있고 지금 수업일시와 다르면 "수업 변경 안내"(기존 → 변경), 같으면 보내지 않는다
-//     (이미 안내한 학생). 다시 보내려면 "수업 안내 일시"를 비우고 누른다(일일 보고서의 전송완료 체크와 같다).
+//   - 출석 "수업 안내 일시"(마지막으로 안내한 수업일시)가 지금 수업일시와 같으면 보내지 않는다(이미 안내한 학생). 비었거나
+//     다르면(시간을 바꾼 뒤 다시 누름) 지금 수업일시로 "수업 안내"를 보낸다. 변경 전용 템플릿은 두지 않는다(10/27 결정:
+//     드문 일이라 시간만 바꾸고 다시 누르면 된다, 바뀐 이유는 수업 안내 메모에). 같은 시간으로 다시 보내려면 "수업 안내 일시"를 비운다.
 //   - 결석으로 표시된 학생은 보내지 않는다. 안내구분은 수업 "보강" 체크면 "보강 수업", 아니면 "정규 수업".
 //     참고사항은 수업 "수업 안내 메모"(50자까지, 비면 "없음"). 템플릿 제목은 고정이고 자유 문장 변수는 이것 하나다(심사 대비).
-//   - 알림톡 설정의 "수업 안내"·"수업 변경 안내" 행이 꺼져 있거나 템플릿 ID가 비면 보내지 않고 ⚠️(다른 템플릿으로 잘못 나가지 않게).
+//   - 알림톡 설정의 "수업 안내" 행이 꺼져 있거나 템플릿 ID가 비면 보내지 않고 ⚠️(다른 템플릿으로 잘못 나가지 않게).
 //   - 오류는 출석 "수업 안내 오류"에만 적는다(보고서의 "마지막 오류"는 건드리지 않음).
 //   - 전송 로그는 등록에만 연결한다(출석의 전송 내역·발송 횟수는 일일 보고서용이라 섞지 않음). 보낸 뒤 출석 "수업 안내 일시"를 적는다.
 // 발송 전 단계(읽기)에서 실패하면 큐가 다시 한다. 발송 단계에서 실패하면 다시 보내지 않고 ⚠️(이미 나갔을 수 있음).
@@ -32,7 +33,7 @@ export const LESSON_MEMO_PROP = "수업 안내 메모"
 export const LESSON_NOTICE_ERROR_PROP = "수업 안내 오류"
 export const TARGET_LESSON_NOTICE = "lesson-notice"
 
-export type LessonNoticeKind = "수업 안내" | "수업 변경 안내"
+export type LessonNoticeKind = "수업 안내"
 
 const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"]
 
@@ -89,8 +90,7 @@ export function planLessonNotice(attendance: any, session: any | null): LessonNo
     "#{클래스}": getFormulaText(attendance, "클래스(보고서)"),
     "#{참고사항}": noteText(memo),
   }
-  if (!sentIso) return { kind: "수업 안내", classIso, variables: { ...common, "#{수업일시}": formatLessonTime(classIso) } }
-  return { kind: "수업 변경 안내", classIso, variables: { ...common, "#{기존일시}": formatLessonTime(sentIso), "#{변경일시}": formatLessonTime(classIso) } }
+  return { kind: "수업 안내", classIso, variables: { ...common, "#{수업일시}": formatLessonTime(classIso) } }
 }
 
 const SOLAPI_API_KEY = Deno.env.get("SOLAPI_API_KEY") ?? ""
