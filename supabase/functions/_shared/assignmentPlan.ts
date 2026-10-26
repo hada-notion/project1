@@ -6,10 +6,13 @@
 //   {"v":1,"c":"과제","s":"수업","items":[{"a":"출석","r":"등록","d":"다음 출석(과제만)","t":"[과제] 학생 MM.DD(요일)"}]}
 // 서버가 학생마다 하던 출석 읽기·등록 읽기(이름)·다음 출석 찾기가 없어지고, 학습활동 만들기만 남는다.
 // 원칙: 학습활동은 출석 기준(학생 한 명·출석 한 건). 과제 마감도 그 학생 등록의 다음 출석이다.
+// (v2.8.0) 예외: 출석 없이 만든 평가(클래스 [평가 만들기], 평가 전용 반)는 "a"가 비어 있고 등록만 있다.
+//   그런 학습활동은 출석 없이 만들고, 리포트는 학습기록 '평가 기간'으로 날짜를 잡는다.
+//   출석·수업으로 만든 평가는 학습기록 '평가 구분'이 비어 있으면 '일일 평가'로 채운다.
 //
 // 두 번 만들기 막기: 만들기 전에 학습활동 DB를 "이 학습기록"으로 한 번 조회해 이미 있는 등록은 건너뛴다.
 // 그래서 버튼을 두 번 눌러 같은 계획이 두 번 들어오거나, 큐가 다시 시도해도 학생마다 하나만 남는다.
-import { createPage, getPage, mapWithConcurrency, queryAllPages, relIds } from "./notionClient.ts"
+import { createPage, getPage, mapWithConcurrency, queryAllPages, relIds, updatePageProperties } from "./notionClient.ts"
 import { DS_STUDY_ACTIVITY } from "./constants.ts"
 import { markDone, markError } from "./statusTracking.ts"
 import { AUTO_DEADLINE_PROP } from "./assignmentDeadline.ts"
@@ -25,7 +28,7 @@ import {
 
 export const PLAN_PROP = "학습활동 계획"
 
-export type AssignmentPlanItem = { att: string; reg: string; due?: string; title: string }
+export type AssignmentPlanItem = { att?: string; reg: string; due?: string; title: string }
 export type AssignmentPlan = { v: 1; skip?: string; category?: string; session?: string; items: AssignmentPlanItem[] }
 
 const ID = /^[0-9a-f]{32}$/
@@ -47,10 +50,12 @@ export function planFromText(text: unknown): AssignmentPlan | null {
 	const items: AssignmentPlanItem[] = []
 	for (const it of raw.items) {
 		const att = cleanId(it?.a), reg = cleanId(it?.r)
-		if (!att || !reg) throw new Error("학습활동 계획의 출석·등록 값이 올바르지 않습니다.")
+		// 출석이 비어도 되는 것은 평가뿐이다(출석 없는 평가). 값이 있는데 형식이 틀리면 오류.
+		const noAtt = !it?.a && raw.c === CATEGORY_EVALUATION
+		if (!reg || (!att && !noAtt)) throw new Error("학습활동 계획의 출석·등록 값이 올바르지 않습니다.")
 		const due = it?.d ? cleanId(it.d) : null
 		if (it?.d && !due) throw new Error("학습활동 계획의 과제 마감 값이 올바르지 않습니다.")
-		items.push({ att, reg, ...(due && raw.c === CATEGORY_ASSIGNMENT ? { due } : {}), title: String(it?.t ?? "").trim() || `[${raw.c}]` })
+		items.push({ ...(att ? { att } : {}), reg, ...(due && raw.c === CATEGORY_ASSIGNMENT ? { due } : {}), title: String(it?.t ?? "").trim() || `[${raw.c}]` })
 	}
 	return { v: 1, category: raw.c, session: cleanId(raw.s) ?? undefined, items }
 }
@@ -68,8 +73,8 @@ export function activityProps(recordId: string, plan: AssignmentPlan, item: Assi
 		학습활동: { title: [{ text: { content: item.title } }] },
 		학습기록: { relation: [{ id: recordId }] },
 		등록: { relation: [{ id: item.reg }] },
-		출석: { relation: [{ id: item.att }] },
 	}
+	if (item.att) props["출석"] = { relation: [{ id: item.att }] }
 	if (plan.session) props["수업"] = { relation: [{ id: plan.session }] }
 	if (plan.category === CATEGORY_ASSIGNMENT) {
 		props["과제상태"] = { select: { name: "🔴 미제출" } }
@@ -86,12 +91,28 @@ export const assignmentPlanDeps = {
 	getPage,
 	createPage,
 	queryAllPages,
+	update: updatePageProperties,
 	markDone: (id: string) => markDone(id, ASSIGNMENT_GEN_STATUS_SPEC),
 	markError: (id: string, message: string) => markError(id, ASSIGNMENT_GEN_STATUS_SPEC, message),
 	legacy: finishCreateAssignment,
 }
 
 const key = (id: string) => id.replace(/-/g, "").toLowerCase()
+
+export const EVAL_TYPE_PROP = "평가 구분"
+export const EVAL_TYPE_DAILY = "일일 평가"
+
+// (v2.8.0) 출석·수업으로 만든 평가는 '평가 구분'이 비어 있으면 '일일 평가'로 채운다. 이미 값이 있으면(선생님이
+// 주간 평가 등으로 고른 경우) 그대로 둔다. 칸이 없는 운영(v2.8.0 전)이나 쓰기 실패는 학습활동 생성을 막지 않는다.
+async function fillDailyEvalType(recordId: string, page: any): Promise<void> {
+	const prop = page?.properties?.[EVAL_TYPE_PROP]
+	if (!prop || prop.type !== "select" || prop.select?.name) return
+	try {
+		await assignmentPlanDeps.update(recordId, { [EVAL_TYPE_PROP]: { select: { name: EVAL_TYPE_DAILY } } })
+	} catch (err) {
+		console.warn(`[create-assignment] ${recordId} 평가 구분 채우기 실패: ${(err as Error).message}`)
+	}
+}
 
 export async function processAssignmentQueueItem(payload: { recordId: string; plan?: string | null }): Promise<void> {
 	const deps = assignmentPlanDeps
@@ -118,6 +139,7 @@ export async function processAssignmentQueueItem(payload: { recordId: string; pl
 			page ??= await deps.getPage(recordId)
 			const category = selectValue(page, "구분")
 			if (!category || !CATEGORIES.includes(category)) return await deps.markDone(recordId)
+			if (category === CATEGORY_EVALUATION && relIds(page.properties?.["출석"]).length) await fillDailyEvalType(recordId, page)
 			return await deps.legacy(recordId, category, dedupe(relIds(page.properties?.["등록"])))
 		}
 	} catch (err) {
@@ -138,6 +160,9 @@ export async function processAssignmentQueueItem(payload: { recordId: string; pl
 			return true
 		})
 		await mapWithConcurrency(todo, 3, (it) => deps.createPage(DS_STUDY_ACTIVITY, activityProps(recordId, plan!, it)))
+		if (plan.category === CATEGORY_EVALUATION && plan.items.some((it) => it.att)) {
+			await fillDailyEvalType(recordId, await deps.getPage(recordId).catch(() => null))
+		}
 		await deps.markDone(recordId)
 		console.log(`[create-assignment] ${recordId} ${plan.category}: 만듦 ${todo.length}, 이미 있음 ${plan.items.length - todo.length}`)
 	} catch (err) {
