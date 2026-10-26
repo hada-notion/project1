@@ -504,6 +504,15 @@ body {
 .chart-legend { display: flex; gap: 14px; margin-bottom: 10px; font-size: 12px; }
 .chart-legend .legend-item { display: flex; align-items: center; gap: 5px; }
 .chart-legend .dot { width: 8px; height: 8px; border-radius: 50%; }
+.score-compare { display: grid; grid-template-columns: max-content 1fr 44px; align-items: center; gap: 6px 8px; margin: 8px 0 4px; font-size: 12px; }
+.score-compare-row { display: contents; }
+.score-compare-label { color: #8a7d6d; }
+.score-compare-track { height: 8px; border-radius: 4px; background: #f0ebe3; overflow: hidden; }
+.score-compare-fill { display: block; height: 100%; border-radius: 4px; }
+.score-compare-row.mine .score-compare-fill { background: #6b5d4d; }
+.score-compare-row.class .score-compare-fill { background: #cfc3b2; }
+.score-compare-value { text-align: right; font-weight: 700; color: #4a4036; }
+.score-compare-row.class .score-compare-value { font-weight: 500; color: #8a7d6d; }
 .chart-wrap { width: 100%; max-width: 480px; margin: 0 auto; aspect-ratio: 400 / 220; max-height: min(34vh, 300px); }
 .chart-wrap svg { width: 100%; height: 100%; display: block; }
 .info-detail-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
@@ -1008,7 +1017,7 @@ body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
 </div>
 
 <script src="hada_config.js"></script>
-<script src="student_report_part1.js?v=990fc9a4"></script>
-<script src="student_report_part2.js?v=ac6821cb"></script>
+<script src="student_report_part1.js?v=3761a258"></script>
+<script src="student_report_part2.js?v=98d1df89"></script>
 </body>
 </html>

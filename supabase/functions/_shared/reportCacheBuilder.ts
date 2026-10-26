@@ -253,8 +253,11 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
 
   const classId = firstRelationId(reg.properties["클래스"])
   let teacherName = ""
+  // (v2.8.0) 클래스의 '반 평균 숨김'을 체크하면 이 반 학생 리포트에 반 평균을 싣지 않는다(칸이 없으면 보여 준다).
+  let hideClassAverage = false
   if (classId) {
     const cls = await cachedGetPage(classId)
+    hideClassAverage = cls.properties?.["반 평균 숨김"]?.checkbox === true
     const teacherId = firstRelationId(cls.properties["담당강사"])
     if (teacherId) {
       const teacher = await cachedGetPage(teacherId)
@@ -514,9 +517,27 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
       return { date: day, status, submitted, total }
     })
 
-  const tests = testActivities
-    .slice(0, 6)
-    .map((a) => ({
+  // (v2.8.0) 반 평균: 같은 학습기록에 묶인 학생들의 평가 학습활동 점수(정답 ÷ 전체 문항) 평균.
+  // 학습기록의 '학습활동' 관계로 형제 활동을 읽으므로 Notion에 페이지를 따로 만들 필요가 없다.
+  // 점수가 있는 학생이 3명 미만이면 null: 2명이면 내 점수를 빼서 다른 학생 점수를 알 수 있다.
+  // 개별진도·개별수업은 학습기록에 학생이 한 명이라 자연히 null이 된다.
+  const classAverageOf = async (recordId?: string | null) => {
+    if (!recordId || hideClassAverage) return null
+    const record = await cachedGetPage(recordId)
+    const siblingIds = relationIds(record.properties?.["학습활동"])
+    const siblings = await mapWithConcurrency(siblingIds, 6, (id) => cachedGetPage(id))
+    const pcts = siblings
+      .filter((p: any) => text(p.properties?.["구분"]) === "평가")
+      .map((p: any) => ({ correct: numberOf(p.properties?.["정답 문항"]), total: numberOf(p.properties?.["전체 문항"]) }))
+      .filter((x) => typeof x.correct === "number" && x.total && x.total > 0)
+      .map((x) => (x.correct as number) / (x.total as number) * 100)
+    if (pcts.length < 3) return null
+    return { avg: Math.round(pcts.reduce((n, v) => n + v, 0) / pcts.length * 10) / 10, count: pcts.length }
+  }
+  const shownTests = testActivities.slice(0, 6)
+  const classAverages = await mapWithConcurrency(shownTests, 3, (a) => classAverageOf(a.learningRecordId))
+  const tests = shownTests
+    .map((a, i) => ({
       title: "",
       book: a.bookTitle,
       range: a.range,
@@ -526,6 +547,8 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
       date: fmtDateKr(a.classIso),
       correct: a.correct,
       total: a.total,
+      class_avg: classAverages[i]?.avg ?? null,
+      class_count: classAverages[i]?.count ?? 0,
       source_body: a.learningRecordId ? (sourcePageBodies.get(a.learningRecordId) ?? []) : [],
       activity_body: activityPageBodies.get(a.id) ?? [],
     }))

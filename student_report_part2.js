@@ -413,6 +413,7 @@ function logCardHtml(l) {
                     <div class="log-title-row"><div class="log-title">${esc(l.title)}</div>${l.pill ? `<span class="log-pill ${l.pillTone || ""}">${esc(l.pill)}</span>` : ""}</div>
                   </div>
                 </div>
+                ${l.compare || ""}
                 ${(() => {
                   // (v2.5.98) 날짜로 묶인 목록이라 출제일은 묶음 날짜와 같아 빼고 마감만 보인다.
                   const meta = renderLogMetaRows(l.unit, l.note, l.type === "과제" && l.due ? [`마감: ${withDow(l.due)}`] : [])
@@ -431,7 +432,7 @@ const logItemOfStudy = (l) => ({ type: "학습", icon: KIND_ICONS["학습"], dat
 const logItemOfHomework = (h) => ({ type: "과제", icon: KIND_ICONS["과제"], date: h.classDate || h.due, due: h.due, classDate: h.classDate, title: [h.book, h.range].filter(Boolean).join(" · "), unit: h.unit, note: h.note, pill: h.status, pillTone: homeworkPillTone(h.status), book: h.book, sourceBody: h.sourceBody, activityBody: h.activityBody })
 // 평가 아이콘은 학습기록 탭이 써 온 Feather file-text 그대로(KIND_ICONS 평가와 줄 하나 다름)
 const LOG_TEST_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`
-const logItemOfTest = (t) => ({ type: "평가", icon: LOG_TEST_ICON, date: t.date, title: [t.book, t.range].filter(Boolean).join(" · "), unit: t.unit, note: t.note, pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), book: t.book, sourceBody: t.sourceBody, activityBody: t.activityBody })
+const logItemOfTest = (t) => ({ type: "평가", icon: LOG_TEST_ICON, date: t.date, title: [t.book, t.range].filter(Boolean).join(" · "), unit: t.unit, note: t.note, pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), book: t.book, sourceBody: t.sourceBody, activityBody: t.activityBody , compare: testCompareBarsHtml(t) })
 // 고른 날짜의 기록: 출석 상태 + 그날 학습·그날 낸 과제·그날 평가. v2.5.101부터 한 카드에 구분선으로 잇지 않고 학습기록 탭과 같은 독립 카드.
 function buildCalDayPanelHtml(r, date) {
   const att = (r.attendance_rows || []).find((a) => a.date === date)
@@ -779,9 +780,14 @@ function computeTestTrendPoints(tests, periodType, baseOffset) {
     }
     const items = tests.filter((t) => t.date >= rangeStart && t.date <= rangeEnd)
     const avg = items.length ? Math.round(items.reduce((s, t) => s + (t.total ? (t.correct / t.total) * 100 : 0), 0) / items.length) : null
-    points.push({ label, avg, count: items.length, items })
+    points.push({ label, avg, classAvg: classAvgOf(items), count: items.length, items })
   }
   return points
+}
+// (v2.8.0) 반 평균: 각 평가에 붙은 class_avg(같은 학습기록에 묶인 학생들의 평가 점수 평균)를 한 점으로 모은다. 없으면 null.
+function classAvgOf(items) {
+  const vals = items.map((t) => t.classAvg).filter((v) => typeof v === "number")
+  return vals.length ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length * 10) / 10 : null
 }
 // 일일 보고서: 최근 평가가 있던 날 count일. 같은 날 평가가 여럿이면 점수(정답 ÷ 전체 문항)의 평균 한 점으로 그린다.
 function computeRecentTestPoints(tests, asOfDate, count) {
@@ -799,6 +805,7 @@ function computeRecentTestPoints(tests, asOfDate, count) {
     return {
       label: day.slice(5).replace("-", "."),
       avg: scored.length ? Math.round(scored.reduce((s, t) => s + (t.correct / t.total) * 100, 0) / scored.length * 10) / 10 : null,
+      classAvg: classAvgOf(items),
       count: items.length,
       items,
     }
@@ -822,9 +829,18 @@ function buildTestTrendChartHtml(points) {
     <text x="2" y="${yFor(v) + 4}" font-size="9" fill="#bbb">${v}</text>
   `).join("")
   const xLabels = points.map((p, i) => `<text x="${xFor(i)}" y="${height - 10}" font-size="10" fill="#999" text-anchor="middle">${esc(p.label)}</text>`).join("")
+  // 반 평균은 점선으로 아이 점수 선 아래에 깔고, 반 평균이 하나라도 있을 때만 범례를 붙인다.
+  const classPoints = points.map((p, i) => ({ ...p, i })).filter((p) => p.classAvg !== null && p.classAvg !== undefined)
+  const classPath = classPoints.map((p) => `${xFor(p.i)},${yFor(p.classAvg)}`).join(" ")
+  const classLine = classPoints.length > 1 ? `<polyline points="${classPath}" fill="none" stroke="#b9ab98" stroke-width="1.5" stroke-dasharray="4 3" />` : ""
+  const classDots = classPoints.map((p) => `<circle cx="${xFor(p.i)}" cy="${yFor(p.classAvg)}" r="3" fill="#fff" stroke="#b9ab98" stroke-width="1.5" style="pointer-events:none" />`).join("")
+  const legend = classPoints.length
+    ? `<div class="chart-legend"><span class="legend-item"><span class="dot" style="background:#6b5d4d"></span>${esc(studentLabel())}</span><span class="legend-item"><span class="dot" style="background:#fff;border:1.5px solid #b9ab98"></span>반 평균</span></div>`
+    : ""
   const emptyOverlay = validPoints.length ? "" : '<div class="empty">해당 기간 평가 기록이 없습니다.</div>'
   return `
-    <div class="chart-wrap"><svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">${gridLines}<polyline points="${path}" fill="none" stroke="#6b5d4d" stroke-width="2" />${dots}${valueLabels}${xLabels}</svg></div>
+    ${legend}
+    <div class="chart-wrap"><svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">${gridLines}${classLine}${classDots}<polyline points="${path}" fill="none" stroke="#6b5d4d" stroke-width="2" />${dots}${valueLabels}${xLabels}</svg></div>
     ${emptyOverlay}
   `
 }
@@ -965,13 +981,14 @@ function findLatestComment(r, date) {
 
 // 보고서 항목 한 건: "교재 · 범위" + 상태 알약 + 메타 줄, 본문은 접지 않고 전부 보여준다.
 function reportItemHtml(r, item, opts) {
-  const { pill, pillTone, extraRows } = opts || {}
+  const { pill, pillTone, extraRows, compare } = opts || {}
   const title = [item.book, item.range].filter(Boolean).join(" · ") || "기록"
   const meta = renderLogMetaRows(item.unit, item.note, extraRows || [])
   const body = buildLogBodyHtml(item)
   return `
     <div class="rep-item">
       <div class="rep-title">${esc(title)}${pill ? `<span class="log-pill ${pillTone || ""}">${esc(pill)}</span>` : ""}</div>
+      ${compare || ""}
       ${meta ? `<div class="rep-meta">${meta}</div>` : ""}
       ${body ? `<div class="rep-body">${body}</div>` : ""}
     </div>
@@ -1009,7 +1026,7 @@ function buildDailyBodyHtml(r, date) {
     groupBand(nextHomeworkItems, (h) => reportItemHtml(r, h, { pill: h.status, pillTone: homeworkPillTone(h.status), extraRows: [h.classDate ? `출제: ${withDow(h.classDate)}` : null, `마감: ${withDow(h.due)}`].filter(Boolean) }), "출제된 과제가 없어요.")
   const testHtml =
     sub("이번 평가") +
-    groupBand(todaysTests, (t) => reportItemHtml(r, t, { pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0) }), "이날 평가가 없어요.") +
+    groupBand(todaysTests, (t) => reportItemHtml(r, t, { pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), compare: testCompareBarsHtml(t) }), "이날 평가가 없어요.") +
     sub("최근 평가 추이") +
     band(buildTestTrendChartHtml(computeRecentTestPoints(r.tests || [], date, 3)))
   const commentHtml = comment
