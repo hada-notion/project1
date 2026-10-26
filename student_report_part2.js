@@ -981,13 +981,14 @@ function findLatestComment(r, date) {
 
 // 보고서 항목 한 건: "교재 · 범위" + 상태 알약 + 메타 줄, 본문은 접지 않고 전부 보여준다.
 function reportItemHtml(r, item, opts) {
-  const { pill, pillTone, extraRows } = opts || {}
+  const { pill, pillTone, extraRows, compare } = opts || {}
   const title = [item.book, item.range].filter(Boolean).join(" · ") || "기록"
   const meta = renderLogMetaRows(item.unit, item.note, extraRows || [])
   const body = buildLogBodyHtml(item)
   return `
     <div class="rep-item">
       <div class="rep-title">${esc(title)}${pill ? `<span class="log-pill ${pillTone || ""}">${esc(pill)}</span>` : ""}</div>
+      ${compare || ""}
       ${meta ? `<div class="rep-meta">${meta}</div>` : ""}
       ${body ? `<div class="rep-body">${body}</div>` : ""}
     </div>
@@ -1025,7 +1026,7 @@ function buildDailyBodyHtml(r, date) {
     groupBand(nextHomeworkItems, (h) => reportItemHtml(r, h, { pill: h.status, pillTone: homeworkPillTone(h.status), extraRows: [h.classDate ? `출제: ${withDow(h.classDate)}` : null, `마감: ${withDow(h.due)}`].filter(Boolean) }), "출제된 과제가 없어요.")
   const testHtml =
     sub("이번 평가") +
-    groupBand(todaysTests, (t) => reportItemHtml(r, t, { pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0) }), "이날 평가가 없어요.") +
+    groupBand(todaysTests, (t) => reportItemHtml(r, t, { pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), compare: testCompareBarsHtml(t) }), "이날 평가가 없어요.") +
     sub("최근 평가 추이") +
     band(buildTestTrendChartHtml(computeRecentTestPoints(r.tests || [], date, 3)))
   const commentHtml = comment
