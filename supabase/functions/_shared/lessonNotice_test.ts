@@ -18,7 +18,7 @@ const att = (o: { status?: string; at?: string | null; sent?: string | null; reg
 		"학부모 연락처": formula("01012345678"),
 	},
 })
-const ses = (makeup: boolean, memo = "") => ({ id: "ses-1", properties: { "보강": { type: "checkbox", checkbox: makeup }, "안내 메모": { type: "rich_text", rich_text: memo ? [{ plain_text: memo }] : [] } } })
+const ses = (makeup: boolean, memo = "") => ({ id: "ses-1", properties: { "보강": { type: "checkbox", checkbox: makeup }, "수업 안내 메모": { type: "rich_text", rich_text: memo ? [{ plain_text: memo }] : [] } } })
 
 Deno.test("v2.8.0 수업 안내: 일시 표기(서울, 오전·오후, 날짜만)", () => {
 	eq(m.formatLessonTime("2026-10-30T17:00:00.000+09:00"), "10월 30일(금) 오후 5:00")
