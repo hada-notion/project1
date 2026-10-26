@@ -55,6 +55,7 @@ const PROP_RECORD_ATTENDANCE = "출석"
 const PROP_RECORD_REGISTRATION = "등록"
 const PROP_RECORD_SESSION = "수업"
 const PROP_RECORD_CATEGORY = "구분"
+const PROP_RECORD_CLASS = "클래스" // (v2.8.0) 학습기록 → 클래스. 수업 없는 평가도 반을 알 수 있게, 클래스 "평가" 탭이 이 칸으로 거른다.
 // (2026-09-27, 그룹 진도 보강 지원) 그룹 진도 학생이 결석 후 보강으로 별도 진도를 이행했을 때
 // 자동으로 체크되는 checkbox. 진도교재(학원) DB의 "진행도" 계산에서 이 값이 true인 학습기록은
 // 제외된다 (그 학생 본인의 실제 진도만 반영되도록).
@@ -469,10 +470,12 @@ export async function processCreateLearningRecordQueueItem(payload: {
 //     개별 진도(또는 보강)는 그 교재를 가진 학생의 출석·등록만. 제목 날짜는 수식이 한국 시간으로 만든다.
 // 서버가 하던 출석·등록·진도교재·라이브러리·클래스 읽기가 없어지고, 교재마다 "오늘 학습" 확인 1번(재시도·두 번 클릭
 // 때 중복 방지) + 체크 해제 1번 + 학습기록 만들기 1번만 남는다. 체크 해제를 만들기보다 먼저 하는 순서는 예전과 같다.
+// (v2.8.0) 수식이 "cls"(수업의 클래스)를 주면 학습기록 '클래스'에 넣는다. 수식이 주지 않으면(v2.8.0 전 운영, 학습기록에
+// '클래스' 칸이 없을 수 있음) 넣지 않는다. 그래서 칸이 없는 운영에서 학습기록 만들기가 실패하지 않는다.
 export const RECORD_PLAN_PROP = "학습기록 계획"
 
 export type RecordPlanItem = { book: string; lib?: string; subjects: string[]; atts: string[]; regs: string[]; title: string }
-export type RecordPlan = { makeup: boolean; items: RecordPlanItem[] }
+export type RecordPlan = { makeup: boolean; cls?: string; items: RecordPlanItem[] }
 
 const PLAN_ID = /^[0-9a-f]{32}$/
 const planId = (v: unknown): string | null => {
@@ -506,7 +509,8 @@ export function recordPlanFromText(text: unknown): RecordPlan | null {
 			title: String(it?.t ?? "").trim() || "[학습]",
 		}
 	})
-	return { makeup: raw.mk === 1, items }
+	if (raw.cls && !planId(raw.cls)) throw new Error("학습기록 계획의 클래스 값이 올바르지 않습니다.")
+	return { makeup: raw.mk === 1, ...(raw.cls ? { cls: planId(raw.cls)! } : {}), items }
 }
 
 export const recordPlanText = (p: any): string => (p?.type === "formula" || p?.formula ? String(p.formula?.string ?? "") : "")
@@ -529,6 +533,7 @@ export async function createLearningRecordsFromPlan(sessionId: string, plan: Rec
 			[PROP_RECORD_SESSION]: { relation: [{ id: sessionId }] },
 			[PROP_RECORD_CATEGORY]: { select: { name: "학습" } },
 			...(plan.makeup ? { [PROP_RECORD_MAKEUP]: { checkbox: true } } : {}),
+			...(plan.cls ? { [PROP_RECORD_CLASS]: { relation: [{ id: plan.cls }] } } : {}),
 			...(it.lib ? { [PROP_RECORD_REGULAR_BOOK]: { relation: [{ id: it.lib }] } } : {}),
 			...(it.subjects.length ? { [PROP_RECORD_SUBJECT]: { relation: it.subjects.map((id) => ({ id })) } } : {}),
 		}

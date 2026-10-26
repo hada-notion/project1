@@ -66,3 +66,22 @@ Deno.test("v2.6.29 큐: 두 번 눌러도(체크가 이미 풀림) 만들지 않
 		eq(t.calls.reads.length, 0)
 	} finally { t.restore() }
 })
+
+Deno.test("v2.8.0 학습기록 계획: 수식이 cls(수업의 클래스)를 주면 학습기록 '클래스'에, 없으면 칸을 쓰지 않는다", async () => {
+	const CLS = "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1"
+	const withCls = JSON.stringify({ v: 1, cls: CLS, items: [item(B1)] })
+	eq(recordPlanFromText(withCls)!.cls, CLS)
+	let threw = false
+	try { recordPlanFromText(JSON.stringify({ v: 1, cls: "bad", items: [] })) } catch { threw = true }
+	eq(threw, true)
+	let t = fake([B1])
+	try {
+		await createLearningRecordsFromPlan(SES, recordPlanFromText(withCls)!)
+		eq(t.calls.created[0]["클래스"].relation, [{ id: CLS }])
+	} finally { t.restore() }
+	t = fake([B1])
+	try {
+		await createLearningRecordsFromPlan(SES, recordPlanFromText(plan([item(B1)]))!)
+		eq("클래스" in t.calls.created[0], false)
+	} finally { t.restore() }
+})

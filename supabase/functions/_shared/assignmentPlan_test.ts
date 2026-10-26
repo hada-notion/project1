@@ -42,11 +42,12 @@ Deno.test("v2.6.22 학습활동 속성: 과제는 미제출·마감·자동 마�
 })
 
 function fakeDeps(existingRegs: string[]) {
-	const calls = { created: [] as any[], done: 0, errors: [] as string[], reads: 0, legacy: 0 }
+	const calls = { created: [] as any[], done: 0, errors: [] as string[], reads: 0, legacy: 0, updates: [] as any[] }
 	const saved = { ...assignmentPlanDeps }
 	Object.assign(assignmentPlanDeps, {
 		getPage: async () => { calls.reads++; return { properties: {} } },
 		createPage: async (_db: string, props: any) => { calls.created.push(props); return { id: "x" } },
+		update: async (_id: string, props: any) => { calls.updates.push(props); return {} },
 		queryAllPages: async () => existingRegs.map((r) => ({ properties: { 등록: { relation: [{ id: dashed(r) }] } } })),
 		markDone: async () => { calls.done++ },
 		markError: async (_id: string, m: string) => { calls.errors.push(m) },
@@ -90,9 +91,57 @@ Deno.test("v2.6.22 큐: 본문 값이 잘렸으면 학습기록을 한 번 읽�
 	assignmentPlanDeps.getPage = async () => { t.calls.reads++; return { properties: { "학습활동 계획": { type: "formula", formula: { string: full } } } } }
 	try {
 		await processAssignmentQueueItem({ recordId: REC, plan: full.slice(0, 80) })
-		assertEquals(t.calls.reads, 1)
+		assertEquals(t.calls.reads, 2) // 계획 다시 읽기 + (v2.8.0) 출석 평가의 '평가 구분' 확인
 		assertEquals(t.calls.created.length, 2)
 		assertEquals(t.calls.legacy, 0)
 		assertEquals(t.calls.done, 1)
+	} finally { t.restore() }
+})
+
+const EVAL_TYPE_SELECT = (name: string | null) => ({ properties: { "평가 구분": { type: "select", select: name ? { name } : null } } })
+
+Deno.test("v2.8.0 학습활동 계획: 출석 없는 평가는 등록만으로 만들고, 다른 구분은 출석이 있어야 한다", () => {
+	const p = planFromText(planJson("평가", [{ a: "", r: R1, t: "[평가] 한지민 주간" }, { r: R2, t: "[평가] 임현우 주간" }]))!
+	assertEquals(p.items, [{ reg: R1, title: "[평가] 한지민 주간" }, { reg: R2, title: "[평가] 임현우 주간" }])
+	const props: any = activityProps(REC, p, p.items[0])
+	assertEquals("출석" in props, false)
+	assertEquals(props["등록"].relation[0].id, R1)
+	assertThrows(() => planFromText(planJson("과제", [{ a: "", r: R1 }])))
+	assertThrows(() => planFromText(planJson("학습", [{ r: R1 }])))
+	assertThrows(() => planFromText(planJson("평가", [{ a: "bad", r: R1 }])))
+	assertThrows(() => planFromText(planJson("평가", [{ a: "", r: "" }])))
+})
+
+Deno.test("v2.8.0 큐: 출석 평가는 비어 있는 '평가 구분'을 일일 평가로, 출석 없는 평가·값이 있으면 그대로", async () => {
+	let t = fakeDeps([])
+	assignmentPlanDeps.getPage = async () => { t.calls.reads++; return EVAL_TYPE_SELECT(null) }
+	try {
+		await processAssignmentQueueItem({ recordId: REC, plan: planJson("평가", [{ a: A1, r: R1, t: "a" }]) })
+		assertEquals(t.calls.created.length, 1)
+		assertEquals(t.calls.updates, [{ "평가 구분": { select: { name: "일일 평가" } } }])
+		assertEquals(t.calls.done, 1)
+	} finally { t.restore() }
+	t = fakeDeps([])
+	assignmentPlanDeps.getPage = async () => { t.calls.reads++; return EVAL_TYPE_SELECT("주간 평가") }
+	try {
+		await processAssignmentQueueItem({ recordId: REC, plan: planJson("평가", [{ a: A1, r: R1, t: "a" }]) })
+		assertEquals(t.calls.updates.length, 0)
+	} finally { t.restore() }
+	t = fakeDeps([])
+	assignmentPlanDeps.getPage = async () => { t.calls.reads++; return EVAL_TYPE_SELECT(null) }
+	try {
+		await processAssignmentQueueItem({ recordId: REC, plan: planJson("평가", [{ a: "", r: R1, t: "a" }]) })
+		assertEquals(t.calls.created.length, 1)
+		assertEquals(t.calls.reads, 0)
+		assertEquals(t.calls.updates.length, 0)
+	} finally { t.restore() }
+	// 칸이 없는 운영(v2.8.0 전)·읽기 실패도 학습활동 생성은 끝난다.
+	t = fakeDeps([])
+	assignmentPlanDeps.getPage = async () => { throw new Error("read failed") }
+	try {
+		await processAssignmentQueueItem({ recordId: REC, plan: planJson("평가", [{ a: A1, r: R1, t: "a" }]) })
+		assertEquals(t.calls.updates.length, 0)
+		assertEquals(t.calls.done, 1)
+		assertEquals(t.calls.errors.length, 0)
 	} finally { t.restore() }
 })

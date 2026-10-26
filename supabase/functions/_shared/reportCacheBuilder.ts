@@ -246,7 +246,21 @@ async function buildRegistrationOverview(reg: any, accessToken: string, cachedGe
   }
 }
 
-async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => Promise<any>) {
+// (v2.8.0) 출석 없이 만든 평가(클래스 [평가 만들기], 평가 전용 반)의 날짜: 학습기록 '평가 기간'의 끝 날짜(하루면 그날).
+// 출석 평가와 같은 모양(서울 자정 ISO)으로 돌려 기간 비교·날짜 표시가 출석 날짜와 똑같이 동작하게 한다.
+export function standaloneEvalIso(evalStart: string | null, evalEnd: string | null): string | null {
+  const d = evalEnd ?? evalStart
+  if (!d) return null
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : kstDateOf(d)
+  return day ? `${day}T00:00:00+09:00` : null
+}
+
+// (v2.8.0) 클래스 '리포트 구성': "평가만"이면 화면이 평가 중심으로 줄인다. 비었거나 칸이 없으면 전체.
+export function reportModeOf(cls: any): "all" | "tests_only" {
+  return cls?.properties?.["리포트 구성"]?.select?.name === "평가만" ? "tests_only" : "all"
+}
+
+export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => Promise<any>) {
   const registrationId = reg.id
   const sinceIso = sinceIsoMonthsAgo(DETAIL_LOOKBACK_MONTHS)
   const todayIso = todayIsoSeoul()
@@ -255,9 +269,11 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
   let teacherName = ""
   // (v2.8.0) 클래스의 '반 평균 숨김'을 체크하면 이 반 학생 리포트에 반 평균을 싣지 않는다(칸이 없으면 보여 준다).
   let hideClassAverage = false
+  let report_mode: "all" | "tests_only" = "all"
   if (classId) {
     const cls = await cachedGetPage(classId)
     hideClassAverage = cls.properties?.["반 평균 숨김"]?.checkbox === true
+    report_mode = reportModeOf(cls)
     const teacherId = firstRelationId(cls.properties["담당강사"])
     if (teacherId) {
       const teacher = await cachedGetPage(teacherId)
@@ -367,7 +383,11 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
     // (참고) 이 수정 배포 시 scripts/check-known-regressions.sh의 오래된 검사 2건(100점 💯 문구,
     // 새로고침 버튼 <img> 요구)이 최신 Feather 아이콘 통일 작업과 맞지 않아 회귀 가드를 함께
     // 갱신했다(같은 날짜 커밋 참고).
-    return { id: lp.id, category, iso, content, range, unit, bookTitle }
+    // (v2.8.0) 평가 구분·평가 기간(칸이 없는 운영이면 빈 값). 출석 없는 평가는 평가 기간으로 날짜를 잡는다.
+    const evalType = text(lprops["평가 구분"])
+    const evalStart = dateStartOf(lprops["평가 기간"])
+    const evalEnd = dateEndOf(lprops["평가 기간"])
+    return { id: lp.id, category, iso, content, range, unit, bookTitle, evalType, evalStart, evalEnd }
   }
   const logDetails = await Promise.all(logPages.map(readLogDetail))
   const logDetailById = new Map(logDetails.map((detail) => [detail.id, detail]))
@@ -409,6 +429,7 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
         source = await readLogDetail(await cachedGetPage(learningRecordId))
         logDetailById.set(learningRecordId, source)
       }
+      if (!classIso && text(props["구분"]) === "평가") classIso = standaloneEvalIso(source?.evalStart ?? null, source?.evalEnd ?? null)
       // (v2.6.19) 과제 마감일도 수식(과제 마감일)이 아니라 마감 출석(과제 마감)의 실제 날짜를 쓴다.
       let dueIso: string | null = null
       const dueAttendanceId = firstRelationId(props["과제 마감"])
@@ -429,6 +450,10 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
         range: source?.range ?? "",
         unit: source?.unit ?? "",
         content: source?.content ?? "",
+        evalType: source?.evalType ?? "",
+        evalStart: source?.evalStart ?? null,
+        evalEnd: source?.evalEnd ?? null,
+        standalone: !attendanceId,
       }
     }),
   )
@@ -547,6 +572,11 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
       date: fmtDateKr(a.classIso),
       correct: a.correct,
       total: a.total,
+      // (v2.8.0) 평가 구분·기간. 화면이 평가 카드에 알약·기간으로 보여 준다(비어 있으면 표시 안 함).
+      eval_type: a.evalType || "",
+      eval_start: a.evalStart,
+      eval_end: a.evalEnd,
+      standalone: a.standalone,
       class_avg: classAverages[i]?.avg ?? null,
       class_count: classAverages[i]?.count ?? 0,
       source_body: a.learningRecordId ? (sourcePageBodies.get(a.learningRecordId) ?? []) : [],
@@ -562,6 +592,7 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
     tests,
     teacher_comments,
     report_comments,
+    report_mode,
     updated_at: new Date().toISOString(),
   }
 }
