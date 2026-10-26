@@ -161,7 +161,7 @@ Deno.test("v2.8.0 가정통신문 [수강료 안내]: 반별 금액 줄·합계 
 
 Deno.test("v2.8.0 가정통신문 [월간 일정 안내]: 학생 개인·두 반·학원 전체·학교 일정을 세 구역으로, 다른 학교 일정은 뺌, 0건이면 안 보냄", async () => {
 	const regs = [reg("r1", { student: "s1", name: "이도윤", cls: "c1", clsName: "중1 A 수학" }), reg("r2", { student: "s1", name: "이도윤", cls: "c2", clsName: "중1 영어 B" })]
-	const pages: Record<string, any> = { b1: batch("b1", { student: "s1" }), s1: { id: "s1", properties: { "학교": rel("sch"), "학년": rel("g1") } } }
+	const pages: Record<string, any> = { b1: batch("b1", { student: "s1" }), s1: { id: "s1", properties: { "학교": rel("sch"), "학년": rel("g1") } }, c1: { id: "c1", properties: { "안내 메모": rt("") } }, c2: { id: "c2", properties: { "안내 메모": rt("기말 대비 보충이 있습니다.") } } }
 	const byLink: Record<string, any[]> = {
 		"학생:s1": [ev("e-own", { name: "보충 수업", start: "2026-12-08", stu: ["s1"] })],
 		"클래스:c1": [ev("e-c1", { name: "겨울 휴원", cat: "💤 휴원", start: "2026-12-24", end: "2026-12-26", cls: ["c1"] })],
@@ -176,11 +176,21 @@ Deno.test("v2.8.0 가정통신문 [월간 일정 안내]: 학생 개인·두 반
 	eq(c.sends[0].vars, {
 		"#{학생이름}": "이도윤", "#{클래스}": "중1 A 수학 · 중1 영어 B", "#{안내월}": "12월",
 		"#{휴원일정}": "12/24(목)~12/26(토) 겨울 휴원", "#{학원일정}": "12/8(화) 보충 수업\n12/20(일) 학부모 설명회", "#{학사일정}": "12/10(목)~12/12(토) 기말고사",
+		"#{전달사항}": "기말 대비 보충이 있습니다.",
 		"#{페이지ID}": "/r.html?token=tok",
 	})
 	eq(c.updates.find((u) => u.props["일정"])?.props["일정"].relation.map((r: any) => r.id), ["e-own", "e-sch", "e-all", "e-c1"])
 	eq(c.updates.at(-1), { id: "b1", props: { "일정 안내 일시": { date: { start: "2026-11-28" } } } })
 	eq(c.logs, [{ cat: "월간 일정 안내", status: "성공", reg: "r1", tuition: undefined }])
+	// 가정통신문 메모가 있으면 클래스 안내 메모보다 먼저, 반 일괄은 누른 반의 메모
+	pages.b1 = batch("b1", { student: "s1" }); pages.b1.properties["가정통신문 메모"] = rt("하윤이는 12/8 보충에 꼭 와 주세요.")
+	const cm = mock(pages, q)
+	await m.processMonthlySendBatchItem({ kind: "schedule", batchId: "b1" })
+	eq(cm.sends[0].vars["#{전달사항}"], "하윤이는 12/8 보충에 꼭 와 주세요.")
+	const p2: any = { ...pages, b1: batch("b1", { student: "s1" }) }
+	const cc = mock(p2, q)
+	await m.sendScheduleNotice(p2.b1, "c1")
+	eq(cc.sends[0].vars["#{전달사항}"], "없음")
 	const c2 = mock({ b1: batch("b1", { student: "s1" }), s1: pages.s1 }, (ds) => ds === "registrations" ? regs : [])
 	await m.processMonthlySendBatchItem({ kind: "schedule", batchId: "b1" })
 	eq([c2.sends.length, c2.marks[1].includes("공개 일정이 없어")], [0, true])

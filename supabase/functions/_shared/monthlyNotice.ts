@@ -13,6 +13,7 @@
 //   먼저 쓰고, 없거나 비면 같은 규칙으로 계산한다. 보낸 뒤 각 수강료의 안내문 전송 상태를 ✅로, 전송로그는 수강료마다 하나.
 //   월간 일정 안내 = 학생 개인·그 달 다니는 반 전부·학교·학년·학원 전체 공개 일정을 휴원·학원·학교 세 구역으로(리포트와 같은 규칙).
 //   보낼 때 일정을 다시 묶는다(묶은 뒤 생긴 일정도 들어간다). 그 달 일정이 0건이면 보내지 않는다.
+//   전달사항 = 가정통신문 메모, 비면 클래스 안내 메모, 둘 다 비면 "없음"(50자).
 // 발송 규칙은 수업 안내와 같다(설정 행이 꺼졌거나 비면 ⚠️, 연락처 없음 ⚠️, 발송 단계 실패는 다시 보내지 않음).
 import { createSendLogEntry, extractErrorMessage, getAlimtalkConfig, getBotUserId, getScheduleConfig } from "./adminShared.ts"
 import { getFormulaText, getRollupText, syncStudentReport } from "./alimtalkShared.ts"
@@ -22,7 +23,7 @@ import { enqueueSync } from "./syncQueue.ts"
 import { markDone, markError, markRunning, type StatusSpec } from "./statusTracking.ts"
 import { isParentPublicEvent } from "./scheduleVisibility.ts"
 import { inPeriodRegistration, resolveBatchDataSourceId, seoulDay, studentNameOf } from "./classReportPlan.ts"
-import { LessonConfigError, sendConfiguredAlimtalk } from "./lessonNotice.ts"
+import { LessonConfigError, noteText, sendConfiguredAlimtalk } from "./lessonNotice.ts"
 import { eventLine, inMonth, isAcademyWide, monthFilter, monthLabel, nextMonthKey, SCHEDULE_NOTICE_STATUS_SPEC, type Section, sectionOf, sectionText } from "./scheduleNotice.ts"
 
 export const KIND_MONTHLY = "가정통신문"
@@ -47,6 +48,9 @@ const PROP_BATCH_EVENTS = "일정"
 const PROP_BATCH_TUITION = "수강료"
 const PROP_TUITION_SENT = "수강료 안내 일시"
 const PROP_SCHEDULE_SENT = "일정 안내 일시"
+const PROP_BATCH_NOTE = "가정통신문 메모"
+// 클래스(학원) DB: 월간 일정 안내 전달사항(반 학생 모두). 학생 가정통신문 메모가 있으면 그것이 먼저.
+const PROP_CLASS_NOTE = "안내 메모"
 // 수강료(학원) DB
 const PROP_TUITION_BATCH = "알림톡 발송함"
 // 클래스(학원) DB: 가정통신문의 달(1일~말일). 비면 누른 날의 다음 달.
@@ -343,8 +347,23 @@ export async function sendTuitionNotice(batch: any): Promise<SendResult> {
 	return "sent"
 }
 
+// 월간 일정 안내의 전달사항: 가정통신문 메모 → 클래스 안내 메모(반 일괄은 누른 반, 한 명 버튼은 그 달 다니는 반 중
+// 메모가 있는 첫 반, 반 이름순) → "없음". 50자까지(수업 안내와 같은 규칙).
+async function scheduleNote(batch: any, regs: any[], classId?: string): Promise<string> {
+	const own = textOf(batch?.properties?.[PROP_BATCH_NOTE]?.rich_text).trim()
+	if (own) return noteText(own)
+	const ids = classId ? [classId] : Array.from(new Set(regs.slice().sort((a, b) => (classNameOfReg(a) < classNameOfReg(b) ? -1 : 1)).flatMap((r: any) => relIds(r?.properties?.["클래스"]))))
+	for (const id of ids) {
+		const cls: any = await monthlyDeps.getPage(id).catch(() => null)
+		const memo = textOf(cls?.properties?.[PROP_CLASS_NOTE]?.rich_text).trim()
+		if (memo) return noteText(memo)
+	}
+	return noteText("")
+}
+
 // 월간 일정 안내 한 통. 이미 보냈으면 skipped, 그 달 일정이 없으면 empty(보내지 않음).
-export async function sendScheduleNotice(batch: any): Promise<SendResult> {
+// classId = 반 일괄로 보낼 때 누른 반(전달사항의 클래스 안내 메모를 그 반에서 읽는다).
+export async function sendScheduleNotice(batch: any, classId?: string): Promise<SendResult> {
 	const deps = monthlyDeps
 	if (batch?.properties?.[PROP_SCHEDULE_SENT]?.date?.start) return "skipped"
 	const month = String(seoulDay(batch?.properties?.[PROP_BATCH_PERIOD]?.date?.start) ?? "").slice(0, 7)
@@ -366,6 +385,7 @@ export async function sendScheduleNotice(batch: any): Promise<SendResult> {
 		"#{휴원일정}": sectionText(lines, "휴원"),
 		"#{학원일정}": sectionText(lines, "학원"),
 		"#{학사일정}": sectionText(lines, "학교"),
+		"#{전달사항}": await scheduleNote(batch, regs, classId),
 		"#{페이지ID}": `${REPORT_PATH}?token=${await deps.token(regId)}`,
 	}
 	const sender = await senderId()
@@ -383,7 +403,7 @@ export async function sendScheduleNotice(batch: any): Promise<SendResult> {
 	return "sent"
 }
 
-const sendOf = (kind: NoticeKind) => (kind === "tuition" ? sendTuitionNotice : sendScheduleNotice)
+const sendOf = (kind: NoticeKind) => (kind === "tuition" ? (b: any, _classId?: string) => sendTuitionNotice(b) : sendScheduleNotice)
 const sentProp = (kind: NoticeKind) => (kind === "tuition" ? PROP_TUITION_SENT : PROP_SCHEDULE_SENT)
 const kindLabel = (kind: NoticeKind) => (kind === "tuition" ? "수강료 안내" : "월간 일정 안내")
 export const classSpecOf = (kind: NoticeKind) => (kind === "tuition" ? CLASS_TUITION_NOTICE_STATUS_SPEC : SCHEDULE_NOTICE_STATUS_SPEC)
@@ -438,7 +458,7 @@ export async function processMonthlySendStudentItem(p: SendStudentPayload): Prom
 		if (!batch) await appendError(p.classId, `${p.studentName}: ${monthLabel(p.month)} 가정통신문이 없습니다(클래스 [월 수강료 생성]을 먼저).`)
 		else {
 			try {
-				await sendOf(p.kind)(batch)
+				await sendOf(p.kind)(batch, p.classId)
 			} catch (err) {
 				if (!(err instanceof MonthlyBlocked || err instanceof MonthlySendFailed)) throw err
 				await appendError(p.classId, `${p.studentName}: ${(err as Error).message}`)
