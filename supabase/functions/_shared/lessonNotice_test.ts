@@ -86,7 +86,8 @@ Deno.test("v2.8.0 수업 안내 큐: 설정 꺼짐·연락처 없음은 로그 �
 	let c = mock({ page: att(), sendThrows: new m.LessonConfigError("알림톡 설정의 '수업 안내' 행을 켜고(활성 여부) 카카오 채널 ID·템플릿 ID를 넣어 주세요.") })
 	await m.processLessonNoticeQueueItem({ attendanceId: "att-1" })
 	eq(c.logs.length, 0)
-	eq(c.patches[0].props["마지막 오류"].rich_text[0].text.content.includes("'수업 안내' 행"), true)
+	eq(c.patches[0].props["수업 안내 오류"].rich_text[0].text.content.includes("'수업 안내' 행"), true)
+	eq(c.patches[0].props["마지막 오류"], undefined) // 보고서 오류 칸은 건드리지 않는다
 	c = mock({ page: att(), sendThrows: new Error("Solapi 502") })
 	await m.processLessonNoticeQueueItem({ attendanceId: "att-1" })
 	eq(c.logs, [{ category: "수업 안내", status: "실패", reg: "reg-1", att: null }])

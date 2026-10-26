@@ -10,6 +10,7 @@
 //   - 결석으로 표시된 학생은 보내지 않는다. 안내구분은 수업 "보강" 체크면 "보강 수업", 아니면 "수업".
 //     안내내용은 수업 "안내 메모"(비면 보강은 "보강 수업이 잡혔습니다", 일반은 "-").
 //   - 알림톡 설정의 "수업 안내"·"수업 변경 안내" 행이 꺼져 있거나 템플릿 ID가 비면 보내지 않고 ⚠️(다른 템플릿으로 잘못 나가지 않게).
+//   - 오류는 출석 "수업 안내 오류"에만 적는다(보고서의 "마지막 오류"는 건드리지 않음).
 //   - 전송 로그는 등록에만 연결한다(출석의 전송 내역·발송 횟수는 일일 보고서용이라 섞지 않음). 보낸 뒤 출석 "수업 안내 일시"를 적는다.
 // 발송 전 단계(읽기)에서 실패하면 큐가 다시 한다. 발송 단계에서 실패하면 다시 보내지 않고 ⚠️(이미 나갔을 수 있음).
 import {
@@ -27,6 +28,8 @@ import { relIds } from "./notionClient.ts"
 export const LESSON_NOTICE_STATUS_PROP = "수업 안내 상태"
 export const LESSON_NOTICE_SENT_PROP = "수업 안내 일시"
 export const LESSON_MEMO_PROP = "안내 메모"
+// 출석 "마지막 오류"는 일일 보고서 칸이다(실시간 처리 상태·학생별 전송 상태가 읽음). 수업 안내는 따로 쓴다.
+export const LESSON_NOTICE_ERROR_PROP = "수업 안내 오류"
 export const TARGET_LESSON_NOTICE = "lesson-notice"
 
 export type LessonNoticeKind = "수업 안내" | "수업 변경 안내"
@@ -120,7 +123,7 @@ export const lessonNoticeDeps = {
 async function finish(attendanceId: string, status: "✅ 완료" | "⚠️ 오류", message: string | null, extra: Record<string, unknown> = {}) {
   await lessonNoticeDeps.patch(attendanceId, {
     [LESSON_NOTICE_STATUS_PROP]: { select: { name: status } },
-    "마지막 오류": { rich_text: message ? [{ text: { content: message.slice(0, 1900) } }] : [] },
+    [LESSON_NOTICE_ERROR_PROP]: { rich_text: message ? [{ text: { content: message.slice(0, 1900) } }] : [] },
     ...extra,
   }).catch((err: unknown) => console.error("[lesson-notice] 출석 상태 쓰기 실패:", attendanceId, extractErrorMessage(err)))
 }
