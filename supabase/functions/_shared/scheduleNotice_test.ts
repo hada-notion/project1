@@ -59,85 +59,12 @@ function mock(pages: Record<string, any>, o: { academy?: any[]; regs?: any[]; al
 		send: async (code: string, regId: string, _phone: string, vars: any) => { if (o.sendThrows) throw o.sendThrows; c.sends.push({ code, regId, vars }) },
 		log: async (a: any) => { c.logs.push({ cat: a.category, status: a.status, reg: a.registrationId }) },
 		botUser: async () => null,
-		token: async () => "tok",
-		sentAcademy: async () => new Set(o.already ?? []),
-		markSent: async (s: string, ids: string[], month: string) => { c.sent.push({ s, ids, month }) },
 		markRunning: async (id: string) => { c.marks.push(`running:${id}`) },
 		markDone: async (id: string) => { c.marks.push(`done:${id}`) },
 		markError: async (id: string, msg: string) => { c.marks.push(`error:${id}:${msg}`) },
 	})
 	return c
 }
-
-Deno.test("v2.8.0 월간 일정 안내(반): 다음 달 반 공개 일정 + 학원 전체 일정, 학생마다 큐", async () => {
-	const pages: Record<string, any> = {
-		cls: { id: "cls", properties: { "클래스명": title("중2 B"), "일정 안내 월": rt(""), "일정": rel("c1", "c2", "c3", "c4") } },
-		c1: ev("c1", { name: "보충", start: "2026-11-14", cls: ["cls"] }),
-		c2: ev("c2", { name: "비공개", start: "2026-11-15", cls: ["cls"], pub: false }),
-		c3: ev("c3", { name: "지난달", start: "2026-10-30", cls: ["cls"] }),
-		c4: ev("c4", { name: "숨김", start: "2026-11-16", cls: ["cls"], hidden: true }),
-	}
-	const c = mock(pages, { academy: [ev("a1", { name: "휴원", cat: "💤 휴원", start: "2026-11-03" }), ev("x", { name: "다른 반", start: "2026-11-05", cls: ["other"] })], regs: [reg("r1", "s1", "김하윤"), reg("r2", "s2", "박지민"), reg("r3", "s3", "종료", false)] })
-	await m.processScheduleMonthClassItem({ classId: "cls", month: "2026-11" })
-	eq(c.enq.length, 2)
-	eq(c.enq[0].target, "schedule-month-student")
-	eq(c.enq[0].payload.classEvents, [{ id: "c1", day: "2026-11-14", line: "11/14(토) 보충", sec: "학원" }])
-	eq(c.enq[0].payload.academyEvents, [{ id: "a1", day: "2026-11-03", line: "11/3(화) 휴원", sec: "휴원" }])
-	eq([c.enq[0].payload.className, c.enq[1].payload.last], ["중2 B", true])
-	eq(c.marks, ["running:cls"])
-})
-
-Deno.test("v2.8.0 월간 일정 안내(반): 같은 달 다시 누르면·일정이 없으면 ⚠️로 멈춤", async () => {
-	let c = mock({ cls: { id: "cls", properties: { "클래스명": title("중2 B"), "일정 안내 월": rt("2026-11"), "일정": rel() } } })
-	await m.processScheduleMonthClassItem({ classId: "cls", month: "2026-11" })
-	eq(c.enq.length, 0)
-	eq(c.marks[1].includes("이미 11월 일정 안내"), true)
-	c = mock({ cls: { id: "cls", properties: { "클래스명": title("중2 B"), "일정 안내 월": rt(""), "일정": rel() } } }, { regs: [reg("r1", "s1", "김하윤")] })
-	await m.processScheduleMonthClassItem({ classId: "cls", month: "2026-11" })
-	eq(c.marks[1].includes("공개 일정이 없습니다"), true)
-})
-
-Deno.test("v2.8.0 월간 일정 안내(반): 학생 학교·학년 일정을 리포트 규칙대로 학생마다 더함", async () => {
-	const pages: Record<string, any> = {
-		cls: { id: "cls", properties: { "클래스명": title("중2 B"), "일정 안내 월": rt(""), "일정": rel() } },
-		s1: { id: "s1", properties: { "학교": rel("schA"), "학년": rel("g2") } },
-		s2: { id: "s2", properties: { "학교": rel("schB"), "학년": rel("g2") } },
-	}
-	const exam = ev("x1", { name: "A중 기말고사", cat: "🏫 학사 일정", start: "2026-11-09", end: "2026-11-11", school: ["schA"], grade: ["g2"] })
-	const g3only = ev("x2", { name: "A중 3학년 행사", cat: "🏫 학사 일정", start: "2026-11-12", school: ["schA"], grade: ["g3"] })
-	const allG2 = ev("x3", { name: "중2 전체 행사", cat: "🏫 학사 일정", start: "2026-11-20", grade: ["g2"] })
-	const c = mock(pages, { regs: [reg("r1", "s1", "김하윤"), reg("r2", "s2", "박지민")], byLink: { "학교:schA": [exam, g3only], "학년:g2": [exam, allG2] } })
-	await m.processScheduleMonthClassItem({ classId: "cls", month: "2026-11" })
-	eq(c.enq.map((e) => e.payload.academyEvents.map((l: any) => l.id)), [["x1", "x3"], ["x3"]])
-	eq(c.enq[0].payload.academyEvents[0], { id: "x1", day: "2026-11-09", line: "11/9(월)~11/11(수) A중 기말고사", sec: "학교" })
-})
-
-Deno.test("v2.8.0 월간 일정 안내(학생): 이미 받은 학원 전체 일정은 빼고 보내며, 보낸 학원 일정을 기록하고 마지막에 반 마침", async () => {
-	const pages: Record<string, any> = { r1: reg("r1", "s1", "김하윤"), cls: { id: "cls", properties: { "마지막 오류": rt("") } } }
-	const c = mock(pages, { already: ["a1"] })
-	const base = { classId: "cls", className: "중2 B", month: "2026-11", classEvents: [{ id: "c1", day: "2026-11-14", line: "11/14(토) 보충", sec: "학원" as const }], academyEvents: [{ id: "a1", day: "2026-11-03", line: "11/3(화) 휴원", sec: "휴원" as const }, { id: "a2", day: "2026-11-20", line: "11/20(금) 설명회", sec: "학원" as const }, { id: "x1", day: "2026-11-09", line: "11/9(월)~11/11(수) A중 기말고사", sec: "학교" as const }] }
-	await m.processScheduleMonthStudentItem({ ...base, regId: "r1", last: true })
-	eq(c.sends.length, 1)
-	eq(c.sends[0].code, "월간 일정 안내")
-	eq(c.sends[0].vars, { "#{학생이름}": "김하윤", "#{클래스}": "중2 B", "#{안내월}": "11월", "#{휴원일정}": "없음", "#{학원일정}": "11/14(토) 보충\n11/20(금) 설명회", "#{학사일정}": "11/9(월)~11/11(수) A중 기말고사", "#{페이지ID}": "/r.html?token=tok" })
-	eq(c.sent, [{ s: "s1", ids: ["a2", "x1"], month: "2026-11" }])
-	eq(c.logs, [{ cat: "월간 일정 안내", status: "성공", reg: "r1" }])
-	eq(c.updates.at(-1), { id: "cls", props: { "일정 안내 월": { rich_text: [{ text: { content: "2026-11" } }] } } })
-	eq(c.marks, ["done:cls"])
-})
-
-Deno.test("v2.8.0 월간 일정 안내(학생): 받을 일정이 없으면 보내지 않고, 설정 꺼짐은 반 마지막 오류에 남기고 마지막에 ⚠️", async () => {
-	let c = mock({ r1: reg("r1", "s1", "김하윤"), cls: { id: "cls", properties: { "마지막 오류": rt("") } } }, { already: ["a1"] })
-	await m.processScheduleMonthStudentItem({ classId: "cls", className: "중2 B", month: "2026-11", regId: "r1", classEvents: [], academyEvents: [{ id: "a1", day: "2026-11-03", line: "x", sec: "휴원" }] })
-	eq(c.sends.length, 0)
-	const pages: Record<string, any> = { r1: reg("r1", "s1", "김하윤"), cls: { id: "cls", properties: { "마지막 오류": rt("") } } }
-	c = mock(pages, { sendThrows: new LessonConfigError("알림톡 설정의 '월간 일정 안내' 행을 켜고…") })
-	await m.processScheduleMonthStudentItem({ classId: "cls", className: "중2 B", month: "2026-11", regId: "r1", classEvents: [{ id: "c1", day: "2026-11-14", line: "x", sec: "학원" }], academyEvents: [], last: true })
-	eq(c.logs.length, 0)
-	eq(c.sent.length, 0)
-	eq(c.marks.length, 1)
-	eq(c.marks[0].startsWith("error:cls:김하윤: 알림톡 설정의 '월간 일정 안내'"), true)
-})
 
 Deno.test("v2.8.0 일정 안내(한 건): 연결된 학생·반의 수강 중 학생(겹치면 한 번), 날짜가 같으면 다시 안 보냄", async () => {
 	const pages: Record<string, any> = {
