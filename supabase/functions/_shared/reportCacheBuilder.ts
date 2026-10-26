@@ -253,8 +253,11 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
 
   const classId = firstRelationId(reg.properties["클래스"])
   let teacherName = ""
+  // (v2.7.20) 클래스의 '반 평균 숨김'을 체크하면 이 반 학생 리포트에 반 평균을 싣지 않는다(칸이 없으면 보여 준다).
+  let hideClassAverage = false
   if (classId) {
     const cls = await cachedGetPage(classId)
+    hideClassAverage = cls.properties?.["반 평균 숨김"]?.checkbox === true
     const teacherId = firstRelationId(cls.properties["담당강사"])
     if (teacherId) {
       const teacher = await cachedGetPage(teacherId)
@@ -514,12 +517,12 @@ async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => 
       return { date: day, status, submitted, total }
     })
 
-  // 반 평균: 같은 학습기록에 묶인 학생들의 평가 학습활동 점수(정답 ÷ 전체 문항) 평균.
+  // (v2.7.20) 반 평균: 같은 학습기록에 묶인 학생들의 평가 학습활동 점수(정답 ÷ 전체 문항) 평균.
   // 학습기록의 '학습활동' 관계로 형제 활동을 읽으므로 Notion에 페이지를 따로 만들 필요가 없다.
   // 점수가 있는 학생이 3명 미만이면 null: 2명이면 내 점수를 빼서 다른 학생 점수를 알 수 있다.
   // 개별진도·개별수업은 학습기록에 학생이 한 명이라 자연히 null이 된다.
-  const classAverageOf = async (recordId: string | null) => {
-    if (!recordId) return null
+  const classAverageOf = async (recordId?: string | null) => {
+    if (!recordId || hideClassAverage) return null
     const record = await cachedGetPage(recordId)
     const siblingIds = relationIds(record.properties?.["학습활동"])
     const siblings = await mapWithConcurrency(siblingIds, 6, (id) => cachedGetPage(id))
