@@ -67,6 +67,8 @@ const CHECKLIST=[
  ['클래스(학원)',[
   ['class-report-sync','학생 페이지 동기화',BUTTON,route('sync-class-report-cache')],
   ['class-report-create','보고서 생성',BUTTON,route('create-class-reports'),{note:'본문 속성은 보고서 구분·보고서 기간·클래스명을 고릅니다(v2.8.0).'}]]],
+ ['알림톡 발송함(학원)',[
+  ['batch-eval-create','평가 만들기',BUTTON,route('create-class-reports'),{path:'/evaluations',note:'주소 끝의 /evaluations까지 넣습니다. 진도교재 탭 안의 버튼, 본문 속성은 평가 계획만 고릅니다(v2.8.0).'}]]],
  ['메뉴(학원)',[['menu-bulk-classes','다음주 수업 일괄 생성',BUTTON,route('generate-classes'),{path:'?mode=bulk',note:'주소 끝의 ?mode=bulk까지 넣습니다.'}]],{
   text:'메뉴 DB의 어떤 페이지(예: 수업 HOME)를 열어도 제목 아래 속성 줄에 "다음주 수업 일괄 생성" 버튼이 있습니다. 속성 이름을 클릭하고 "자동화 편집"을 눌러 웹훅 보내기의 값 칸을 바꿉니다. 메뉴 DB에는 "웹훅 등록" 보기가 없어도 됩니다.',
   image:'assets/admin-settings/menu-bulk-button.png',alt:'메뉴 페이지 상단 속성 줄의 다음주 수업 일괄 생성 버튼'}],

@@ -42,7 +42,7 @@ Deno.test("v2.6.22 학습활동 속성: 과제는 미제출·마감·자동 마�
 })
 
 function fakeDeps(existingRegs: string[]) {
-	const calls = { created: [] as any[], done: 0, errors: [] as string[], reads: 0, legacy: 0, updates: [] as any[] }
+	const calls = { created: [] as any[], done: 0, errors: [] as string[], reads: 0, legacy: 0, updates: [] as any[], linked: 0 }
 	const saved = { ...assignmentPlanDeps }
 	Object.assign(assignmentPlanDeps, {
 		getPage: async () => { calls.reads++; return { properties: {} } },
@@ -52,6 +52,7 @@ function fakeDeps(existingRegs: string[]) {
 		markDone: async () => { calls.done++ },
 		markError: async (_id: string, m: string) => { calls.errors.push(m) },
 		legacy: async () => { calls.legacy++ },
+		linkBatch: async () => { calls.linked++; return 0 },
 	})
 	return { calls, restore: () => Object.assign(assignmentPlanDeps, saved) }
 }
@@ -120,6 +121,7 @@ Deno.test("v2.8.0 큐: 출석 평가는 비어 있는 '평가 구분'을 일일 
 		assertEquals(t.calls.created.length, 1)
 		assertEquals(t.calls.updates, [{ "평가 구분": { select: { name: "일일 평가" } } }])
 		assertEquals(t.calls.done, 1)
+		assertEquals(t.calls.linked, 0)
 	} finally { t.restore() }
 	t = fakeDeps([])
 	assignmentPlanDeps.getPage = async () => { t.calls.reads++; return EVAL_TYPE_SELECT("주간 평가") }
@@ -134,6 +136,8 @@ Deno.test("v2.8.0 큐: 출석 평가는 비어 있는 '평가 구분'을 일일 
 		assertEquals(t.calls.created.length, 1)
 		assertEquals(t.calls.reads, 0)
 		assertEquals(t.calls.updates.length, 0)
+		// (v2.8.0) 출석 없는 평가만 발송함 보고서 붙이기를 부른다(출석 평가·일일 기록은 호출이 늘지 않음).
+		assertEquals(t.calls.linked, 1)
 	} finally { t.restore() }
 	// 칸이 없는 운영(v2.8.0 전)·읽기 실패도 학습활동 생성은 끝난다.
 	t = fakeDeps([])
