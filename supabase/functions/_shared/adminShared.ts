@@ -234,6 +234,9 @@ export type SendLogCategory =
   | "수강료 안내"
   | "교재비 안내"
   | "키오스크 알림톡"
+  // (v2.8.0) 수업 안내 알림톡(보강·예외 수업). _shared/lessonNotice.ts
+  | "수업 안내"
+  | "수업 변경 안내"
 export type SendLogStatus = "성공" | "실패"
 
 function formatSendLogDate(periodStart?: string): string {
