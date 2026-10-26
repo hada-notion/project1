@@ -78,13 +78,17 @@ function scorePillText(correct, total) {
   const pct = Math.round(((correct ?? 0) / total) * 100)
   return `${pct}점 (${correct ?? 0}/${total})`
 }
-// (v2.7.20) 반 평균이 있는 평가는 "우리 아이 / 반 평균" 가로 막대 두 줄로 비교한다(반 평균이 없으면 그리지 않는다).
+// (v2.7.20) 평가 점수를 가로 막대로 보여 준다. 위 줄은 "OOO 학생" 점수, 반 평균이 있으면 아래 줄에 반 평균을 더한다.
+function studentLabel() {
+  const name = (STUDENT && STUDENT.student_name) || ""
+  return name ? `${name} 학생` : "학생"
+}
 function testCompareBarsHtml(t) {
-  const avg = t && t.classAvg
-  if (typeof avg !== "number" || !t.total) return ""
+  if (!t || !t.total) return ""
+  const avg = t.classAvg
   const mine = Math.round(((t.correct ?? 0) / t.total) * 100)
-  const row = (label, value, cls) => `<div class="score-compare-row ${cls}"><span class="score-compare-label">${label}</span><span class="score-compare-track"><span class="score-compare-fill" style="width:${Math.max(0, Math.min(100, value))}%"></span></span><span class="score-compare-value">${value}점</span></div>`
-  return `<div class="score-compare">${row("우리 아이", mine, "mine")}${row("반 평균", Math.round(avg * 10) / 10, "class")}</div>`
+  const row = (label, value, cls) => `<div class="score-compare-row ${cls}"><span class="score-compare-label">${esc(label)}</span><span class="score-compare-track"><span class="score-compare-fill" style="width:${Math.max(0, Math.min(100, value))}%"></span></span><span class="score-compare-value">${value}점</span></div>`
+  return `<div class="score-compare">${row(studentLabel(), mine, "mine")}${typeof avg === "number" ? row("반 평균", Math.round(avg * 10) / 10, "class") : ""}</div>`
 }
 // 학습기록 카드의 단원·내용은 각각 독립된 줄로 표시한다.
 // 단원은 "1-1." 같은 번호 패턴 앞에서 잘라 하나씩 별도 줄(불릿)로 보여준다 (단원이 하나뿐이어도 동일하게 처리).

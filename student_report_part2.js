@@ -835,7 +835,7 @@ function buildTestTrendChartHtml(points) {
   const classLine = classPoints.length > 1 ? `<polyline points="${classPath}" fill="none" stroke="#b9ab98" stroke-width="1.5" stroke-dasharray="4 3" />` : ""
   const classDots = classPoints.map((p) => `<circle cx="${xFor(p.i)}" cy="${yFor(p.classAvg)}" r="3" fill="#fff" stroke="#b9ab98" stroke-width="1.5" style="pointer-events:none" />`).join("")
   const legend = classPoints.length
-    ? `<div class="chart-legend"><span class="legend-item"><span class="dot" style="background:#6b5d4d"></span>우리 아이</span><span class="legend-item"><span class="dot" style="background:#fff;border:1.5px solid #b9ab98"></span>반 평균</span></div>`
+    ? `<div class="chart-legend"><span class="legend-item"><span class="dot" style="background:#6b5d4d"></span>${esc(studentLabel())}</span><span class="legend-item"><span class="dot" style="background:#fff;border:1.5px solid #b9ab98"></span>반 평균</span></div>`
     : ""
   const emptyOverlay = validPoints.length ? "" : '<div class="empty">해당 기간 평가 기록이 없습니다.</div>'
   return `
