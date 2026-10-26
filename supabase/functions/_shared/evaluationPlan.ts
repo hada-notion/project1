@@ -1,7 +1,7 @@
 // _shared/evaluationPlan.ts
 //
-// (v2.8.0) 발송함 [평가 만들기] → create-class-reports/evaluations 웹훅 → 큐. 수업 [학습기록 생성]과 같은 짝이다:
-//   수업 `오늘 학습` 체크 + [학습기록 생성]  ↔  발송함(반·구분·기간) 진도교재 `평가 대상` 체크 + [평가 만들기]
+// (v2.8.0) 발송함 [평가 생성] → create-class-reports/evaluations 웹훅 → 큐. 수업 [학습기록 생성]과 같은 짝이다:
+//   수업 `오늘 학습` 체크 + [학습기록 생성]  ↔  발송함(반·구분·기간) 진도교재 `평가 대상` 체크 + [평가 생성]
 // 무엇을 만들지는 발송함 수식 "평가 계획"이 계산한다(체크된 교재마다 평가 학습기록 1개, 대상 학생 = 이 발송함에 보고서가 있는 학생):
 //   {"v":1,"items":[{"b":"진도교재","l":"라이브러리","s":["과목"],"r":["등록"],"t":"[주간 평가] 교재 · 중2 B 10.19~10.25"}]}
 // 평가 구분·평가 기간·클래스는 서버가 발송함 페이지에서 읽는다(구분이 주간·월간 보고서가 아니면 ⚠️ 오류, 수강료 발송함 보호).
@@ -99,7 +99,7 @@ export const evaluationDeps = {
 	markError: (id: string, message: string) => markError(id, BATCH_EVAL_STATUS_SPEC, message),
 }
 
-// 큐 "발송함 평가 만들기".
+// 큐 "발송함 평가 생성".
 export async function processBatchEvaluationsQueueItem(payload: BatchEvaluationsPayload): Promise<void> {
 	const deps = evaluationDeps
 	const batchId = payload.batchId
