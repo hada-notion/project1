@@ -94,11 +94,14 @@ Deno.test("v2.8.0 리포트 캐시: 평가는 구분마다 최근 6개씩(일일
 	}
 })
 
-Deno.test("v2.8.0 리포트 캐시: 보강 출석의 기존 수업일을 그 출석의 학습기록에 makeup_of로 붙인다(없으면 안 붙음)", async () => {
+Deno.test("v2.8.0 리포트 캐시: 보강 출석의 기존 결석 수업일(서울 날짜)을 그 출석의 학습기록에 makeup_of로 붙인다(없으면 안 붙음)", async () => {
 	const REG = "reg-9", ATT_MK = "att-mk", ATT_N = "att-n", LOG_MK = "log-mk", LOG_N = "log-n"
 	const day = daysAgo(2), orig = daysAgo(16)
 	const sel = (name: string) => ({ type: "select", select: { name } })
+	const ABS = "abs-1"
 	const pages: Record<string, any> = {
+		// 원래 결석: 오전 8시(KST) 수업 = 전날 23:00 UTC. 서울 날짜로 orig가 나와야 한다.
+		[ABS]: { id: ABS, properties: { "수업일시": { type: "date", date: { start: new Date(`${orig}T08:00:00+09:00`).toISOString() } } } },
 		[LOG_MK]: { id: LOG_MK, properties: { "구분": sel("학습"), "학습": { type: "title", title: [{ plain_text: "보강" }] } } },
 		[LOG_N]: { id: LOG_N, properties: { "구분": sel("학습"), "학습": { type: "title", title: [{ plain_text: "정규" }] } } },
 	}
@@ -113,7 +116,7 @@ Deno.test("v2.8.0 리포트 캐시: 보강 출석의 기존 수업일을 그 출
 		const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { "Content-Type": "application/json" } })
 		if (url.includes("/rest/v1/attendance_records")) return json(rows)
 		if (url.startsWith("https://mock.supabase")) return json([])
-		if (url.includes("/data_sources/attendance/query")) { asked = String(init?.body ?? ""); return json({ results: [{ id: ATT_MK, properties: { "기존 수업일": { type: "formula", formula: { type: "string", string: orig } } } }], has_more: false }) }
+		if (url.includes("/data_sources/attendance/query")) { asked = String(init?.body ?? ""); return json({ results: [{ id: ATT_MK, properties: { "기존 결석": { type: "relation", relation: [{ id: ABS }] } } }], has_more: false }) }
 		if (url.includes("/query")) return json({ results: [], has_more: false })
 		if (url.includes("/blocks/")) return json({ results: [], has_more: false })
 		throw new Error(`unexpected fetch ${url} ${init?.method ?? "GET"}`)
@@ -123,7 +126,7 @@ Deno.test("v2.8.0 리포트 캐시: 보강 출석의 기존 수업일을 그 출
 		const byTitle = Object.fromEntries(detail.study_logs.map((l: any) => [l.book, l]))
 		eq(byTitle["보강"].makeup_of, orig)
 		eq("makeup_of" in byTitle["정규"], false)
-		eq(asked.includes("기존 수업일") && asked.includes(REG), true)
+		eq(asked.includes("기존 결석") && asked.includes(REG), true)
 	} finally {
 		globalThis.fetch = realFetch
 	}

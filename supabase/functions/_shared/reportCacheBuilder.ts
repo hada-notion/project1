@@ -379,22 +379,27 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
     if (r.class_iso && !logIsoById.has(id)) logIsoById.set(id, r.class_iso)
   }))
   const logIds = Array.from(logIdSet)
-  // (v2.8.0) 보강 날 학습기록의 "기존 수업": 출석 수식 `기존 수업일`(보강 출석이면 그 보강으로 메운 결석의 수업일, YYYY-MM-DD)을
-  // 이 등록의 출석 중 값이 있는 것만 한 번 조회한다. 그 출석에 연결된 학습기록에 날짜를 붙인다. 칸이 없는 운영은 조용히 건너뛴다.
+  // (v2.8.0) 보강 날 학습기록의 "기존 수업": 이 등록의 출석 중 `기존 결석`(보강 출석 → 원래 결석 관계)이 있는 것만 한 번 조회하고,
+  // 그 결석의 수업일시를 서울 날짜로 바꿔 그 출석에 연결된 학습기록에 붙인다. 수식(API에서 UTC로 계산돼 오전 9시 전 수업은 하루
+  // 어긋남)은 읽지 않는다. 칸이 없는 운영은 조용히 건너뛴다.
   const makeupOfByLog = new Map<string, string>()
   try {
-    const makeupPages = await queryAllPages(DS_ATTENDANCE, { and: [{ property: "등록", relation: { contains: registrationId } }, { property: "기존 수업일", formula: { string: { is_not_empty: true } } }] })
+    const makeupPages = await queryAllPages(DS_ATTENDANCE, { and: [{ property: "등록", relation: { contains: registrationId } }, { property: "기존 결석", relation: { is_not_empty: true } }] })
     const makeupOfByAttendance = new Map<string, string>()
     for (const p of makeupPages) {
-      const day = String(p?.properties?.["기존 수업일"]?.formula?.string ?? "").trim()
-      if (/^\d{4}-\d{2}-\d{2}$/.test(day)) makeupOfByAttendance.set(String(p.id).replace(/-/g, ""), day)
+      const absenceId = firstRelationId(p?.properties?.["기존 결석"])
+      if (!absenceId) continue
+      const absence = await cachedGetPage(absenceId)
+      if (absence?.archived || absence?.in_trash) continue
+      const day = kstDateOf(absence?.properties?.["수업일시"]?.date?.start ?? null)
+      if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) makeupOfByAttendance.set(String(p.id).replace(/-/g, ""), day)
     }
     attendanceRows.forEach((r) => {
       const day = makeupOfByAttendance.get(String(r.notion_page_id).replace(/-/g, ""))
       if (day) r.study_log_ids.forEach((id: string) => makeupOfByLog.set(id.replace(/-/g, ""), day))
     })
   } catch (err) {
-    console.warn("[report-cache] 기존 수업일 조회 건너뜀:", (err as Error).message)
+    console.warn("[report-cache] 기존 결석 조회 건너뜀:", (err as Error).message)
   }
   const logPages = await Promise.all(logIds.map((id) => cachedGetPage(id)))
   const logUnitNames = await unitNamesOf(logPages) // 학습기록 "선택 단원" 이름(v2.5.126)
