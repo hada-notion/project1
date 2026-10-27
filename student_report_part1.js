@@ -496,7 +496,7 @@ function mapRegistration(reg) {
       return { date: kstDate || (rawDate ? String(rawDate).slice(0, 10) : null), weekday: a.weekday || "", status: a.status || "", arrived: isoToKstTime(a.arrived), left: isoToKstTime(a.left) }
     }),
     // 학습·과제·평가를 같은 수업일로 묶을 수 있도록 시각 포함 ISO 값을 모두 KST 날짜로 통일한다.
-    study_logs: (reg.study_logs || []).map((s) => ({ type: "학습", book: s.book || "", range: s.range || "", unit: s.unit || "", date: isoToKstDate(s.iso) || (s.iso ? String(s.iso).slice(0, 10) : null), note: s.note || "", body: normalizeFeedBody(s.body), sourceBody: normalizeFeedBody(s.source_body || s.body), activityBody: normalizeFeedBody(s.activity_body) })),
+    study_logs: (reg.study_logs || []).map((s) => ({ type: "학습", book: s.book || "", range: s.range || "", unit: s.unit || "", date: isoToKstDate(s.iso) || (s.iso ? String(s.iso).slice(0, 10) : null), note: s.note || "", body: normalizeFeedBody(s.body), sourceBody: normalizeFeedBody(s.source_body || s.body), activityBody: normalizeFeedBody(s.activity_body), makeupOf: s.makeup_of || "" })),
     // classDate(수업일)는 백엔드가 h.iso로 내려주지만 지금까지 프론트에서 버려지고 있었다. "다음과제"를
     // 마감일이 아니라 수업일(그 과제를 실제로 내준 날) 기준으로 판단하려면 이 값이 있어야 한다.
     homework: (reg.homework || []).map((h) => ({ type: "과제", title: h.title || "", book: h.book || "", range: h.range || "", unit: h.unit || "", note: h.note || "", due: h.due_iso || null, classDate: isoToKstDate(h.iso) || null, status: h.status || "미제출", sourceBody: normalizeFeedBody(h.source_body), activityBody: normalizeFeedBody(h.activity_body) })),
@@ -828,7 +828,7 @@ function renderBookDetail() {
                   </div>
                 </div>
                 ${(() => {
-                  const meta = renderLogMetaRows(l.unit, l.note, l.type === "과제" ? [l.classDate ? `출제: ${withDow(l.classDate)}` : null, l.due ? `마감: ${withDow(l.due)}` : null].filter(Boolean) : [])
+                  const meta = renderLogMetaRows(l.unit, l.note, l.type === "과제" ? [l.classDate ? `출제: ${withDow(l.classDate)}` : null, l.due ? `마감: ${withDow(l.due)}` : null].filter(Boolean) : makeupMetaRows(l))
                   const bodyHtml = buildLogBodyHtml(l)
                   const hasExtra = l.photo || !!bodyHtml
                   const chevronBtn = hasExtra ? `<button type="button" class="log-extra-chevron" onclick="toggleLogExtra(this)" aria-label="펼치기"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>` : ""

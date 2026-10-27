@@ -19,7 +19,7 @@ import {
 } from "./reportCacheShared.ts"
 import { isParentPublicEvent, NOTICE_VISIBILITY_POLICY } from "./scheduleVisibility.ts"
 import { selectAttendanceByRegistrationId } from "./attendanceSyncShared.ts"
-import { DS_STUDY_ACTIVITY, DS_REPORT, DS_SCHEDULE_EVENT } from "./constants.ts"
+import { DS_ATTENDANCE, DS_STUDY_ACTIVITY, DS_REPORT, DS_SCHEDULE_EVENT } from "./constants.ts"
 import { libraryIds } from "./libraryProp.ts"
 import { libraryCopyReady, readUnits } from "./libraryCopy.ts"
 import { unitNamesOf, unitTextOf } from "./selectedUnits.ts"
@@ -379,6 +379,23 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
     if (r.class_iso && !logIsoById.has(id)) logIsoById.set(id, r.class_iso)
   }))
   const logIds = Array.from(logIdSet)
+  // (v2.8.0) 보강 날 학습기록의 "기존 수업": 출석 수식 `기존 수업일`(보강 출석이면 그 보강으로 메운 결석의 수업일, YYYY-MM-DD)을
+  // 이 등록의 출석 중 값이 있는 것만 한 번 조회한다. 그 출석에 연결된 학습기록에 날짜를 붙인다. 칸이 없는 운영은 조용히 건너뛴다.
+  const makeupOfByLog = new Map<string, string>()
+  try {
+    const makeupPages = await queryAllPages(DS_ATTENDANCE, { and: [{ property: "등록", relation: { contains: registrationId } }, { property: "기존 수업일", formula: { string: { is_not_empty: true } } }] })
+    const makeupOfByAttendance = new Map<string, string>()
+    for (const p of makeupPages) {
+      const day = String(p?.properties?.["기존 수업일"]?.formula?.string ?? "").trim()
+      if (/^\d{4}-\d{2}-\d{2}$/.test(day)) makeupOfByAttendance.set(String(p.id).replace(/-/g, ""), day)
+    }
+    attendanceRows.forEach((r) => {
+      const day = makeupOfByAttendance.get(String(r.notion_page_id).replace(/-/g, ""))
+      if (day) r.study_log_ids.forEach((id: string) => makeupOfByLog.set(id.replace(/-/g, ""), day))
+    })
+  } catch (err) {
+    console.warn("[report-cache] 기존 수업일 조회 건너뜀:", (err as Error).message)
+  }
   const logPages = await Promise.all(logIds.map((id) => cachedGetPage(id)))
   const logUnitNames = await unitNamesOf(logPages) // 학습기록 "선택 단원" 이름(v2.5.126)
   const readLogDetail = async (lp: any) => {
@@ -432,7 +449,7 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
     await mapWithConcurrency(studyLogCandidates, 6, async (l) => [l.id, await readPageBodyBlocks(l.id)] as const),
   )
   const study_logs = studyLogCandidates
-    .map((l) => ({ iso: l.iso, date: fmtDateKr(l.iso), book: l.bookTitle, range: l.range, unit: l.unit, note: l.content, body: studyLogBodies.get(l.id) ?? [] }))
+    .map((l) => ({ iso: l.iso, date: fmtDateKr(l.iso), book: l.bookTitle, range: l.range, unit: l.unit, note: l.content, body: studyLogBodies.get(l.id) ?? [], ...(makeupOfByLog.get(l.id.replace(/-/g, "")) ? { makeup_of: makeupOfByLog.get(l.id.replace(/-/g, "")) } : {}) }))
 
   const activityPages = await shareQueriedPages(
     await queryAllPages(DS_STUDY_ACTIVITY, {
