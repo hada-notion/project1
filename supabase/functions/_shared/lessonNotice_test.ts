@@ -41,6 +41,8 @@ Deno.test("v2.8.0 수업 안내: 보강이면 수업구분 보강 수업, 일반
 	const withF: any = att()
 	withF.properties["수업구분(수업안내)"] = { type: "formula", formula: { type: "string", string: "보강 수업" } }
 	withF.properties["전달사항(수업안내)"] = { type: "formula", formula: { type: "string", string: "수식 값" } }
+	// 일시 수식은 API가 UTC로 계산해 9시간 어긋나므로(10/27 원본 "09:00") 읽지 않는다.
+	withF.properties["수업일시(수업안내)"] = { type: "formula", formula: { type: "string", string: "26.10.30(금) 08:00" } }
 	const pf: any = m.planLessonNotice(withF, ses(false, "메모"))
 	eq([pf.variables["#{수업구분}"], pf.variables["#{전달사항}"], pf.variables["#{수업일시}"]], ["보강 수업", "수식 값", "26.10.30(금) 17:00"])
 })
