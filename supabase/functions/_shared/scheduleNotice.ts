@@ -58,13 +58,15 @@ function shortDay(day: string): string {
 }
 
 // 일정 한 줄: "11/3(월) 휴원", 기간이면 "11/3(월)~11/5(수) 시험 대비". 이름이 비면 구분.
+// (10/28 사용자) 같은 달 기간은 끝의 "월/"을 빼 "11/3(월)~5(수)"로 줄인다(카톡에서 줄이 덜 꺾이게). 달이 넘어가면 그대로.
 export function eventLine(event: any): { day: string; line: string } | null {
 	const p = event?.properties ?? {}
 	const start = seoulDay(p["날짜"]?.date?.start)
 	if (!start) return null
 	const end = seoulDay(p["날짜"]?.date?.end)
 	const name = textOf(p["이름"]?.title).trim() || String(p["구분"]?.select?.name ?? "").replace(/^\S+\s/, "")
-	return { day: start, line: `${shortDay(start)}${end && end !== start ? `~${shortDay(end)}` : ""} ${name}`.trim() }
+	const tail = end && end !== start ? `~${end.slice(0, 7) === start.slice(0, 7) ? shortDay(end).replace(/^\d+\//, "") : shortDay(end)}` : ""
+	return { day: start, line: `${shortDay(start)}${tail} ${name}`.trim() }
 }
 
 // 일정 요약: 날짜순 최대 5줄, 넘치면 "외 N건".
@@ -106,7 +108,7 @@ export function sectionText(lines: { day: string; line: string; sec: Section }[]
 }
 
 // 일정일시(수업 안내와 같은 표기): 하루면 "26.11.03(화)", 시각이 있으면 "26.11.03(화) 14:00~16:00",
-// 기간이면 "26.11.09(월)~26.11.11(수)"(시각이 있으면 각 끝에 시각).
+// 기간이면 "26.11.09(월)~26.11.11(수)"(시각이 있으면 각 끝에 시각). (10/28) 시각 없는 같은 달 기간은 "26.11.09(월)~11(수)".
 export function eventTimeText(event: any): string {
 	const d = event?.properties?.["날짜"]?.date
 	if (!d?.start) return ""
@@ -114,6 +116,7 @@ export function eventTimeText(event: any): string {
 	if (!d.end) return start
 	const end = formatClassTime(d.end)
 	if (seoulDay(d.end) === seoulDay(d.start)) return /T/.test(String(d.end)) ? `${start}~${end.split(" ")[1] ?? end}` : start
+	if (!/T/.test(String(d.start)) && !/T/.test(String(d.end)) && seoulDay(d.end)?.slice(0, 7) === seoulDay(d.start)?.slice(0, 7)) return `${start}~${end.slice(6)}`
 	return `${start}~${end}`
 }
 
