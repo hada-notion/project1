@@ -53,6 +53,7 @@ import {
   markAttendanceFixError,
   fixAttendanceForClassSession,
   planFromWebhookBody,
+  TARGET_MAKEUP_ASSIGN,
 } from "../_shared/fixAttendanceTarget.ts"
 import { resolveAdminKeyFromRequest, getCurrentAdminKey } from "../_shared/adminShared.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
@@ -103,6 +104,12 @@ Deno.serve(async (req: Request) => {
     await enqueueSync("session-date", { pageId: classSessionId })
     wakeSyncQueueWorker()
     return respondAccepted({ classSessionId, queued: true })
+  }
+  // (v2.8.0) 출석 버튼 [보강 배정]이 직접 부르는 경로(본문의 페이지 = 결석 출석). 큐에 넣고 바로 202.
+  if (new URL(req.url).pathname.split("/").pop() === "makeup") {
+    await enqueueSync(TARGET_MAKEUP_ASSIGN, { attendanceId: classSessionId })
+    wakeSyncQueueWorker()
+    return respondAccepted({ attendanceId: classSessionId, queued: true })
   }
   if (new URL(req.url).pathname.split("/").pop() === "queue") {
     const parsed = planFromWebhookBody(body, classSessionId)
