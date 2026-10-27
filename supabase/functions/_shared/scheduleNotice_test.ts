@@ -27,7 +27,8 @@ Deno.test("v2.8.0 일정 안내: 다음 달, 한 줄·요약(5줄+외 N건), 학
 	eq(m.nextMonthKey(new Date("2026-10-27T03:00:00Z")), "2026-11")
 	eq(m.nextMonthKey(new Date("2026-12-31T16:00:00Z")), "2027-02") // 서울은 이미 1월 1일
 	eq(m.eventLine(ev("e", { name: "휴원", start: "2026-11-03" }))!.line, "11/3(화) 휴원")
-	eq(m.eventLine(ev("e", { name: "시험 대비", start: "2026-11-09", end: "2026-11-11" }))!.line, "11/9(월)~11/11(수) 시험 대비")
+	eq(m.eventLine(ev("e", { name: "시험 대비", start: "2026-11-09", end: "2026-11-11" }))!.line, "11/9(월)~11(수) 시험 대비")
+	eq(m.eventLine(ev("e", { name: "겨울 휴원", start: "2026-11-30", end: "2026-12-02" }))!.line, "11/30(월)~12/2(수) 겨울 휴원")
 	eq(m.eventLine(ev("e", { cat: "💤 휴원", start: "2026-11-03" }))!.line, "11/3(화) 휴원")
 	const lines = [7, 1, 3, 2, 5, 4, 6].map((d) => ({ day: `2026-11-0${d}`, line: `L${d}` }))
 	eq(m.summarize(lines), "L1\nL2\nL3\nL4\nL5\n외 2건")
@@ -42,7 +43,8 @@ Deno.test("v2.8.0 일정 안내: 다음 달, 한 줄·요약(5줄+외 N건), 학
 	eq(m.sectionText([{ day: "2026-11-03", line: "11/3(화) 휴원", sec: "휴원" }], "학교"), "없음")
 	eq(m.eventTimeText(ev("e", { start: "2026-11-03" })), "26.11.03(화)")
 	eq(m.eventTimeText(ev("e", { start: "2026-11-03T14:00:00+09:00", end: "2026-11-03T16:00:00+09:00" })), "26.11.03(화) 14:00~16:00")
-	eq(m.eventTimeText(ev("e", { start: "2026-11-09", end: "2026-11-11" })), "26.11.09(월)~26.11.11(수)")
+	eq(m.eventTimeText(ev("e", { start: "2026-11-09", end: "2026-11-11" })), "26.11.09(월)~11(수)")
+	eq(m.eventTimeText(ev("e", { start: "2026-11-30", end: "2026-12-02" })), "26.11.30(월)~26.12.02(수)")
 })
 
 type Calls = { enq: any[]; sends: any[]; logs: any[]; marks: string[]; updates: any[]; sent: any[] }
