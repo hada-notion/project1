@@ -88,7 +88,7 @@ import { processClassReportsQueueItem, processRegistrationReportQueueItem } from
 import { processBatchEvaluationsQueueItem } from "../_shared/evaluationPlan.ts"
 import { processLessonNoticeQueueItem } from "../_shared/lessonNotice.ts"
 import { processScheduleEventItem, processScheduleEventStudentItem } from "../_shared/scheduleNotice.ts"
-import { processMonthlyCreateClassItem, processMonthlyCreateRegItem, processMonthlySendBatchItem, processMonthlySendClassItem, processMonthlySendStudentItem } from "../_shared/monthlyNotice.ts"
+import { processMonthlyCreateClassItem, processMonthlyCreateRegItem, processMonthlySendLetterItem, processMonthlySendMailboxItem, processMonthlySendStudentItem } from "../_shared/monthlyNotice.ts"
 
 // target별 실제 처리 함수. 앞으로 다른 "일괄(bulk)" 웹훅 함수나, 사람이 여러 페이지를 동시에 클릭할
 // 수 있는 "개별" 웹훅 함수가 추가되면 여기에 추가한다 (위 2026-09-22 Phase 6 주석 참고).
@@ -140,12 +140,12 @@ const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Pro
   // (v2.8.0) 일정 [일정 안내 전송] → send-schedule-notice/event. 일정 1건이 학생 1건씩을 다시 넣는다.
   "schedule-event": processScheduleEventItem,
   "schedule-event-student": processScheduleEventStudentItem,
-  // (v2.8.0) 학생 월간 안내 → send-monthly-notice. 클래스 1건이 등록(학생) 1건씩을 다시 넣는다.
+  // (v2.8.0) 가정통신문 → send-monthly-notice. 클래스 1건이 등록(학생) 1건씩을, 발송함 1건이 가정통신문 1건씩을 다시 넣는다.
   "monthly-create-class": processMonthlyCreateClassItem,
   "monthly-create-reg": processMonthlyCreateRegItem,
-  "monthly-send-class": processMonthlySendClassItem,
+  "monthly-send-mailbox": processMonthlySendMailboxItem,
   "monthly-send-student": processMonthlySendStudentItem,
-  "monthly-send-batch": processMonthlySendBatchItem,
+  "monthly-send-letter": processMonthlySendLetterItem,
 }
 
 // (2026-09-22, Phase 6) 이 워커 한 번의 실행(위 sync_queue_worker_lock으로 항상 한 번에 하나만
