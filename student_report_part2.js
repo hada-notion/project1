@@ -428,7 +428,9 @@ function logCardHtml(l) {
 `
 }
 // 학습·과제·평가를 카드 항목으로(학습기록 탭과 캘린더 날짜 목록이 같은 값으로 그린다)
-const logItemOfStudy = (l) => ({ type: "학습", icon: KIND_ICONS["학습"], date: l.date, title: [l.book, l.range].filter(Boolean).join(" · ") || "학습 기록", unit: l.unit, note: l.note, photo: l.photo, body: l.body, book: l.book, sourceBody: l.sourceBody, activityBody: l.activityBody })
+// (v2.8.0) 결석을 메운 보강 날 학습기록: 과제의 "출제·마감"처럼 "기존 수업: 날짜" 한 줄(서버가 출석 수식 기존 수업일로 붙임)
+function makeupMetaRows(l) { return l && l.makeupOf ? [`기존 수업: ${withDow(l.makeupOf)}`] : [] }
+const logItemOfStudy = (l) => ({ type: "학습", icon: KIND_ICONS["학습"], date: l.date, title: [l.book, l.range].filter(Boolean).join(" · ") || "학습 기록", unit: l.unit, note: l.note, photo: l.photo, body: l.body, book: l.book, sourceBody: l.sourceBody, activityBody: l.activityBody, extraRows: makeupMetaRows(l) })
 const logItemOfHomework = (h) => ({ type: "과제", icon: KIND_ICONS["과제"], date: h.classDate || h.due, due: h.due, classDate: h.classDate, title: [h.book, h.range].filter(Boolean).join(" · "), unit: h.unit, note: h.note, pill: h.status, pillTone: homeworkPillTone(h.status), book: h.book, sourceBody: h.sourceBody, activityBody: h.activityBody })
 // 평가 아이콘은 학습기록 탭이 써 온 Feather file-text 그대로(KIND_ICONS 평가와 줄 하나 다름)
 const LOG_TEST_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`
@@ -1017,7 +1019,7 @@ function buildDailyBodyHtml(r, date) {
   const session = (icon, text, inner) => `<h3 class="sec-title"><span class="sec-icon">${icon}</span>${text}</h3>${inner}`
   const sub = (text) => `<div class="rep-sub">${text}</div>`
 
-  const studyHtml = todaysLogs.length ? todaysLogs.map((l) => band(reportItemHtml(r, l))).join("") : empty("이날 기록된 학습 내용이 없어요.")
+  const studyHtml = todaysLogs.length ? todaysLogs.map((l) => band(reportItemHtml(r, l, { extraRows: makeupMetaRows(l) }))).join("") : empty("이날 기록된 학습 내용이 없어요.")
   const homeworkHtml =
     sub("지난 과제") +
     groupBand(dueTodayHomework, (h) => reportItemHtml(r, h, { pill: h.status, pillTone: homeworkPillTone(h.status), extraRows: h.classDate ? [`출제: ${withDow(h.classDate)}`] : [] }), "이날 마감인 과제가 없어요.") +

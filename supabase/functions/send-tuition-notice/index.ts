@@ -200,7 +200,8 @@ Deno.serve(async (req) => {
         "#{청구년월}": billingMonth,
         "#{청구기간}": periodDisplay,
         "#{학생이름}": studentName,
-        "#{클래스}": className,
+        // (v2.8.0) 템플릿이 학생 합산 모양으로 바뀌어 한 장이면 수강내역 한 줄(_shared/noticeQueue.ts prepareTuition과 같다).
+        "#{수강내역}": `• ${className}: ${amountDisplay}`,
         "#{청구금액}": amountDisplay,
         "#{안내멘트}": notice,
       }

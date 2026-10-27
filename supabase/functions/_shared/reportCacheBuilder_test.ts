@@ -1,5 +1,5 @@
 // All network calls are mocked. No live Notion/Supabase writes or secret values are used.
-for (const [key, value] of Object.entries({ NOTION_TOKEN: "test-only", ADMIN_SECRET: "test-only", SB_URL: "https://mock.supabase", SB_SERVICE_ROLE_KEY: "test-only", DATA_SOURCE_STUDY_ACTIVITY_ID: "activities", DATA_SOURCE_REPORT_ID: "reports" })) Deno.env.set(key, value)
+for (const [key, value] of Object.entries({ NOTION_TOKEN: "test-only", ADMIN_SECRET: "test-only", SB_URL: "https://mock.supabase", SB_SERVICE_ROLE_KEY: "test-only", DATA_SOURCE_STUDY_ACTIVITY_ID: "activities", DATA_SOURCE_REPORT_ID: "reports", DATA_SOURCE_ATTENDANCE_ID: "attendance" })) Deno.env.set(key, value)
 const eq = (a: unknown, b: unknown) => { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error(`expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`) }
 const { buildRegistrationDetail, reportModeOf, standaloneEvalIso } = await import("./reportCacheBuilder.ts")
 
@@ -89,6 +89,41 @@ Deno.test("v2.8.0 리포트 캐시: 평가는 구분마다 최근 6개씩(일일
 		eq(kinds.filter((k: string) => k === "일일 평가").length, 6)
 		eq(kinds.filter((k: string) => k === "주간 평가").length, 2)
 		eq(detail.tests[0].iso >= detail.tests[detail.tests.length - 1].iso, true)
+	} finally {
+		globalThis.fetch = realFetch
+	}
+})
+
+Deno.test("v2.8.0 리포트 캐시: 보강 출석의 기존 수업일을 그 출석의 학습기록에 makeup_of로 붙인다(없으면 안 붙음)", async () => {
+	const REG = "reg-9", ATT_MK = "att-mk", ATT_N = "att-n", LOG_MK = "log-mk", LOG_N = "log-n"
+	const day = daysAgo(2), orig = daysAgo(16)
+	const sel = (name: string) => ({ type: "select", select: { name } })
+	const pages: Record<string, any> = {
+		[LOG_MK]: { id: LOG_MK, properties: { "구분": sel("학습"), "학습": { type: "title", title: [{ plain_text: "보강" }] } } },
+		[LOG_N]: { id: LOG_N, properties: { "구분": sel("학습"), "학습": { type: "title", title: [{ plain_text: "정규" }] } } },
+	}
+	const rows = [
+		{ notion_page_id: ATT_MK, registration_id: REG, class_iso: `${day}T18:00:00+09:00`, status: "보강", check_in: "", check_out: "", teacher_comment: "", study_log_ids: [LOG_MK] },
+		{ notion_page_id: ATT_N, registration_id: REG, class_iso: `${daysAgo(3)}T18:00:00+09:00`, status: "출석", check_in: "", check_out: "", teacher_comment: "", study_log_ids: [LOG_N] },
+	]
+	let asked = ""
+	const realFetch = globalThis.fetch
+	globalThis.fetch = (async (input: Request | URL | string, init?: RequestInit) => {
+		const url = String(input instanceof Request ? input.url : input)
+		const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { "Content-Type": "application/json" } })
+		if (url.includes("/rest/v1/attendance_records")) return json(rows)
+		if (url.startsWith("https://mock.supabase")) return json([])
+		if (url.includes("/data_sources/attendance/query")) { asked = String(init?.body ?? ""); return json({ results: [{ id: ATT_MK, properties: { "기존 수업일": { type: "formula", formula: { type: "string", string: orig } } } }], has_more: false }) }
+		if (url.includes("/query")) return json({ results: [], has_more: false })
+		if (url.includes("/blocks/")) return json({ results: [], has_more: false })
+		throw new Error(`unexpected fetch ${url} ${init?.method ?? "GET"}`)
+	}) as typeof fetch
+	try {
+		const detail: any = await buildRegistrationDetail({ id: REG, properties: {} }, async (id: string) => pages[id] ?? { id, properties: {} })
+		const byTitle = Object.fromEntries(detail.study_logs.map((l: any) => [l.book, l]))
+		eq(byTitle["보강"].makeup_of, orig)
+		eq("makeup_of" in byTitle["정규"], false)
+		eq(asked.includes("기존 수업일") && asked.includes(REG), true)
 	} finally {
 		globalThis.fetch = realFetch
 	}

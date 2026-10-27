@@ -401,6 +401,16 @@ export async function applyFixPlan(session: FixSession, plan: FixPlan, log: stri
 	const deadlines = plan.add.length && !makeup ? await pendingDeadlinesForRegistrations(deadlineIO, plan.add.map((a) => a.reg)) : new Map<string, string[]>()
 	for (const a of plan.add) {
 		const backfill = backfillProps(deadlines.get(normId(a.reg)))
+		// (v2.8.0) 보강 수업은 결석 현황 [보강 배정]을 여러 줄 연달아 누르면 같은 수업에 큐 항목이 여러 개 쌓이고,
+		// 각 항목의 계획(누른 순간의 수식 값)에는 앞 항목이 만들 학생도 들어 있다. 보강은 지우기를 하지 않아 겹치면 그대로
+		// 남으므로, 만들기 직전에 이 수업·이 등록의 출석이 이미 있는지 한 번 확인한다(정규 수업은 다음 조정이 중복을 지운다).
+		if (makeup && !a.att) {
+			const existing = await queryAllPages(DS_ATTENDANCE, { and: [{ property: "수업", relation: { contains: session.id } }, { property: "등록", relation: { contains: a.reg } }] })
+			if (existing.some((x: any) => !x?.in_trash && !x?.archived)) {
+				log.push(`[exists] ${session.id}: reg ${a.reg} 보강 출석이 이미 있어 만들지 않음`)
+				continue
+			}
+		}
 		if (a.att) {
 			await updatePageProperties(a.att, { 수업: { relation: [{ id: session.id }] }, ...classRel, ...teacher, ...backfill })
 			log.push(`[linked] ${session.id}: attendance ${a.att} -> reg ${a.reg}`)

@@ -19,7 +19,7 @@ import {
 } from "./reportCacheShared.ts"
 import { isParentPublicEvent, NOTICE_VISIBILITY_POLICY } from "./scheduleVisibility.ts"
 import { selectAttendanceByRegistrationId } from "./attendanceSyncShared.ts"
-import { DS_STUDY_ACTIVITY, DS_REPORT } from "./constants.ts"
+import { DS_ATTENDANCE, DS_STUDY_ACTIVITY, DS_REPORT, DS_SCHEDULE_EVENT } from "./constants.ts"
 import { libraryIds } from "./libraryProp.ts"
 import { libraryCopyReady, readUnits } from "./libraryCopy.ts"
 import { unitNamesOf, unitTextOf } from "./selectedUnits.ts"
@@ -50,21 +50,37 @@ async function shareQueriedPages(pages: any[], cachedGetPage: (id: string) => Pr
   return seed ? await Promise.all(pages.map((page) => seed(page))) : pages
 }
 
+// (v2.8.0) 학부모 공개 일정은 연결 기준마다 일정 DB를 직접 조회한다(공개·숨김 해제·기간 안만).
+// 예전에는 학생·클래스·학교·학년 페이지의 "일정" 관계를 읽었는데, Notion API는 페이지를 읽을 때 관계를 앞 25개까지만
+// 주므로 학사일정을 많이 가져온 학교(예: 한 해 200건)는 최근 일정이 빠져 리포트에 나오지 않았다.
+// 학원 전체 일정(클래스·학생·학교·학년이 모두 빈 공개 일정)도 여기서 함께 모은다. 같은 실행 안에서는 기준마다 한 번만 조회한다(1분).
+export const noticeDeps = { query: queryAllPages }
+const noticeQueryCache = new Map<string, { at: number; pages: Promise<any[]> }>()
+export function clearNoticeCache() { noticeQueryCache.clear() }
+function publicEvents(link: { prop: "학생" | "클래스" | "학교" | "학년"; id: string } | null, sinceIso: string): Promise<any[]> {
+  const key = `${link ? `${link.prop}:${link.id}` : "academy"}:${sinceIso.slice(0, 10)}`
+  const hit = noticeQueryCache.get(key)
+  if (hit && Date.now() - hit.at < 60_000) return hit.pages
+  const filters: Record<string, unknown>[] = [
+    { property: "학부모 공개", checkbox: { equals: true } },
+    { property: "숨김", checkbox: { equals: false } },
+    { property: "날짜", date: { on_or_after: sinceIso.slice(0, 10) } },
+  ]
+  if (link) filters.unshift({ property: link.prop, relation: { contains: link.id } })
+  const pages = noticeDeps.query(DS_SCHEDULE_EVENT, { and: filters })
+    .then((rows: any[]) => link ? rows : rows.filter((n: any) => ["클래스", "학생", "학교", "학년"].every((k) => relationIds(n.properties?.[k]).length === 0)))
+    .catch((err: unknown) => { console.warn(`[report-cache] 일정 조회 건너뜀(${key}):`, (err as Error).message); return [] })
+  noticeQueryCache.set(key, { at: Date.now(), pages })
+  return pages
+}
+
 export async function buildStudentNotices(
   studentId: string,
   studentProps: any,
   cachedGetPage: (id: string) => Promise<any>,
 ) {
-  const studentNoticeIds = relationIds(studentProps["학원일정"])
-
   const schoolId = firstRelationId(studentProps["학교"])
   const gradeId = firstRelationId(studentProps["학년"])
-  const [schoolPage, gradePage] = await Promise.all([
-    schoolId ? cachedGetPage(schoolId) : Promise.resolve(null),
-    gradeId ? cachedGetPage(gradeId) : Promise.resolve(null),
-  ])
-  const schoolNoticeIds = schoolPage ? relationIds(schoolPage.properties["일정"]) : []
-  const gradeNoticeIds = gradePage ? relationIds(gradePage.properties["일정"]) : []
 
   const registrationIds = relationIds(studentProps["등록"])
   const registrations = await Promise.all(registrationIds.map((id: string) => cachedGetPage(id)))
@@ -76,15 +92,20 @@ export async function buildStudentNotices(
         .filter((id): id is string => Boolean(id)),
     ),
   )
-  const classPages = await Promise.all(activeClassIds.map((id: string) => cachedGetPage(id)))
-  const classNoticeIds = classPages.flatMap((c: any) => relationIds(c.properties["일정"]))
-
-  const directIds = new Set<string>([...studentNoticeIds, ...classNoticeIds])
-  const candidateIds = Array.from(new Set<string>([...directIds, ...schoolNoticeIds, ...gradeNoticeIds]))
-  if (!candidateIds.length) return []
 
   const sinceIso = sinceIsoMonthsAgo(DETAIL_LOOKBACK_MONTHS)
-  const noticePages = await Promise.all(candidateIds.map((id: string) => cachedGetPage(id)))
+  // 학생·클래스에 직접 연결된 일정과 학원 전체 일정은 그대로 싣고, 학교·학년 일정은 아래에서 학생의 학교·학년과 맞춰 본다.
+  const [studentEvents, classEvents, academyEvents, schoolEvents, gradeEvents] = await Promise.all([
+    publicEvents({ prop: "학생", id: studentId }, sinceIso),
+    Promise.all(activeClassIds.map((id) => publicEvents({ prop: "클래스", id }, sinceIso))).then((l) => l.flat()),
+    publicEvents(null, sinceIso),
+    schoolId ? publicEvents({ prop: "학교", id: schoolId }, sinceIso) : Promise.resolve([]),
+    gradeId ? publicEvents({ prop: "학년", id: gradeId }, sinceIso) : Promise.resolve([]),
+  ])
+  const directIds = new Set<string>([...studentEvents, ...classEvents, ...academyEvents].map((n: any) => n.id))
+  const byId = new Map<string, any>()
+  for (const n of [...studentEvents, ...classEvents, ...academyEvents, ...schoolEvents, ...gradeEvents]) byId.set(n.id, n)
+  const noticePages = await shareQueriedPages(Array.from(byId.values()), cachedGetPage)
 
   return noticePages
     .filter((n: any) => {
@@ -358,6 +379,23 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
     if (r.class_iso && !logIsoById.has(id)) logIsoById.set(id, r.class_iso)
   }))
   const logIds = Array.from(logIdSet)
+  // (v2.8.0) 보강 날 학습기록의 "기존 수업": 출석 수식 `기존 수업일`(보강 출석이면 그 보강으로 메운 결석의 수업일, YYYY-MM-DD)을
+  // 이 등록의 출석 중 값이 있는 것만 한 번 조회한다. 그 출석에 연결된 학습기록에 날짜를 붙인다. 칸이 없는 운영은 조용히 건너뛴다.
+  const makeupOfByLog = new Map<string, string>()
+  try {
+    const makeupPages = await queryAllPages(DS_ATTENDANCE, { and: [{ property: "등록", relation: { contains: registrationId } }, { property: "기존 수업일", formula: { string: { is_not_empty: true } } }] })
+    const makeupOfByAttendance = new Map<string, string>()
+    for (const p of makeupPages) {
+      const day = String(p?.properties?.["기존 수업일"]?.formula?.string ?? "").trim()
+      if (/^\d{4}-\d{2}-\d{2}$/.test(day)) makeupOfByAttendance.set(String(p.id).replace(/-/g, ""), day)
+    }
+    attendanceRows.forEach((r) => {
+      const day = makeupOfByAttendance.get(String(r.notion_page_id).replace(/-/g, ""))
+      if (day) r.study_log_ids.forEach((id: string) => makeupOfByLog.set(id.replace(/-/g, ""), day))
+    })
+  } catch (err) {
+    console.warn("[report-cache] 기존 수업일 조회 건너뜀:", (err as Error).message)
+  }
   const logPages = await Promise.all(logIds.map((id) => cachedGetPage(id)))
   const logUnitNames = await unitNamesOf(logPages) // 학습기록 "선택 단원" 이름(v2.5.126)
   const readLogDetail = async (lp: any) => {
@@ -411,7 +449,7 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
     await mapWithConcurrency(studyLogCandidates, 6, async (l) => [l.id, await readPageBodyBlocks(l.id)] as const),
   )
   const study_logs = studyLogCandidates
-    .map((l) => ({ iso: l.iso, date: fmtDateKr(l.iso), book: l.bookTitle, range: l.range, unit: l.unit, note: l.content, body: studyLogBodies.get(l.id) ?? [] }))
+    .map((l) => ({ iso: l.iso, date: fmtDateKr(l.iso), book: l.bookTitle, range: l.range, unit: l.unit, note: l.content, body: studyLogBodies.get(l.id) ?? [], ...(makeupOfByLog.get(l.id.replace(/-/g, "")) ? { makeup_of: makeupOfByLog.get(l.id.replace(/-/g, "")) } : {}) }))
 
   const activityPages = await shareQueriedPages(
     await queryAllPages(DS_STUDY_ACTIVITY, {

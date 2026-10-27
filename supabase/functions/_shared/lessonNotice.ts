@@ -5,11 +5,16 @@
 // 바꾸고, 출석 DB 자동화 [웹훅] 수업 안내가 send-lesson-notice/queue로 출석마다 웹훅을 보낸다. 큐가 한 건씩 보낸다.
 //
 // 한 건 처리:
-//   - 출석 "수업 안내 일시"가 비었으면 "수업 안내", 있고 지금 수업일시와 다르면 "수업 변경 안내"(기존 → 변경), 같으면 보내지 않는다
-//     (이미 안내한 학생). 다시 보내려면 "수업 안내 일시"를 비우고 누른다(일일 보고서의 전송완료 체크와 같다).
-//   - 결석으로 표시된 학생은 보내지 않는다. 안내구분은 수업 "보강" 체크면 "보강 수업", 아니면 "수업".
-//     안내내용은 수업 "안내 메모"(비면 보강은 "보강 수업이 잡혔습니다", 일반은 "-").
-//   - 알림톡 설정의 "수업 안내"·"수업 변경 안내" 행이 꺼져 있거나 템플릿 ID가 비면 보내지 않고 ⚠️(다른 템플릿으로 잘못 나가지 않게).
+//   - 출석 "수업 안내 일시"(마지막으로 안내한 수업일시)가 지금 수업일시와 같으면 보내지 않는다(이미 안내한 학생). 비었거나
+//     다르면(시간을 바꾼 뒤 다시 누름) 지금 수업일시로 "수업 안내"를 보낸다. 변경 전용 템플릿은 두지 않는다(10/27 결정:
+//     드문 일이라 시간만 바꾸고 다시 누르면 된다, 바뀐 이유는 수업 안내 메모에). 같은 시간으로 다시 보내려면 "수업 안내 일시"를 비운다.
+//   - 결석으로 표시된 학생은 보내지 않는다. 수업구분은 수업 "보강" 체크면 "보강 수업", 아니면 "정규 수업".
+//     수업일시는 "26.10.30(금) 17:00". 전달사항은 수업 "수업 안내 메모"(50자까지, 비면 "없음").
+//     템플릿 제목은 고정이고 자유 문장 변수는 전달사항 하나다(카카오 심사: 간헐적 공지 통로로 보이지 않게).
+//   - 다른 알림톡처럼 변수 값은 보내는 페이지(출석)의 수식에서 읽는다: 수업구분(수업안내)·수업일시(수업안내)·전달사항(수업안내),
+//     학생이름(보고서)·클래스(보고서). 수식이 아직 없거나 비면 같은 규칙으로 서버가 계산한다(운영에 수식을 넣기 전에도 동작).
+//   - 알림톡 설정의 "수업 안내" 행이 꺼져 있거나 템플릿 ID가 비면 보내지 않고 ⚠️(다른 템플릿으로 잘못 나가지 않게).
+//   - 오류는 출석 "수업 안내 오류"에만 적는다(보고서의 "마지막 오류"는 건드리지 않음).
 //   - 전송 로그는 등록에만 연결한다(출석의 전송 내역·발송 횟수는 일일 보고서용이라 섞지 않음). 보낸 뒤 출석 "수업 안내 일시"를 적는다.
 // 발송 전 단계(읽기)에서 실패하면 큐가 다시 한다. 발송 단계에서 실패하면 다시 보내지 않고 ⚠️(이미 나갔을 수 있음).
 import {
@@ -19,34 +24,41 @@ import {
   getBotUserId,
   notionGetPage,
   notionPatchPageProperties,
+  type SendLogCategory,
 } from "./adminShared.ts"
 import { getFormulaText, normalizePhone, resolveAlimtalkRecipients } from "./alimtalkShared.ts"
 import { relIds } from "./notionClient.ts"
 
 export const LESSON_NOTICE_STATUS_PROP = "수업 안내 상태"
 export const LESSON_NOTICE_SENT_PROP = "수업 안내 일시"
-export const LESSON_MEMO_PROP = "안내 메모"
+export const LESSON_MEMO_PROP = "수업 안내 메모"
+// 출석 "마지막 오류"는 일일 보고서 칸이다(실시간 처리 상태·학생별 전송 상태가 읽음). 수업 안내는 따로 쓴다.
+export const LESSON_NOTICE_ERROR_PROP = "수업 안내 오류"
 export const TARGET_LESSON_NOTICE = "lesson-notice"
 
-export type LessonNoticeKind = "수업 안내" | "수업 변경 안내"
+export type LessonNoticeKind = "수업 안내"
 
 const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"]
 
-// "10월 30일(목) 오후 5:00" (서울). 시각이 없는 날짜면 "10월 30일(목)".
-export function formatLessonTime(value: string | null | undefined): string {
+// 템플릿의 자유 문장 변수(수업 안내·일정 안내의 전달사항): 공백을 한 칸으로, 50자를 넘으면 자르고 "…", 비면 "없음".
+export function noteText(value: string | null | undefined, max = 50): string {
+  const t = String(value ?? "").replace(/\s+/g, " ").trim()
+  if (!t) return "없음"
+  const chars = Array.from(t)
+  return chars.length > max ? chars.slice(0, max - 1).join("") + "…" : t
+}
+
+// 수업 안내의 수업일시 "26.10.30(금) 17:00"(서울, 24시간제). 시각이 없는 날짜면 "26.10.30(금)".
+export function formatClassTime(value: string | null | undefined): string {
   const v = String(value ?? "")
   if (!v) return ""
   const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(v)
   const t = new Date(dateOnly ? `${v}T00:00:00+09:00` : v)
   if (Number.isNaN(t.getTime())) return ""
-  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit", hourCycle: "h23", weekday: "short" }).formatToParts(t).map((p) => [p.type, p.value]))
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", year: "2-digit", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23", weekday: "short" }).formatToParts(t).map((p) => [p.type, p.value]))
   const dayIdx = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(parts.weekday)
-  const head = `${parts.month}월 ${parts.day}일(${WEEKDAY[dayIdx]})`
-  if (dateOnly) return head
-  const h = Number(parts.hour)
-  const ampm = h < 12 ? "오전" : "오후"
-  const h12 = h % 12 === 0 ? 12 : h % 12
-  return `${head} ${ampm} ${h12}:${parts.minute}`
+  const head = `${parts.year}.${parts.month}.${parts.day}(${WEEKDAY[dayIdx]})`
+  return dateOnly ? head : `${head} ${parts.hour}:${parts.minute}`
 }
 
 // 같은 시각인지(표기 차이 무시). 둘 다 비면 같다.
@@ -69,16 +81,20 @@ export function planLessonNotice(attendance: any, session: any | null): LessonNo
   const sentIso = String(p[LESSON_NOTICE_SENT_PROP]?.date?.start ?? "")
   if (sentIso && sameInstant(sentIso, classIso)) return { skip: "" }
   const makeup = session?.properties?.["보강"]?.checkbox === true
-  const label = makeup ? "보강 수업" : "수업"
+  const label = makeup ? "보강 수업" : "정규 수업"
   const memo = (session?.properties?.[LESSON_MEMO_PROP]?.rich_text ?? []).map((t: any) => t.plain_text ?? "").join("").trim()
-  const common = {
-    "#{안내구분}": label,
-    "#{학생이름}": getFormulaText(attendance, "학생이름(보고서)"),
-    "#{클래스}": getFormulaText(attendance, "클래스(보고서)"),
-    "#{안내내용}": memo || (makeup ? "보강 수업이 잡혔습니다" : "-"),
+  const f = (name: string, fallback: string) => getFormulaText(attendance, name).trim() || fallback
+  return {
+    kind: "수업 안내",
+    classIso,
+    variables: {
+      "#{수업구분}": f("수업구분(수업안내)", label),
+      "#{학생이름}": getFormulaText(attendance, "학생이름(보고서)"),
+      "#{클래스}": getFormulaText(attendance, "클래스(보고서)"),
+      "#{수업일시}": f("수업일시(수업안내)", formatClassTime(classIso)),
+      "#{전달사항}": f("전달사항(수업안내)", noteText(memo)),
+    },
   }
-  if (!sentIso) return { kind: "수업 안내", classIso, variables: { ...common, "#{수업일시}": formatLessonTime(classIso) } }
-  return { kind: "수업 변경 안내", classIso, variables: { ...common, "#{기존일시}": formatLessonTime(sentIso), "#{변경일시}": formatLessonTime(classIso) } }
 }
 
 const SOLAPI_API_KEY = Deno.env.get("SOLAPI_API_KEY") ?? ""
@@ -86,7 +102,8 @@ const SOLAPI_API_SECRET = Deno.env.get("SOLAPI_API_SECRET") ?? ""
 const SOLAPI_SENDER_NUMBER_FALLBACK = Deno.env.get("SOLAPI_SENDER_NUMBER") ?? ""
 
 // 템플릿 ID·채널 기본값(Secrets)을 쓰지 않는다: 설정 행이 꺼졌거나 비었으면 다른 템플릿으로 나가지 않게 막는다.
-async function sendLessonAlimtalk(kind: LessonNoticeKind, registrationId: string, primaryPhone: string, variables: Record<string, string>) {
+// (v2.8.0) 일정 안내(_shared/scheduleNotice.ts)도 같은 규칙으로 이 함수를 쓴다. primaryPhone이 비면 등록의 우선 연락처를 읽는다.
+export async function sendConfiguredAlimtalk(kind: SendLogCategory, registrationId: string, primaryPhone: string, variables: Record<string, string>) {
   const config = await getAlimtalkConfig(kind, { pfId: "", templateId: "", senderNumber: SOLAPI_SENDER_NUMBER_FALLBACK })
   if (!config.templateId || !config.pfId) throw new LessonConfigError(`알림톡 설정의 '${kind}' 행을 켜고(활성 여부) 카카오 채널 ID·템플릿 ID를 넣어 주세요.`)
   const recipients = await resolveAlimtalkRecipients({ registrationId, primaryPhone, recipientTarget: config.recipientTarget })
@@ -110,7 +127,7 @@ export class LessonConfigError extends Error {}
 export const lessonNoticeDeps = {
   getPage: notionGetPage,
   patch: notionPatchPageProperties,
-  send: sendLessonAlimtalk,
+  send: sendConfiguredAlimtalk,
   log: createSendLogEntry,
   botUser: getBotUserId,
 }
@@ -118,7 +135,7 @@ export const lessonNoticeDeps = {
 async function finish(attendanceId: string, status: "✅ 완료" | "⚠️ 오류", message: string | null, extra: Record<string, unknown> = {}) {
   await lessonNoticeDeps.patch(attendanceId, {
     [LESSON_NOTICE_STATUS_PROP]: { select: { name: status } },
-    "마지막 오류": { rich_text: message ? [{ text: { content: message.slice(0, 1900) } }] : [] },
+    [LESSON_NOTICE_ERROR_PROP]: { rich_text: message ? [{ text: { content: message.slice(0, 1900) } }] : [] },
     ...extra,
   }).catch((err: unknown) => console.error("[lesson-notice] 출석 상태 쓰기 실패:", attendanceId, extractErrorMessage(err)))
 }

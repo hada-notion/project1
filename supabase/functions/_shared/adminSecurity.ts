@@ -2,7 +2,7 @@
 export const SECURITY_WEBHOOK_ROUTES = new Set([
   'cascade-delete','create-assignment','create-class-reports','create-learning-record','fill-record-units','fix-attendance',
   'generate-classes',
-  'send-report','send-daily-report','send-lesson-notice','send-tuition-notice',
+  'send-report','send-daily-report','send-lesson-notice','send-monthly-notice','send-schedule-notice','send-tuition-notice',
   'send-textbook-notice','send-inquiry-receipt',
   'sync-attendance','sync-class-report-cache','sync-class-room-copy','sync-dashboard-link',
   'sync-registration-textbook','sync-report-cache',

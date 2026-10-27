@@ -151,12 +151,15 @@ function prepareTuition(page: any): Prepared {
 	if (!registrationId) throw new Error("이 수강료 안내에 연결된 등록이 없습니다.")
 	const studentName = getFormulaText(page, "학생정보")
 	const period = getDateRange(page, "청구기간")
+	// (v2.8.0) 템플릿이 학생 합산 모양(#{수강내역}·#{청구금액} 합계)으로 바뀌었다. 한 장만 보낼 때는 수강내역이 한 줄이다.
+	// 학생의 반을 모두 합쳐 한 통으로 보내는 것은 학생 월간 안내 [수강료 안내](_shared/monthlyNotice.ts).
+	const amount = getFormulaText(page, "청구금액(표시)")
 	const fixed = {
 		"#{청구년월}": getFormulaText(page, "청구년월(보고서)"),
 		"#{청구기간}": getFormulaText(page, "청구기간(표시)"),
 		"#{학생이름}": studentName,
-		"#{클래스}": getRollupText(page, "클래스(수강료)"),
-		"#{청구금액}": getFormulaText(page, "청구금액(표시)"),
+		"#{수강내역}": `• ${getRollupText(page, "클래스(수강료)")}: ${amount}`,
+		"#{청구금액}": amount,
 	}
 	return {
 		registrationId,

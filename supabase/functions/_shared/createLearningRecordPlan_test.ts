@@ -1,7 +1,7 @@
 // All network calls are mocked. No live Notion/Supabase writes or secret values are used.
 for (const [key, value] of Object.entries({ NOTION_TOKEN: "test-only", ADMIN_SECRET: "test-only", SB_URL: "https://mock.supabase", SB_SERVICE_ROLE_KEY: "test-only", DATA_SOURCE_LEARNING_RECORD_ID: "records" })) Deno.env.set(key, value)
 const eq = (a: unknown, b: unknown) => { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error(`expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`) }
-const { recordPlanDeps, recordPlanFromText, createLearningRecordsFromPlan } = await import("./createLearningRecordTarget.ts")
+const { recordPlanDeps, recordPlanFromText, createLearningRecordsFromPlan, recordPlanEmptyError, NO_BOOKS_MARKED_TODAY } = await import("./createLearningRecordTarget.ts")
 
 const SES = "3ecba040586b8044be66db21a8c2c7e9", B1 = "3fc8121f51254cd5a32ee6b8ccf8ca1e", B2 = "7ad0b5a15c67453cbb8ccfd195636733"
 const LIB = "11111111222233334444555555555555", SUB = "aaaaaaaabbbbccccddddeeeeeeeeeeee"
@@ -84,4 +84,11 @@ Deno.test("v2.8.0 학습기록 계획: 수식이 cls(수업의 클래스)를 주
 		await createLearningRecordsFromPlan(SES, recordPlanFromText(plan([item(B1)]))!)
 		eq("클래스" in t.calls.created[0], false)
 	} finally { t.restore() }
+})
+
+Deno.test("v2.8.0 학습기록 계획: 오늘 학습 체크한 교재가 없으면(빈 계획) ⚠️ 문구, 교재가 있거나 예전 방식이면 없음", () => {
+	eq(recordPlanEmptyError(recordPlanFromText(plan([]))), NO_BOOKS_MARKED_TODAY)
+	eq(recordPlanEmptyError(recordPlanFromText(plan([item(B1)]))), null)
+	eq(recordPlanEmptyError(null), null)
+	eq(NO_BOOKS_MARKED_TODAY, "오늘 학습을 체크한 진도교재가 없어요. 진도교재 탭에서 오늘 학습을 체크하고 다시 누르세요")
 })
