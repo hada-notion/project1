@@ -158,6 +158,24 @@ async function disconnectRelation(kid: any, propName: string, removeId: string):
   await updatePageProperties(pageId, { [propName]: { relation: filtered.map((id) => ({ id })) } })
 }
 
+// (v2.8.0) 보강 출석(`기존 결석`이 있는 출석)을 지우면 보강 수업 명단(`등록`)에서도 이 학생을 뺀다. 명단에 남으면 다음
+// 출석 조정·[보강 배정]이 지운 출석을 다시 만든다. 수업째 지우는 중이거나, 보강 수업이 아니거나, 같은 수업에 이 학생의 다른
+// 출석이 남아 있으면 건드리지 않는다.
+async function dropFromMakeupRoster(att: any, visited: Set<string>, log: string[], indent: string, name: string): Promise<void> {
+  const sessionId = relIds(att.properties?.["수업"])[0]
+  const regId = relIds(att.properties?.["등록"])[0]
+  if (!sessionId || !regId) return
+  const deleting = new Set([...visited].map((v) => v.replace(/-/g, "")))
+  if (deleting.has(sessionId.replace(/-/g, ""))) return
+  const session = await getPage(sessionId)
+  if (session?.archived || session?.in_trash || session?.properties?.["보강"]?.checkbox !== true) return
+  const others = await queryAllPages(DS_ATTENDANCE, { and: [{ property: "수업", relation: { contains: sessionId } }, { property: "등록", relation: { contains: regId } }] })
+  const self = String(att.id).replace(/-/g, "")
+  if (others.some((o: any) => String(o.id).replace(/-/g, "") !== self && !o.archived && !o.in_trash)) return
+  await disconnectRelation(session, "등록", regId)
+  log.push(`${indent}🔗 [${name}] 보강 출석이라 보강 수업 명단에서도 이 학생을 뺌: ${sessionId}`)
+}
+
 // (v2.6.31) 누른 페이지(depth 0)만 읽고 상태를 표시한다. 하위 페이지는 조회 결과(kidPage)를 그대로 쓰고,
 // "삭제 체크"를 켜지 않으며(켜면 7개 DB의 삭제 체크 자동화가 하위마다 웹훅을 또 보내 같은 페이지를 다시
 // 읽고 큐에 넣었다), 상태 표시 없이 휴지통으로만 보낸다. 누른 페이지는 ✅ 완료 쓰기와 휴지통 보내기를 한 번에.
@@ -262,14 +280,20 @@ export async function cascadeDelete(
     // (v2.8.0) 보강 수업을 지우면 결석 출석의 `보강 수업`(양방향, 수업 쪽 `보강 대상`)이 휴지통 수업을 계속 가리켜
     // 결석 현황에 "배정 전"으로 남는다. 휴지통에 보내면서 수업 쪽 관계를 비워 결석이 "미배정"으로 돌아가게 한다.
     const makeupTargets = dataSourceId === DS_CLASS_SESSION && relIds(page.properties?.["보강 대상"]).length ? { "보강 대상": { relation: [] } } : {}
+    // (v2.8.0) 보강 출석을 지우면 원래 결석의 `보강 출석`(양방향, 출석 쪽 `기존 결석`)이 휴지통 출석을 계속 가리켜 결석이
+    // 보강 대기에서 빠진 채 남는다. 휴지통에 보내면서 관계를 비워 원래 결석이 다시 뜨게 하고, 보강 수업 명단에서도 뺀다.
+    const isMakeupAttendance = dataSourceId === DS_ATTENDANCE && relIds(page.properties?.["기존 결석"]).length > 0
+    if (isMakeupAttendance) await dropFromMakeupRoster(page, visited, log, indent, name)
+    const makeupLink = isMakeupAttendance ? { "기존 결석": { relation: [] } } : {}
     if (depth === 0) {
       await archivePage(pageId, {
         [CASCADE_DELETE_STATUS_SPEC.statusProp]: { select: { name: STATUS_DONE } },
         [CASCADE_DELETE_STATUS_SPEC.errorProp]: { rich_text: [] },
         ...makeupTargets,
+        ...makeupLink,
       })
     } else {
-      await archivePage(pageId)
+      await archivePage(pageId, isMakeupAttendance ? makeupLink : undefined)
     }
     removeLater([pageId]) // 수업 관리 복사본에서도 지운다(v2.5.115, 수업·출석·학습기록·학습활동이면)
     log.push(`${indent}🗑️ [${name}] 삭제되어 휴지통으로 이동됨`)
