@@ -84,3 +84,14 @@ Deno.test("v2.6.31 다시 시도: 이미 휴지통에 간 하위는 건너뛰고
 	assert(!writes.some((w) => ["att1", "act11", "act12"].includes(w.id)), "이미 지운 하위는 손대지 않음")
 	assert(Object.values(pages).every((p: any) => p.archived), "남은 것 모두 휴지통")
 })
+
+Deno.test("v2.8.0 보강 수업 삭제: 휴지통에 보내면서 보강 대상(결석 출석의 보강 수업)을 비운다, 없으면 건드리지 않음", async () => {
+	const pages = world()
+	pages.sess.properties["보강 대상"] = rel("abs1")
+	const { writes } = await run(pages, "sess")
+	const last = writes.filter((w) => w.id === "sess").at(-1)!
+	assert(last.body.archived && Array.isArray(last.body.properties["보강 대상"]?.relation) && last.body.properties["보강 대상"].relation.length === 0, JSON.stringify(last.body))
+	const plain = world()
+	const r2 = await run(plain, "sess")
+	assert(!("보강 대상" in (r2.writes.filter((w) => w.id === "sess").at(-1)!.body.properties ?? {})), "보강 대상이 없으면 쓰지 않음")
+})

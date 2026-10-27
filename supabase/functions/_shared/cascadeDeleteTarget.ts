@@ -259,10 +259,14 @@ export async function cascadeDelete(
       )
     }
 
+    // (v2.8.0) 보강 수업을 지우면 결석 출석의 `보강 수업`(양방향, 수업 쪽 `보강 대상`)이 휴지통 수업을 계속 가리켜
+    // 결석 현황에 "배정 전"으로 남는다. 휴지통에 보내면서 수업 쪽 관계를 비워 결석이 "미배정"으로 돌아가게 한다.
+    const makeupTargets = dataSourceId === DS_CLASS_SESSION && relIds(page.properties?.["보강 대상"]).length ? { "보강 대상": { relation: [] } } : {}
     if (depth === 0) {
       await archivePage(pageId, {
         [CASCADE_DELETE_STATUS_SPEC.statusProp]: { select: { name: STATUS_DONE } },
         [CASCADE_DELETE_STATUS_SPEC.errorProp]: { rich_text: [] },
+        ...makeupTargets,
       })
     } else {
       await archivePage(pageId)
