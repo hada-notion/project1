@@ -391,6 +391,12 @@ export type AlimtalkConfig = {
 const alimtalkConfigCache = new Map<string, { value: AlimtalkConfig; expiresAt: number }>()
 // (v2.6.20) 일일 보고서를 큐로 차례로 보낼 때 같은 설정을 다시 읽지 않도록 5분 재사용(설정은 거의 바뀌지 않음).
 const ALIMTALK_CONFIG_CACHE_MS = 5 * 60_000
+// (v2.8.0) 캐시에는 행에 적힌 값만 두고 기본값(fallback)은 부를 때마다 채운다. 예전에는 처음 부른 쪽의 기본값이 함께
+// 저장돼, 빈 기본값으로 먼저 읽으면(가정통신문 수강료 안내의 안내멘트 읽기) 같은 함수 안 다음 발송이 발신번호 빈 값으로
+// 나가 Solapi가 요청 모양 오류로 거절했다(10/28 원본 실테스트).
+export function withConfigFallback(row: AlimtalkConfig, fallback: { pfId: string; templateId: string; senderNumber: string }): AlimtalkConfig {
+  return { ...row, pfId: row.pfId || fallback.pfId, templateId: row.templateId || fallback.templateId, senderNumber: row.senderNumber || fallback.senderNumber }
+}
 
 // [NEW] 주간/월간 보고서는 카카오 템플릿이 하나로 통합되어 있어서, "알림톡 설정(학원) DB"에서는 "보고서" 하나의 행으로 조회합니다.
 // 전송로그의 "발송 구분"(일일/주간/월간/수강료)은 이와 별개로 그대로 유지됩니다.
@@ -474,7 +480,7 @@ export async function getAlimtalkConfig(
     console.log(
       `[getAlimtalkConfig][${category}] cache hit, noticeLength=${cached.value.notice.length}, noticePreview=${JSON.stringify(cached.value.notice.slice(0, 15))}`,
     )
-    return cached.value
+    return withConfigFallback(cached.value, fallback)
   }
 
   if (!ALIMTALK_CONFIG_DB_ID) {
@@ -516,21 +522,21 @@ export async function getAlimtalkConfig(
         ? rawRecipientTarget
         : "우선 연락 대상"
 
-    const config: AlimtalkConfig = {
-      pfId: getText("카카오 채널 ID (pfId)") || fallback.pfId,
-      templateId: getText("템플릿 ID") || fallback.templateId,
-      senderNumber: getText("발신번호") || fallback.senderNumber,
+    const row: AlimtalkConfig = {
+      pfId: getText("카카오 채널 ID (pfId)"),
+      templateId: getText("템플릿 ID"),
+      senderNumber: getText("발신번호"),
       notice: getText("안내멘트"),
       recipientTarget,
     }
 
     // [DEBUG, 2026-09-17] 안내멘트 누락 원인 추적용 임시 로그. 원인 파악 후 제거 예정.
     console.log(
-      `[getAlimtalkConfig][${category}] Notion 조회 성공, pageId=${page.id}, noticeLength=${config.notice.length}, noticePreview=${JSON.stringify(config.notice.slice(0, 15))}`,
+      `[getAlimtalkConfig][${category}] Notion 조회 성공, pageId=${page.id}, noticeLength=${row.notice.length}, noticePreview=${JSON.stringify(row.notice.slice(0, 15))}`,
     )
 
-    alimtalkConfigCache.set(category, { value: config, expiresAt: Date.now() + ALIMTALK_CONFIG_CACHE_MS })
-    return config
+    alimtalkConfigCache.set(category, { value: row, expiresAt: Date.now() + ALIMTALK_CONFIG_CACHE_MS })
+    return withConfigFallback(row, fallback)
   } catch (e) {
     console.error(`[getAlimtalkConfig][${category}] 조회 실패, Secrets 기본값 사용:`, e)
     return { ...fallback, notice: "", recipientTarget: "우선 연락 대상" }
