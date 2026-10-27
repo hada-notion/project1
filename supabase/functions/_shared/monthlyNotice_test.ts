@@ -294,3 +294,21 @@ Deno.test("v2.8.0 가정통신문 발송함 일정 일괄: 그 달 학부모 공
 	eq(c.marks, ["error:boxB:강준혁: 이 달 이 학생의 학부모 공개 일정이 없어 보내지 않았습니다."])
 	eq([pages.l1.properties["마지막 오류"].rich_text[0].plain_text, pages.l1.properties["일정 전송 선택"].checkbox, pages.l1.properties["일정 안내 일시"].date], ["이 달 이 학생의 학부모 공개 일정이 없어 보내지 않았습니다.", true, null])
 })
+
+Deno.test("v2.8.0 월간 일정 안내: 반 이름은 이름순, 두 반 이상 학생에게 일부 반에만 걸린 일정은 반 이름을 붙임(10/28 사용자)", async () => {
+	const names = new Map([["ca", "중1 A"], ["cb", "중1 B"]])
+	const ev1 = { properties: { "클래스": rel("cb") } }
+	eq(m.withClassPrefix("11/14(토) 보충 수업", ev1, names), "11/14(토) 중1 B 보충 수업")
+	eq(m.withClassPrefix("12/24(목)~12/26(토) 겨울 휴원", { properties: { "클래스": rel("cb") } }, names), "12/24(목)~12/26(토) 중1 B 겨울 휴원")
+	// 두 반 모두·반 없음(학생·학원 전체)·한 반만 다니는 학생은 그대로
+	eq(m.withClassPrefix("11/14(토) 보충", { properties: { "클래스": rel("ca", "cb") } }, names), "11/14(토) 보충")
+	eq(m.withClassPrefix("11/14(토) 설명회", { properties: { "클래스": rel() } }, names), "11/14(토) 설명회")
+	eq(m.withClassPrefix("11/14(토) 보충", ev1, new Map([["cb", "중1 B"]])), "11/14(토) 보충")
+	// 실제 보내기: 등록 순서가 B, A여도 #{클래스}는 이름순, 중1 B 일정 앞에 반 이름
+	const regs = [reg("r2", { student: "s1", name: "강준혁", cls: "cb", clsName: "중1 B" }), reg("r1", { student: "s1", name: "강준혁", cls: "ca", clsName: "중1 A" })]
+	const pages: Record<string, any> = { l1: letter("l1", { student: "s1" }), s1: { id: "s1", properties: { "학교": rel(), "학년": rel() } }, ca: { id: "ca", properties: { "안내 메모": rt("") } }, cb: { id: "cb", properties: { "안내 메모": rt("") } } }
+	const q = (ds: string, filter: any) => ds === "registrations" ? regs : ds === "events" && relFilter(filter) === "클래스:cb" ? [ev("e-b", { name: "(테스트) 보충 수업", start: "2026-12-12", cls: ["cb"] })] : []
+	const c = mock(pages, q)
+	await m.processMonthlySendLetterItem({ kind: "schedule", letterId: "l1" })
+	eq([c.sends[0].vars["#{클래스}"], c.sends[0].vars["#{학원일정}"]], ["중1 A · 중1 B", "12/12(토) 중1 B (테스트) 보충 수업"])
+})
