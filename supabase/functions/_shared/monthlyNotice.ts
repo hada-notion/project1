@@ -216,9 +216,25 @@ async function studentRegsInMonth(studentId: string, month: string): Promise<any
 
 const classNameOfReg = (reg: any) => getRollupText(reg, "클래스명(등록)").trim()
 
+// 그 달 다니는 반 이름(수강 내역과 같은 이름순, 같은 이름은 한 번). 월간 일정 안내 #{클래스}와 반 일정 앞 이름에 쓴다.
+const classNamesOf = (regs: any[]) => Array.from(new Set(regs.map(classNameOfReg).filter(Boolean))).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+
+// 두 반 이상 다니는 학생에게 일부 반에만 걸린 일정은 날짜 뒤에 그 반 이름을 붙인다("11/14(토) 중1 B 보충 수업").
+// 다니는 반 모두에 걸린 일정·학생 개인·학원 전체·학교 일정과 한 반만 다니는 학생은 그대로.
+export function withClassPrefix(line: string, event: any, classNameById: Map<string, string>): string {
+	if (classNameById.size < 2) return line
+	const names = relIds(event?.properties?.["클래스"]).map((id) => classNameById.get(key(id))).filter((n): n is string => !!n)
+	const unique = Array.from(new Set(names)).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+	if (!unique.length || unique.length >= new Set(classNameById.values()).size) return line
+	return line.replace(/^(\S+) /, `$1 ${unique.join(" · ")} `)
+}
+
 // 그 학생의 그 달 학부모 공개 일정(리포트와 같은 규칙): 학생 개인 + 다니는 반 전부 + 학원 전체 + 학교·학년(일정의 학교·학년이
-// 비었거나 학생 것과 같을 때). 같은 일정은 한 번만, 날짜순.
-export async function studentMonthEvents(studentId: string, month: string, classIds: string[]): Promise<Line[]> {
+// 비었거나 학생 것과 같을 때). 같은 일정은 한 번만, 날짜순. regs = 그 달 다니는 그 학생의 등록들.
+export async function studentMonthEvents(studentId: string, month: string, regs: any[]): Promise<Line[]> {
+	const classNameById = new Map<string, string>()
+	for (const r of regs) for (const id of relIds(r?.properties?.["클래스"])) classNameById.set(key(id), classNameOfReg(r) || "반")
+	const classIds = Array.from(new Set(regs.flatMap((r: any) => relIds(r?.properties?.["클래스"]))))
 	const deps = monthlyDeps
 	const st: any = await deps.getPage(studentId).catch(() => null)
 	const schoolId = relIds(st?.properties?.["학교"])[0]
@@ -242,14 +258,17 @@ export async function studentMonthEvents(studentId: string, month: string, class
 	for (const e of [...own, ...cls, ...academy, ...[...school, ...grade].filter(schoolOk)]) if (alive(e)) byId.set(key(e.id), e)
 	return Array.from(byId.values())
 		.filter((e) => isParentPublicEvent(e))
-		.map((e) => ({ id: String(e.id), ...(eventLine(e) ?? { day: "", line: "" }), sec: sectionOf(e) }))
+		.map((e) => {
+			const base = eventLine(e) ?? { day: "", line: "" }
+			return { id: String(e.id), day: base.day, line: base.line ? withClassPrefix(base.line, e, classNameById) : "", sec: sectionOf(e) }
+		})
 		.filter((l) => l.line && inMonth(l.day, month))
 		.sort((a, b) => a.day.localeCompare(b.day))
 }
 
 // 가정통신문 `일정`을 그 학생의 그 달 일정으로 다시 묶는다.
-async function bundleEvents(letterId: string, studentId: string, month: string, classIds: string[]): Promise<Line[]> {
-	const lines = await studentMonthEvents(studentId, month, classIds)
+async function bundleEvents(letterId: string, studentId: string, month: string, regs: any[]): Promise<Line[]> {
+	const lines = await studentMonthEvents(studentId, month, regs)
 	await monthlyDeps.update(letterId, { [PROP_LETTER_EVENTS]: { relation: lines.slice(0, 100).map((l) => ({ id: l.id })) } })
 	return lines
 }
@@ -321,8 +340,7 @@ export async function processMonthlyCreateRegItem(p: CreateRegPayload): Promise<
 					"일괄전송 선택": { checkbox: false },
 				})
 			}
-			const classIds = (await studentRegsInMonth(studentId, p.month)).flatMap((r: any) => relIds(r?.properties?.["클래스"]))
-			await bundleEvents(letterId, studentId, p.month, classIds).catch((err) => console.warn("[monthly-create] 일정 묶기 건너뜀:", (err as Error).message))
+			await bundleEvents(letterId, studentId, p.month, await studentRegsInMonth(studentId, p.month)).catch((err) => console.warn("[monthly-create] 일정 묶기 건너뜀:", (err as Error).message))
 		}
 		if (p.last) await finishParent(p.classId, CLASS_TUITION_GEN_STATUS_SPEC)
 	} catch (err) {
@@ -437,11 +455,11 @@ export async function sendScheduleNotice(letter: any, classId?: string): Promise
 	if (!studentId) throw new MonthlyBlocked("가정통신문에 '학생'이 연결되어 있지 않습니다.")
 	const regs = await studentRegsInMonth(studentId, month)
 	if (!regs.length) throw new MonthlyBlocked(`${monthLabel(month)}에 다니는 등록이 없습니다.`)
-	const lines = await bundleEvents(String(letter.id), studentId, month, regs.flatMap((r: any) => relIds(r?.properties?.["클래스"])))
+	const lines = await bundleEvents(String(letter.id), studentId, month, regs)
 	if (!lines.length) return "empty"
 	const regId = String(regs[0].id)
 	const studentName = studentNameOf(regs[0])
-	const classNames = Array.from(new Set(regs.map(classNameOfReg).filter(Boolean)))
+	const classNames = classNamesOf(regs)
 	const REPORT_PATH = Deno.env.get("REPORT_PATH") ?? "/project1/student_report.html"
 	const variables = {
 		"#{학생이름}": studentName,
