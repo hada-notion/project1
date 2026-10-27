@@ -91,7 +91,8 @@ export function planLessonNotice(attendance: any, session: any | null): LessonNo
       "#{수업구분}": f("수업구분(수업안내)", label),
       "#{학생이름}": getFormulaText(attendance, "학생이름(보고서)"),
       "#{클래스}": getFormulaText(attendance, "클래스(보고서)"),
-      "#{수업일시}": f("수업일시(수업안내)", formatClassTime(classIso)),
+      // 일시는 수식을 읽지 않는다: Notion API가 수식의 formatDate를 UTC로 계산해 18:00이 "09:00"으로 온다(10/27 원본). 서버가 서울 시각으로.
+      "#{수업일시}": formatClassTime(classIso),
       "#{전달사항}": f("전달사항(수업안내)", noteText(memo)),
     },
   }

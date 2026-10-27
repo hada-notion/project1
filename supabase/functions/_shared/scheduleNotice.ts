@@ -220,7 +220,8 @@ export async function processScheduleEventItem(p: EventPayload): Promise<void> {
 		const vars = {
 			"#{일정구분}": f("일정구분(일정안내)", eventLabel(ev)),
 			"#{일정명}": f("일정명(일정안내)", textOf(ev.properties?.["이름"]?.title).trim() || `${eventLabel(ev)} 일정`),
-			"#{일정일시}": f("일정일시(일정안내)", eventTimeText(ev)),
+			// 일시는 수식을 읽지 않는다(API의 수식 날짜는 UTC라 시각이 9시간 어긋남). 서버가 서울 시각으로.
+			"#{일정일시}": eventTimeText(ev),
 			"#{전달사항}": f("전달사항(일정안내)", noteText(textOf(ev.properties?.["메모"]?.rich_text))),
 		}
 		console.log(`[schedule-event] event=${p.eventId} 대상 ${targets.length}`)

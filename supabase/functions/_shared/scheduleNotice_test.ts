@@ -83,12 +83,13 @@ Deno.test("v2.8.0 일정 안내(한 건): 연결된 학생·반의 수강 중 �
 	await m.processScheduleEventItem({ eventId: "e1" })
 	eq(c2.enq.length, 0)
 	eq(c2.marks[1].includes("이미 이 날짜로"), true)
-	// 일정 페이지의 (일정안내) 수식이 있으면 그 값을 보낸다.
+	// 일정 페이지의 (일정안내) 수식이 있으면 그 값을 보낸다. 일시만은 수식(API에서 UTC)을 쓰지 않고 서버가 서울 시각으로 만든다.
 	const withF: any = ev("e1", { name: "휴강", start: "2026-11-03", cls: ["cls"] })
 	withF.properties["일정일시(일정안내)"] = { type: "formula", formula: { type: "string", string: "수식 일시" } }
+	withF.properties["전달사항(일정안내)"] = { type: "formula", formula: { type: "string", string: "수식 메모" } }
 	const cf = mock({ e1: withF }, { regs: [reg("r1", "s1", "김하윤")] })
 	await m.processScheduleEventItem({ eventId: "e1" })
-	eq(cf.enq[0].payload.vars["#{일정일시}"], "수식 일시")
+	eq([cf.enq[0].payload.vars["#{일정일시}"], cf.enq[0].payload.vars["#{전달사항}"]], ["26.11.03(화)", "수식 메모"])
 	const c3 = mock({ e1: ev("e1", { start: "2026-11-03" }) })
 	await m.processScheduleEventItem({ eventId: "e1" })
 	eq(c3.marks[1].includes("학생이나 클래스를 연결"), true)
