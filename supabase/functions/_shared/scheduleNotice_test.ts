@@ -17,7 +17,7 @@ const ev = (id: string, o: { name?: string; cat?: string; start: string; end?: s
 		"학부모 공개": { type: "checkbox", checkbox: o.pub ?? true },
 		"숨김": { type: "checkbox", checkbox: o.hidden ?? false },
 		"클래스": rel(...(o.cls ?? [])), "학생": rel(...(o.stu ?? [])), "학교": rel(...(o.school ?? [])), "학년": rel(...(o.grade ?? [])),
-		"메모": rt(o.memo ?? ""), "안내 구분": rt(o.label ?? ""),
+		"메모": rt(o.memo ?? ""), "안내 구분": { type: "select", select: o.label ? { name: o.label } : null },
 		"일정 안내 일시": { type: "date", date: o.sent ? { start: o.sent } : null },
 	},
 })
@@ -34,7 +34,9 @@ Deno.test("v2.8.0 일정 안내: 다음 달, 한 줄·요약(5줄+외 N건), 학
 	eq(m.isAcademyWide(ev("e", { start: "2026-11-03" })), true)
 	eq(m.isAcademyWide(ev("e", { start: "2026-11-03", cls: ["c"] })), false)
 	eq(m.eventLabel(ev("e", { cat: "💤 휴원", start: "2026-11-03" })), "휴원")
-	eq(m.eventLabel(ev("e", { cat: "🏫 학사 일정", start: "2026-11-03" })), "학사 일정")
+	eq(m.eventLabel(ev("e", { cat: "🏫 학사 일정", start: "2026-11-03" })), "학사")
+	eq(m.eventLabel(ev("e", { start: "2026-11-03" })), "학원")
+	eq(m.eventLabel(ev("e", { cat: "✅ 할일", start: "2026-11-03" })), "학원")
 	eq(m.eventLabel(ev("e", { start: "2026-11-03", label: "휴강" })), "휴강")
 	eq([m.sectionOf(ev("e", { cat: "💤 휴원", start: "2026-11-03" })), m.sectionOf(ev("e", { cat: "🏫 학사 일정", start: "2026-11-03" })), m.sectionOf(ev("e", { start: "2026-11-03" }))], ["휴원", "학교", "학원"])
 	eq(m.sectionText([{ day: "2026-11-03", line: "11/3(화) 휴원", sec: "휴원" }], "학교"), "없음")

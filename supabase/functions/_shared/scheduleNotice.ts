@@ -1,7 +1,8 @@
 // _shared/scheduleNotice.ts
 //
 // (v2.8.0) 일정 안내(한 건): 일정 [일정 안내 전송] → send-schedule-notice/event → 큐. 일정에 연결된 학생, 연결된 클래스의 수강 중
-// 학생에게. 일정구분 = 일정 "안내 구분"(비면 구분에서: 💤 휴원 → 휴원, 📆 → 학원 일정, 🏫 → 학사 일정). 전달사항 = 메모(50자, 비면 "없음").
+// 학생에게. 일정구분 = 일정 "안내 구분"(선택: 상담·테스트·휴강·휴원, 비면 구분에서: 💤 휴원 → 휴원, 🏫 → 학사, 그 밖 → 학원).
+// 본문 첫 문장 "… 학생의 #{일정구분} 일정을 안내드립니다."에 들어간다. 전달사항 = 메모(50자, 비면 "없음").
 // 보낸 뒤 일정 "일정 안내 일시" = 그때 날짜. 다시 누르면 날짜가 바뀌었을 때만 보낸다.
 // 월간 일정 안내는 학생 단위다(학생 월간 안내, _shared/monthlyNotice.ts). 이 파일의 한 줄·구역 함수를 같이 쓴다.
 // 큐 모양은 반별 보고서와 같다: 일정 1건이 학생 1건씩을 다시 넣고, 마지막 학생이 상태를 마친다(✅, 중간 실패가 있으면 ⚠️).
@@ -80,16 +81,15 @@ export function isAcademyWide(event: any): boolean {
 	return ["클래스", "학생", "학교", "학년"].every((n) => relIds(p[n]).length === 0)
 }
 
-// 일정 안내의 구분 줄: "안내 구분" 칸 → 없으면 구분으로(템플릿 본문 "📌 구분: …"이라 "안내"를 붙이지 않는다).
+// 일정 안내의 구분: "안내 구분"(선택) → 없으면 구분으로. 본문이 "학생의 #{일정구분} 일정을"이라 "일정"을 붙이지 않는다.
 export function eventLabel(event: any): string {
 	const p = event?.properties ?? {}
-	const custom = textOf(p[PROP_EVENT_LABEL]?.rich_text).trim()
+	const custom = String(p[PROP_EVENT_LABEL]?.select?.name ?? textOf(p[PROP_EVENT_LABEL]?.rich_text)).trim()
 	if (custom) return custom
 	const cat = String(p["구분"]?.select?.name ?? "")
 	if (cat.includes("휴원")) return "휴원"
-	if (cat.includes("학사")) return "학사 일정"
-	if (cat.includes("학원 일정")) return "학원 일정"
-	return "일정"
+	if (cat.includes("학사")) return "학사"
+	return "학원"
 }
 
 // 월간 일정 안내의 구역: 💤 휴원 → 휴원, 🏫 학사 일정 → 학교, 그 밖(📆 학원 일정) → 학원.
@@ -219,7 +219,7 @@ export async function processScheduleEventItem(p: EventPayload): Promise<void> {
 		const f = (name: string, fallback: string) => getFormulaText(ev, name).trim() || fallback
 		const vars = {
 			"#{일정구분}": f("일정구분(일정안내)", eventLabel(ev)),
-			"#{일정명}": f("일정명(일정안내)", textOf(ev.properties?.["이름"]?.title).trim() || eventLabel(ev)),
+			"#{일정명}": f("일정명(일정안내)", textOf(ev.properties?.["이름"]?.title).trim() || `${eventLabel(ev)} 일정`),
 			"#{일정일시}": f("일정일시(일정안내)", eventTimeText(ev)),
 			"#{전달사항}": f("전달사항(일정안내)", noteText(textOf(ev.properties?.["메모"]?.rich_text))),
 		}
