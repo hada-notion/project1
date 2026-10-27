@@ -85,7 +85,6 @@ const CHECKLIST=[
  ['출석(학원)',[
   ['attendance-report-queue','[웹훅] 보고서 전송',AUTO,route('send-daily-report'),{path:'/queue',trigger:{when:'속성 편집',select:['보고서 전송 상태','⚪ 대기']},note:'주소 끝의 /queue까지 넣습니다. 출석 [보고서 전송]·수업 [보고서 일괄 전송] 버튼은 상태만 바꿉니다(v2.7).'}],
   ['attendance-lesson-notice-queue','[웹훅] 수업 안내',AUTO,route('send-lesson-notice'),{path:'/queue',trigger:{when:'속성 편집',select:['수업 안내 상태','⚪ 대기']},note:'주소 끝의 /queue까지 넣습니다. 출석 [수업 안내 전송]·수업 [수업 안내 일괄 전송] 버튼은 상태만 바꿉니다(v2.8.0).'}],
-  ['attendance-makeup-assign','보강 배정',BUTTON,route('fix-attendance'),{path:'/makeup',note:'주소 끝의 /makeup까지 넣습니다. 결석 현황에서 보강 수업을 고른 결석 줄의 버튼, 그 보강 수업에 보강 출석을 만듭니다(v2.8.0).'}],
   ['attendance-delete','[웹훅] 삭제',AUTO,route('cascade-delete'),DELETE]]],
  ['학습기록(학원)',[
   ['record-assignment','학습활동 생성',BUTTON,route('create-assignment'),{path:'/queue',note:'주소 끝의 /queue까지 넣습니다. 본문 속성은 학습활동 계획만 고릅니다(v2.7).'}],

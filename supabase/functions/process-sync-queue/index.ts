@@ -77,7 +77,7 @@ import { processSyncClassReportCacheQueueItem } from "../_shared/classReportCach
 import { processCascadeDeleteQueueItem } from "../_shared/cascadeDeleteTarget.ts"
 import { processDashboardLinkQueueItem } from "../_shared/dashboardLinkTarget.ts"
 import { processRegistrationTextbookQueueItem } from "../_shared/registrationTextbookTarget.ts"
-import { processFixAttendanceQueueItem, processMakeupAssignItem, TARGET_MAKEUP_ASSIGN } from "../_shared/fixAttendanceTarget.ts"
+import { processFixAttendanceQueueItem } from "../_shared/fixAttendanceTarget.ts"
 import { processGenerateClassesQueueItem } from "../_shared/generateClassesQueue.ts"
 import { processSessionDateQueueItem } from "../_shared/sessionDateMove.ts"
 import { processDailyReportQueueItem } from "../_shared/dailyReportQueue.ts"
@@ -118,8 +118,6 @@ const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Pro
   "sync-registration-textbook": processRegistrationTextbookQueueItem,
   // (v2.6.11) 수업 DB "출석조정 상태 ⚪ 대기" 자동화 → fix-attendance/queue
   "fix-attendance": processFixAttendanceQueueItem,
-  // (v2.8.0) 출석 버튼 [보강 배정] → fix-attendance/makeup (결석 한 건의 보강 수업에 보강 출석)
-  [TARGET_MAKEUP_ASSIGN]: processMakeupAssignItem,
   // (v2.6.12) 시간표 DB "상태 ⚪ 대기" 자동화 → generate-classes/queue (메뉴 일괄 생성을 시간표 하나씩)
   "generate-classes": processGenerateClassesQueueItem,
   // (v2.6.18) 수업 DB "수업일시 편집" 자동화 → fix-attendance/session-date (출석 날짜·기록 제목 날짜 맞추기)
