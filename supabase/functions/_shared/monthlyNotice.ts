@@ -408,7 +408,7 @@ export async function sendTuitionNotice(letter: any): Promise<SendResult> {
 	await logAll("성공")
 	await markTuitions("✅ 완료", null)
 	// 이미 보냈으므로 여기서 실패해도 다시 보내지 않는다(큐 재시도 금지).
-	await deps.update(String(letter.id), { [PROP_TUITION_SENT]: { date: { start: deps.today() } }, [PROP_TUITION_PICK]: { checkbox: false } }).catch((err: unknown) => console.error("[monthly] 보낸 일시 쓰기 실패:", letter.id, extractErrorMessage(err)))
+	await deps.update(String(letter.id), { [PROP_TUITION_SENT]: { date: { start: deps.today() } }, [PROP_TUITION_PICK]: { checkbox: false }, [PROP_LAST_ERROR]: { rich_text: [] } }).catch((err: unknown) => console.error("[monthly] 보낸 일시 쓰기 실패:", letter.id, extractErrorMessage(err)))
 	return "sent"
 }
 
@@ -464,7 +464,7 @@ export async function sendScheduleNotice(letter: any, classId?: string): Promise
 	}
 	await deps.log({ registrationId: regId, senderUserId: sender, title: studentName || "월간 일정 안내", category: "월간 일정 안내", status: "성공" }).catch((err: unknown) => console.error("[monthly-schedule] 전송 로그 실패:", extractErrorMessage(err)))
 	// 이미 보냈으므로 여기서 실패해도 다시 보내지 않는다(큐 재시도 금지).
-	await deps.update(String(letter.id), { [PROP_SCHEDULE_SENT]: { date: { start: deps.today() } }, [PROP_SCHEDULE_PICK]: { checkbox: false } }).catch((err: unknown) => console.error("[monthly] 보낸 일시 쓰기 실패:", letter.id, extractErrorMessage(err)))
+	await deps.update(String(letter.id), { [PROP_SCHEDULE_SENT]: { date: { start: deps.today() } }, [PROP_SCHEDULE_PICK]: { checkbox: false }, [PROP_LAST_ERROR]: { rich_text: [] } }).catch((err: unknown) => console.error("[monthly] 보낸 일시 쓰기 실패:", letter.id, extractErrorMessage(err)))
 	return "sent"
 }
 
@@ -530,11 +530,17 @@ export async function processMonthlySendStudentItem(p: SendStudentPayload): Prom
 	try {
 		const letter: any = await deps.getPage(p.letterId)
 		if (pickedUnsent(letter, p.kind)) {
+			// 보내지 못한 사유는 발송함(한 줄씩)과 그 가정통신문 '마지막 오류'에 남긴다. 체크는 그대로라 고친 뒤 다시 보낼 수 있다.
+			const note = async (reason: string) => {
+				await appendError(p.mailboxId, `${p.studentName}: ${reason}`)
+				await deps.update(p.letterId, { [PROP_LAST_ERROR]: { rich_text: [{ text: { content: reason.slice(0, 1900) } }] } }).catch(() => {})
+			}
 			try {
-				await sendOf(p.kind)(letter, p.classId)
+				const r = await sendOf(p.kind)(letter, p.classId)
+				if (r === "empty") await note("이 달 이 학생의 학부모 공개 일정이 없어 보내지 않았습니다.")
 			} catch (err) {
 				if (!(err instanceof MonthlyBlocked || err instanceof MonthlySendFailed)) throw err
-				await appendError(p.mailboxId, `${p.studentName}: ${(err as Error).message}`)
+				await note((err as Error).message)
 			}
 		}
 		if (p.last) await finishParent(p.mailboxId, spec)

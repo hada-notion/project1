@@ -162,7 +162,7 @@ Deno.test("v2.8.0 가정통신문 [수강료 안내]: 반별 금액 줄·합계 
 	})
 	eq(c.logs.map((l) => [l.tuition, l.status]), [["t2", "성공"], ["t1", "성공"]])
 	eq(c.updates.filter((u) => u.props["안내문 전송 상태"]).map((u) => [u.id, u.props["안내문 전송 상태"].select.name, u.props["일괄전송 선택"].checkbox]), [["t2", "✅ 완료", false], ["t1", "✅ 완료", false]])
-	eq(c.updates.at(-1), { id: "l1", props: { "수강료 안내 일시": { date: { start: "2026-11-28" } }, "수강료 전송 선택": { checkbox: false } } })
+	eq(c.updates.at(-1), { id: "l1", props: { "수강료 안내 일시": { date: { start: "2026-11-28" } }, "수강료 전송 선택": { checkbox: false }, "마지막 오류": { rich_text: [] } } })
 	eq(c.marks, ["running:l1", "done:l1"])
 	// 가정통신문의 (수강료안내) 수식이 있으면 그 값을 쓴다.
 	pages.l1 = letter("l1", { student: "s1", tuitions: ["t2", "t1"] })
@@ -213,7 +213,7 @@ Deno.test("v2.8.0 가정통신문 [일정 안내]: 학생 개인·두 반·학�
 		"#{페이지ID}": "/r.html?token=tok",
 	})
 	eq(c.updates.find((u) => u.props["일정"])?.props["일정"].relation.map((r: any) => r.id), ["e-own", "e-sch", "e-all", "e-c1"])
-	eq(c.updates.at(-1), { id: "l1", props: { "일정 안내 일시": { date: { start: "2026-11-28" } }, "일정 전송 선택": { checkbox: false } } })
+	eq(c.updates.at(-1), { id: "l1", props: { "일정 안내 일시": { date: { start: "2026-11-28" } }, "일정 전송 선택": { checkbox: false }, "마지막 오류": { rich_text: [] } } })
 	eq(c.logs, [{ cat: "월간 일정 안내", status: "성공", reg: "r1", tuition: undefined }])
 	// 가정통신문 메모가 있으면 클래스 안내 메모보다 먼저, 발송함 일괄은 그 발송함의 반 메모
 	pages.l1 = letter("l1", { student: "s1" }); pages.l1.properties["가정통신문 메모"] = rt("하윤이는 12/8 보충에 꼭 와 주세요.")
@@ -279,4 +279,18 @@ Deno.test("v2.8.0 가정통신문 두 반 발송함: 영어 B에서 먼저 보�
 	const c2 = mock(p2, (ds) => ds === "registrations" ? [pages.r1, pages.r2] : [])
 	await m.processMonthlySendStudentItem({ kind: "tuition", mailboxId: "boxA", classId: "cA", letterId: "l9", studentName: "이도윤", last: true })
 	eq([c2.sends.length, c2.marks.length, c2.marks[0].startsWith("error:boxA:이도윤: 영어 B 12월 수강료가 아직 없어"), p2.l9.properties["수강료 전송 선택"].checkbox], [0, 1, true, true])
+	eq(p2.l9.properties["마지막 오류"].rich_text[0].plain_text.startsWith("영어 B 12월 수강료가 아직 없어"), true)
+})
+
+Deno.test("v2.8.0 가정통신문 발송함 일정 일괄: 그 달 학부모 공개 일정이 0건이면 보내지 않고 사유를 발송함·가정통신문에 남김(10/28 원본 실테스트)", async () => {
+	const regs = [reg("r1", { student: "s1", name: "강준혁", cls: "cB", clsName: "중1 B" })]
+	const pages: Record<string, any> = {
+		boxB: mailbox("boxB", { cls: "cB", letters: ["l1"] }), l1: letter("l1", { student: "s1" }),
+		s1: { id: "s1", properties: { "학교": rel(), "학년": rel() } }, cB: { id: "cB", properties: { "안내 메모": rt("") } },
+	}
+	const c = mock(pages, (ds) => ds === "registrations" ? regs : [])
+	await m.processMonthlySendStudentItem({ kind: "schedule", mailboxId: "boxB", classId: "cB", letterId: "l1", studentName: "강준혁", last: true })
+	eq(c.sends.length, 0)
+	eq(c.marks, ["error:boxB:강준혁: 이 달 이 학생의 학부모 공개 일정이 없어 보내지 않았습니다."])
+	eq([pages.l1.properties["마지막 오류"].rich_text[0].plain_text, pages.l1.properties["일정 전송 선택"].checkbox, pages.l1.properties["일정 안내 일시"].date], ["이 달 이 학생의 학부모 공개 일정이 없어 보내지 않았습니다.", true, null])
 })
