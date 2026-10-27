@@ -450,6 +450,13 @@ export async function processCreateLearningRecordQueueItem(payload: {
 			await Promise.all(payload.statusTargetIds.map((id) => setRecordGenError(id, (err as Error).message)))
 			return
 		}
+		// (v2.8.0) 계획이 비었으면(오늘 학습 체크한 진도교재 없음) ✅ 대신 ⚠️로 알린다. 같은 계획을 다시 받은 경우(두 번 클릭·
+		// 큐 재시도)는 교재가 남아 있어 아래에서 건너뛰고 지금처럼 ✅. 다시 해도 같으므로 재시도하지 않는다.
+		const emptyPlanError = recordPlanEmptyError(plan)
+		if (emptyPlanError) {
+			await Promise.all(payload.statusTargetIds.map((id) => setRecordGenError(id, emptyPlanError)))
+			return
+		}
 		const created = plan ? await createLearningRecordsFromPlan(sessionId, plan) : await finishCreateLearningRecord(sessionId)
 		if (plan) console.log(`[create-learning-record] plan items=${plan.items.length}`)
 		await Promise.all(payload.statusTargetIds.map((id) => setRecordGenDone(id)))
@@ -512,6 +519,10 @@ export function recordPlanFromText(text: unknown): RecordPlan | null {
 	if (raw.cls && !planId(raw.cls)) throw new Error("학습기록 계획의 클래스 값이 올바르지 않습니다.")
 	return { makeup: raw.mk === 1, ...(raw.cls ? { cls: planId(raw.cls)! } : {}), items }
 }
+
+export const NO_BOOKS_MARKED_TODAY = "오늘 학습을 체크한 진도교재가 없어요. 진도교재 탭에서 오늘 학습을 체크하고 다시 누르세요"
+
+export const recordPlanEmptyError = (plan: RecordPlan | null): string | null => (plan && !plan.items.length ? NO_BOOKS_MARKED_TODAY : null)
 
 export const recordPlanText = (p: any): string => (p?.type === "formula" || p?.formula ? String(p.formula?.string ?? "") : "")
 
