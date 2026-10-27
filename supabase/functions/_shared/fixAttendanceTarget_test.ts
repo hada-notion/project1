@@ -14,7 +14,7 @@ function mock() {
  const fetch = async (input: any, init: any = {}) => {
   const url = String(input), body = init.body ? JSON.parse(init.body) : {}; calls.push({ url, body, method: init.method ?? "GET" })
   if (url.startsWith("https://mock.supabase/")) return new Response("[]")
-  if (url.includes("/data_sources/")) return new Response(JSON.stringify({ results: [], has_more: false }))
+  if (url.includes("/data_sources/")) return new Response(JSON.stringify({ results: (globalThis as any).mockQuery?.(url, body) ?? [], has_more: false }))
   const id = url.match(/\/pages\/([^/?]+)/)?.[1]
   if (id && init.method !== "PATCH" && (globalThis as any).mockPages?.[id]) return new Response(JSON.stringify((globalThis as any).mockPages[id]))
   if (id && init.method === "PATCH") { writes.push({ id, body }); return new Response(JSON.stringify({ id, properties: body.properties })) }
@@ -69,6 +69,17 @@ Deno.test("v2.6.17 보강 수업: 합치기만 — 출석을 🔵 보강으로 �
  assert(!m.calls.some((c) => c.url.includes("/data_sources/activities/")), "보강은 대기 과제 조회 안 함")
  assert(log.some((l) => l.includes("지우지 않음")))
 }))
+Deno.test("v2.8.0 보강 수업: 연달아 쌓인 계획에 이미 출석이 생긴 학생이 있으면 만들지 않는다([보강 배정] 연속 클릭)", () => withMock(async (m) => {
+ const log: string[] = []
+ // R1은 앞 큐 항목이 이미 만들었다(이 수업·이 등록 출석이 조회됨), R2는 아직 없다.
+ ;(globalThis as any).mockQuery = (url: string, body: any) => url.includes("/data_sources/attendance/") && JSON.stringify(body).includes(R1) ? [{ id: A1, properties: {} }] : []
+ try {
+  const plan = target.planFromText(JSON.stringify({ v: 1, mk: 1, day: "2026-10-29", add: [{ reg: R1, att: "", rec: [] }, { reg: R2, att: "", rec: [] }], del: [], roster: [R1, R2] }))!
+  await target.applyFixPlan({ ...session, classIds: [], makeup: true }, plan, log, { "출석 조정 상태": { select: { name: "✅ 완료" } } })
+  assert(m.created.length === 1 && ids(m.created[0].properties, "등록") === R2, JSON.stringify(m.created.map((c) => c.properties["등록"])))
+  assert(log.some((l) => l.includes("[exists]") && l.includes(R1)))
+ } finally { delete (globalThis as any).mockQuery }
+}))
 Deno.test("안전장치: 다녀야 할 학생 0명 + 출석 삭제 계획은 아무것도 쓰지 않는다(applyFixPlan은 오류, 큐는 페이지 재읽기 항목으로)", () => withMock(async (m) => {
  let threw = false
  try { await target.applyFixPlan(session, { v: 1, day: "2026-10-24", add: [], del: [A1, A2], roster: [] }, []) } catch (e) { threw = /0명/.test((e as Error).message) }
@@ -96,6 +107,14 @@ Deno.test("큐 경로: 인증, 본문의 수식 계획을 Notion 읽기 없이 �
  const bare = JSON.stringify({ data: { object: "page", id: S, properties: {} } })
  assert((await handler(new Request(url, { method: "POST", headers: { "x-admin-key": "test-only" }, body: bare }))).status === 202)
  assert(m.calls.filter((c) => c.url.endsWith("/rest/v1/sync_queue")).at(-1).body[0].payload.plan === null)
+}))
+Deno.test("v2.8.0 큐 경로: 보강 수업은 계획 없이 넣어 워커가 새로 읽게 하고, 상태를 바로 🔄로 바꾼다(연속 [보강 배정])", () => withMock(async (m) => {
+ const plan = JSON.stringify({ v: 1, mk: 1, day: "2026-10-29", add: [{ reg: R1, att: "", rec: [] }], del: [], roster: [R1] })
+ const body = JSON.stringify({ data: { object: "page", id: S, properties: { "출석 조정 정보": formula(plan), "클래스": rel(), "담당강사": rel(), "수업일시": { date: { start: "2026-10-29" } }, "보강": { checkbox: true } } } })
+ assert((await handler(new Request("https://mock.supabase/functions/v1/fix-attendance/queue", { method: "POST", headers: { "x-admin-key": "test-only" }, body }))).status === 202)
+ const q = m.calls.filter((c) => c.url.endsWith("/rest/v1/sync_queue")).at(-1)
+ assert(q && q.body[0].payload.pageId === S && !("plan" in q.body[0].payload), JSON.stringify(q?.body))
+ assert(m.writes.some((w) => w.id === S && w.body.properties["출석 조정 상태"]?.select?.name === "🔄 작업중"), "상태 🔄")
 }))
 Deno.test("큐 처리: 본문에 계획이 없으면 수업 페이지를 한 번 읽어 수식 값으로 처리", () => withMock(async (m) => {
  const plan = JSON.stringify({ v: 1, day: "2026-10-15", add: [{ reg: R1, att: "", rec: [] }], del: [] })

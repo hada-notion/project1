@@ -106,6 +106,15 @@ Deno.serve(async (req: Request) => {
   }
   if (new URL(req.url).pathname.split("/").pop() === "queue") {
     const parsed = planFromWebhookBody(body, classSessionId)
+    // (v2.8.0) 보강 수업은 결석 현황 [보강 배정]으로 학생이 한 명씩 연달아 더해진다. 누른 순간의 계획 대신 워커가 처리할 때
+    // 수업을 새로 읽게 하고(그사이 더해진 학생도 들어감), 상태를 바로 🔄로 바꿔 둔다. 상태가 ⚪ 대기로 남아 있으면 다음 클릭의
+    // "⚪ 대기로 바뀌면" 자동화가 다시 돌지 않아 그 학생이 빠질 수 있다. 이미 만든 출석은 applyFixPlan이 다시 만들지 않는다.
+    if (parsed && (parsed.session.makeup || parsed.plan.makeup)) {
+      await markAttendanceFixRunning(classSessionId)
+      await enqueueSync("fix-attendance", { pageId: classSessionId })
+      wakeSyncQueueWorker()
+      return respondAccepted({ classSessionId, queued: true, plan: false })
+    }
     await enqueueSync("fix-attendance", { pageId: classSessionId, plan: parsed?.plan ?? null, session: parsed?.session ?? null })
     wakeSyncQueueWorker()
     return respondAccepted({ classSessionId, queued: true, plan: !!parsed })
