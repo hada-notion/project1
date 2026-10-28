@@ -101,10 +101,30 @@ export function sectionOf(event: any): Section {
 	return cat.includes("휴원") ? "휴원" : cat.includes("학사") ? "학교" : "학원"
 }
 
-// 한 구역 목록(최대 5줄 + 외 N건), 비면 "없음".
+// 월간 일정 안내 한 구역의 일정 수 한도(넘치면 "외 N건"). 날짜로 묶으면 줄이 늘어 알림톡 1,000자를 넘지 않게 한다.
+const SECTION_EVENTS = 8
+// (10/28 사용자, A안) 한 구역 목록: 날짜 한 줄 아래 그날 일정을 "· 이름"으로 모은다(같은 날짜 표기는 한 번). 비면 "없음".
+//   11/7(토)
+//   · 중1 영어 보충 수업
+//   11/14(토)
+//   · 학원 설명회
+//   · 중1 수학 보강
+// 한 줄(eventLine·반 이름 붙임)의 첫 칸이 날짜 표기("11/9(월)~11(수)"처럼 기간이어도 공백 없음)이고 나머지가 일정이다.
 export function sectionText(lines: { day: string; line: string; sec: Section }[], sec: Section): string {
-	const own = lines.filter((l) => l.sec === sec)
-	return own.length ? summarize(own) : "없음"
+	const own = lines.filter((l) => l.sec === sec).sort((a, b) => a.day.localeCompare(b.day))
+	if (!own.length) return "없음"
+	const out: string[] = []
+	let prev = ""
+	for (const l of own.slice(0, SECTION_EVENTS)) {
+		const cut = l.line.indexOf(" ")
+		const date = cut < 0 ? l.line : l.line.slice(0, cut)
+		const what = cut < 0 ? "" : l.line.slice(cut + 1).trim()
+		if (date !== prev) out.push(date)
+		prev = date
+		if (what) out.push(`· ${what}`)
+	}
+	if (own.length > SECTION_EVENTS) out.push(`외 ${own.length - SECTION_EVENTS}건`)
+	return out.join("\n")
 }
 
 // 일정일시(수업 안내와 같은 표기): 하루면 "26.11.03(화)", 시각이 있으면 "26.11.03(화) 14:00~16:00",

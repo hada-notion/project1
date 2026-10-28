@@ -189,9 +189,11 @@ function prepareTuition(page: any): Prepared {
 const DONE = "✅ 완료"
 const statusOf = (p: any, kind: NoticeKind) => p?.properties?.[NOTICE_STATUS_PROP[kind]]?.select?.name ?? ""
 const siblingIds = (page: any, kind: NoticeKind): string[] => (page?.properties?.[SIBLING_PROP[kind] ?? ""]?.relation ?? []).map((r: any) => String(r.id))
-const titleOf = (p: any): string => Object.values<any>(p?.properties ?? {}).find((v) => v?.type === "title")?.title?.map((t: any) => t.plain_text ?? "").join("") ?? ""
-// 잠금 사유에 쓸 '이미 보낸 장'의 이름: 수강료는 반 이름 + 수강료, 가정통신문은 그 장의 이름.
-const sentName = (p: any, kind: NoticeKind) => kind === "tuition" ? `${getRollupText(p, "클래스(수강료)") || "다른 반"} 수강료` : (titleOf(p) || "다른 반 가정통신문")
+// 잠금 사유. 보낸 뒤 같은 달 장이 모두 ✅가 되므로 어느 반으로 보냈는지는 알 수 없다(묶음 전체로 말한다).
+const LOCK_REASON: Partial<Record<NoticeKind, string>> = {
+	tuition: "같은 달 수강료 안내(다른 반 포함)를 이미 보냈습니다. 다시 보내려면 [안내문 전송]을 누르세요.",
+	letter: "같은 달 가정통신문(다른 반 포함)을 이미 보냈습니다. 다시 보내려면 [안내문 전송]을 누르세요.",
+}
 // 수강료·가정통신문 [안내문 전송](개별)이 켠다. 켜져 있으면 같은 달 장을 이미 보냈어도 보낸다.
 const isForced = (page: any) => page?.properties?.["개별 전송"]?.checkbox === true
 
@@ -260,7 +262,7 @@ export async function processNoticeQueueItem(payload: NoticePayload): Promise<vo
 		siblings = (await Promise.all(siblingIds(page, kind).map((id) => noticeDeps.getPage(id).catch(() => null)))).filter((p: any) => p && !p.archived && !p.in_trash)
 		const sent = siblings.find((p: any) => statusOf(p, kind) === DONE)
 		if (sent && !forced) {
-			return await finish(kind, pageId, "⚠️ 오류", `같은 달 ${sentName(sent, kind)}(으)로 이미 안내했습니다. 다시 보내려면 [안내문 전송]을 누르세요.`, bulkReset)
+			return await finish(kind, pageId, "⚠️ 오류", LOCK_REASON[kind] ?? "같은 달 안내를 이미 보냈습니다.", bulkReset)
 		}
 	}
 

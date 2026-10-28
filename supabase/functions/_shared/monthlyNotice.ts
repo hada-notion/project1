@@ -368,9 +368,9 @@ async function monthLettersOfReg(regId: string, month: string): Promise<any[]> {
 		.filter((t: any) => alive(t) && seoulDay(t?.properties?.[PROP_LETTER_PERIOD]?.date?.start)?.slice(0, 7) === month)
 }
 
-// 가정통신문 '학원 일정'을 연결 안 된 그 달 일정으로 맞춘다(같으면 쓰지 않음). 넣은 일정을 돌려준다.
-async function bundleUnlinked(letter: any, studentId: string, month: string): Promise<any[]> {
-	const events = await unlinkedMonthEvents(studentId, month)
+// 가정통신문 '학원 일정'을 연결 안 된 그 달 일정으로 맞춘다(같으면 쓰지 않음). 넣은 일정을 돌려준다. events를 주면 다시 읽지 않는다.
+async function bundleUnlinked(letter: any, studentId: string, month: string, given?: any[]): Promise<any[]> {
+	const events = given ?? await unlinkedMonthEvents(studentId, month)
 	const want = events.map((e: any) => key(e.id)).sort()
 	const have = relIds(letter?.properties?.[PROP_LETTER_EVENTS]).map(key).sort()
 	if (want.join(",") !== have.join(",")) {
@@ -449,6 +449,11 @@ export async function buildLetterNotice(letter: any): Promise<{ registrationId: 
 	const regs = await studentRegsInMonth(studentId, month)
 	if (!regs.length) throw new LetterBlocked(`${monthLabel(month)}에 다니는 등록이 없습니다.`)
 	const unlinked = await bundleUnlinked(letter, studentId, month)
+	// 같은 묶음의 다른 반 가정통신문도 미리보기가 맞게 같은 '학원 일정'으로 맞춘다(실패해도 보내기는 계속).
+	for (const id of relIds(letter?.properties?.[PROP_LETTER_SIBLINGS])) {
+		const sib: any = await deps.getPage(id).catch(() => null)
+		if (alive(sib)) await bundleUnlinked(sib, studentId, month, unlinked).catch((err: unknown) => console.warn("[letter] 같은 달 가정통신문 학원 일정 건너뜀:", id, (err as Error).message))
+	}
 	const lines = await studentMonthEvents(studentId, month, regs, unlinked)
 	if (!lines.length) throw new LetterBlocked(`${monthLabel(month)} 학부모 공개 일정이 없어 보내지 않았습니다. 일정을 넣은 뒤 [안내문 전송]을 누르세요.`)
 	const fresh: any = await deps.getPage(String(letter.id)).catch(() => letter)

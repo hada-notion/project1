@@ -214,7 +214,7 @@ Deno.test("v2.8.0 가정통신문 보내기 변수: 학원 일정을 다시 넣�
 	const built = await m.buildLetterNotice(letter)
 	eq(c.updates.find((u) => u.id === "lA")?.props["학원 일정"].relation, [{ id: "e-all" }])
 	eq([built.registrationId, built.variables["#{클래스}"], built.variables["#{안내월}"], built.variables["#{학원일정}"], built.variables["#{전달사항}"], built.variables["#{페이지ID}"].endsWith("?token=tok")],
-		["rA", "수학반 · 영어반", "11월", "11/7(토) 영어반 보충\n11/14(토) 학원 설명회", "교재 지참", true])
+		["rA", "수학반 · 영어반", "11월", "11/7(토)\n· 영어반 보충\n11/14(토)\n· 학원 설명회", "교재 지참", true])
 	// 수식 값이 있으면 그것을 쓴다(다시 읽은 페이지 기준)
 	pages.lA = { ...letter, properties: { ...letter.properties, "학원일정(일정안내)": fx("수식 줄") } }
 	eq((await m.buildLetterNotice(letter)).variables["#{학원일정}"], "수식 줄")
