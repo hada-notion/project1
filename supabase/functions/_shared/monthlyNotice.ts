@@ -180,6 +180,8 @@ export function withClassPrefix(line: string, event: any, classNameById: Map<str
 	const names = relIds(event?.properties?.["클래스"]).map((id) => classNameById.get(key(id))).filter((n): n is string => !!n)
 	const unique = Array.from(new Set(names)).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
 	if (!unique.length || unique.length >= new Set(classNameById.values()).size) return line
+	// 일정 이름에 반 이름이 이미 있으면 붙이지 않는다("영어반 영어반 보충 수업" 방지).
+	if (unique.every((n) => line.includes(n))) return line
 	return line.replace(/^(\S+) /, `$1 ${unique.join(" · ")} `)
 }
 
@@ -421,6 +423,8 @@ export class LetterBlocked extends Error {}
 
 // 같은 학생의 그 달 반 이름(이름순, 같은 이름은 한 번). #{클래스}에 쓴다.
 const classNamesOf = (regs: any[]) => Array.from(new Set(regs.map(classNameOfReg).filter(Boolean))).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+// (10/28 시안 1) 새 템플릿 "🏛️ 클래스 #{클래스목록}"용: 반 하나면 ": 영어반", 둘 이상이면 줄을 바꿔 "· 반" 목록.
+export const classListText = (names: string[]) => names.length <= 1 ? `: ${names[0] ?? "없음"}` : "\n" + names.map((n) => `· ${n}`).join("\n")
 
 // 전달사항: 가정통신문 메모 → 다니는 반의 클래스 '안내 메모'(반 이름순 첫 번째) → 없음.
 async function letterNote(letter: any, regs: any[]): Promise<string> {
@@ -466,6 +470,7 @@ export async function buildLetterNotice(letter: any): Promise<{ registrationId: 
 		variables: {
 			"#{학생이름}": f("학생이름(일정안내)", studentName),
 			"#{클래스}": f("클래스(일정안내)", classNamesOf(regs).join(" · ")),
+			"#{클래스목록}": f("클래스목록(일정안내)", classListText(classNamesOf(regs))),
 			"#{안내월}": f("안내월(일정안내)", monthLabel(month)),
 			"#{휴원일정}": f("휴원일정(일정안내)", sectionText(lines, "휴원")),
 			"#{학원일정}": f("학원일정(일정안내)", sectionText(lines, "학원")),
