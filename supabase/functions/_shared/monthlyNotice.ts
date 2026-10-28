@@ -180,6 +180,8 @@ export function withClassPrefix(line: string, event: any, classNameById: Map<str
 	const names = relIds(event?.properties?.["클래스"]).map((id) => classNameById.get(key(id))).filter((n): n is string => !!n)
 	const unique = Array.from(new Set(names)).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
 	if (!unique.length || unique.length >= new Set(classNameById.values()).size) return line
+	// 일정 이름에 반 이름이 이미 있으면 붙이지 않는다("영어반 영어반 보충 수업" 방지).
+	if (unique.every((n) => line.includes(n))) return line
 	return line.replace(/^(\S+) /, `$1 ${unique.join(" · ")} `)
 }
 

@@ -141,6 +141,8 @@ Deno.test("v2.8.0 월간 일정 안내: 반 이름은 이름순, 두 반 이상 
 	eq(m.withClassPrefix("11/14(토) 보충", { properties: { "클래스": rel("ca", "cb") } }, names), "11/14(토) 보충")
 	eq(m.withClassPrefix("11/14(토) 설명회", { properties: { "클래스": rel() } }, names), "11/14(토) 설명회")
 	eq(m.withClassPrefix("11/14(토) 보충", ev1, new Map([["cb", "중1 B"]])), "11/14(토) 보충")
+	// (10/28) 일정 이름에 반 이름이 이미 있으면 다시 붙이지 않는다
+	eq(m.withClassPrefix("11/14(토) 중1 B 보충 수업", ev1, names), "11/14(토) 중1 B 보충 수업")
 })
 
 const ev = (id: string, o: { name: string; cat?: string; start: string; end?: string; cls?: string[]; stu?: string[]; school?: string[]; grade?: string[] }) => ({ id, properties: {
