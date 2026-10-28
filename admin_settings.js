@@ -67,7 +67,8 @@ const CHECKLIST=[
  ['클래스(학원)',[
   ['class-report-sync','학생 페이지 동기화',BUTTON,route('sync-class-report-cache')],
   ['class-report-create','보고서 생성',BUTTON,route('create-class-reports'),{note:'본문 속성은 보고서 구분·보고서 기간·클래스명을 고릅니다(v2.8.0).'}],
-  ['class-tuition-create','월 수강료 생성',BUTTON,route('send-monthly-notice'),{path:'/create',note:'주소 끝의 /create까지 넣습니다. 클래스 수강료 기간의 달 반 수강료 발송함·수강료를 만들고 같은 학생의 다른 반 수강료와 잇습니다(v2.8.0).'}]]],
+  ['class-tuition-create','월 수강료 생성',BUTTON,route('send-monthly-notice'),{path:'/create',note:'주소 끝의 /create까지 넣습니다. 클래스 수강료 기간의 달 반 수강료 발송함·수강료를 만들고 같은 학생의 다른 반 수강료와 잇습니다(v2.8.0).'}],
+  ['class-letter-create','가정통신문 생성',BUTTON,route('send-monthly-notice'),{path:'/create-letter',note:'주소 끝의 /create-letter까지 넣습니다. 클래스 안내 기간의 달 반 가정통신문 발송함·가정통신문을 만들고 같은 학생의 다른 반 가정통신문과 잇습니다(v2.8.0).'}]]],
  ['알림톡 발송함(학원)',[
   ['batch-eval-create','평가 생성',BUTTON,route('create-class-reports'),{path:'/evaluations',note:'주소 끝의 /evaluations까지 넣습니다. 진도교재 탭 안의 버튼, 본문 속성은 평가 계획만 고릅니다(v2.8.0).'}]]],
  ['메뉴(학원)',[['menu-bulk-classes','다음주 수업 일괄 생성',BUTTON,route('generate-classes'),{path:'?mode=bulk',note:'주소 끝의 ?mode=bulk까지 넣습니다.'}]],{
@@ -88,6 +89,7 @@ const CHECKLIST=[
   ['record-delete','[웹훅] 삭제',AUTO,route('cascade-delete'),DELETE]]],
  ['학습활동(학원)',[['assignment-delete','[웹훅] 삭제',AUTO,route('cascade-delete'),DELETE]]],
  ['보고서(학원)',[['report-send','[웹훅] 보고서 전송',AUTO,route('send-report'),{path:'/queue',trigger:{when:'속성 편집',select:['보고서 전송 상태','⚪ 대기']},note:'주소 끝의 /queue까지 넣습니다. [보고서 전송] 버튼과 발송함 [일괄 전송]은 전송 상태만 바꿉니다(v2.7).'}]]],
+ ['가정통신문(학원)',[['letter-notice','[웹훅] 안내문 전송',AUTO,route('send-monthly-notice'),{path:'/queue',trigger:{when:'속성 편집',select:['안내문 전송 상태','⚪ 대기']},note:'주소 끝의 /queue까지 넣습니다. 가정통신문 [안내문 전송] 버튼과 발송함 [일괄 전송]은 전송 상태만 바꿉니다(v2.8.0).'}]]],
  ['수강료(학원)',[['tuition-notice','[웹훅] 안내문 전송',AUTO,route('send-tuition-notice'),{path:'/queue',trigger:{when:'속성 편집',select:['안내문 전송 상태','⚪ 대기']},note:'주소 끝의 /queue까지 넣습니다. [안내문 전송] 버튼과 발송함 [일괄 전송]은 전송 상태만 바꿉니다(v2.7).'}]]],
  ['교재비(학원)',[
   ['cart-notice','[웹훅] 안내문 전송',AUTO,route('send-textbook-notice'),{path:'/queue',trigger:{when:'속성 편집',select:['안내문 전송 상태','⚪ 대기']},note:'주소 끝의 /queue까지 넣습니다. [안내문 전송] 버튼은 안내문 전송 상태만 바꿉니다(v2.7).'}],

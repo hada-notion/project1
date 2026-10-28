@@ -9,6 +9,8 @@
 //
 // (v2.8.0) 수강료는 같은 학생의 같은 달 수강료('같은 달 수강료')를 한 통으로 보낸다(아래 prepareTuition). 발송함 일괄은
 // 그중 하나라도 이미 보냈으면 잠그고(⚠️ 사유), 수강료 [안내문 전송](개별 전송 체크)은 잠금 없이 다시 보낸다.
+// (10/28) 가정통신문(월간 일정 안내, kind "letter")도 같다: '같은 달 가정통신문'을 한 통으로, 같은 잠금·개별 전송. 문구는
+// _shared/monthlyNotice.ts buildLetterNotice(보내기 직전 '학원 일정'을 다시 넣고 (일정안내) 수식 값 우선). 일정 0건이면 ⚠️.
 //
 // 한 건 처리(필요한 만큼만 읽기):
 //   1) 페이지 1번 읽기 — 전송 상태가 ⚪ 대기가 아니면 건너뜀(두 번 눌러도·같은 항목이 두 번 들어와도 한 번만 보냄).
@@ -37,15 +39,19 @@ import {
 	resolveAlimtalkRecipients,
 } from "./alimtalkShared.ts"
 import { refreshStudentReport } from "./dailyReportRefresh.ts"
+import { buildLetterNotice, LetterBlocked } from "./monthlyNotice.ts"
 
-export type NoticeKind = "report" | "tuition" | "textbook"
+export type NoticeKind = "report" | "tuition" | "textbook" | "letter"
 export type NoticePayload = { kind: NoticeKind; pageId: string; clickerUserId?: string | null }
 
 export const NOTICE_STATUS_PROP: Record<NoticeKind, string> = {
 	report: "보고서 전송 상태",
 	tuition: "안내문 전송 상태",
 	textbook: "안내문 전송 상태",
+	letter: "안내문 전송 상태",
 }
+// 같은 학생의 같은 달 다른 반 장(한 통으로 보내는 묶음)
+const SIBLING_PROP: Partial<Record<NoticeKind, string>> = { tuition: "같은 달 수강료", letter: "같은 달 가정통신문" }
 const WAITING = "⚪ 대기"
 const RUN_BUCKET_MS = 5 * 60 * 1000
 const REPORT_PATH = Deno.env.get("REPORT_PATH") ?? "/project1/student_report.html"
@@ -55,6 +61,7 @@ const FALLBACK = {
 	report: Deno.env.get("SOLAPI_TEMPLATE_ID_WEEKLY") || Deno.env.get("SOLAPI_TEMPLATE_ID_MONTHLY") || "",
 	tuition: Deno.env.get("SOLAPI_TEMPLATE_ID_TUITION") ?? "",
 	textbook: Deno.env.get("SOLAPI_TEMPLATE_ID_TEXTBOOK") ?? "",
+	letter: "",
 }
 
 type Prepared = {
@@ -102,6 +109,7 @@ export const noticeDeps = {
 	send: sendKakao,
 	log: createSendLogEntry,
 	botUserId: getBotUserId,
+	letter: buildLetterNotice,
 	now: () => Date.now(),
 }
 
@@ -180,8 +188,11 @@ function prepareTuition(page: any): Prepared {
 
 const DONE = "✅ 완료"
 const statusOf = (p: any, kind: NoticeKind) => p?.properties?.[NOTICE_STATUS_PROP[kind]]?.select?.name ?? ""
-const siblingIds = (page: any): string[] => (page?.properties?.["같은 달 수강료"]?.relation ?? []).map((r: any) => String(r.id))
-// 수강료 [안내문 전송](개별)이 켠다. 켜져 있으면 같은 달 수강료를 이미 보냈어도 보낸다.
+const siblingIds = (page: any, kind: NoticeKind): string[] => (page?.properties?.[SIBLING_PROP[kind] ?? ""]?.relation ?? []).map((r: any) => String(r.id))
+const titleOf = (p: any): string => Object.values<any>(p?.properties ?? {}).find((v) => v?.type === "title")?.title?.map((t: any) => t.plain_text ?? "").join("") ?? ""
+// 잠금 사유에 쓸 '이미 보낸 장'의 이름: 수강료는 반 이름 + 수강료, 가정통신문은 그 장의 이름.
+const sentName = (p: any, kind: NoticeKind) => kind === "tuition" ? `${getRollupText(p, "클래스(수강료)") || "다른 반"} 수강료` : (titleOf(p) || "다른 반 가정통신문")
+// 수강료·가정통신문 [안내문 전송](개별)이 켠다. 켜져 있으면 같은 달 장을 이미 보냈어도 보낸다.
 const isForced = (page: any) => page?.properties?.["개별 전송"]?.checkbox === true
 
 function prepareTextbook(page: any): Prepared {
@@ -205,6 +216,20 @@ function prepareTextbook(page: any): Prepared {
 	}
 }
 
+async function prepareLetter(page: any): Promise<Prepared> {
+	const built = await noticeDeps.letter(page)
+	return {
+		registrationId: built.registrationId,
+		title: built.title,
+		logCategory: "월간 일정 안내",
+		configCategory: "월간 일정 안내",
+		primaryPhone: "", // 가정통신문에는 연락처 롤업이 없다 → 우선 연락 대상이면 등록을 한 번 읽는다
+		variables: () => built.variables,
+		log: { periodStart: built.period.start, periodEnd: built.period.end },
+		clearBulkSelect: false,
+	}
+}
+
 async function finish(kind: NoticeKind, pageId: string, status: "✅ 완료" | "⚠️ 오류", message: string | null, clearBulkSelect: boolean, extra: Record<string, unknown> = {}) {
 	await noticeDeps.patch(pageId, {
 		[NOTICE_STATUS_PROP[kind]]: { select: { name: status } },
@@ -224,17 +249,18 @@ export async function processNoticeQueueItem(payload: NoticePayload): Promise<vo
 		return
 	}
 
-	// (v2.8.0) 수강료: 같은 달 수강료를 함께 다룬다. 일괄(발송함 [일괄 전송])은 그중 하나라도 이미 보냈으면 잠근다.
-	// 개별(수강료 [안내문 전송], '개별 전송' 체크)은 잠금 없이 다시 보낸다. 보낸 뒤 같은 달 수강료 모두 ✅.
-	const forced = kind === "tuition" && isForced(page)
+	// (v2.8.0) 수강료·가정통신문: 같은 달 장을 함께 다룬다. 일괄(발송함 [일괄 전송])은 그중 하나라도 이미 보냈으면 잠근다.
+	// 개별([안내문 전송], '개별 전송' 체크)은 잠금 없이 다시 보낸다. 보낸 뒤 같은 달 장 모두 ✅.
+	const grouped = !!SIBLING_PROP[kind]
+	const forced = grouped && isForced(page)
 	const forcedReset = forced ? { "개별 전송": { checkbox: false } } : {}
+	const bulkReset = kind === "tuition"
 	let siblings: any[] = []
-	if (kind === "tuition") {
-		siblings = (await Promise.all(siblingIds(page).map((id) => noticeDeps.getPage(id).catch(() => null)))).filter((p: any) => p && !p.archived && !p.in_trash)
+	if (grouped) {
+		siblings = (await Promise.all(siblingIds(page, kind).map((id) => noticeDeps.getPage(id).catch(() => null)))).filter((p: any) => p && !p.archived && !p.in_trash)
 		const sent = siblings.find((p: any) => statusOf(p, kind) === DONE)
 		if (sent && !forced) {
-			const name = getRollupText(sent, "클래스(수강료)") || "다른 반"
-			return await finish(kind, pageId, "⚠️ 오류", `같은 달 ${name} 수강료로 이미 안내했습니다(이 반은 그 안내에 없었을 수 있습니다). 이 반까지 다시 보내려면 [안내문 전송]을 누르세요.`, true)
+			return await finish(kind, pageId, "⚠️ 오류", `같은 달 ${sentName(sent, kind)}(으)로 이미 안내했습니다. 다시 보내려면 [안내문 전송]을 누르세요.`, bulkReset)
 		}
 	}
 
@@ -243,10 +269,12 @@ export async function processNoticeQueueItem(payload: NoticePayload): Promise<vo
 	let config: Awaited<ReturnType<typeof getAlimtalkConfig>>
 	let recipients: { phone: string }[]
 	try {
-		prep = kind === "report" ? await prepareReport(page) : kind === "tuition" ? prepareTuition(page) : prepareTextbook(page)
+		prep = kind === "report" ? await prepareReport(page) : kind === "tuition" ? prepareTuition(page) : kind === "letter" ? await prepareLetter(page) : prepareTextbook(page)
 		config = await noticeDeps.config(prep.configCategory, { pfId: FALLBACK.pfId, templateId: FALLBACK[kind], senderNumber: FALLBACK.senderNumber })
 		recipients = await noticeDeps.recipients({ registrationId: prep.registrationId, primaryPhone: prep.primaryPhone, recipientTarget: config.recipientTarget })
 	} catch (err) {
+		// 일정 0건처럼 다시 해도 같은 막힘은 재시도 없이 ⚠️로 끝낸다.
+		if (err instanceof LetterBlocked) return await finish(kind, pageId, "⚠️ 오류", err.message, false, forcedReset)
 		await noticeDeps.patch(pageId, { "마지막 오류": { rich_text: [{ text: { content: extractErrorMessage(err).slice(0, 1900) } }] } }).catch(() => {})
 		throw err
 	}
@@ -264,10 +292,11 @@ export async function processNoticeQueueItem(payload: NoticePayload): Promise<vo
 	}
 	await noticeDeps.log({ ...logBase, status: "성공" }).catch((err: unknown) => console.error("[notice] 전송 로그 실패:", extractErrorMessage(err)))
 	await finish(kind, pageId, "✅ 완료", null, prep.clearBulkSelect, forcedReset)
-	// 같은 달 수강료도 이 한 통에 들어갔으므로 ✅로 맞추고 전송 로그를 남긴다(다른 반 발송함에서 다시 보내지 않게).
+	// 같은 달 장도 이 한 통에 들어갔으므로 ✅로 맞추고 전송 로그를 남긴다(다른 반 발송함에서 다시 보내지 않게).
 	for (const sib of siblings) {
-		await noticeDeps.log({ ...logBase, tuitionId: String(sib.id), status: "성공" }).catch((err: unknown) => console.error("[notice] 전송 로그 실패:", extractErrorMessage(err)))
-		await finish(kind, String(sib.id), "✅ 완료", null, true)
+		const sibLog = kind === "tuition" ? { tuitionId: String(sib.id) } : { registrationId: getRelationFirstId(sib, "등록") ?? prep.registrationId }
+		await noticeDeps.log({ ...logBase, ...sibLog, status: "성공" }).catch((err: unknown) => console.error("[notice] 전송 로그 실패:", extractErrorMessage(err)))
+		await finish(kind, String(sib.id), "✅ 완료", null, bulkReset)
 	}
-	console.log(`[notice] ${kind} sent: ${pageId} (${recipients.length}명${siblings.length ? `, 같은 달 수강료 ${siblings.length}장 함께` : ""})`)
+	console.log(`[notice] ${kind} sent: ${pageId} (${recipients.length}명${siblings.length ? `, 같은 달 ${siblings.length}장 함께` : ""})`)
 }
