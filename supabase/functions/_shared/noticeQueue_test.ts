@@ -10,12 +10,12 @@ const rollup = (s: string) => ({ type: "rollup", rollup: { type: "array", array:
 const rel = (id: string) => ({ relation: [{ id }] })
 const select = (name: string) => ({ select: { name } })
 
-function fake(page: any, opts: { sendFails?: boolean; refreshFails?: boolean } = {}) {
-	const calls = { reads: 0, patches: [] as any[], sent: [] as any[], logs: [] as any[], refresh: [] as any[], recipients: [] as any[] }
+function fake(page: any, opts: { sendFails?: boolean; refreshFails?: boolean; pages?: Record<string, any> } = {}) {
+	const calls = { reads: 0, patched: [] as any[], patches: [] as any[], sent: [] as any[], logs: [] as any[], refresh: [] as any[], recipients: [] as any[] }
 	const saved = { ...noticeDeps }
 	Object.assign(noticeDeps, {
-		getPage: async () => { calls.reads++; return page },
-		patch: async (_id: string, props: any) => { calls.patches.push(props) },
+		getPage: async (id: string) => { calls.reads++; return opts.pages?.[id] ?? page },
+		patch: async (id: string, props: any) => { calls.patches.push(props); calls.patched.push({ id, props }) },
 		refresh: async (reg: string, o: any) => { calls.refresh.push({ reg, ...o }); if (opts.refreshFails) throw new Error("최신화 실패"); return { access_token: "tok", cacheRow: { registration_detail: { report_comments: [] } } } },
 		config: async () => ({ pfId: "pf", templateId: "tpl", senderNumber: "0200000000", notice: "안내", recipientTarget: "우선 연락 대상" }),
 		recipients: async (a: any) => { calls.recipients.push(a); return [{ label: "우선 연락 대상", phone: "01000000000" }] },
@@ -103,4 +103,43 @@ Deno.test("v2.6.24 교재비 안내문: 안내문 전송 상태, 일괄전송 �
 		eq(calls.patches[0]["안내문 전송 상태"].select.name, "✅ 완료")
 		eq("일괄전송 선택" in calls.patches[0], false)
 	} finally { restore() }
+})
+
+const tuitionPage = (id: string, status: string, extra: Record<string, unknown> = {}) => ({ id, properties: { "안내문 전송 상태": select(status), 등록: rel(REG), 학생정보: formula("테스트학생"), "학부모 연락처": rollup("010-1111-1111"), 청구기간: { date: { start: "2026-11-01", end: "2026-11-30" } }, ...extra } })
+const sibs = (...ids: string[]) => ({ relation: ids.map((id) => ({ id })) })
+
+Deno.test("v2.8.0 수강료: 같은 달 수강료를 한 통으로(수강료안내 수식 사용) 보내고 같은 달 수강료 모두 ✅·성공 로그", async () => {
+	const me = tuitionPage("t-math", "⚪ 대기", {
+		"같은 달 수강료": sibs("t-eng", "t-kor"),
+		"청구년월(수강료안내)": formula("26년 11월"), "학생이름(수강료안내)": formula("테스트학생"), "청구기간(수강료안내)": formula("11/1~11/30"),
+		"수강내역(수강료안내)": formula("• 수학반 150,000원\n• 영어반 200,000원\n• 국어반 120,000원"), "청구금액(수강료안내)": formula("470,000원"),
+	})
+	const pages = { "t-math": me, "t-eng": tuitionPage("t-eng", ""), "t-kor": tuitionPage("t-kor", "⚪ 대기") }
+	const { calls, restore } = fake(me, { pages })
+	try {
+		await processNoticeQueueItem({ kind: "tuition", pageId: "t-math" })
+		eq(calls.sent.length, 1)
+		eq([calls.sent[0].vars["#{청구년월}"], calls.sent[0].vars["#{청구금액}"], calls.sent[0].vars["#{수강내역}"].split("\n").length, calls.sent[0].vars["#{안내멘트}"]], ["26년 11월", "470,000원", 3, "안내"])
+		eq(calls.patched.map((p) => [p.id, p.props["안내문 전송 상태"].select.name]), [["t-math", "✅ 완료"], ["t-eng", "✅ 완료"], ["t-kor", "✅ 완료"]])
+		eq(calls.logs.map((l) => [l.status, l.tuitionId]), [["성공", "t-math"], ["성공", "t-eng"], ["성공", "t-kor"]])
+	} finally { restore() }
+})
+
+Deno.test("v2.8.0 수강료 일괄: 같은 달 수강료 하나라도 이미 보냈으면 보내지 않고 ⚠️ 사유, 개별 전송은 잠금 무시", async () => {
+	const sent = tuitionPage("t-eng", "✅ 완료", { "클래스(수강료)": rollup("영어반") })
+	const locked = tuitionPage("t-math", "⚪ 대기", { "같은 달 수강료": sibs("t-eng") })
+	const a = fake(locked, { pages: { "t-math": locked, "t-eng": sent } })
+	try {
+		await processNoticeQueueItem({ kind: "tuition", pageId: "t-math" })
+		eq(a.calls.sent.length, 0)
+		eq(a.calls.patched.map((p) => [p.id, p.props["안내문 전송 상태"].select.name, p.props["일괄전송 선택"].checkbox]), [["t-math", "⚠️ 오류", false]])
+		eq(a.calls.patched[0].props["마지막 오류"].rich_text[0].text.content.includes("영어반 수강료로 이미 안내"), true)
+	} finally { a.restore() }
+	const forced = tuitionPage("t-math", "⚪ 대기", { "같은 달 수강료": sibs("t-eng"), "개별 전송": { checkbox: true } })
+	const b = fake(forced, { pages: { "t-math": forced, "t-eng": sent } })
+	try {
+		await processNoticeQueueItem({ kind: "tuition", pageId: "t-math" })
+		eq(b.calls.sent.length, 1)
+		eq(b.calls.patched.map((p) => [p.id, p.props["안내문 전송 상태"].select.name, p.props["개별 전송"]?.checkbox]), [["t-math", "✅ 완료", false], ["t-eng", "✅ 완료", undefined]])
+	} finally { b.restore() }
 })
