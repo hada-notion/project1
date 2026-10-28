@@ -40,6 +40,8 @@ import {
 } from "./alimtalkShared.ts"
 import { refreshStudentReport } from "./dailyReportRefresh.ts"
 import { buildLetterNotice, LetterBlocked } from "./monthlyNotice.ts"
+import { alimtalkVar, reportStatusBlock, textbookBlock } from "./noticeBlocks.ts"
+import { fitVariablesToTemplate } from "./templateFit.ts"
 
 export type NoticeKind = "report" | "tuition" | "textbook" | "letter"
 export type NoticePayload = { kind: NoticeKind; pageId: string; clickerUserId?: string | null }
@@ -92,10 +94,12 @@ async function sendKakao(to: string, variables: Record<string, string>, config: 
 	if (!config.templateId) throw new Error("템플릿 ID가 설정되지 않았습니다. '알림톡 설정(학원) DB'를 확인해 주세요.")
 	const { SolapiMessageService } = await import("npm:solapi")
 	const service = new SolapiMessageService(Deno.env.get("SOLAPI_API_KEY")!, Deno.env.get("SOLAPI_API_SECRET")!)
+	// (v2.8.0 통일안) 옛·새 템플릿 변수를 함께 만들었으므로 이 템플릿에 있는 것만 보낸다.
+	const fitted = await fitVariablesToTemplate(service, config.templateId, variables)
 	return service.send({
 		to: normalizePhone(to),
 		from: normalizePhone(config.senderNumber),
-		kakaoOptions: { pfId: config.pfId, templateId: config.templateId, variables, disableSms: false },
+		kakaoOptions: { pfId: config.pfId, templateId: config.templateId, variables: fitted, disableSms: false },
 	}, { allowDuplicates: true })
 }
 
@@ -135,14 +139,19 @@ async function prepareReport(page: any): Promise<Prepared> {
 		}
 	}
 	const period = getDateRange(page, "보고서 기간")
-	const studentName = getFormulaText(page, "학생이름(보고서)")
+	// 변수 값은 "변수(알림톡)" 수식 → 옛 "(보고서)" 수식(_shared/noticeBlocks.ts alimtalkVar).
+	// (v2.8.0 통일안) 새 템플릿의 #{학습현황}(두 칸 표기)과 옛 템플릿의 #{보고서요약}을 함께 만든다.
+	const v = (name: string, fallback = "") => alimtalkVar(page, name, fallback, `${name}(보고서)`)
+	const studentName = v("학생이름")
+	const summary = getFormulaText(page, "보고서요약(보고서)")
 	const fixed = {
-		"#{보고서기간}": getFormulaText(page, "보고서기간(보고서)"),
-		"#{보고서구분}": reportType,
+		"#{보고서기간}": v("보고서기간"),
+		"#{보고서구분}": alimtalkVar(page, "보고서구분", reportType),
 		"#{학생이름}": studentName,
-		"#{클래스}": getFormulaText(page, "클래스(보고서)"),
-		"#{학습기간}": getFormulaText(page, "학습기간(보고서)"),
-		"#{보고서요약}": getFormulaText(page, "보고서요약(보고서)"),
+		"#{클래스}": v("클래스"),
+		"#{학습기간}": v("학습기간"),
+		"#{학습현황}": alimtalkVar(page, "학습현황", reportStatusBlock(summary)),
+		"#{보고서요약}": summary,
 		"#{페이지ID}": REPORT_PATH + "?token=" + access_token,
 	}
 	return {
@@ -160,7 +169,8 @@ async function prepareReport(page: any): Promise<Prepared> {
 // (v2.8.0) 수강료 안내는 같은 학생의 같은 달 수강료(듣는 반마다 한 장, '같은 달 수강료')를 한 통으로 보낸다.
 // 문구는 수강료 페이지의 (수강료안내) 수식 값을 그대로 쓴다(수강 내역 줄·합계가 Notion에서 계산됨). 수식이 없거나 비면
 // 이 한 장만 담은 예전 모양으로 보낸다(운영에 수식이 아직 없을 때).
-const tuitionVar = (page: any, name: string, fallback: string) => getFormulaText(page, name).trim() || fallback
+// "청구년월(수강료안내)" 같은 옛 이름을 넘기면 "청구년월(알림톡)"을 먼저 읽는다.
+const tuitionVar = (page: any, legacy: string, fallback: string) => alimtalkVar(page, legacy.replace(/\(수강료안내\)$/, ""), fallback, legacy)
 function prepareTuition(page: any): Prepared {
 	const registrationId = getRelationFirstId(page, "등록")
 	if (!registrationId) throw new Error("이 수강료 안내에 연결된 등록이 없습니다.")
@@ -201,10 +211,13 @@ function prepareTextbook(page: any): Prepared {
 	const registrationId = getRelationFirstId(page, "등록")
 	if (!registrationId) throw new Error("교재비 페이지에 연결된 등록이 없습니다.")
 	const studentName = getRollupText(page, "학생이름(표시)") || "학생"
+	// (v2.8.0 통일안) 새 템플릿의 #{교재내역}("📚 교재 내역 … 🧾 합계")과 옛 템플릿의 #{교재비안내}를 함께 만든다.
+	const unpaid = getFormulaText(page, "미납교재")
 	const fixed = {
-		"#{학생이름}": studentName,
-		"#{클래스}": getRollupText(page, "클래스명(표시)"),
-		"#{교재비안내}": getFormulaText(page, "미납교재"),
+		"#{학생이름}": alimtalkVar(page, "학생이름", studentName),
+		"#{클래스}": alimtalkVar(page, "클래스", getRollupText(page, "클래스명(표시)")),
+		"#{교재내역}": alimtalkVar(page, "교재내역", textbookBlock(unpaid)),
+		"#{교재비안내}": unpaid,
 	}
 	return {
 		registrationId,

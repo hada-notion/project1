@@ -28,7 +28,15 @@ Deno.test("v2.8.0 수업 안내: 같은 시각 비교(표기 차이 무시)", ()
 Deno.test("v2.8.0 수업 안내: 보강이면 수업구분 보강 수업, 일반은 정규 수업, 전달사항은 메모 또는 없음, 날짜 26.10.30(금) 17:00", () => {
 	const p1: any = m.planLessonNotice(att(), ses(true))
 	eq(p1.kind, "수업 안내")
-	eq(p1.variables, { "#{수업구분}": "보강 수업", "#{학생이름}": "김하윤", "#{클래스}": "고1 A", "#{수업일시}": "26.10.30(금) 17:00", "#{전달사항}": "없음" })
+	eq(p1.variables, { "#{수업구분}": "보강 수업", "#{학생이름}": "김하윤", "#{클래스}": "고1 A", "#{수업정보}": "📅 일시  26.10.30(금) 17:00", "#{수업일시}": "26.10.30(금) 17:00", "#{전달사항}": "없음" })
+	// (v2.8.0 통일안) 보강 출석에 기존 결석이 있으면 일시 앞에 🔁 기존 줄, 메모가 있으면 전달사항 구역
+	const pm: any = m.planLessonNotice(att(), ses(true, "교재를 챙겨 주세요."), "2026-10-12T08:30:00.000Z")
+	eq(pm.variables["#{수업정보}"], "🔁 기존  26.10.12(월) 결석\n📅 일시  26.10.30(금) 17:00\n\n📝 전달사항\n교재를 챙겨 주세요.")
+	// "수업구분(알림톡)" 수식이 옛 "(수업안내)" 수식보다 먼저
+	const withNew: any = att()
+	withNew.properties["수업구분(알림톡)"] = { type: "formula", formula: { type: "string", string: "정규 수업" } }
+	withNew.properties["수업구분(수업안내)"] = { type: "formula", formula: { type: "string", string: "보강 수업" } }
+	eq((m.planLessonNotice(withNew, ses(true)) as any).variables["#{수업구분}"], "정규 수업")
 	const p2: any = m.planLessonNotice(att(), ses(false, "선거일이지만 정상 수업합니다."))
 	eq([p2.variables["#{수업구분}"], p2.variables["#{전달사항}"]], ["정규 수업", "선거일이지만 정상 수업합니다."])
 	eq((m.planLessonNotice(att(), ses(false)) as any).variables["#{전달사항}"], "없음")
