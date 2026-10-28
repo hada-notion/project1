@@ -101,6 +101,13 @@ Deno.test("v2.8.0 일정 안내(한 건): 연결된 학생·반의 수강 중 �
 	const c3 = mock({ e1: ev("e1", { start: "2026-11-03" }) })
 	await m.processScheduleEventItem({ eventId: "e1" })
 	eq(c3.marks[1].includes("학생이나 클래스를 연결"), true)
+	// 학교·학년만 연결된 학사 일정은 가정통신문으로 보낸다고 알린다. 연결은 있는데 수강 중 학생이 없으면 그렇게 말한다.
+	const c4 = mock({ e1: ev("e1", { cat: "🏫 학사 일정", start: "2026-10-01", school: ["sc"], grade: ["g2"] }) })
+	await m.processScheduleEventItem({ eventId: "e1" })
+	eq(c4.marks[1].includes("학교·학년 일정은 일정 안내로 보내지 않습니다"), true)
+	const c5 = mock({ e1: ev("e1", { start: "2026-11-03", cls: ["cls"] }) }, { regs: [] })
+	await m.processScheduleEventItem({ eventId: "e1" })
+	eq(c5.marks[1], "error:e1:연결된 학생·클래스에 수강 중인 학생이 없습니다.")
 })
 
 Deno.test("v2.8.0 일정 안내(학생): 학생 이름을 넣어 보내고, 마지막이면 일정 안내 일시를 적고 ✅", async () => {
