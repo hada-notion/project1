@@ -67,7 +67,7 @@ const CHECKLIST=[
  ['클래스(학원)',[
   ['class-report-sync','학생 페이지 동기화',BUTTON,route('sync-class-report-cache')],
   ['class-report-create','보고서 생성',BUTTON,route('create-class-reports'),{note:'본문 속성은 보고서 구분·보고서 기간·클래스명을 고릅니다(v2.8.0).'}],
-  ['class-tuition-create','월 수강료 생성',BUTTON,route('send-monthly-notice'),{path:'/create',note:'주소 끝의 /create까지 넣습니다. 그 달 반 발송함·가정통신문·수강료를 만듭니다(v2.8.0).'}]]],
+  ['class-tuition-create','월 수강료 생성',BUTTON,route('send-monthly-notice'),{path:'/create',note:'주소 끝의 /create까지 넣습니다. 클래스 수강료 기간의 달 반 수강료 발송함·수강료를 만들고 같은 학생의 다른 반 수강료와 잇습니다(v2.8.0).'}]]],
  ['알림톡 발송함(학원)',[
   ['batch-eval-create','평가 생성',BUTTON,route('create-class-reports'),{path:'/evaluations',note:'주소 끝의 /evaluations까지 넣습니다. 진도교재 탭 안의 버튼, 본문 속성은 평가 계획만 고릅니다(v2.8.0).'}],
   ['batch-monthly-tuition','수강료 일괄 전송',BUTTON,route('send-monthly-notice'),{path:'/batch-tuition',note:'주소 끝의 /batch-tuition까지 넣습니다. 구분 "가정통신문" 발송함의 버튼, 수강료 전송 선택이 체크된 가정통신문마다 한 통(v2.8.0).'}],

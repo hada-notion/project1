@@ -29,6 +29,8 @@ import { LessonConfigError, noteText, sendConfiguredAlimtalk } from "./lessonNot
 import { eventLine, inMonth, isAcademyWide, monthFilter, monthLabel, nextMonthKey, type Section, sectionOf, sectionText } from "./scheduleNotice.ts"
 
 export const KIND_MONTHLY = "가정통신문"
+// (10/28) 수강료 생성은 보고서처럼 반 발송함(구분 "수강료", 반 × 달)을 만든다.
+export const KIND_TUITION = "수강료"
 // 가정통신문 한 명 보내기(가정통신문 DB)와 발송함 일괄 전송(발송함 DB). 두 DB 모두 같은 이름의 칸을 쓴다.
 export const MONTHLY_STATUS_SPEC: StatusSpec = { statusProp: "가정통신문 상태", errorProp: PROP_LAST_ERROR, startedAtProp: "가정통신문 처리 시작 시각" }
 // 클래스 [월 수강료 생성]
@@ -64,6 +66,12 @@ const PROP_TUITION_MAILBOX = "알림톡 발송함"
 const PROP_TUITION_LETTER = "가정통신문"
 // 클래스(학원) DB: 가정통신문의 달(1일~말일). 비면 누른 날의 다음 달.
 export const PROP_CLASS_NOTICE_PERIOD = "안내 기간"
+// 클래스(학원) DB: 수강료의 달(1일~말일, 보고서 기간과 같은 방식). 비면 누른 날의 다음 달.
+export const PROP_CLASS_TUITION_PERIOD = "수강료 기간"
+// 클래스(학원) DB: [월 수강료 생성]이 만든(또는 찾은) 이 반의 수강료 발송함(보고서 생성 대상과 같은 방식).
+const PROP_CLASS_TUITION_MAILBOX = "수강료 생성 대상"
+// 수강료(학원) DB: 같은 학생의 같은 달 다른 반 수강료(한쪽 자기 관계, 서로 모두 잇는다).
+const PROP_TUITION_SIBLINGS = "같은 달 수강료"
 
 export type NoticeKind = "tuition" | "schedule"
 export type CreateClassPayload = { classId: string; month: string }
@@ -80,14 +88,16 @@ const won = (n: number) => `${Math.round(n).toLocaleString("en-US")}원`
 
 // 클래스 버튼의 대상 달: 클래스 '안내 기간'의 시작일이 있는 달, 비면 누른 날의 다음 달(서울).
 // 시작과 끝이 다른 달이면 고칠 곳을 문장으로 알린다(보고서 기간과 같은 방식).
-export function monthFromClass(cls: any, now = new Date()): string {
-	const d = cls?.properties?.[PROP_CLASS_NOTICE_PERIOD]?.date
+export function monthFromClass(cls: any, now = new Date(), prop = PROP_CLASS_NOTICE_PERIOD): string {
+	const d = cls?.properties?.[prop]?.date
 	const start = seoulDay(d?.start)
 	if (!start) return nextMonthKey(now)
 	const end = seoulDay(d?.end)
-	if (end && end.slice(0, 7) !== start.slice(0, 7)) throw new Error(`클래스 '${PROP_CLASS_NOTICE_PERIOD}'은 한 달 안(1일~말일)으로 넣어 주세요. 비우면 다음 달입니다.`)
+	if (end && end.slice(0, 7) !== start.slice(0, 7)) throw new Error(`클래스 '${prop}'은 한 달 안(1일~말일)으로 넣어 주세요. 비우면 다음 달입니다.`)
 	return start.slice(0, 7)
 }
+// 클래스 [월 수강료 생성]의 달: 클래스 '수강료 기간'(비면 다음 달).
+export const tuitionMonthFromClass = (cls: any, now = new Date()) => monthFromClass(cls, now, PROP_CLASS_TUITION_PERIOD)
 
 // "2026-12" → { start: "2026-12-01", end: "2026-12-31" }
 export function monthRange(month: string): { start: string; end: string } {
@@ -164,21 +174,21 @@ export async function resolveLetterDataSourceId(): Promise<string> {
 const samePeriod = (page: any, prop: string, range: { start: string }) => alive(page) && seoulDay(page?.properties?.[prop]?.date?.start) === range.start
 
 // 그 반의 그 달 발송함(구분 가정통신문)을 찾고, create면 없을 때 만든다.
-export async function findClassMailbox(classId: string, month: string, create: { className: string } | null): Promise<any | null> {
+export async function findClassMailbox(classId: string, month: string, create: { className: string } | null, kind = KIND_MONTHLY): Promise<any | null> {
 	const deps = monthlyDeps
 	const ds = await deps.batchDataSourceId()
 	const range = monthRange(month)
 	const found = await deps.queryAllPages(ds, {
 		and: [
 			{ property: PROP_MAILBOX_CLASS, relation: { contains: classId } },
-			{ property: PROP_MAILBOX_KIND, select: { equals: KIND_MONTHLY } },
+			{ property: PROP_MAILBOX_KIND, select: { equals: kind } },
 		],
 	})
 	const same = found.find((b: any) => samePeriod(b, PROP_MAILBOX_PERIOD, range))
 	if (same || !create) return same ?? null
 	return await deps.createPage(ds, {
-		[PROP_MAILBOX_TITLE]: { title: [{ text: { content: mailboxTitle(month, create.className) } }] },
-		[PROP_MAILBOX_KIND]: { select: { name: KIND_MONTHLY } },
+		[PROP_MAILBOX_TITLE]: { title: [{ text: { content: `${month.slice(2, 4)}.${month.slice(5, 7)} ${create.className} ${kind}` } }] },
+		[PROP_MAILBOX_KIND]: { select: { name: kind } },
 		[PROP_MAILBOX_PERIOD]: { date: { start: range.start, end: range.end } },
 		[PROP_MAILBOX_CLASS]: { relation: [{ id: classId }] },
 	})
@@ -273,6 +283,29 @@ async function bundleEvents(letterId: string, studentId: string, month: string, 
 	return lines
 }
 
+// 그 등록의 그 달(청구기간 시작이 그 달) 수강료.
+async function monthTuitionsOfReg(regId: string, month: string): Promise<any[]> {
+	return (await monthlyDeps.queryAllPages(DS_TUITION, { property: "등록", relation: { contains: regId } }))
+		.filter((t: any) => alive(t) && seoulDay(t?.properties?.["청구기간"]?.date?.start)?.slice(0, 7) === month)
+}
+
+// 같은 학생의 그 달 수강료(듣는 반마다 한 장)를 '같은 달 수강료'로 서로 잇는다. 각 수강료에는 자기를 뺀 나머지 전부가 들어간다.
+// 방금 만든 수강료는 조회에 늦게 잡힐 수 있어 mine으로 직접 넣는다. 이미 같으면 쓰지 않는다.
+export async function linkSiblingTuitions(studentId: string, month: string, regId: string, mine: any[]): Promise<void> {
+	const deps = monthlyDeps
+	const others = (await studentRegsInMonth(studentId, month)).filter((r: any) => key(r.id) !== key(regId))
+	const group = new Map<string, any>()
+	for (const t of mine) if (t?.id) group.set(key(t.id), t)
+	for (const r of others) for (const t of await monthTuitionsOfReg(String(r.id), month)) group.set(key(t.id), t)
+	if (group.size < 2) return
+	for (const [k, t] of group) {
+		const want = Array.from(group.keys()).filter((x) => x !== k).sort()
+		const have = relIds(t?.properties?.[PROP_TUITION_SIBLINGS]).map(key).sort()
+		if (want.join(",") === have.join(",")) continue
+		await deps.update(String(t.id), { [PROP_TUITION_SIBLINGS]: { relation: Array.from(group.values()).filter((x) => key(x.id) !== k).map((x) => ({ id: String(x.id) })) } })
+	}
+}
+
 // ── 1) 클래스 [월 수강료 생성] ────────────────────────────────────────────────
 const amountOf = (cls: any): number | null => {
 	const p = cls?.properties?.["월간 수업 총량"]
@@ -291,8 +324,12 @@ export async function processMonthlyCreateClassItem(p: CreateClassPayload): Prom
 		const regs = (await deps.queryAllPages(DS_REGISTRATION, { property: "클래스", relation: { contains: p.classId } })).filter((r: any) => inMonthReg(r, p.month))
 		console.log(`[monthly-create] class=${p.classId} ${p.month} 대상 등록 ${regs.length}`)
 		if (!regs.length) return await deps.markError(p.classId, spec, `${monthLabel(p.month)}에 이 반을 다니는 학생이 없습니다.`)
-		const mailbox = await findClassMailbox(p.classId, p.month, { className: anyTitleText(cls).trim() || "클래스" })
+		const mailbox = await findClassMailbox(p.classId, p.month, { className: anyTitleText(cls).trim() || "클래스" }, KIND_TUITION)
 		const mailboxId = String(mailbox.id)
+		// 보고서 생성 대상처럼 클래스에서 이 달 수강료 발송함을 바로 열 수 있게 잇는다(칸이 없는 운영은 건너뜀).
+		if (!relIds(cls?.properties?.[PROP_CLASS_TUITION_MAILBOX]).some((id: string) => key(id) === key(mailboxId))) {
+			await deps.update(p.classId, { [PROP_CLASS_TUITION_MAILBOX]: { relation: [{ id: mailboxId }] } }).catch((err: unknown) => console.warn("[monthly-create] 수강료 생성 대상 연결 건너뜀:", (err as Error).message))
+		}
 		for (let i = 0; i < regs.length; i++) {
 			const item: CreateRegPayload = { classId: p.classId, month: p.month, regId: String(regs[i].id), amount, mailboxId, ...(i === regs.length - 1 ? { last: true } : {}) }
 			await deps.enqueue(TARGET_MONTHLY_CREATE_REG, item)
@@ -303,8 +340,9 @@ export async function processMonthlyCreateClassItem(p: CreateClassPayload): Prom
 	}
 }
 
-// 등록 1건: 그 학생의 가정통신문을 찾거나 만들어 반 발송함에 잇고, 그 등록의 그 달 수강료가 없으면 만든다(있으면 연결만). 다시 해도 같다.
-// 수강료의 '일괄전송 선택'은 켜지 않는다(예전 발송함 [일괄 전송]이 반별로 따로 보내지 않게). 보내기는 가정통신문 단위로만 한다.
+// 등록 1건: 그 등록의 그 달 수강료가 없으면 만들어 반 수강료 발송함에 잇는다(있으면 빈 발송함만 연결). 다시 해도 같다.
+// 그 뒤 같은 학생의 그 달 다른 반 수강료와 '같은 달 수강료'로 서로 잇는다(두 반·세 반 학생의 합산 안내용).
+// 수강료의 '일괄전송 선택'은 켜지 않는다(보내기는 학생 단위로 따로 만든다).
 export async function processMonthlyCreateRegItem(p: CreateRegPayload): Promise<void> {
 	const deps = monthlyDeps
 	try {
@@ -314,33 +352,27 @@ export async function processMonthlyCreateRegItem(p: CreateRegPayload): Promise<
 		if (!studentId) {
 			await appendError(p.classId, `${studentName || p.regId}: 등록에 학생이 연결되어 있지 않아 건너뜀`)
 		} else {
-			const letter = await findStudentLetter(studentId, p.month, { studentName })
-			const letterId = String(letter.id)
-			if (p.mailboxId) await linkLetterToMailbox(letter, p.mailboxId)
 			const range = monthRange(p.month)
-			const existing = (await deps.queryAllPages(DS_TUITION, { property: "등록", relation: { contains: p.regId } }))
-				.filter((t: any) => alive(t) && seoulDay(t?.properties?.["청구기간"]?.date?.start)?.slice(0, 7) === p.month)
+			const existing = (await monthTuitionsOfReg(p.regId, p.month))
+			let mine: any[] = existing
 			if (existing.length) {
 				for (const t of existing) {
-					const patch: Record<string, unknown> = {}
-					if (!relIds(t?.properties?.[PROP_TUITION_LETTER]).length) patch[PROP_TUITION_LETTER] = { relation: [{ id: letterId }] }
-					if (p.mailboxId && !relIds(t?.properties?.[PROP_TUITION_MAILBOX]).length) patch[PROP_TUITION_MAILBOX] = { relation: [{ id: p.mailboxId }] }
-					if (Object.keys(patch).length) await deps.update(String(t.id), patch)
+					if (p.mailboxId && !relIds(t?.properties?.[PROP_TUITION_MAILBOX]).length) await deps.update(String(t.id), { [PROP_TUITION_MAILBOX]: { relation: [{ id: p.mailboxId }] } })
 				}
 			} else {
 				const rowId = await deps.tuitionConfigRow().catch(() => null)
-				await deps.createPage(DS_TUITION, {
+				const created = await deps.createPage(DS_TUITION, {
 					"청구명": { title: [{ text: { content: tuitionTitle(p.month, studentName) } }] },
 					"청구기간": { date: { start: range.start, end: range.end } },
 					"등록": { relation: [{ id: p.regId }] },
 					"실제 수업량": { number: p.amount },
-					[PROP_TUITION_LETTER]: { relation: [{ id: letterId }] },
 					...(p.mailboxId ? { [PROP_TUITION_MAILBOX]: { relation: [{ id: p.mailboxId }] } } : {}),
 					...(rowId ? { "알림톡 설정": { relation: [{ id: rowId }] } } : {}),
 					"일괄전송 선택": { checkbox: false },
 				})
+				mine = [created]
 			}
-			await bundleEvents(letterId, studentId, p.month, await studentRegsInMonth(studentId, p.month)).catch((err) => console.warn("[monthly-create] 일정 묶기 건너뜀:", (err as Error).message))
+			await linkSiblingTuitions(studentId, p.month, p.regId, mine)
 		}
 		if (p.last) await finishParent(p.classId, CLASS_TUITION_GEN_STATUS_SPEC)
 	} catch (err) {
