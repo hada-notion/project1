@@ -143,6 +143,9 @@ Deno.test("v2.8.0 월간 일정 안내: 반 이름은 이름순, 두 반 이상 
 	eq(m.withClassPrefix("11/14(토) 보충", ev1, new Map([["cb", "중1 B"]])), "11/14(토) 보충")
 	// (10/28) 일정 이름에 반 이름이 이미 있으면 다시 붙이지 않는다
 	eq(m.withClassPrefix("11/14(토) 중1 B 보충 수업", ev1, names), "11/14(토) 중1 B 보충 수업")
+	// (10/28 시안 1) #{클래스목록}: 반 하나면 옆에, 둘 이상이면 줄을 바꿔 · 목록
+	eq(m.classListText(["영어반"]), ": 영어반")
+	eq(m.classListText(["국어반", "수학반"]), "\n· 국어반\n· 수학반")
 })
 
 const ev = (id: string, o: { name: string; cat?: string; start: string; end?: string; cls?: string[]; stu?: string[]; school?: string[]; grade?: string[] }) => ({ id, properties: {
