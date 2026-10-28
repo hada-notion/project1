@@ -74,9 +74,11 @@ def main():
         db, kind = k.split(" / ")[:2]
         hit = by_hash.get((db, kind, ref[k]))
         if hit:
-            renamed.append((k, hit[0]))
+            # 같은 내용이 여럿이면 한 번씩만 짝짓는다(이미 짝지은 것은 목록에서 뺀다)
+            other = hit.pop(0)
+            renamed.append((k, other))
             missing.remove(k)
-            extra.remove(hit[0])
+            extra.remove(other)
 
     pub = published_items(repo)
 
