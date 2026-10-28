@@ -9,7 +9,7 @@
 //   학생·반에 연결된 일정은 Notion 수식이 모으고, 연결 안 된 일정(학원 전체, 학생의 학교·학년)은 서버가 `학원 일정`에 넣는다
 //   (만들 때 한 번, 보내기 직전에 다시). 보내기는 수강료와 같은 큐(_shared/noticeQueue.ts, kind "letter")다.
 import { getScheduleConfig } from "./adminShared.ts"
-import { getFormulaText, getRollupText, syncStudentReport } from "./alimtalkShared.ts"
+import { getRollupText, syncStudentReport } from "./alimtalkShared.ts"
 import { anyTitleText, createPage, fetchWithRetry, fullRelationIds, getPage, notionHeaders, queryAllPages, relIds, updatePageProperties } from "./notionClient.ts"
 import { DS_REGISTRATION, DS_SCHEDULE_EVENT, DS_TUITION, NOTION_API, PROP_LAST_ERROR } from "./constants.ts"
 import { enqueueSync } from "./syncQueue.ts"
@@ -18,6 +18,7 @@ import { isParentPublicEvent } from "./scheduleVisibility.ts"
 import { inPeriodRegistration, resolveBatchDataSourceId, seoulDay, studentNameOf } from "./classReportPlan.ts"
 import { eventLine, inMonth, isAcademyWide, monthFilter, monthLabel, nextMonthKey, type Section, sectionOf, sectionText } from "./scheduleNotice.ts"
 import { noteText } from "./lessonNotice.ts"
+import { alimtalkVar, classListBlock, letterScheduleBlock } from "./noticeBlocks.ts"
 
 export const KIND_MONTHLY = "가정통신문"
 // (10/28) 수강료 생성은 보고서처럼 반 발송함(구분 "수강료", 반 × 달)을 만든다.
@@ -423,8 +424,8 @@ export class LetterBlocked extends Error {}
 
 // 같은 학생의 그 달 반 이름(이름순, 같은 이름은 한 번). #{클래스}에 쓴다.
 const classNamesOf = (regs: any[]) => Array.from(new Set(regs.map(classNameOfReg).filter(Boolean))).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
-// (10/28 시안 1) 새 템플릿 "🏛️ 클래스 #{클래스목록}"용: 반 하나면 ": 영어반", 둘 이상이면 줄을 바꿔 "· 반" 목록.
-export const classListText = (names: string[]) => names.length <= 1 ? `: ${names[0] ?? "없음"}` : "\n" + names.map((n) => `· ${n}`).join("\n")
+// (v2.8.0 통일안) 템플릿 "🏛 클래스#{클래스목록}"용: 반 하나면 "  영어반"(두 칸), 둘 이상이면 줄을 바꿔 "· 반" 목록.
+export const classListText = classListBlock
 
 // 전달사항: 가정통신문 메모 → 다니는 반의 클래스 '안내 메모'(반 이름순 첫 번째) → 없음.
 async function letterNote(letter: any, regs: any[]): Promise<string> {
@@ -461,21 +462,27 @@ export async function buildLetterNotice(letter: any): Promise<{ registrationId: 
 	const lines = await studentMonthEvents(studentId, month, regs, unlinked)
 	if (!lines.length) throw new LetterBlocked(`${monthLabel(month)} 학부모 공개 일정이 없어 보내지 않았습니다. 일정을 넣은 뒤 [안내문 전송]을 누르세요.`)
 	const fresh: any = await deps.getPage(String(letter.id)).catch(() => letter)
-	const f = (name: string, fallback: string) => getFormulaText(fresh, name).trim() || fallback
+	// 변수 값: "변수(알림톡)" 수식 → 옛 "(일정안내)" 수식 → 서버 계산(_shared/noticeBlocks.ts alimtalkVar).
+	// (v2.8.0 통일안) 새 템플릿의 #{클래스목록}·#{일정목록}과 옛 템플릿의 구역별 변수를 함께 만든다(보낼 때 템플릿에 있는 것만 남음).
+	const f = (name: string, fallback: string) => alimtalkVar(fresh, name, fallback, `${name}(일정안내)`)
 	const studentName = studentNameOf(reg)
+	const rest = f("휴원일정", sectionText(lines, "휴원")), academy = f("학원일정", sectionText(lines, "학원")), school = f("학사일정", sectionText(lines, "학교"))
+	const note = f("전달사항", await letterNote(fresh, regs))
 	return {
 		registrationId,
 		title: studentName || "월간 일정 안내",
 		period: monthRange(month),
 		variables: {
-			"#{학생이름}": f("학생이름(일정안내)", studentName),
-			"#{클래스}": f("클래스(일정안내)", classNamesOf(regs).join(" · ")),
-			"#{클래스목록}": f("클래스목록(일정안내)", classListText(classNamesOf(regs))),
-			"#{안내월}": f("안내월(일정안내)", monthLabel(month)),
-			"#{휴원일정}": f("휴원일정(일정안내)", sectionText(lines, "휴원")),
-			"#{학원일정}": f("학원일정(일정안내)", sectionText(lines, "학원")),
-			"#{학사일정}": f("학사일정(일정안내)", sectionText(lines, "학교")),
-			"#{전달사항}": f("전달사항(일정안내)", await letterNote(fresh, regs)),
+			"#{학생이름}": f("학생이름", studentName),
+			"#{클래스}": f("클래스", classNamesOf(regs).join(" · ")),
+			// 옛 (일정안내) 수식은 ": 반" 모양이라 읽지 않는다.
+			"#{클래스목록}": alimtalkVar(fresh, "클래스목록", classListText(classNamesOf(regs))),
+			"#{안내월}": f("안내월", monthLabel(month)),
+			"#{일정목록}": alimtalkVar(fresh, "일정목록", letterScheduleBlock({ 휴원: rest, 학원: academy, 학사: school, note })),
+			"#{휴원일정}": rest,
+			"#{학원일정}": academy,
+			"#{학사일정}": school,
+			"#{전달사항}": note,
 			"#{페이지ID}": `${Deno.env.get("REPORT_PATH") ?? "/project1/student_report.html"}?token=${await deps.token(registrationId)}`,
 		},
 	}

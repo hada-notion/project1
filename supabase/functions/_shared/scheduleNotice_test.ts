@@ -85,7 +85,7 @@ Deno.test("v2.8.0 일정 안내(한 건): 연결된 학생·반의 수강 중 �
 	const c = mock(pages, { regs: [reg("r1", "s1", "김하윤"), reg("r2", "s2", "박지민")] })
 	await m.processScheduleEventItem({ eventId: "e1" })
 	eq(c.enq.map((e) => e.payload.regId), ["r1", "r2"])
-	eq(c.enq[0].payload.vars, { "#{일정구분}": "휴강", "#{일정명}": "휴강", "#{일정일시}": "26.11.03(화)", "#{전달사항}": "선생님 사정" })
+	eq(c.enq[0].payload.vars, { "#{일정구분}": "휴강", "#{일정명}": "휴강", "#{일정정보}": "📅 일시  26.11.03(화)\n\n📝 전달사항\n선생님 사정", "#{일정일시}": "26.11.03(화)", "#{전달사항}": "선생님 사정" })
 	eq(c.enq[1].payload.last, true)
 	const c2 = mock({ e1: ev("e1", { start: "2026-11-03", cls: ["cls"], sent: "2026-11-03" }) })
 	await m.processScheduleEventItem({ eventId: "e1" })

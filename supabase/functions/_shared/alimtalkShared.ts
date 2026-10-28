@@ -1,4 +1,5 @@
 import { securityEnabled, currentInternalKey } from "./adminSecurity.ts"
+import { fitVariablesToTemplate } from "./templateFit.ts"
 // _shared/alimtalkShared.ts
 //
 // send-daily-report / send-tuition-notice / send-report / send-class-daily-reports 네 함수가
@@ -207,6 +208,8 @@ export async function sendDailyReportAlimtalk(payload: {
 
   const { SolapiMessageService } = await import("npm:solapi")
   const messageService = new SolapiMessageService(SOLAPI_API_KEY, SOLAPI_API_SECRET)
+  // (v2.8.0 통일안) 옛·새 템플릿 변수를 함께 받으므로 이 템플릿에 있는 것만 보낸다.
+  const variables = await fitVariablesToTemplate(messageService, config.templateId, payload.variables)
 
   const recipients = await resolveAlimtalkRecipients({
     registrationId: payload.registrationId,
@@ -221,7 +224,7 @@ export async function sendDailyReportAlimtalk(payload: {
       kakaoOptions: {
         pfId: config.pfId,
         templateId: config.templateId,
-        variables: payload.variables,
+        variables,
         disableSms: false,
       },
     }, { allowDuplicates: true }))

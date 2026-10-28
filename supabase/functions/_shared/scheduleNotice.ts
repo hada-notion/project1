@@ -15,6 +15,7 @@ import { enqueueSync } from "./syncQueue.ts"
 import { markDone, markError, markRunning, type StatusSpec } from "./statusTracking.ts"
 import { seoulDay } from "./classReportPlan.ts"
 import { formatClassTime, LessonConfigError, noteText, sameInstant, sendConfiguredAlimtalk } from "./lessonNotice.ts"
+import { alimtalkVar, eventInfoBlock } from "./noticeBlocks.ts"
 
 export const SCHEDULE_NOTICE_STATUS_SPEC: StatusSpec = {
 	statusProp: "일정 안내 상태",
@@ -247,14 +248,17 @@ export async function processScheduleEventItem(p: EventPayload): Promise<void> {
 			targets.push(r)
 		}
 		if (!targets.length) return await deps.markError(p.eventId, noTargetMessage(ev, linkedStudents.length + linkedClasses.length > 0))
-		// 다른 알림톡처럼 일정 페이지의 (일정안내) 수식 값을 보낸다. 수식이 없거나 비면 같은 규칙으로 계산한다.
-		const f = (name: string, fallback: string) => getFormulaText(ev, name).trim() || fallback
+		// 다른 알림톡처럼 일정 페이지의 "변수(알림톡)" 수식 값을 보낸다(없으면 옛 (일정안내) 수식, 그것도 비면 같은 규칙으로 계산).
+		// (v2.8.0 통일안) 새 템플릿의 #{일정정보}와 옛 템플릿의 #{일정일시}·#{전달사항}을 함께 만든다. 보낼 때 템플릿에 있는 것만 남는다.
+		const note = getFormulaText(ev, "전달사항(일정안내)").trim() || noteText(textOf(ev.properties?.["메모"]?.rich_text))
+		// 일시는 수식을 읽지 않는다(API의 수식 날짜는 UTC라 시각이 9시간 어긋남). 서버가 서울 시각으로.
+		const time = eventTimeText(ev)
 		const vars = {
-			"#{일정구분}": f("일정구분(일정안내)", eventLabel(ev)),
-			"#{일정명}": f("일정명(일정안내)", textOf(ev.properties?.["이름"]?.title).trim() || `${eventLabel(ev)} 일정`),
-			// 일시는 수식을 읽지 않는다(API의 수식 날짜는 UTC라 시각이 9시간 어긋남). 서버가 서울 시각으로.
-			"#{일정일시}": eventTimeText(ev),
-			"#{전달사항}": f("전달사항(일정안내)", noteText(textOf(ev.properties?.["메모"]?.rich_text))),
+			"#{일정구분}": alimtalkVar(ev, "일정구분", eventLabel(ev), "일정구분(일정안내)"),
+			"#{일정명}": alimtalkVar(ev, "일정명", textOf(ev.properties?.["이름"]?.title).trim() || `${eventLabel(ev)} 일정`, "일정명(일정안내)"),
+			"#{일정정보}": eventInfoBlock({ time, note }),
+			"#{일정일시}": time,
+			"#{전달사항}": note,
 		}
 		console.log(`[schedule-event] event=${p.eventId} 대상 ${targets.length}`)
 		for (let i = 0; i < targets.length; i++) {

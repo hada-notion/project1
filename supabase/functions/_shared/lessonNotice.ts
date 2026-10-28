@@ -28,6 +28,8 @@ import {
 } from "./adminShared.ts"
 import { getFormulaText, normalizePhone, resolveAlimtalkRecipients } from "./alimtalkShared.ts"
 import { relIds } from "./notionClient.ts"
+import { alimtalkVar, dateOnly, lessonInfoBlock } from "./noticeBlocks.ts"
+import { fitVariablesToTemplate } from "./templateFit.ts"
 
 export const LESSON_NOTICE_STATUS_PROP = "수업 안내 상태"
 export const LESSON_NOTICE_SENT_PROP = "수업 안내 일시"
@@ -72,8 +74,10 @@ export type LessonNoticePlan =
   | { skip: string }
   | { kind: LessonNoticeKind; variables: Record<string, string>; classIso: string }
 
-// 출석·수업 페이지로 무엇을 보낼지 정한다(네트워크 없음).
-export function planLessonNotice(attendance: any, session: any | null): LessonNoticePlan {
+// 출석·수업 페이지로 무엇을 보낼지 정한다(네트워크 없음). makeupOfIso는 보강 출석의 기존 결석 수업일시(있으면).
+// (v2.8.0 통일안) 새 템플릿 변수 #{수업정보}와 옛 템플릿 변수(#{수업일시}·#{전달사항})를 함께 만든다.
+// 보낼 때 그 템플릿에 있는 것만 남긴다(_shared/templateFit.ts).
+export function planLessonNotice(attendance: any, session: any | null, makeupOfIso = ""): LessonNoticePlan {
   const p = attendance?.properties ?? {}
   if (p["출석 상태"]?.select?.name === "🔴 결석") return { skip: "결석으로 표시된 학생이라 보내지 않았습니다." }
   const classIso = String(p["수업일시"]?.date?.start ?? "")
@@ -83,17 +87,19 @@ export function planLessonNotice(attendance: any, session: any | null): LessonNo
   const makeup = session?.properties?.["보강"]?.checkbox === true
   const label = makeup ? "보강 수업" : "정규 수업"
   const memo = (session?.properties?.[LESSON_MEMO_PROP]?.rich_text ?? []).map((t: any) => t.plain_text ?? "").join("").trim()
-  const f = (name: string, fallback: string) => getFormulaText(attendance, name).trim() || fallback
+  const note = getFormulaText(attendance, "전달사항(수업안내)").trim() || noteText(memo)
+  // 일시는 수식을 읽지 않는다: Notion API가 수식의 formatDate를 UTC로 계산해 18:00이 "09:00"으로 온다(10/27 원본). 서버가 서울 시각으로.
+  const classTime = formatClassTime(classIso)
   return {
     kind: "수업 안내",
     classIso,
     variables: {
-      "#{수업구분}": f("수업구분(수업안내)", label),
-      "#{학생이름}": getFormulaText(attendance, "학생이름(보고서)"),
-      "#{클래스}": getFormulaText(attendance, "클래스(보고서)"),
-      // 일시는 수식을 읽지 않는다: Notion API가 수식의 formatDate를 UTC로 계산해 18:00이 "09:00"으로 온다(10/27 원본). 서버가 서울 시각으로.
-      "#{수업일시}": formatClassTime(classIso),
-      "#{전달사항}": f("전달사항(수업안내)", noteText(memo)),
+      "#{수업구분}": alimtalkVar(attendance, "수업구분", label, "수업구분(수업안내)"),
+      "#{학생이름}": alimtalkVar(attendance, "학생이름", getFormulaText(attendance, "학생이름(보고서)")),
+      "#{클래스}": alimtalkVar(attendance, "클래스", getFormulaText(attendance, "클래스(보고서)")),
+      "#{수업정보}": lessonInfoBlock({ classTime, makeupOf: makeupOfIso ? dateOnly(formatClassTime(makeupOfIso)) : undefined, note }),
+      "#{수업일시}": classTime,
+      "#{전달사항}": note,
     },
   }
 }
@@ -110,12 +116,13 @@ export async function sendConfiguredAlimtalk(kind: SendLogCategory, registration
   const recipients = await resolveAlimtalkRecipients({ registrationId, primaryPhone, recipientTarget: config.recipientTarget })
   const { SolapiMessageService } = await import("npm:solapi")
   const messageService = new SolapiMessageService(SOLAPI_API_KEY, SOLAPI_API_SECRET)
+  const fitted = await fitVariablesToTemplate(messageService, config.templateId, variables)
   const results = []
   for (const r of recipients) {
     results.push(await messageService.send({
       to: r.phone,
       from: normalizePhone(config.senderNumber),
-      kakaoOptions: { pfId: config.pfId, templateId: config.templateId, variables, disableSms: false },
+      kakaoOptions: { pfId: config.pfId, templateId: config.templateId, variables: fitted, disableSms: false },
     }, { allowDuplicates: true }))
   }
   return results
@@ -150,7 +157,10 @@ export async function processLessonNoticeQueueItem(payload: { attendanceId: stri
   if (!registrationId) return await finish(attendanceId, "⚠️ 오류", "등록 관계가 비어 있습니다.")
   const sessionId = relIds(page.properties?.["수업"])[0]
   const session = sessionId ? await deps.getPage(sessionId) : null
-  const plan = planLessonNotice(page, session)
+  // 보강 출석이면 기존 결석의 수업일시(🔁 기존 줄). 못 읽으면 그 줄 없이 보낸다.
+  const makeupId = relIds(page.properties?.["기존 결석"])[0]
+  const makeupPage = makeupId ? await deps.getPage(makeupId).catch(() => null) : null
+  const plan = planLessonNotice(page, session, String(makeupPage?.properties?.["수업일시"]?.date?.start ?? ""))
   if ("skip" in plan) {
     // 이미 같은 일시로 안내한 학생(일괄 전송을 다시 누른 경우)은 완료로 둔다.
     return await finish(attendanceId, plan.skip ? "⚠️ 오류" : "✅ 완료", plan.skip || null)
