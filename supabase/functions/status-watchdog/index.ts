@@ -48,7 +48,7 @@ import { ASSIGNMENT_GEN_STATUS_SPEC } from "../_shared/createAssignmentTarget.ts
 import { CLASS_REPORT_GEN_STATUS_SPEC, resolveBatchDataSourceId } from "../_shared/classReportPlan.ts"
 import { BATCH_EVAL_STATUS_SPEC } from "../_shared/evaluationPlan.ts"
 import { SCHEDULE_NOTICE_STATUS_SPEC } from "../_shared/scheduleNotice.ts"
-import { CLASS_TUITION_GEN_STATUS_SPEC } from "../_shared/monthlyNotice.ts"
+import { CLASS_LETTER_GEN_STATUS_SPEC, CLASS_TUITION_GEN_STATUS_SPEC } from "../_shared/monthlyNotice.ts"
 import { resolveMenuDataSourceId } from "../_shared/menuDataSource.ts"
 
 // 메뉴(학원) DB는 전용 Secret이 없다. 이 워치독은 그 안의 "시간표" 단일 행만 상태 관리 대상이다.
@@ -99,6 +99,7 @@ const TARGETS: Array<{ label: string; dataSourceId: string | (() => Promise<stri
 	{ label: "일정:일정안내", dataSourceId: DS_SCHEDULE_EVENT, spec: SCHEDULE_NOTICE_STATUS_SPEC },
 	// (v2.8.0) 클래스 [월 수강료 생성].
 	{ label: "클래스:수강료생성", dataSourceId: DS_CLASS, spec: CLASS_TUITION_GEN_STATUS_SPEC },
+	{ label: "클래스:가정통신문생성", dataSourceId: DS_CLASS, spec: CLASS_LETTER_GEN_STATUS_SPEC },
 	{ label: "클래스:교재생성", dataSourceId: DS_CLASS, spec: CLASS_TEXTBOOK_STATUS_SPEC },
 	// (2026-09-22, Phase 3) cascade-delete가 공유하는 "삭제 처리중" 상태 — 7개 DB(원래 마스터플랜
 	// 표엔 4개만 있었으나 코드 확인 후 교재비 계열 3개까지 범위 확장, cascadeDeleteTarget.ts 참고).

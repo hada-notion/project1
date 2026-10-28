@@ -133,7 +133,7 @@ Deno.test("v2.8.0 수강료 일괄: 같은 달 수강료 하나라도 이미 보
 		await processNoticeQueueItem({ kind: "tuition", pageId: "t-math" })
 		eq(a.calls.sent.length, 0)
 		eq(a.calls.patched.map((p) => [p.id, p.props["안내문 전송 상태"].select.name, p.props["일괄전송 선택"].checkbox]), [["t-math", "⚠️ 오류", false]])
-		eq(a.calls.patched[0].props["마지막 오류"].rich_text[0].text.content.includes("영어반 수강료로 이미 안내"), true)
+		eq(a.calls.patched[0].props["마지막 오류"].rich_text[0].text.content.includes("영어반 수강료(으)로 이미 안내"), true)
 	} finally { a.restore() }
 	const forced = tuitionPage("t-math", "⚪ 대기", { "같은 달 수강료": sibs("t-eng"), "개별 전송": { checkbox: true } })
 	const b = fake(forced, { pages: { "t-math": forced, "t-eng": sent } })
@@ -142,4 +142,37 @@ Deno.test("v2.8.0 수강료 일괄: 같은 달 수강료 하나라도 이미 보
 		eq(b.calls.sent.length, 1)
 		eq(b.calls.patched.map((p) => [p.id, p.props["안내문 전송 상태"].select.name, p.props["개별 전송"]?.checkbox]), [["t-math", "✅ 완료", false], ["t-eng", "✅ 완료", undefined]])
 	} finally { b.restore() }
+})
+
+Deno.test("v2.8.0 가정통신문(letter): 같은 달 가정통신문을 한 통으로, 모두 ✅·로그, 잠금·개별 전송, 일정 0건이면 재시도 없이 ⚠️", async () => {
+	const letterPage = (id: string, status: string, extra: Record<string, unknown> = {}) => ({ id, properties: { "안내문 전송 상태": select(status), "이름": { type: "title", title: [{ plain_text: `26.11 테스트학생 ${id} 가정통신문` }] }, 등록: rel(`reg-${id}`), ...extra } })
+	const me = letterPage("lA", "⚪ 대기", { "같은 달 가정통신문": sibs("lB") })
+	const built = { registrationId: "reg-lA", title: "테스트학생", period: { start: "2026-11-01", end: "2026-11-30" }, variables: { "#{학원일정}": "11/14(토) 학원 설명회" } }
+	const a = fake(me, { pages: { lA: me, lB: letterPage("lB", "") } })
+	noticeDeps.letter = async () => built
+	try {
+		await processNoticeQueueItem({ kind: "letter", pageId: "lA" })
+		eq(a.calls.sent.map((s) => s.vars["#{학원일정}"]), ["11/14(토) 학원 설명회"])
+		eq(a.calls.patched.map((p) => [p.id, p.props["안내문 전송 상태"].select.name, "일괄전송 선택" in p.props]), [["lA", "✅ 완료", false], ["lB", "✅ 완료", false]])
+		eq(a.calls.logs.map((l) => [l.status, l.category, l.registrationId]), [["성공", "월간 일정 안내", "reg-lA"], ["성공", "월간 일정 안내", "reg-lB"]])
+	} finally { a.restore() }
+	// 잠금: 같은 달 장을 이미 보냈으면 일괄은 ⚠️(그 장 이름), 개별 전송은 보냄
+	const locked = letterPage("lA", "⚪ 대기", { "같은 달 가정통신문": sibs("lB") })
+	const b = fake(locked, { pages: { lA: locked, lB: letterPage("lB", "✅ 완료") } })
+	noticeDeps.letter = async () => built
+	try {
+		await processNoticeQueueItem({ kind: "letter", pageId: "lA" })
+		eq(b.calls.sent.length, 0)
+		eq(b.calls.patched[0].props["마지막 오류"].rich_text[0].text.content.startsWith("같은 달 26.11 테스트학생 lB 가정통신문(으)로 이미 안내"), true)
+	} finally { b.restore() }
+	// 일정 0건: 보내지 않고 ⚠️, 예외 없음(큐 재시도 안 함), 개별 전송은 끔
+	const { LetterBlocked } = await import("./monthlyNotice.ts")
+	const forced = letterPage("lA", "⚪ 대기", { "개별 전송": { checkbox: true } })
+	const d = fake(forced)
+	noticeDeps.letter = async () => { throw new LetterBlocked("11월 학부모 공개 일정이 없어 보내지 않았습니다.") }
+	try {
+		await processNoticeQueueItem({ kind: "letter", pageId: "lA" })
+		eq(d.calls.sent.length, 0)
+		eq([d.calls.patched[0].props["안내문 전송 상태"].select.name, d.calls.patched[0].props["개별 전송"].checkbox], ["⚠️ 오류", false])
+	} finally { d.restore() }
 })

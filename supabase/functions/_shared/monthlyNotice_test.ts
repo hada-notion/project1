@@ -8,6 +8,7 @@ const rel = (...ids: string[]) => ({ type: "relation", relation: ids.map((id) =>
 const title = (s: string) => ({ type: "title", title: [{ plain_text: s }] })
 const rt = (s: string) => ({ type: "rich_text", rich_text: s ? [{ plain_text: s }] : [] })
 const date = (start: string | null, end: string | null = null) => ({ type: "date", date: start ? { start, end } : null })
+const fx = (s: string) => ({ type: "formula", formula: { type: "string", string: s } })
 const roll = (s: string) => ({ type: "rollup", rollup: { type: "array", array: [{ type: "rich_text", rich_text: [{ plain_text: s }] }] } })
 const reg = (id: string, o: { student: string; name: string; cls: string; clsName: string; since?: string; until?: string }) => ({ id, properties: {
 	"학생정보": rel(o.student), "클래스": rel(o.cls), "등록일": date(o.since ?? "2026-03-02"), "종료일": date(o.until ?? null),
@@ -31,6 +32,7 @@ function mock(pages: Record<string, any>, q: (ds: string, filter: any) => any[] 
 		fullRelationIds: async (page: any, name: string) => (page.properties?.[name]?.relation ?? []).map((r: any) => r.id),
 		enqueue: async (target: string, payload: any) => { c.enq.push({ target, payload }) },
 		batchDataSourceId: async () => "batches",
+		letterDataSourceId: async () => "letters",
 		config: async () => ({ pfId: "pf", templateId: "tpl", senderNumber: "", notice: "계좌번호\n하다은행", recipientTarget: "우선 연락 대상" }),
 		tuitionConfigRow: async () => "cfg-row",
 		send: async (code: string, regId: string, phone: string, vars: any) => { if (o.sendThrows) throw o.sendThrows; c.sends.push({ code, regId, phone, vars }) },
@@ -139,4 +141,86 @@ Deno.test("v2.8.0 월간 일정 안내: 반 이름은 이름순, 두 반 이상 
 	eq(m.withClassPrefix("11/14(토) 보충", { properties: { "클래스": rel("ca", "cb") } }, names), "11/14(토) 보충")
 	eq(m.withClassPrefix("11/14(토) 설명회", { properties: { "클래스": rel() } }, names), "11/14(토) 설명회")
 	eq(m.withClassPrefix("11/14(토) 보충", ev1, new Map([["cb", "중1 B"]])), "11/14(토) 보충")
+})
+
+const ev = (id: string, o: { name: string; cat?: string; start: string; end?: string; cls?: string[]; stu?: string[]; school?: string[]; grade?: string[] }) => ({ id, properties: {
+	"이름": title(o.name), "구분": { type: "select", select: { name: o.cat ?? "📆 학원 일정" } }, "날짜": date(o.start, o.end ?? null),
+	"학부모 공개": { type: "checkbox", checkbox: true }, "숨김": { type: "checkbox", checkbox: false },
+	"클래스": rel(...(o.cls ?? [])), "학생": rel(...(o.stu ?? [])), "학교": rel(...(o.school ?? [])), "학년": rel(...(o.grade ?? [])),
+} })
+const relFilter = (filter: any) => {
+	const f = filter?.relation ? filter : filter?.and?.find((x: any) => x.relation)
+	return f ? `${f.property}:${f.relation.contains}` : ""
+}
+
+Deno.test("v2.8.0 [가정통신문 생성]: 반 가정통신문 발송함을 찾거나 만들어 클래스에 잇고, 등록마다 가정통신문 한 장·같은 달 잇기·학원 일정(연결 안 된 일정)", async () => {
+	const rA = reg("rA", { student: "s1", name: "테스트학생", cls: "cA", clsName: "수학반" })
+	const rB = reg("rB", { student: "s1", name: "테스트학생", cls: "cB", clsName: "영어반" })
+	const cls = { id: "cA", properties: { "클래스명": title("수학반"), "가정통신문 생성 대상": rel(), "마지막 오류": rt("") } }
+	// 1) 클래스: 발송함(구분 가정통신문) 만들고 클래스에 잇고 등록마다 큐(월간 수업 총량은 필요 없음)
+	const c1 = mock({ cA: cls }, (ds) => ds === "registrations" ? [rA] : [])
+	await m.processLetterCreateClassItem({ classId: "cA", month: "2026-11" })
+	eq(c1.created.map((x) => [x.props["이름"].title[0].text.content, x.props["구분"].select.name]), [["26.11 수학반 가정통신문", "가정통신문"]])
+	eq(c1.updates[0], { id: "cA", props: { "가정통신문 생성 대상": { relation: [{ id: "new1" }] } } })
+	eq(c1.enq.map((e) => [e.target, e.payload.regId, e.payload.mailboxId, e.payload.last]), [["letter-create-reg", "rA", "new1", true]])
+	// 2) 등록: 가정통신문 생성(이름 = 등록 이름 없으면 학생 이름), 영어반 가정통신문과 서로 잇기, 학원 전체·같은 학교 일정만 학원 일정에
+	const academy = ev("e-all", { name: "학원 설명회", start: "2026-11-14" })
+	const mySchool = ev("e-sch", { name: "중간고사", cat: "🏫 학사 일정", start: "2026-11-20", school: ["sch1"] })
+	const otherSchool = ev("e-oth", { name: "다른 학교 시험", cat: "🏫 학사 일정", start: "2026-11-21", school: ["sch9"] })
+	const classEv = ev("e-cls", { name: "보충", start: "2026-11-07", cls: ["cA"] })
+	const pages: Record<string, any> = { rA, rB, cA: cls, s1: { id: "s1", properties: { "학교": rel("sch1"), "학년": rel() } } }
+	const lettersOf: Record<string, any[]> = { rA: [], rB: [{ id: "lB", properties: { "기간": date("2026-11-01", "2026-11-30"), "등록": rel("rB"), "같은 달 가정통신문": rel(), "학원 일정": rel() } }] }
+	const q = (ds: string, filter: any) => {
+		if (ds === "registrations") return [rA, rB]
+		if (ds === "letters") return lettersOf[filter?.relation?.contains] ?? []
+		if (ds === "events") {
+			const r = relFilter(filter)
+			if (r === "") return [academy, mySchool, otherSchool, classEv]
+			if (r === "학교:sch1") return [mySchool]
+			return []
+		}
+		return []
+	}
+	const c2 = mock(pages, q)
+	await m.processLetterCreateRegItem({ classId: "cA", month: "2026-11", regId: "rA", amount: null, mailboxId: "box-A", last: true })
+	const made = c2.created[0]
+	eq([made.ds, made.props["이름"].title[0].text.content, made.props["등록"].relation, made.props["알림톡 발송함"].relation, made.props["기간"].date], ["letters", "26.11 테스트학생 가정통신문", [{ id: "rA" }], [{ id: "box-A" }], { start: "2026-11-01", end: "2026-11-30" }])
+	const sib = new Map(c2.updates.filter((u) => u.props["같은 달 가정통신문"]).map((u) => [u.id, u.props["같은 달 가정통신문"].relation.map((r: any) => r.id)]))
+	eq([sib.get("new1"), sib.get("lB")], [["lB"], ["new1"]])
+	const events = c2.updates.find((u) => u.id === "new1" && u.props["학원 일정"])
+	eq(events?.props["학원 일정"].relation.map((r: any) => r.id).sort(), ["e-all", "e-sch"])
+	eq(c2.marks, ["done:cA"])
+})
+
+Deno.test("v2.8.0 가정통신문 보내기 변수: 학원 일정을 다시 넣고 (일정안내) 수식 우선, 없으면 서버 계산(학생·두 반·연결 안 된 일정), 0건이면 막음", async () => {
+	const rA = reg("rA", { student: "s1", name: "테스트학생", cls: "cA", clsName: "수학반" })
+	const rB = reg("rB", { student: "s1", name: "테스트학생", cls: "cB", clsName: "영어반" })
+	const letter = { id: "lA", properties: { "기간": date("2026-11-01", "2026-11-30"), "등록": rel("rA"), "학원 일정": rel(), "가정통신문 메모": rt("") } }
+	const academy = ev("e-all", { name: "학원 설명회", start: "2026-11-14" })
+	const classB = ev("e-b", { name: "보충", start: "2026-11-07", cls: ["cB"] })
+	const pages: Record<string, any> = { rA, rB, lA: letter, s1: { id: "s1", properties: { "학교": rel(), "학년": rel() } }, cA: { id: "cA", properties: { "안내 메모": rt("") } }, cB: { id: "cB", properties: { "안내 메모": rt("교재 지참") } } }
+	let all = [academy, classB]
+	const q = (ds: string, filter: any) => {
+		if (ds === "registrations") return [rB, rA]
+		if (ds === "events") {
+			const r = relFilter(filter)
+			if (r === "") return all.filter((e) => e.id === "e-all")
+			if (r === "클래스:cB") return all.filter((e) => e.id === "e-b")
+			return []
+		}
+		return []
+	}
+	const c = mock(pages, q)
+	const built = await m.buildLetterNotice(letter)
+	eq(c.updates.find((u) => u.id === "lA")?.props["학원 일정"].relation, [{ id: "e-all" }])
+	eq([built.registrationId, built.variables["#{클래스}"], built.variables["#{안내월}"], built.variables["#{학원일정}"], built.variables["#{전달사항}"], built.variables["#{페이지ID}"].endsWith("?token=tok")],
+		["rA", "수학반 · 영어반", "11월", "11/7(토) 영어반 보충\n11/14(토) 학원 설명회", "교재 지참", true])
+	// 수식 값이 있으면 그것을 쓴다(다시 읽은 페이지 기준)
+	pages.lA = { ...letter, properties: { ...letter.properties, "학원일정(일정안내)": fx("수식 줄") } }
+	eq((await m.buildLetterNotice(letter)).variables["#{학원일정}"], "수식 줄")
+	// 그 달 일정 0건이면 막음
+	all = []
+	let msg = ""
+	try { await m.buildLetterNotice(letter) } catch (e) { msg = (e as Error).message; eq(e instanceof m.LetterBlocked, true) }
+	eq(msg.includes("일정이 없어 보내지 않았습니다"), true)
 })
