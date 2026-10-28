@@ -7,6 +7,9 @@
 // 멈춘 건은 큐에 남아 이어서 끝난다. 예전 발송함 이어달리기(send-selected-notifications)의 10건 묶음·전역 잠금이
 // 필요 없다.
 //
+// (v2.8.0) 수강료는 같은 학생의 같은 달 수강료('같은 달 수강료')를 한 통으로 보낸다(아래 prepareTuition). 발송함 일괄은
+// 그중 하나라도 이미 보냈으면 잠그고(⚠️ 사유), 수강료 [안내문 전송](개별 전송 체크)은 잠금 없이 다시 보낸다.
+//
 // 한 건 처리(필요한 만큼만 읽기):
 //   1) 페이지 1번 읽기 — 전송 상태가 ⚪ 대기가 아니면 건너뜀(두 번 눌러도·같은 항목이 두 번 들어와도 한 번만 보냄).
 //   2) (보고서만) 리포트 최신화 — 같은 발송함은 공용 캐시(5분 단위 실행 키), "리포트 토큰" 롤업이 있으면 등록을 다시 읽지 않음.
@@ -146,20 +149,22 @@ async function prepareReport(page: any): Promise<Prepared> {
 	}
 }
 
+// (v2.8.0) 수강료 안내는 같은 학생의 같은 달 수강료(듣는 반마다 한 장, '같은 달 수강료')를 한 통으로 보낸다.
+// 문구는 수강료 페이지의 (수강료안내) 수식 값을 그대로 쓴다(수강 내역 줄·합계가 Notion에서 계산됨). 수식이 없거나 비면
+// 이 한 장만 담은 예전 모양으로 보낸다(운영에 수식이 아직 없을 때).
+const tuitionVar = (page: any, name: string, fallback: string) => getFormulaText(page, name).trim() || fallback
 function prepareTuition(page: any): Prepared {
 	const registrationId = getRelationFirstId(page, "등록")
 	if (!registrationId) throw new Error("이 수강료 안내에 연결된 등록이 없습니다.")
 	const studentName = getFormulaText(page, "학생정보")
 	const period = getDateRange(page, "청구기간")
-	// (v2.8.0) 템플릿이 학생 합산 모양(#{수강내역}·#{청구금액} 합계)으로 바뀌었다. 한 장만 보낼 때는 수강내역이 한 줄이다.
-	// 학생의 반을 모두 합쳐 한 통으로 보내는 것은 학생 월간 안내 [수강료 안내](_shared/monthlyNotice.ts).
 	const amount = getFormulaText(page, "청구금액(표시)")
 	const fixed = {
-		"#{청구년월}": getFormulaText(page, "청구년월(보고서)"),
-		"#{청구기간}": getFormulaText(page, "청구기간(표시)"),
-		"#{학생이름}": studentName,
-		"#{수강내역}": `• ${getRollupText(page, "클래스(수강료)")}: ${amount}`,
-		"#{청구금액}": amount,
+		"#{청구년월}": tuitionVar(page, "청구년월(수강료안내)", getFormulaText(page, "청구년월(보고서)")),
+		"#{청구기간}": tuitionVar(page, "청구기간(수강료안내)", getFormulaText(page, "청구기간(표시)")),
+		"#{학생이름}": tuitionVar(page, "학생이름(수강료안내)", studentName),
+		"#{수강내역}": tuitionVar(page, "수강내역(수강료안내)", `• ${getRollupText(page, "클래스(수강료)")}  ${amount}`),
+		"#{청구금액}": tuitionVar(page, "청구금액(수강료안내)", amount),
 	}
 	return {
 		registrationId,
@@ -172,6 +177,12 @@ function prepareTuition(page: any): Prepared {
 		clearBulkSelect: true,
 	}
 }
+
+const DONE = "✅ 완료"
+const statusOf = (p: any, kind: NoticeKind) => p?.properties?.[NOTICE_STATUS_PROP[kind]]?.select?.name ?? ""
+const siblingIds = (page: any): string[] => (page?.properties?.["같은 달 수강료"]?.relation ?? []).map((r: any) => String(r.id))
+// 수강료 [안내문 전송](개별)이 켠다. 켜져 있으면 같은 달 수강료를 이미 보냈어도 보낸다.
+const isForced = (page: any) => page?.properties?.["개별 전송"]?.checkbox === true
 
 function prepareTextbook(page: any): Prepared {
 	const registrationId = getRelationFirstId(page, "등록")
@@ -194,11 +205,12 @@ function prepareTextbook(page: any): Prepared {
 	}
 }
 
-async function finish(kind: NoticeKind, pageId: string, status: "✅ 완료" | "⚠️ 오류", message: string | null, clearBulkSelect: boolean) {
+async function finish(kind: NoticeKind, pageId: string, status: "✅ 완료" | "⚠️ 오류", message: string | null, clearBulkSelect: boolean, extra: Record<string, unknown> = {}) {
 	await noticeDeps.patch(pageId, {
 		[NOTICE_STATUS_PROP[kind]]: { select: { name: status } },
 		"마지막 오류": { rich_text: message ? [{ text: { content: message.slice(0, 1900) } }] : [] },
 		...(clearBulkSelect ? { "일괄전송 선택": { checkbox: false } } : {}),
+		...extra,
 	}).catch((err: unknown) => console.error("[notice] 상태 쓰기 실패:", pageId, extractErrorMessage(err)))
 }
 
@@ -210,6 +222,20 @@ export async function processNoticeQueueItem(payload: NoticePayload): Promise<vo
 	if (status !== WAITING) {
 		console.log(`[notice] ${kind} ${pageId}: 전송 상태가 ${status || "비어 있음"}이라 건너뜀`)
 		return
+	}
+
+	// (v2.8.0) 수강료: 같은 달 수강료를 함께 다룬다. 일괄(발송함 [일괄 전송])은 그중 하나라도 이미 보냈으면 잠근다.
+	// 개별(수강료 [안내문 전송], '개별 전송' 체크)은 잠금 없이 다시 보낸다. 보낸 뒤 같은 달 수강료 모두 ✅.
+	const forced = kind === "tuition" && isForced(page)
+	const forcedReset = forced ? { "개별 전송": { checkbox: false } } : {}
+	let siblings: any[] = []
+	if (kind === "tuition") {
+		siblings = (await Promise.all(siblingIds(page).map((id) => noticeDeps.getPage(id).catch(() => null)))).filter((p: any) => p && !p.archived && !p.in_trash)
+		const sent = siblings.find((p: any) => statusOf(p, kind) === DONE)
+		if (sent && !forced) {
+			const name = getRollupText(sent, "클래스(수강료)") || "다른 반"
+			return await finish(kind, pageId, "⚠️ 오류", `같은 달 ${name} 수강료로 이미 안내했습니다(이 반은 그 안내에 없었을 수 있습니다). 이 반까지 다시 보내려면 [안내문 전송]을 누르세요.`, true)
+		}
 	}
 
 	// 발송 전 단계: 실패하면 오류만 적고 예외 → 큐 재시도(아직 보내지 않음, 상태는 ⚪ 대기 그대로).
@@ -234,9 +260,14 @@ export async function processNoticeQueueItem(payload: NoticePayload): Promise<vo
 	} catch (sendErr) {
 		const reason = extractErrorMessage(sendErr)
 		await noticeDeps.log({ ...logBase, status: "실패", failReason: reason }).catch(() => {})
-		return await finish(kind, pageId, "⚠️ 오류", reason, prep.clearBulkSelect)
+		return await finish(kind, pageId, "⚠️ 오류", reason, prep.clearBulkSelect, forcedReset)
 	}
 	await noticeDeps.log({ ...logBase, status: "성공" }).catch((err: unknown) => console.error("[notice] 전송 로그 실패:", extractErrorMessage(err)))
-	await finish(kind, pageId, "✅ 완료", null, prep.clearBulkSelect)
-	console.log(`[notice] ${kind} sent: ${pageId} (${recipients.length}명)`)
+	await finish(kind, pageId, "✅ 완료", null, prep.clearBulkSelect, forcedReset)
+	// 같은 달 수강료도 이 한 통에 들어갔으므로 ✅로 맞추고 전송 로그를 남긴다(다른 반 발송함에서 다시 보내지 않게).
+	for (const sib of siblings) {
+		await noticeDeps.log({ ...logBase, tuitionId: String(sib.id), status: "성공" }).catch((err: unknown) => console.error("[notice] 전송 로그 실패:", extractErrorMessage(err)))
+		await finish(kind, String(sib.id), "✅ 완료", null, true)
+	}
+	console.log(`[notice] ${kind} sent: ${pageId} (${recipients.length}명${siblings.length ? `, 같은 달 수강료 ${siblings.length}장 함께` : ""})`)
 }
