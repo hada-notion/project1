@@ -209,6 +209,14 @@ const studentNameOf = (reg: any): string => {
 }
 
 // ── 일정 안내(한 건) ───────────────────────────────────────────────────────
+// 보낼 학생이 없을 때 이유. 학교·학년만 연결된 일정(NEIS 학사 일정 등)은 가정통신문 학사일정 구역으로 보낸다.
+export const noTargetMessage = (ev: any, linked: boolean): string => {
+	if (linked) return "연결된 학생·클래스에 수강 중인 학생이 없습니다."
+	const p = ev?.properties ?? {}
+	if (relIds(p["학교"]).length || relIds(p["학년"]).length) return "학교·학년 일정은 일정 안내로 보내지 않습니다(가정통신문 학사일정에 들어갑니다). 학생이나 클래스를 연결한 일정에서 누르세요."
+	return "일정에 학생이나 클래스를 연결해 주세요(수강 중인 학생이 없습니다)."
+}
+
 export type EventPayload = { eventId: string }
 export type EventStudentPayload = { eventId: string; regId: string; vars: Record<string, string>; dateStart: string; last?: boolean }
 
@@ -223,13 +231,14 @@ export async function processScheduleEventItem(p: EventPayload): Promise<void> {
 		if (sentAt && sameInstant(sentAt, dateStart)) return await deps.markError(p.eventId, `이미 이 날짜로 안내했습니다. 다시 보내려면 '${PROP_EVENT_SENT}'을 비우고 누르세요.`)
 		// 대상: 연결된 학생의 수강 중 등록(학생마다 하나) + 연결된 클래스의 수강 중 등록. 학생이 겹치면 한 번만.
 		const regs: any[] = []
-		for (const sid of await deps.fullRelationIds(ev, "학생")) {
+		const linkedStudents = await deps.fullRelationIds(ev, "학생"), linkedClasses = await deps.fullRelationIds(ev, "클래스")
+		for (const sid of linkedStudents) {
 			const st: any = await deps.getPage(sid)
 			const own = await Promise.all((await deps.fullRelationIds(st, "등록")).map((id: string) => deps.getPage(id)))
 			const active = own.filter(isActiveReg)
 			if (active[0]) regs.push(active[0])
 		}
-		for (const cid of await deps.fullRelationIds(ev, "클래스")) regs.push(...await activeRegsOfClass(cid))
+		for (const cid of linkedClasses) regs.push(...await activeRegsOfClass(cid))
 		const seen = new Set<string>(), targets: any[] = []
 		for (const r of regs) {
 			const sk = key(relIds(r.properties?.["학생정보"])[0] ?? r.id)
@@ -237,7 +246,7 @@ export async function processScheduleEventItem(p: EventPayload): Promise<void> {
 			seen.add(sk)
 			targets.push(r)
 		}
-		if (!targets.length) return await deps.markError(p.eventId, "일정에 학생이나 클래스를 연결해 주세요(수강 중인 학생이 없습니다).")
+		if (!targets.length) return await deps.markError(p.eventId, noTargetMessage(ev, linkedStudents.length + linkedClasses.length > 0))
 		// 다른 알림톡처럼 일정 페이지의 (일정안내) 수식 값을 보낸다. 수식이 없거나 비면 같은 규칙으로 계산한다.
 		const f = (name: string, fallback: string) => getFormulaText(ev, name).trim() || fallback
 		const vars = {
