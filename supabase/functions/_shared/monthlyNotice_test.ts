@@ -197,7 +197,7 @@ Deno.test("v2.8.0 [가정통신문 생성]: 반 가정통신문 발송함을 찾
 	eq(c2.marks, ["done:cA"])
 })
 
-Deno.test("v2.8.0 가정통신문 보내기 변수: 학원 일정을 다시 넣고 (일정안내) 수식 우선, 없으면 서버 계산(학생·두 반·연결 안 된 일정), 0건이면 막음", async () => {
+Deno.test("v2.8.0 가정통신문 보내기 변수: 학원 일정을 다시 넣고 (일정안내) 수식 우선, 없으면 서버 계산(학생·두 반·연결 안 된 일정), 일정 0건이면 전달사항만, 둘 다 없으면 막음", async () => {
 	const rA = reg("rA", { student: "s1", name: "테스트학생", cls: "cA", clsName: "수학반" })
 	const rB = reg("rB", { student: "s1", name: "테스트학생", cls: "cB", clsName: "영어반" })
 	const letter = { id: "lA", properties: { "기간": date("2026-11-01", "2026-11-30"), "등록": rel("rA"), "학원 일정": rel(), "가정통신문 메모": rt("") } }
@@ -223,9 +223,14 @@ Deno.test("v2.8.0 가정통신문 보내기 변수: 학원 일정을 다시 넣�
 	// 수식 값이 있으면 그것을 쓴다(다시 읽은 페이지 기준)
 	pages.lA = { ...letter, properties: { ...letter.properties, "학원일정(일정안내)": fx("수식 줄") } }
 	eq((await m.buildLetterNotice(letter)).variables["#{학원일정}"], "수식 줄")
-	// 그 달 일정 0건이면 막음
+	// 그 달 일정 0건이어도 전달사항(클래스 안내 메모 "교재 지참")이 있으면 보낸다: 일정 구역 없이 전달사항만
 	all = []
+	pages.lA = letter
+	const noteOnly = await m.buildLetterNotice(letter)
+	eq([noteOnly.variables["#{일정목록}"], noteOnly.variables["#{학원일정}"], noteOnly.variables["#{전달사항}"]], ["📝 전달사항\n교재 지참", "없음", "교재 지참"])
+	// 일정도 전달사항도 없으면 막음
+	pages.cB = { id: "cB", properties: { "안내 메모": rt("") } }
 	let msg = ""
 	try { await m.buildLetterNotice(letter) } catch (e) { msg = (e as Error).message; eq(e instanceof m.LetterBlocked, true) }
-	eq(msg.includes("일정이 없어 보내지 않았습니다"), true)
+	eq(msg.includes("일정과 전달사항이 없어 보내지 않았습니다"), true)
 })

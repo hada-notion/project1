@@ -18,7 +18,7 @@ import { isParentPublicEvent } from "./scheduleVisibility.ts"
 import { inPeriodRegistration, resolveBatchDataSourceId, seoulDay, studentNameOf } from "./classReportPlan.ts"
 import { eventLine, inMonth, isAcademyWide, monthFilter, monthLabel, nextMonthKey, type Section, sectionOf, sectionText } from "./scheduleNotice.ts"
 import { noteText } from "./lessonNotice.ts"
-import { alimtalkVar, classListBlock, letterScheduleBlock } from "./noticeBlocks.ts"
+import { alimtalkVar, classListBlock, letterScheduleBlock, NO_NOTE } from "./noticeBlocks.ts"
 
 export const KIND_MONTHLY = "가정통신문"
 // (10/28) 수강료 생성은 보고서처럼 반 발송함(구분 "수강료", 반 × 달)을 만든다.
@@ -419,7 +419,7 @@ export async function processLetterCreateRegItem(p: CreateRegPayload): Promise<v
 }
 
 // ── 3) 가정통신문 보내기(noticeQueue kind "letter"가 부른다) ──────────────────────────
-// 보내기 전에 막힌 경우(일정 0건 등). 다시 해도 같으므로 큐 재시도 없이 ⚠️.
+// 보내기 전에 막힌 경우(일정도 전달사항도 없음 등). 다시 해도 같으므로 큐 재시도 없이 ⚠️.
 export class LetterBlocked extends Error {}
 
 // 같은 학생의 그 달 반 이름(이름순, 같은 이름은 한 번). #{클래스}에 쓴다.
@@ -441,7 +441,8 @@ async function letterNote(letter: any, regs: any[]): Promise<string> {
 }
 
 // 월간 일정 안내 한 통의 변수. 보내기 직전에 '학원 일정'을 다시 넣고 페이지를 다시 읽어 (일정안내) 수식 값을 먼저 쓴다.
-// 수식이 없거나 비면 서버가 같은 규칙으로 계산한 값(학생·다니는 반 전부·연결 안 된 일정). 그 달 일정이 0건이면 LetterBlocked.
+// 수식이 없거나 비면 서버가 같은 규칙으로 계산한 값(학생·다니는 반 전부·연결 안 된 일정).
+// (10/29) 그 달 일정이 0건이어도 전달사항이 있으면 보낸다(일정 구역 없이 전달사항만). 둘 다 없으면 LetterBlocked.
 export async function buildLetterNotice(letter: any): Promise<{ registrationId: string; title: string; period: { start: string; end: string }; variables: Record<string, string> }> {
 	const deps = monthlyDeps
 	const registrationId = relIds(letter?.properties?.[PROP_LETTER_REG])[0]
@@ -460,7 +461,6 @@ export async function buildLetterNotice(letter: any): Promise<{ registrationId: 
 		if (alive(sib)) await bundleUnlinked(sib, studentId, month, unlinked).catch((err: unknown) => console.warn("[letter] 같은 달 가정통신문 학원 일정 건너뜀:", id, (err as Error).message))
 	}
 	const lines = await studentMonthEvents(studentId, month, regs, unlinked)
-	if (!lines.length) throw new LetterBlocked(`${monthLabel(month)} 학부모 공개 일정이 없어 보내지 않았습니다. 일정을 넣은 뒤 [안내문 전송]을 누르세요.`)
 	const fresh: any = await deps.getPage(String(letter.id)).catch(() => letter)
 	// 변수 값: "변수(알림톡)" 수식 → 옛 "(일정안내)" 수식 → 서버 계산(_shared/noticeBlocks.ts alimtalkVar).
 	// (v2.8.0 통일안) 새 템플릿의 #{클래스목록}·#{일정목록}과 옛 템플릿의 구역별 변수를 함께 만든다(보낼 때 템플릿에 있는 것만 남음).
@@ -468,6 +468,7 @@ export async function buildLetterNotice(letter: any): Promise<{ registrationId: 
 	const studentName = studentNameOf(reg)
 	const rest = f("휴원일정", sectionText(lines, "휴원")), academy = f("학원일정", sectionText(lines, "학원")), school = f("학사일정", sectionText(lines, "학교"))
 	const note = f("전달사항", await letterNote(fresh, regs))
+	if (!lines.length && (!note.trim() || note.trim() === NO_NOTE)) throw new LetterBlocked(`${monthLabel(month)} 학부모 공개 일정과 전달사항이 없어 보내지 않았습니다. 일정이나 가정통신문 메모(또는 클래스 안내 메모)를 넣은 뒤 [안내문 전송]을 누르세요.`)
 	return {
 		registrationId,
 		title: studentName || "월간 일정 안내",
