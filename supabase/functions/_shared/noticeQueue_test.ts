@@ -154,7 +154,7 @@ Deno.test("v2.8.0 가정통신문(letter): 같은 달 가정통신문을 한 통
 		await processNoticeQueueItem({ kind: "letter", pageId: "lA" })
 		eq(a.calls.sent.map((s) => s.vars["#{학원일정}"]), ["11/14(토) 학원 설명회"])
 		eq(a.calls.patched.map((p) => [p.id, p.props["안내문 전송 상태"].select.name, "일괄전송 선택" in p.props]), [["lA", "✅ 완료", false], ["lB", "✅ 완료", false]])
-		eq(a.calls.logs.map((l) => [l.status, l.category, l.registrationId]), [["성공", "월간 일정 안내", "reg-lA"], ["성공", "월간 일정 안내", "reg-lB"]])
+		eq(a.calls.logs.map((l) => [l.status, l.category, l.registrationId, l.letterId]), [["성공", "월간 일정 안내", "reg-lA", "lA"], ["성공", "월간 일정 안내", "reg-lB", "lB"]])
 	} finally { a.restore() }
 	// 잠금: 같은 달 장을 이미 보냈으면 일괄은 ⚠️(그 장 이름), 개별 전송은 보냄
 	const locked = letterPage("lA", "⚪ 대기", { "같은 달 가정통신문": sibs("lB") })
