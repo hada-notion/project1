@@ -10,7 +10,7 @@ const sel = (name: string) => ({ type: "select", select: { name } })
 const txt = (s: string) => ({ type: "rich_text", rich_text: s ? [{ plain_text: s }] : [] })
 const n = (v: number | null) => ({ type: "number", number: v })
 const REC = "3eeba040586b81e3a977f3fb68b99d50", LIB = "3eeba040586b81e3a977f3fb68b99d51", CLS = "3eeba040586b81e3a977f3fb68b99d52", REG = "3eeba040586b81e3a977f3fb68b99d53", U1 = "3eeba040586b81e3a977f3fb68b99d54"
-const act = (id: string, correct: number | null, total: number | null, comment = "", status = "") => ({ id, properties: { "등록": rel(REG), "학습기록": rel(REC), "정답 문항": n(correct), "전체 문항": n(total), "선생님 한마디": txt(comment), "교재 평가 안내 상태": status ? sel(status) : { type: "select", select: null } } })
+const act = (id: string, correct: number | null, total: number | null, comment = "", status = "") => ({ id, properties: { "등록": rel(REG), "학습기록": rel(REC), "정답 문항": n(correct), "전체 문항": n(total), "선생님 한마디": txt(comment), "진도 평가 안내 상태": status ? sel(status) : { type: "select", select: null } } })
 
 Deno.test("v2.8.0 교재 평가 알림톡 블록: 평가정보·평가결과(점수/수료, 반 평균, 한마디)", () => {
 	eq(b.bookEvalInfoBlock({ evalType: "단원 평가", range: "p.10~20", units: ["1-2. 정수와 유리수"] }), "📝 단원 평가  p.10~20\n  • 1-2. 정수와 유리수")
@@ -22,7 +22,7 @@ Deno.test("v2.8.0 교재 평가 알림톡 블록: 평가정보·평가결과(점
 Deno.test("v2.8.0 교재 평가 알림톡 내용: 단원 평가는 범위·단원, 반 평균은 점수 3명 이상", async () => {
 	const A1 = "a1", A2 = "a2", A3 = "a3"
 	const pages: Record<string, any> = {
-		[REC]: { id: REC, properties: { "평가 구분": sel("단원 평가"), "교재": rel(LIB), "클래스": rel(CLS), "범위": txt("p.10~20"), "선택 단원": rel(U1), "학습활동": rel(A1, A2, A3), "학습": { type: "title", title: [{ plain_text: "[단원 평가] 쎈 공통수학1(고1 A)" }] } } },
+		[REC]: { id: REC, properties: { "구분": sel("평가"), "평가 구분": sel("단원 평가"), "교재": rel(LIB), "클래스": rel(CLS), "범위": txt("p.10~20"), "선택 단원": rel(U1), "학습활동": rel(A1, A2, A3), "학습": { type: "title", title: [{ plain_text: "[단원 평가] 쎈 공통수학1(고1 A)" }] } } },
 		[LIB]: { id: LIB, properties: { "교재명": { type: "title", title: [{ plain_text: "쎈 공통수학1" }] } } },
 		[CLS]: { id: CLS, properties: { "반 평균 숨김": { type: "checkbox", checkbox: false } } },
 		[REG]: { id: REG, properties: { "학생이름(등록)": { type: "rollup", rollup: { type: "array", array: [{ type: "title", title: [{ plain_text: "강하을" }] }] } } } },
@@ -35,7 +35,13 @@ Deno.test("v2.8.0 교재 평가 알림톡 내용: 단원 평가는 범위·단�
 	pages[REC].properties["평가 구분"] = sel("주간 평가")
 	let err = ""
 	try { await m.bookEvalContent(pages[A1]) } catch (e) { err = (e as Error).message }
-	eq(err.includes("교재 평가"), true)
+	eq(err.includes("진도 평가"), true)
+	// 학습 기록에 평가 구분을 잘못 골라 둔 경우도 보내지 않는다.
+	pages[REC].properties["평가 구분"] = sel("단원 평가")
+	pages[REC].properties["구분"] = sel("학습")
+	err = ""
+	try { await m.bookEvalContent(pages[A1]) } catch (e) { err = (e as Error).message }
+	eq(err.includes("구분이 평가인"), true)
 })
 
 Deno.test("v2.8.0 교재 평가 일괄: 이미 받은 학생은 건너뛰고 나머지만 ⚪ 대기·큐", async () => {

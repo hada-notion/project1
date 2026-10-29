@@ -27,7 +27,7 @@ const book = (extra: Record<string, unknown>) => ({ id: BOOK, properties: { "진
 
 Deno.test("v2.8.0 교재 평가: 반 교재는 수강 중 학생 모두로 평가 학습기록 1개 → 학습활동 큐", async () => {
 	const c = mock({ [BOOK]: book({ "등록": rel(R1, R2, R3), "클래스": rel(CLS) }), [R1]: reg(R1, "🟢 수강 중"), [R2]: reg(R2, "🟢 수강 중"), [R3]: reg(R3, "🔴 퇴원") })
-	await m.processFinalEvaluationQueueItem({ bookId: BOOK })
+	await m.processFinalEvaluationQueueItem({ bookId: BOOK, kind: "final" })
 	eq(c.marks, ["running", "done"])
 	const p = c.created[0].props
 	eq([c.created[0].ds, p["학습"].title[0].text.content, p["구분"].select.name, p["평가 구분"].select.name, p["평가 기간"].date], ["records", "[마무리 평가] 쎈 공통수학1(고1 A)", "평가", "마무리 평가", { start: "2026-10-29" }])
@@ -49,6 +49,16 @@ Deno.test("v2.8.0 교재 평가: 개별 진도 반 교재(템플릿)·수강 중
 	const b = mock({ [BOOK]: book({ "등록": rel(R3) }), [R3]: reg(R3, "🔴 퇴원") })
 	await m.processFinalEvaluationQueueItem({ bookId: BOOK })
 	eq([b.created.length, b.marks[1].includes("수강 중인 학생이 없습니다")], [0, true])
+})
+
+Deno.test("v2.8.0 진도 평가 생성(버튼 하나): 진행상태 완료면 마무리 평가, 진행 중·빈 값이면 단원 평가", async () => {
+	const st = (name: string) => ({ "진행상태": { type: "status", status: { name } } })
+	for (const [extra, want] of [[st("완료"), "마무리 평가"], [st("진행 중"), "단원 평가"], [{}, "단원 평가"]] as const) {
+		const c = mock({ [BOOK]: book({ "등록": rel(R1), "클래스": rel(CLS), ...extra }), [R1]: reg(R1, "🟢 수강 중") })
+		await m.processFinalEvaluationQueueItem({ bookId: BOOK, kind: "auto" })
+		eq([c.created[0].props["평가 구분"].select.name, c.created[0].props["학습"].title[0].text.content.startsWith(`[${want}]`)], [want, true])
+	}
+	eq(m.autoEvalKindOf({ properties: { "진행상태": { type: "select", select: { name: "✅ 완료" } } } }), "final")
 })
 
 Deno.test("v2.8.0 교재 평가: 단원 평가는 범위·단원이 있는 가장 최근 학습기록의 값을 미리 채운다(빈 기록 건너뜀)", async () => {
