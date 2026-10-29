@@ -40,7 +40,7 @@ export function eventInfoBlock(o: { time: string; note?: string }): string {
 }
 
 // 가정통신문 #{클래스목록}: 반 하나면 "  중2 B"(템플릿 "🏛 클래스" 바로 뒤에 붙음), 둘 이상이면 줄바꿈 + "· 반" 목록.
-export const classListBlock = (names: string[]) => (names.length <= 1 ? `  ${names[0] ?? NO_NOTE}` : "\n" + names.map((n) => `· ${n}`).join("\n"))
+export const classListBlock = (names: string[]) => (names.length <= 1 ? `  ${names[0] ?? NO_NOTE}` : "\n" + names.map((n) => `• ${n}`).join("\n"))
 
 // 가정통신문 #{일정목록}: 일정이 있는 구역만(휴원 → 학원 → 학사) + [📝 전달사항]. 구역 값이 비었거나 "없음"이면 뺀다.
 export function letterScheduleBlock(o: { 휴원: string; 학원: string; 학사: string; note?: string }): string {

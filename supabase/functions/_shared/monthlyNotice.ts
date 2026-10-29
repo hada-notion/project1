@@ -47,9 +47,10 @@ export const PROP_CLASS_TUITION_PERIOD = "수강료 기간"
 const PROP_CLASS_TUITION_MAILBOX = "수강료 생성 대상"
 // 수강료(학원) DB: 같은 학생의 같은 달 다른 반 수강료(한쪽 자기 관계, 서로 모두 잇는다).
 const PROP_TUITION_SIBLINGS = "같은 달 수강료"
-// 클래스(학원) DB: [가정통신문 생성]이 만든(또는 찾은) 이 반의 가정통신문 발송함. 월간 일정 안내 전달사항(반 학생 모두).
+// 클래스(학원) DB: [가정통신문 생성]이 만든(또는 찾은) 이 반의 가정통신문 발송함.
 const PROP_CLASS_LETTER_MAILBOX = "가정통신문 생성 대상"
-const PROP_CLASS_NOTE = "안내 메모"
+// 알림톡 발송함(학원) DB: 가정통신문 발송함의 반 전달사항(그 반 학생 모두, 그 달만). (10/29) 클래스 '안내 메모'를 대신한다.
+const PROP_BOX_LETTER_NOTE = "가정통신문 전달사항"
 // 알림톡 발송함(학원) DB: 이 발송함의 가정통신문(가정통신문 DB '알림톡 발송함'의 짝). 가정통신문 DB id를 여기서 찾는다.
 const PROP_MAILBOX_LETTERS = "가정통신문"
 // 가정통신문(학원) DB: 등록 × 달 한 장
@@ -427,22 +428,34 @@ const classNamesOf = (regs: any[]) => Array.from(new Set(regs.map(classNameOfReg
 // (v2.8.0 통일안) 템플릿 "🏛 클래스#{클래스목록}"용: 반 하나면 "  영어반"(두 칸), 둘 이상이면 줄을 바꿔 "· 반" 목록.
 export const classListText = classListBlock
 
-// 전달사항: 가정통신문 메모 → 다니는 반의 클래스 '안내 메모'(반 이름순 첫 번째) → 없음.
-async function letterNote(letter: any, regs: any[]): Promise<string> {
+// (10/29 사용자) 전달사항: 이 장의 '가정통신문 메모'(공통) + 같은 달 반마다 가정통신문 발송함의 '가정통신문 전달사항'(반 이름순).
+// 하나뿐이면 문장만, 둘 이상이면 "• (공통) …" / "• (반 이름) …" 한 줄씩. 모두 비면 없음. 문구마다 50자까지.
+export async function letterNote(letter: any, regs: any[]): Promise<string> {
+	const items: [string, string][] = []
 	const own = textOf(letter?.properties?.[PROP_LETTER_NOTE]?.rich_text).trim()
-	if (own) return noteText(own)
-	const ids = Array.from(new Set(regs.slice().sort((a, b) => (classNameOfReg(a) < classNameOfReg(b) ? -1 : 1)).flatMap((r: any) => relIds(r?.properties?.["클래스"]))))
-	for (const id of ids) {
-		const cls: any = await monthlyDeps.getPage(id).catch(() => null)
-		const memo = textOf(cls?.properties?.[PROP_CLASS_NOTE]?.rich_text).trim()
-		if (memo) return noteText(memo)
+	if (own) items.push(["공통", noteText(own)])
+	const className = new Map(regs.map((r: any) => [key(r.id), classNameOfReg(r)]))
+	const sibs = await Promise.all(relIds(letter?.properties?.[PROP_LETTER_SIBLINGS]).map((id) => monthlyDeps.getPage(id).catch(() => null)))
+	const seen = new Set<string>()
+	const perClass: [string, string][] = []
+	for (const l of [letter, ...sibs.filter(alive)]) {
+		const name = className.get(key(relIds(l?.properties?.[PROP_LETTER_REG])[0] ?? ""))
+		const boxId = relIds(l?.properties?.[PROP_LETTER_MAILBOX])[0]
+		if (!name || !boxId || seen.has(key(boxId))) continue
+		seen.add(key(boxId))
+		const box: any = await monthlyDeps.getPage(boxId).catch(() => null)
+		const memo = textOf(box?.properties?.[PROP_BOX_LETTER_NOTE]?.rich_text).trim()
+		if (memo) perClass.push([name, noteText(memo)])
 	}
-	return noteText("")
+	items.push(...perClass.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)))
+	if (!items.length) return noteText("")
+	if (items.length === 1) return items[0][1]
+	return items.map(([label, text]) => `• (${label}) ${text}`).join("\n")
 }
 
 // 월간 일정 안내 한 통의 변수. 보내기 직전에 '학원 일정'을 다시 넣고 페이지를 다시 읽어 (일정안내) 수식 값을 먼저 쓴다.
 // 수식이 없거나 비면 서버가 같은 규칙으로 계산한 값(학생·다니는 반 전부·연결 안 된 일정).
-// (10/29) 그 달 일정이 0건이어도 전달사항이 있으면 보낸다(일정 구역 없이 전달사항만). 둘 다 없으면 LetterBlocked.
+// (10/29) 그 달 일정이 0건이어도 전달사항(이 장 메모·반 발송함 메모)이 있으면 보낸다(일정 구역 없이 전달사항만). 둘 다 없으면 LetterBlocked.
 export async function buildLetterNotice(letter: any): Promise<{ registrationId: string; title: string; period: { start: string; end: string }; variables: Record<string, string> }> {
 	const deps = monthlyDeps
 	const registrationId = relIds(letter?.properties?.[PROP_LETTER_REG])[0]
@@ -476,7 +489,7 @@ export async function buildLetterNotice(letter: any): Promise<{ registrationId: 
 		variables: {
 			"#{학생이름}": f("학생이름", studentName),
 			"#{클래스}": f("클래스", classNamesOf(regs).join(" · ")),
-			// 옛 (일정안내) 수식은 ": 반" 모양이라 읽지 않는다.
+			// 옛 (일정안내) 수식은 ": 반" 모양이라 읽지 않는다. 둘 이상이면 "• 반" 목록.
 			"#{클래스목록}": alimtalkVar(fresh, "클래스목록", classListText(classNamesOf(regs))),
 			"#{안내월}": f("안내월", monthLabel(month)),
 			"#{일정목록}": alimtalkVar(fresh, "일정목록", letterScheduleBlock({ 휴원: rest, 학원: academy, 학사: school, note })),
