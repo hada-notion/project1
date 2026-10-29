@@ -16,18 +16,7 @@ export function templateText(template: unknown): string {
 	return JSON.stringify(template, (key, value) => (IGNORED_KEYS.has(key) ? undefined : value)) ?? ""
 }
 
-// 솔라피(또는 카카오)는 변수 값을 끼울 때 맨 앞 공백을 지운다(10/29 실발송: 목록 블록 첫 줄 "  • "만 들여쓰기가 빠지고
-// 둘째 줄부터는 남음). 공백으로 시작하는 값 앞에 폭 없는 공백(U+200B, 화면에 안 보임)을 붙여 그 공백이 맨 앞이 아니게 한다.
-const ZWSP = "\u200B"
-export function keepLeadingSpaces(variables: Record<string, string>): Record<string, string> {
-	return Object.fromEntries(Object.entries(variables).map(([k, v]) => [k, typeof v === "string" && /^[ \t]/.test(v) ? ZWSP + v : v]))
-}
-
 export async function fitVariablesToTemplate(reader: TemplateReader, templateId: string, variables: Record<string, string>): Promise<Record<string, string>> {
-	return keepLeadingSpaces(await pickTemplateVariables(reader, templateId, variables))
-}
-
-async function pickTemplateVariables(reader: TemplateReader, templateId: string, variables: Record<string, string>): Promise<Record<string, string>> {
 	if (!templateId) return variables
 	const now = templateFitDeps.now()
 	let hit = cache.get(templateId)

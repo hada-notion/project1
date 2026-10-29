@@ -40,7 +40,7 @@ import {
 } from "./alimtalkShared.ts"
 import { refreshStudentReport } from "./dailyReportRefresh.ts"
 import { buildLetterNotice, LetterBlocked } from "./monthlyNotice.ts"
-import { alimtalkVar, BULLET, reportStatusBlock, textbookBlock } from "./noticeBlocks.ts"
+import { alimtalkVar, BULLET, reportStatusBlock, textbookBlock, tuitionInfoBlock } from "./noticeBlocks.ts"
 import { fitVariablesToTemplate } from "./templateFit.ts"
 
 export type NoticeKind = "report" | "tuition" | "textbook" | "letter"
@@ -144,7 +144,7 @@ async function prepareReport(page: any): Promise<Prepared> {
 	const v = (name: string, fallback = "") => alimtalkVar(page, name, fallback, `${name}(보고서)`)
 	const studentName = v("학생이름")
 	const summary = getFormulaText(page, "보고서요약(보고서)")
-	const fixed = {
+	const fixed: Record<string, string> = {
 		"#{보고서기간}": v("보고서기간"),
 		"#{보고서구분}": alimtalkVar(page, "보고서구분", reportType),
 		"#{학생이름}": studentName,
@@ -177,13 +177,15 @@ function prepareTuition(page: any): Prepared {
 	const studentName = getFormulaText(page, "학생정보")
 	const period = getDateRange(page, "청구기간")
 	const amount = getFormulaText(page, "청구금액(표시)")
-	const fixed = {
+	const fixed: Record<string, string> = {
 		"#{청구년월}": tuitionVar(page, "청구년월(수강료안내)", getFormulaText(page, "청구년월(보고서)")),
 		"#{청구기간}": tuitionVar(page, "청구기간(수강료안내)", getFormulaText(page, "청구기간(표시)")),
 		"#{학생이름}": tuitionVar(page, "학생이름(수강료안내)", studentName),
 		"#{수강내역}": tuitionVar(page, "수강내역(수강료안내)", `${BULLET}${getRollupText(page, "클래스(수강료)")}  ${amount}`),
 		"#{청구금액}": tuitionVar(page, "청구금액(수강료안내)", amount),
 	}
+	// (10/29 다시 신청한 본문) 머리줄 "📚 수강 내역"까지 담는 블록(솔라피가 값 맨 앞 공백을 지우므로).
+	fixed["#{수강정보}"] = alimtalkVar(page, "수강정보", tuitionInfoBlock(fixed["#{수강내역}"]))
 	return {
 		registrationId,
 		title: studentName || "수강료 안내",
@@ -213,7 +215,7 @@ function prepareTextbook(page: any): Prepared {
 	const studentName = getRollupText(page, "학생이름(표시)") || "학생"
 	// (v2.8.0 통일안) 새 템플릿의 #{교재내역}("📚 교재 내역 … 🧾 합계")과 옛 템플릿의 #{교재비안내}를 함께 만든다.
 	const unpaid = getFormulaText(page, "미납교재")
-	const fixed = {
+	const fixed: Record<string, string> = {
 		"#{학생이름}": alimtalkVar(page, "학생이름", studentName),
 		"#{클래스}": alimtalkVar(page, "클래스", getRollupText(page, "클래스명(표시)")),
 		"#{교재내역}": alimtalkVar(page, "교재내역", textbookBlock(unpaid)),
