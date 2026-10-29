@@ -494,7 +494,7 @@ function mapRegistration(reg) {
     teacher: reg.teacher_name || "",
     class_mode: reg.class_mode || "",
     schedule: (reg.schedule || []).map((s) => ({ day: s.day, start: s.start, end: s.end })),
-    books: (reg.books || []).map((b) => ({ id: b.id || "", title: b.title || "", progress: b.progress ?? 0, status: normalizeBookStatus(b.status), cover: b.cover || "", pages: b.pages ?? null, units: b.units || [] })),
+    books: (reg.books || []).map((b) => ({ id: b.id || "", kind: b.kind || "", title: b.title || "", progress: b.progress ?? 0, status: normalizeBookStatus(b.status), cover: b.cover || "", pages: b.pages ?? null, units: b.units || [] })),
     attendance_summary: reg.attendance_summary || { present: 0, absent: 0, makeup: 0 },
     attendance_rows: (reg.attendance_rows || []).map((a) => {
       const rawDate = a.iso || a.date_iso || (typeof a.date === "string" && /^\d{4}-\d{2}-\d{2}/.test(a.date) ? a.date : null)
@@ -710,6 +710,13 @@ function closeBookDetail() {
 function normBookTitle(v) {
   return String(v || "").trim()
 }
+// (v2.8.0 예체능) 라이브러리 구분이 프로그램이면 교재→프로그램, 단원→차시, 쪽→차시로 보인다.
+// 반 전체 이름(탭·목록 제목)은 이 반 교재가 모두 프로그램일 때만 "프로그램"이다.
+function isProgram(b) { return !!b && b.kind === "프로그램" }
+function bookNoun(b) { return isProgram(b) ? "프로그램" : "교재" }
+function regBookNoun(r) { const bs = (r && r.books) || []; return bs.length && bs.every(isProgram) ? "프로그램" : "교재" }
+// 받침: 프로그램(ㅁ) → 을·이·과, 교재 → 를·가·와
+function josa(noun, withFinal, withoutFinal) { return noun + (noun === "프로그램" ? withFinal : withoutFinal) }
 // (v2.8.0) 기록이 이 교재(진도교재)의 것인지. 둘 다 진도교재 ID가 있으면 ID로, 아니면(예전 캐시·교재 없는 기록) 이름으로 본다.
 function inBook(item, title, id) {
   if (id && item.bookId) return item.bookId === id
@@ -720,7 +727,7 @@ function regTabsList() {
   const testsOnly = typeof currentReg === "function" && isTestsOnly(currentReg())
   return [
     { id: "home", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>`, label: "홈" },
-    { id: "books", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>`, label: "교재" },
+    { id: "books", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>`, label: typeof currentReg === "function" ? regBookNoun(currentReg()) : "교재" },
     { id: "calendar", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`, label: "캘린더" },
     { id: "study", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`, label: "학습기록" },
     { id: "report", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>`, label: "보고서" },
@@ -758,7 +765,7 @@ function renderBookDetail() {
   const trendPoints = computeRecentTestPoints(bookTests, MOCK_TODAY, 8)
   const finalHtml = finalTests.length ? `
         <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg></span>진도 평가</h3>
-        <div class="section-hint">단원을 마치거나 교재를 마무리하며 본 평가예요</div>
+        <div class="section-hint">${isProgram(book) ? "차시를" : "단원을"} 마치거나 ${josa(bookNoun(book), "을", "를")} 마무리하며 본 평가예요</div>
         ${finalTests.map((t) => {
           // 마무리 평가는 교재 전체 평가라 범위·단원을 보이지 않는다(단원 평가로 만든 뒤 바꿔 남은 값).
           const isFinal = testKind(t) === "마무리 평가"
@@ -772,7 +779,7 @@ function renderBookDetail() {
             <div class="log-meta">${renderLogMetaRows(isFinal ? "" : t.unit, t.comment ? `선생님 한마디: ${t.comment}` : "", [withDow(t.date), typeof t.classAvg === "number" ? `반 평균 ${t.classAvg}점` : null].filter(Boolean))}</div>
           </div>`
         }).join("")}
-        ${trendPoints.filter((p) => p.avg !== null).length >= 2 ? `<h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></span>이 교재 평가 추이</h3>${buildTestTrendChartHtml(trendPoints)}` : ""}` : ""
+        ${trendPoints.filter((p) => p.avg !== null).length >= 2 ? `<h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></span>이 ${bookNoun(book)} 평가 추이</h3>${buildTestTrendChartHtml(trendPoints)}` : ""}` : ""
   const sorted = items.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
   const studiedUnitKeys = new Set()
   const studiedUnitList = []
@@ -807,7 +814,7 @@ function renderBookDetail() {
             <span class="crumb-sep">›</span>
             <span class="crumb" onclick="closeBookDetail()">${esc(r.class_name)}</span>
             <span class="crumb-sep">›</span>
-            <span class="crumb" onclick="closeBookDetail()">교재</span>
+            <span class="crumb" onclick="closeBookDetail()">${regBookNoun(r)}</span>
             <span class="crumb-sep">›</span>
             <span class="crumb current">${esc(selectedBookTitle)}</span>
           </div>
@@ -832,7 +839,7 @@ function renderBookDetail() {
             <div class="book-cover-card-img">${book.cover ? `<img src="${esc(book.cover)}" alt="${esc(selectedBookTitle)}">` : `<span class="cover-fallback-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></span>`}</div>
             <div class="book-cover-card-info">
               <div class="book-cover-info-row">
-                <span class="info-label">단원목록</span>
+                <span class="info-label">${isProgram(book) ? "차시 목록" : "단원목록"}</span>
                 <ul class="unit-list">
                   ${unitList.length ? unitList.map((u) => `<li>${esc(u.text)}${u.done ? ' <span class="inline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg></span>' : ""}</li>`).join("") : `<li class="empty">-</li>`}
                 </ul>
@@ -847,7 +854,7 @@ function renderBookDetail() {
         </div>
         ${finalHtml}
         <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg></span>학습기록</h3>
-        <div class="section-hint">이 교재의 학습 · 과제 · 평가 기록을 최근 순서로 보여줘요</div>
+        <div class="section-hint">이 ${bookNoun(book)}의 학습 · 과제 · 평가 기록을 최근 순서로 보여줘요</div>
         <div class="seg-toggle">
           <button class="${bookLogFilter === "전체" ? "active" : ""}" onclick="setBookLogFilter('전체')">전체</button>
           <button class="${bookLogFilter === "학습" ? "active" : ""}" onclick="setBookLogFilter('학습')">학습</button>
@@ -884,7 +891,7 @@ function renderBookDetail() {
                 </div>
               `).join("")}
             </div>
-          `).join("") : `<div class="empty">이 교재와 관련된 기록이 없습니다.</div>`
+          `).join("") : `<div class="empty">이 ${josa(bookNoun(book), "과", "와")} 관련된 기록이 없습니다.</div>`
         })()}
         </div>
       </div>
