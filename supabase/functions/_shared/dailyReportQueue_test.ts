@@ -45,7 +45,7 @@ Deno.test("v2.6.20 일일 보고서 한 건: 출석 1번 읽고 최신화(공용
  assert(r.refreshed.length === 1 && r.refreshed[0].o.tokenRaw === "tok123" && /^daily:sess:\d+$/.test(r.refreshed[0].o.sharedRunKey), JSON.stringify(r.refreshed))
  const v = r.sent[0].variables
  assert(r.sent.length === 1 && r.sent[0].primaryPhone === "010-0000-0000" && v["#{학생이름}"] === "박현준" && v["#{학습내용}"] === "개념 정리" && v["#{페이지ID}"].endsWith("?token=tok123"), JSON.stringify(r.sent))
- assert(v["#{등원정보}"] === "📅 수업일  10.05(월)\n✅ 출결  출석", JSON.stringify(v))
+ assert(v["#{등원정보}"] === "📅 수업일  10.05(월)\n✅ 출결상태  출석", JSON.stringify(v))
  const att = r.patches.filter((p) => p.properties?.["보고서 전송 상태"])
  assert(att.length === 1 && statusOf(att[0]) === "✅ 완료" && att[0].properties["전송완료 체크"].checkbox === true, JSON.stringify(r.patches))
 })
