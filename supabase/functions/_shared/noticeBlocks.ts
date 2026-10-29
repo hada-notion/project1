@@ -59,14 +59,20 @@ export function letterScheduleBlock(o: { 휴원: string; 학원: string; 학사:
 	return body + (body ? noteSection(o.note) : noteSection(o.note).trimStart())
 }
 
-// 일일 보고서 #{등원정보}: [🔁 기존 결석한 날] + 📅 수업일 + ✅ 출결.
+// 일일 보고서 #{등원정보}: [🔁 기존 결석한 날] + 📅 수업일 + ✅ 출결상태.
+// (10/29 사용자) 출석 상태 "보강"은 "출석(보강)"으로 쓴다("출결 보강"은 뜻이 바로 안 읽힌다).
 export function arrivalBlock(o: { classDate: string; status: string; makeupOf?: string }): string {
 	return [
 		...(o.makeupOf ? [line("🔁", "기존", `${o.makeupOf} 결석`)] : []),
 		line("📅", "수업일", o.classDate),
 		// 출석 상태 앞의 색 이모지("🟢 출석")는 뺀다. 줄 머리가 이미 ✅다.
-		line("✅", "출결", o.status.trim().replace(/^[^\p{L}\p{N}\s]+\s*/u, "") || "-"),
+		line("✅", "출결상태", attendanceLabel(o.status)),
 	].join("\n")
+}
+
+function attendanceLabel(status: string): string {
+	const s = status.trim().replace(/^[^\p{L}\p{N}\s]+\s*/u, "")
+	return s === "보강" ? "출석(보강)" : s || "-"
 }
 
 // 일일 보고서 #{학습내용}: 그날 기록이 하나도 없을 때(결석 등) 대신 넣는 한 줄.
