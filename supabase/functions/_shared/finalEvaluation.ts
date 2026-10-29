@@ -17,6 +17,7 @@ import { DS_LEARNING_RECORD, PROP_LAST_ERROR } from "./constants.ts"
 import { enqueueSync } from "./syncQueue.ts"
 import { markDone, markError, markRunning, type StatusSpec } from "./statusTracking.ts"
 import { seoulDay } from "./classReportPlan.ts"
+import { unitIdsOf, unitRelationNameOf } from "./selectedUnits.ts"
 
 export const FINAL_EVAL_STATUS_SPEC: StatusSpec = {
 	statusProp: "교재 평가 상태",
@@ -34,7 +35,7 @@ const plain = (prop: any): string => (prop?.title ?? prop?.rich_text ?? []).map(
 const isActive = (reg: any) => !reg?.in_trash && !reg?.archived && String(reg?.properties?.["수강상태"]?.formula?.string ?? "").includes("수강 중")
 const LATEST_LOOKUP = 20
 
-export function finalRecordProps(o: { kind: BookEvalKind; bookId: string; title: string; day: string; regs: string[]; classId: string | null; libId: string | null; subjects: string[]; range?: string; units?: string[] }): Record<string, unknown> {
+export function finalRecordProps(o: { kind: BookEvalKind; bookId: string; title: string; day: string; regs: string[]; classId: string | null; libId: string | null; subjects: string[]; range?: string; units?: string[]; unitProp?: string | null }): Record<string, unknown> {
 	return {
 		"학습": { title: [{ text: { content: o.title } }] },
 		"구분": { select: { name: "평가" } },
@@ -46,19 +47,20 @@ export function finalRecordProps(o: { kind: BookEvalKind; bookId: string; title:
 		...(o.libId ? { "교재": { relation: [{ id: o.libId }] } } : {}),
 		...(o.subjects.length ? { "과목": { relation: o.subjects.map((id) => ({ id })) } } : {}),
 		...(o.range ? { "범위": { rich_text: [{ text: { content: o.range } }] } } : {}),
-		...(o.units?.length ? { "선택 단원": { relation: o.units.map((id) => ({ id })) } } : {}),
+		// 단원 관계 속성 이름은 학원마다 "단원" 또는 "선택 단원"(_shared/selectedUnits.ts). 최근 학습기록에서 찾은 이름으로 쓴다.
+		...(o.units?.length && o.unitProp ? { [o.unitProp]: { relation: o.units.map((id) => ({ id })) } } : {}),
 	}
 }
 
 // 이 교재 학습 기록(구분 학습) 중 범위나 선택 단원이 들어 있는 가장 최근 것의 범위·선택 단원. 관계 끝쪽 몇 개만 읽는다
 // (최근 기록이 뒤에 붙는다). 범위·단원을 적지 않은 기록(10/29 원본: 최근 2건이 빈 기록)은 건너뛴다. 없으면 빈 값.
-async function latestStudyOf(book: any, getPageFn: (id: string) => Promise<any>): Promise<{ range: string; units: string[] }> {
+async function latestStudyOf(book: any, getPageFn: (id: string) => Promise<any>): Promise<{ range: string; units: string[]; unitProp: string | null }> {
 	const ids = relIds(book?.properties?.["학습기록"]).slice(-LATEST_LOOKUP)
 	const pages = (await Promise.all(ids.map((id) => getPageFn(id).catch(() => null))))
 		.filter((p: any) => p && !p.in_trash && !p.archived && p.properties?.["구분"]?.select?.name === "학습")
 		.sort((a: any, b: any) => String(b.created_time ?? "").localeCompare(String(a.created_time ?? "")))
-	const last = pages.find((pg: any) => plain(pg.properties?.["범위"]) || relIds(pg.properties?.["선택 단원"]).length)
-	return { range: plain(last?.properties?.["범위"]), units: relIds(last?.properties?.["선택 단원"]) }
+	const last = pages.find((pg: any) => plain(pg.properties?.["범위"]) || unitIdsOf(pg).length)
+	return { range: plain(last?.properties?.["범위"]), units: last ? unitIdsOf(last) : [], unitProp: last ? unitRelationNameOf(last) : null }
 }
 
 // 테스트에서 Notion·큐 호출을 바꿔 끼울 수 있게 한다.
@@ -106,11 +108,11 @@ export async function processFinalEvaluationQueueItem(payload: FinalEvaluationPa
 			const reg = await deps.getPage(regs[0]).catch(() => null)
 			classId = relIds(reg?.properties?.["클래스"])[0] ?? null
 		}
-		const latest = kind === "unit" ? await latestStudyOf(book, deps.getPage) : { range: "", units: [] as string[] }
+		const latest = kind === "unit" ? await latestStudyOf(book, deps.getPage) : { range: "", units: [] as string[], unitProp: null }
 		const day = deps.today()
 		const name = plain(p["진도교재"]) || "교재"
 		const rec: any = await deps.createPage(DS_LEARNING_RECORD, finalRecordProps({
-			kind, bookId, title: `[${label}] ${name}`, day, regs, classId, libId, subjects: relIds(p["과목"]), range: latest.range, units: latest.units,
+			kind, bookId, title: `[${label}] ${name}`, day, regs, classId, libId, subjects: relIds(p["과목"]), range: latest.range, units: latest.units, unitProp: latest.unitProp,
 		}))
 		await deps.enqueue("create-assignment", { recordId: String(rec.id), plan: null })
 		console.log(`[book-evaluation] ${kind} book=${bookId} ${day} 학생 ${regs.length}명 → 학습기록 ${rec.id}`)
