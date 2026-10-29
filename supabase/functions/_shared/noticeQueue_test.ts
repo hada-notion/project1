@@ -120,6 +120,7 @@ Deno.test("v2.8.0 수강료: 같은 달 수강료를 한 통으로(수강료안�
 		await processNoticeQueueItem({ kind: "tuition", pageId: "t-math" })
 		eq(calls.sent.length, 1)
 		eq([calls.sent[0].vars["#{청구년월}"], calls.sent[0].vars["#{청구금액}"], calls.sent[0].vars["#{수강내역}"].split("\n").length, calls.sent[0].vars["#{안내멘트}"]], ["26년 11월", "470,000원", 3, "안내"])
+		eq(calls.sent[0].vars["#{수강정보}"], "📚 수강 내역\n• 수학반 150,000원\n• 영어반 200,000원\n• 국어반 120,000원")
 		eq(calls.patched.map((p) => [p.id, p.props["안내문 전송 상태"].select.name]), [["t-math", "✅ 완료"], ["t-eng", "✅ 완료"], ["t-kor", "✅ 완료"]])
 		eq(calls.logs.map((l) => [l.status, l.tuitionId]), [["성공", "t-math"], ["성공", "t-eng"], ["성공", "t-kor"]])
 	} finally { restore() }

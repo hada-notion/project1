@@ -44,6 +44,12 @@ export function eventInfoBlock(o: { time: string; note?: string }): string {
 // 가정통신문 #{클래스목록}: 반 하나면 "  중2 B"(템플릿 "🏛 클래스" 바로 뒤에 붙음), 둘 이상이면 줄바꿈 + "· 반" 목록.
 // (10/29 사용자) 알림톡 목록 줄은 모두 두 칸 들여 "  • 내용"(일일 보고서 학습내용·Notion 텍스트 목록과 같은 모양).
 export const BULLET = "  • "
+// (10/29) 솔라피는 변수 값 맨 앞의 공백(폭 없는 공백까지)을 지운다. 그래서 목록이 든 블록 변수는 머리줄로 시작한다.
+// 가정통신문 #{클래스정보}: 반 하나면 "🏛 클래스  수학반", 둘 이상이면 "🏛 클래스" 아래 "  • 반" 목록.
+export const classInfoBlock = (names: string[]) =>
+	names.length <= 1 ? `🏛 클래스  ${names[0] ?? NO_NOTE}` : ["🏛 클래스", ...names.map((n) => `${BULLET}${n}`)].join("\n")
+// 수강료 #{수강정보}: "📚 수강 내역" 머리줄 + "  • 반  금액" 줄.
+export const tuitionInfoBlock = (lines: string) => `📚 수강 내역\n${lines}`
 export const classListBlock = (names: string[]) => (names.length <= 1 ? `  ${names[0] ?? NO_NOTE}` : "\n" + names.map((n) => `${BULLET}${n}`).join("\n"))
 
 // 가정통신문 #{일정목록}: 일정이 있는 구역만(휴원 → 학원 → 학사) + [📝 전달사항]. 구역 값이 비었거나 "없음"이면 뺀다.

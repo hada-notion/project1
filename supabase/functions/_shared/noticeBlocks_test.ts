@@ -10,6 +10,7 @@ Deno.test("v2.8.0 통일안 블록: 기존·전달사항은 있을 때만, 일�
 	eq(b.lessonInfoBlock({ classTime: "26.10.31(토) 18:00", makeupOf: "26.10.12(월)", note: "교재 지참" }), "🔁 기존  26.10.12(월) 결석\n📅 일시  26.10.31(토) 18:00\n\n📝 전달사항\n교재 지참")
 	eq(b.eventInfoBlock({ time: "26.11.05(목) 18:00", note: "" }), "📅 일시  26.11.05(목) 18:00")
 	eq(b.classListBlock(["중2 B"]), "  중2 B")
+	eq([b.classInfoBlock(["중2 B"]), b.classInfoBlock(["중2 B 수학", "중2 영어 A"]), b.tuitionInfoBlock("  • 수학반  150,000원")], ["🏛 클래스  중2 B", "🏛 클래스\n  • 중2 B 수학\n  • 중2 영어 A", "📚 수강 내역\n  • 수학반  150,000원"])
 	eq(b.classListBlock(["중2 B 수학", "중2 영어 A"]), "\n  • 중2 B 수학\n  • 중2 영어 A")
 	eq(b.letterScheduleBlock({ 휴원: "없음", 학원: "11/13(금)\n· 보충", 학사: "11/9(월)~11(수)\n· 기말고사", note: "교재 지참" }), "📆 학원 일정\n11/13(금)\n· 보충\n\n🏫 학사 일정\n11/9(월)~11(수)\n· 기말고사\n\n📝 전달사항\n교재 지참")
 	eq(b.letterScheduleBlock({ 휴원: "12/31(목)\n· 연말 휴원", 학원: "없음", 학사: "", note: "없음" }), "💤 휴원 일정\n12/31(목)\n· 연말 휴원")
@@ -44,7 +45,4 @@ Deno.test("v2.8.0 통일안 템플릿 맞춤: 본문·제목·버튼에 있는 �
 	eq(await fit.fitVariablesToTemplate(reader, "", vars), vars)
 	const withButton = { getKakaoAlimtalkTemplate: async () => ({ content: "#{학습내용}", buttons: [{ linkMo: "https://x/#{페이지ID}" }] }) }
 	eq(await fit.fitVariablesToTemplate(withButton, "T3", { "#{학습내용}": "a", "#{페이지ID}": "b", "#{수업일}": "c" }), { "#{학습내용}": "a", "#{페이지ID}": "b" })
-	// 공백으로 시작하는 값은 맨 앞에 폭 없는 공백(U+200B)을 붙인다(솔라피가 맨 앞 공백을 지움). 나머지는 그대로.
-	eq(await fit.fitVariablesToTemplate(withButton, "T3", { "#{학습내용}": "  • 첫 줄\n  • 둘째 줄", "#{페이지ID}": "b" }), { "#{학습내용}": "\u200B  • 첫 줄\n  • 둘째 줄", "#{페이지ID}": "b" })
-	eq(await fit.fitVariablesToTemplate(broken, "T2", { "#{클래스목록}": "  수학반" }), { "#{클래스목록}": "\u200B  수학반" })
 })

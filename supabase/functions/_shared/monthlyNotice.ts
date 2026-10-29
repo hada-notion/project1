@@ -18,7 +18,7 @@ import { isParentPublicEvent } from "./scheduleVisibility.ts"
 import { inPeriodRegistration, resolveBatchDataSourceId, seoulDay, studentNameOf } from "./classReportPlan.ts"
 import { eventLine, inMonth, isAcademyWide, monthFilter, monthLabel, nextMonthKey, type Section, sectionOf, sectionText } from "./scheduleNotice.ts"
 import { noteText } from "./lessonNotice.ts"
-import { alimtalkVar, BULLET, classListBlock, letterScheduleBlock, NO_NOTE } from "./noticeBlocks.ts"
+import { alimtalkVar, BULLET, classInfoBlock, classListBlock, letterScheduleBlock, NO_NOTE } from "./noticeBlocks.ts"
 
 export const KIND_MONTHLY = "가정통신문"
 // (10/28) 수강료 생성은 보고서처럼 반 발송함(구분 "수강료", 반 × 달)을 만든다.
@@ -487,6 +487,8 @@ export async function buildLetterNotice(letter: any): Promise<{ registrationId: 
 			"#{클래스}": f("클래스", classNamesOf(regs).join(" · ")),
 			// 옛 (일정안내) 수식은 ": 반" 모양이라 읽지 않는다. 둘 이상이면 "• 반" 목록.
 			"#{클래스목록}": alimtalkVar(fresh, "클래스목록", classListText(classNamesOf(regs))),
+			// (10/29 다시 신청한 본문) 머리줄 "🏛 클래스"까지 담는 블록. 값이 공백으로 시작하지 않게.
+			"#{클래스정보}": alimtalkVar(fresh, "클래스정보", classInfoBlock(classNamesOf(regs))),
 			"#{안내월}": f("안내월", monthLabel(month)),
 			"#{일정목록}": alimtalkVar(fresh, "일정목록", letterScheduleBlock({ 휴원: rest, 학원: academy, 학사: school, note })),
 			"#{휴원일정}": rest,
