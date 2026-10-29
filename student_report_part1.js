@@ -126,12 +126,13 @@ function testCompareBarsHtml(t) {
 // 학습기록 카드의 단원·내용은 각각 독립된 줄로 표시한다.
 // 단원은 "1-1." 같은 번호 패턴 앞에서 잘라 하나씩 별도 줄(불릿)로 보여준다 (단원이 하나뿐이어도 동일하게 처리).
 // 마감/날짜에도 같은 불릿 스타일을 쓰고, 내용은 원문만 그대로 보여준다.
+// 서버는 고른 단원 이름을 띄어쓰기로 이어 보낸다. 교과 "1-2. 정수…", 예체능 "1차시 색 섞기" 앞에서 나눈다(v2.8.0 예체능).
+function splitUnits(unit) {
+  return String(unit || "").split(/(?=\d+-\d+\.)|\s+(?=\d+차시)/).map((s) => s.trim()).filter(Boolean)
+}
 function renderLogMetaRows(unit, note, extraRows = []) {
   const unitRow = unit
-    ? unit
-        .split(/(?=\d+-\d+\.)/)
-        .map((s) => s.trim())
-        .filter(Boolean)
+    ? splitUnits(unit)
         .map((part) => `<div class="log-context">${esc(`• ${part}`)}</div>`)
         .join("")
     : ""
@@ -804,7 +805,7 @@ function renderBookDetail() {
   const studiedUnitList = []
   items.slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)).forEach((l) => {
     if (!l.unit) return
-    l.unit.split(/(?=\d+-\d+\.)/).map((s) => s.trim()).filter(Boolean).forEach((part) => {
+    splitUnits(l.unit).forEach((part) => {
       const m = part.match(/^(\d+-\d+)/)
       const key = m ? m[1] : part
       studiedUnitKeys.add(key)
