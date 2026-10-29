@@ -495,6 +495,8 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
         status: normalizeStatus(text(props["과제상태"])),
         correct: numberOf(props["정답 문항"]) ?? 0,
         total: numberOf(props["전체 문항"]) ?? 0,
+        // (v2.8.0 종합 평가, 항목 16) 학생별 선생님 한마디. 리포트 교재 상세의 종합 평가 카드에 보인다(칸이 없으면 빈 값).
+        comment: text(props["선생님 한마디"]),
         bookTitle: source?.bookTitle ?? "",
         range: source?.range ?? "",
         unit: source?.unit ?? "",
@@ -637,6 +639,7 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
       eval_start: a.evalStart,
       eval_end: a.evalEnd,
       standalone: a.standalone,
+      comment: a.comment,
       class_avg: classAverages[i]?.avg ?? null,
       class_count: classAverages[i]?.count ?? 0,
       source_body: a.learningRecordId ? (sourcePageBodies.get(a.learningRecordId) ?? []) : [],

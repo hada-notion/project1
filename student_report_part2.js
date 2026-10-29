@@ -434,7 +434,7 @@ const logItemOfStudy = (l) => ({ type: "학습", icon: KIND_ICONS["학습"], dat
 const logItemOfHomework = (h) => ({ type: "과제", icon: KIND_ICONS["과제"], date: h.classDate || h.due, due: h.due, classDate: h.classDate, title: [h.book, h.range].filter(Boolean).join(" · "), unit: h.unit, note: h.note, pill: h.status, pillTone: homeworkPillTone(h.status), book: h.book, sourceBody: h.sourceBody, activityBody: h.activityBody })
 // 평가 아이콘은 학습기록 탭이 써 온 Feather file-text 그대로(KIND_ICONS 평가와 줄 하나 다름)
 const LOG_TEST_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`
-const logItemOfTest = (t) => ({ type: "평가", icon: LOG_TEST_ICON, date: t.date, title: testTitle(t), extraRows: testEvalRow(t) ? [testEvalRow(t)] : [], unit: t.unit, note: t.note, pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), book: t.book, sourceBody: t.sourceBody, activityBody: t.activityBody , compare: testCompareBarsHtml(t) })
+const logItemOfTest = (t) => ({ type: "평가", icon: LOG_TEST_ICON, date: t.date, title: testTitle(t), extraRows: testEvalRow(t) ? [testEvalRow(t)] : [], unit: t.unit, note: t.note, pill: testPillText(t), pillTone: testPillTone(t), book: t.book, sourceBody: t.sourceBody, activityBody: t.activityBody , compare: testCompareBarsHtml(t) })
 // 고른 날짜의 기록: 출석 상태 + 그날 학습·그날 낸 과제·그날 평가. v2.5.101부터 한 카드에 구분선으로 잇지 않고 학습기록 탭과 같은 독립 카드.
 function buildCalDayPanelHtml(r, date) {
   const att = (r.attendance_rows || []).find((a) => a.date === date)
@@ -499,7 +499,7 @@ function buildHomeTabHtml(r) {
   const recentTests = (r.tests || []).filter((t) => t.date && t.date <= MOCK_TODAY).slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 3)
   const topHtml = isTestsOnly(r) ? `
       <h3 class="sec-title"><span class="sec-icon">${KIND_ICONS["평가"]}</span>최근 평가</h3>
-      <div class="card">${recentTests.length ? recentTests.map((t) => kindBlockHtml("평가", { title: testTitle(t), pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), sub: [shortDateDow(t.date), testEvalRow(t)].filter(Boolean).join(" · ") })).join("") : `<div class="empty">아직 평가 기록이 없어요.</div>`}</div>
+      <div class="card">${recentTests.length ? recentTests.map((t) => kindBlockHtml("평가", { title: testTitle(t), pill: testPillText(t), pillTone: testPillTone(t), sub: [shortDateDow(t.date), testEvalRow(t)].filter(Boolean).join(" · ") })).join("") : `<div class="empty">아직 평가 기록이 없어요.</div>`}</div>
       <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span>최근 평가 추이</h3>
       <div class="card">${buildTestTrendChartHtml(computeRecentTestPoints(r.tests || [], MOCK_TODAY, 5))}</div>` : ""
   return `
@@ -1027,7 +1027,7 @@ function buildDailyBodyHtml(r, date) {
     groupBand(nextHomeworkItems, (h) => reportItemHtml(r, h, { pill: h.status, pillTone: homeworkPillTone(h.status), extraRows: [h.classDate ? `출제: ${withDow(h.classDate)}` : null, `마감: ${withDow(h.due)}`].filter(Boolean) }), "출제된 과제가 없어요.")
   const testHtml =
     sub("이번 평가") +
-    groupBand(todaysTests, (t) => reportItemHtml(r, t, { pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), compare: testCompareBarsHtml(t) }), "이날 평가가 없어요.") +
+    groupBand(todaysTests, (t) => reportItemHtml(r, t, { pill: testPillText(t), pillTone: testPillTone(t), compare: testCompareBarsHtml(t) }), "이날 평가가 없어요.") +
     sub("최근 평가 추이") +
     band(buildTestTrendChartHtml(computeRecentTestPoints(dailyTests, date, 3)))
   const commentHtml = comment
