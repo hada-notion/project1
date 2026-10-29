@@ -1,4 +1,5 @@
 import { queryAllPages, mapWithConcurrency } from "./notionClient.ts"
+import { routineRowsForRegistration, type RoutineRow } from "./routineCheck.ts"
 import { readPageBodyBlocks } from "./feedBody.ts"
 import { parseTokenValue } from "./adminShared.ts"
 import {
@@ -673,9 +674,18 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
       activity_body: activityPageBodies.get(a.id) ?? [],
     }))
 
+  // (v2.8.0 루틴, 항목 18) 루틴 체크(했다/안 했다). 날짜는 출석의 수업일시. 루틴 체크 DB가 없는 운영은 빈 목록.
+  const attendanceIsoById = new Map<string, string>()
+  attendanceRows.forEach((r) => { if (r.class_iso) attendanceIsoById.set(String(r.notion_page_id).replace(/-/g, ""), r.class_iso) })
+  const routines = (await routineRowsForRegistration(registrationId, cachedGetPage, attendanceIsoById, kstDateOf).catch((err) => {
+    console.warn("[report-cache] 루틴 체크 건너뜀:", (err as Error).message)
+    return [] as RoutineRow[]
+  })).filter((r) => r.date >= sinceIso && r.date <= todayIso)
+
   return {
     attendance_summary,
     attendance_rows,
+    routines,
     study_logs: studyLogsWithActivity,
     homework,
     homework_days,
