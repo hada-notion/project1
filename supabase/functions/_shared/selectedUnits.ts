@@ -44,6 +44,8 @@ export function cleanUnitIds(v: unknown): string[] | null {
 	return [...new Set(v.filter(isId))].slice(0, 60)
 }
 
+// (v2.8.0 교재 평가) 이 페이지의 단원 관계 속성 이름("단원" 또는 "선택 단원", 없으면 null). 단원 평가가 같은 이름으로 쓴다.
+export const unitRelationNameOf = (record: Page): string | null => relationName(record?.properties)
 export const unitIdsOf = (record: Page): string[] => { const n = relationName(record?.properties); return n ? relationIds(record.properties[n]) : [] }
 
 // 기록들의 고른 단원 id → 이름. 라이브러리 복사본에서 먼저, 없으면 Notion 페이지 제목.
