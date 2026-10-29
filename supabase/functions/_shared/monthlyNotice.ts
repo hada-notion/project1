@@ -60,7 +60,6 @@ const PROP_LETTER_REG = "등록"
 const PROP_LETTER_MAILBOX = "알림톡 발송함"
 export const PROP_LETTER_SIBLINGS = "같은 달 가정통신문"
 const PROP_LETTER_EVENTS = "학원 일정"
-const PROP_LETTER_NOTE = "가정통신문 메모"
 
 export type CreateClassPayload = { classId: string; month: string }
 export type CreateRegPayload = { classId: string; month: string; regId: string; amount: number | null; mailboxId?: string; last?: boolean }
@@ -428,10 +427,9 @@ const classNamesOf = (regs: any[]) => Array.from(new Set(regs.map(classNameOfReg
 // (v2.8.0 통일안) 템플릿 "🏛 클래스#{클래스목록}"용: 반 하나면 "  영어반"(두 칸), 둘 이상이면 줄을 바꿔 "· 반" 목록.
 export const classListText = classListBlock
 
-// (10/29 사용자) 전달사항: 같은 달 반마다 가정통신문 발송함의 '가정통신문 전달사항'(반 이름순) + 맨 아래 이 장의 '가정통신문 메모'(학생 개별).
-// 하나뿐이면 문장만, 둘 이상이면 "  • (반 이름) …" 줄들 뒤에 "  • …"(개별은 머리 없이). 모두 비면 없음. 문구마다 50자까지.
+// (10/29 사용자) 전달사항: 같은 달 반마다 가정통신문 발송함의 '가정통신문 전달사항'(반 이름순). 가정통신문은 반 공지라
+// 학생 개인 메모는 넣지 않는다(개별 전달은 따로 메시지로). 하나뿐이면 문장만, 둘 이상이면 "  • (반 이름) …" 줄. 모두 비면 없음. 문구마다 50자까지.
 export async function letterNote(letter: any, regs: any[]): Promise<string> {
-	const own = textOf(letter?.properties?.[PROP_LETTER_NOTE]?.rich_text).trim()
 	const className = new Map(regs.map((r: any) => [key(r.id), classNameOfReg(r)]))
 	const sibs = await Promise.all(relIds(letter?.properties?.[PROP_LETTER_SIBLINGS]).map((id) => monthlyDeps.getPage(id).catch(() => null)))
 	const seen = new Set<string>()
@@ -445,11 +443,10 @@ export async function letterNote(letter: any, regs: any[]): Promise<string> {
 		const memo = textOf(box?.properties?.[PROP_BOX_LETTER_NOTE]?.rich_text).trim()
 		if (memo) perClass.push([name, noteText(memo)])
 	}
-	const lines = perClass.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).map(([name, text]) => [`(${name}) ${text}`, text])
-	if (own) lines.push([noteText(own), noteText(own)])
-	if (!lines.length) return noteText("")
-	if (lines.length === 1) return lines[0][1]
-	return lines.map(([line]) => `${BULLET}${line}`).join("\n")
+	perClass.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+	if (!perClass.length) return noteText("")
+	if (perClass.length === 1) return perClass[0][1]
+	return perClass.map(([name, text]) => `${BULLET}(${name}) ${text}`).join("\n")
 }
 
 // 월간 일정 안내 한 통의 변수. 보내기 직전에 '학원 일정'을 다시 넣고 페이지를 다시 읽어 (일정안내) 수식 값을 먼저 쓴다.
@@ -480,7 +477,7 @@ export async function buildLetterNotice(letter: any): Promise<{ registrationId: 
 	const studentName = studentNameOf(reg)
 	const rest = f("휴원일정", sectionText(lines, "휴원")), academy = f("학원일정", sectionText(lines, "학원")), school = f("학사일정", sectionText(lines, "학교"))
 	const note = f("전달사항", await letterNote(fresh, regs))
-	if (!lines.length && (!note.trim() || note.trim() === NO_NOTE)) throw new LetterBlocked(`${monthLabel(month)} 학부모 공개 일정과 전달사항이 없어 보내지 않았습니다. 일정이나 가정통신문 메모(또는 클래스 안내 메모)를 넣은 뒤 [안내문 전송]을 누르세요.`)
+	if (!lines.length && (!note.trim() || note.trim() === NO_NOTE)) throw new LetterBlocked(`${monthLabel(month)} 학부모 공개 일정과 전달사항이 없어 보내지 않았습니다. 일정이나 발송함 가정통신문 전달사항을 넣은 뒤 [안내문 전송]을 누르세요.`)
 	return {
 		registrationId,
 		title: studentName || "월간 일정 안내",

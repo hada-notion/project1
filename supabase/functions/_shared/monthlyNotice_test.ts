@@ -200,8 +200,8 @@ Deno.test("v2.8.0 [가정통신문 생성]: 반 가정통신문 발송함을 찾
 Deno.test("v2.8.0 가정통신문 보내기 변수: 학원 일정을 다시 넣고 (일정안내) 수식 우선, 없으면 서버 계산(학생·두 반·연결 안 된 일정), 일정 0건이면 전달사항만, 둘 다 없으면 막음", async () => {
 	const rA = reg("rA", { student: "s1", name: "테스트학생", cls: "cA", clsName: "수학반" })
 	const rB = reg("rB", { student: "s1", name: "테스트학생", cls: "cB", clsName: "영어반" })
-	const letter = { id: "lA", properties: { "기간": date("2026-11-01", "2026-11-30"), "등록": rel("rA"), "학원 일정": rel(), "가정통신문 메모": rt(""), "알림톡 발송함": rel("bA"), "같은 달 가정통신문": rel("lB") } }
-	const letterB = { id: "lB", properties: { "기간": date("2026-11-01", "2026-11-30"), "등록": rel("rB"), "학원 일정": rel(), "가정통신문 메모": rt(""), "알림톡 발송함": rel("bB"), "같은 달 가정통신문": rel("lA") } }
+	const letter = { id: "lA", properties: { "기간": date("2026-11-01", "2026-11-30"), "등록": rel("rA"), "학원 일정": rel(), "알림톡 발송함": rel("bA"), "같은 달 가정통신문": rel("lB") } }
+	const letterB = { id: "lB", properties: { "기간": date("2026-11-01", "2026-11-30"), "등록": rel("rB"), "학원 일정": rel(), "알림톡 발송함": rel("bB"), "같은 달 가정통신문": rel("lA") } }
 	const academy = ev("e-all", { name: "학원 설명회", start: "2026-11-14" })
 	const classB = ev("e-b", { name: "보충", start: "2026-11-07", cls: ["cB"] })
 	const box = (id: string, memo: string) => ({ id, properties: { "가정통신문 전달사항": rt(memo) } })
@@ -223,10 +223,9 @@ Deno.test("v2.8.0 가정통신문 보내기 변수: 학원 일정을 다시 넣�
 	eq([built.registrationId, built.variables["#{클래스}"], built.variables["#{안내월}"], built.variables["#{학원일정}"], built.variables["#{전달사항}"], built.variables["#{페이지ID}"].endsWith("?token=tok")],
 		["rA", "수학반 · 영어반", "11월", "  • 11.07(토) 영어반 보충\n  • 11.14(토) 학원 설명회", "교재 지참", true])
 	eq(built.variables["#{클래스목록}"], "\n  • 수학반\n  • 영어반")
-	// (10/29) 전달사항: 반 발송함 메모 "  • (반) 문구"(반 이름순) 뒤에 이 장 메모 "  • 문구"(머리 없이)
-	pages.lA = { ...letter, properties: { ...letter.properties, "가정통신문 메모": rt("11/12 상담이 있습니다.") } }
+	// (10/29) 전달사항: 반 발송함 메모만 "  • (반) 문구"(반 이름순). 학생 개인 메모는 넣지 않는다
 	pages.bA = box("bA", "단원평가 범위는 3단원")
-	eq(await m.letterNote(pages.lA, [rB, rA]), "  • (수학반) 단원평가 범위는 3단원\n  • (영어반) 교재 지참\n  • 11/12 상담이 있습니다.")
+	eq(await m.letterNote(letter, [rB, rA]), "  • (수학반) 단원평가 범위는 3단원\n  • (영어반) 교재 지참")
 	pages.bA = box("bA", "")
 	// 수식 값이 있으면 그것을 쓴다(다시 읽은 페이지 기준)
 	pages.lA = { ...letter, properties: { ...letter.properties, "학원일정(일정안내)": fx("수식 줄") } }
