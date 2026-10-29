@@ -47,6 +47,7 @@ import { CASCADE_DELETE_STATUS_SPEC } from "../_shared/cascadeDeleteTarget.ts"
 import { ASSIGNMENT_GEN_STATUS_SPEC } from "../_shared/createAssignmentTarget.ts"
 import { CLASS_REPORT_GEN_STATUS_SPEC, resolveBatchDataSourceId } from "../_shared/classReportPlan.ts"
 import { BATCH_EVAL_STATUS_SPEC } from "../_shared/evaluationPlan.ts"
+import { FINAL_EVAL_STATUS_SPEC } from "../_shared/finalEvaluation.ts"
 import { SCHEDULE_NOTICE_STATUS_SPEC } from "../_shared/scheduleNotice.ts"
 import { CLASS_LETTER_GEN_STATUS_SPEC, CLASS_TUITION_GEN_STATUS_SPEC } from "../_shared/monthlyNotice.ts"
 import { resolveMenuDataSourceId } from "../_shared/menuDataSource.ts"
@@ -95,6 +96,8 @@ const TARGETS: Array<{ label: string; dataSourceId: string | (() => Promise<stri
 	{ label: "클래스:보고서생성", dataSourceId: DS_CLASS, spec: CLASS_REPORT_GEN_STATUS_SPEC },
 	// (v2.8.0) 알림톡 발송함 [평가 생성]. 발송함 DB는 전용 Secret 없이 보고서 DB 관계에서 찾는다.
 	{ label: "발송함:평가생성", dataSourceId: resolveBatchDataSourceId, spec: BATCH_EVAL_STATUS_SPEC },
+	// (v2.9.0) 진도교재 [종합 평가 만들기].
+	{ label: "진도교재:종합평가", dataSourceId: DS_PROGRESS_BOOK, spec: FINAL_EVAL_STATUS_SPEC },
 	// (v2.8.0) 일정 안내(일정 한 건).
 	{ label: "일정:일정안내", dataSourceId: DS_SCHEDULE_EVENT, spec: SCHEDULE_NOTICE_STATUS_SPEC },
 	// (v2.8.0) 클래스 [월 수강료 생성].

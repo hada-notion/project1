@@ -10,6 +10,9 @@
 //
 // (v2.8.0) 경로 /evaluations: 알림톡 발송함 [평가 생성]. 본문의 발송함 수식 '평가 계획'(체크한 진도교재마다 평가 1개)을
 // 큐에 넣는다. 처리는 _shared/evaluationPlan.ts. 상태는 발송함 '평가 생성 상태'.
+//
+// (v2.9.0) 경로 /final-evaluation: 진도교재 [종합 평가 만들기]. 그 교재의 수강 중 학생으로 종합 평가 학습기록을 만든다.
+// 처리는 _shared/finalEvaluation.ts. 상태는 진도교재 '종합 평가 상태'.
 import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 import { getCurrentAdminKey, resolveAdminKeyFromRequest } from "../_shared/adminShared.ts"
 import { describeBody, extractPageId, getPage } from "../_shared/notionClient.ts"
@@ -18,6 +21,7 @@ import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 import { isRunning, markError, markQueued } from "../_shared/statusTracking.ts"
 import { CLASS_REPORT_GEN_STATUS_SPEC, TARGET_CLASS_REPORTS, reportRequestFromProps, type ClassReportsPayload } from "../_shared/classReportPlan.ts"
 import { BATCH_EVAL_STATUS_SPEC, EVAL_PLAN_PROP, TARGET_BATCH_EVALUATIONS, evalPlanText } from "../_shared/evaluationPlan.ts"
+import { FINAL_EVAL_STATUS_SPEC, TARGET_FINAL_EVALUATION } from "../_shared/finalEvaluation.ts"
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } })
 
@@ -31,7 +35,9 @@ Deno.serve(async (req: Request) => {
 	const currentAdminKey = securityEnabled() ? "" : await getCurrentAdminKey()
 	if (!adminKey || !await authorizeKey(req, adminKey, currentAdminKey)) return json({ error: "unauthorized" }, 401)
 
-	if (new URL(req.url).pathname.split("/").pop() === "evaluations") return await queueEvaluations(body)
+	const route = new URL(req.url).pathname.split("/").pop()
+	if (route === "evaluations") return await queueEvaluations(body)
+	if (route === "final-evaluation") return await queueFinalEvaluation(body)
 
 	const classId = extractPageId(body)
 	if (!classId) return json({ error: "pageId를 찾을 수 없음" }, 400)
@@ -59,6 +65,24 @@ Deno.serve(async (req: Request) => {
 		return json({ ok: false, error: (err as Error).message }, 500)
 	}
 })
+
+// 진도교재 [종합 평가 만들기]: 잠금 확인 → ⏳ 대기열 → 큐. 대상 학생 확인은 큐가 한다.
+async function queueFinalEvaluation(body: Record<string, unknown>): Promise<Response> {
+	const bookId = extractPageId(body)
+	if (!bookId) return json({ error: "pageId를 찾을 수 없음" }, 400)
+	try {
+		const page = await getPage(bookId)
+		if (isRunning(page, FINAL_EVAL_STATUS_SPEC)) return json({ ok: true, message: "already_processing", bookId })
+		await markQueued(bookId, FINAL_EVAL_STATUS_SPEC)
+		await enqueueSync(TARGET_FINAL_EVALUATION, { bookId })
+		wakeSyncQueueWorker()
+		return respondAccepted({ bookId, queued: true })
+	} catch (err) {
+		console.error("[create-class-reports/final-evaluation] ERROR:", (err as Error).message)
+		await markError(bookId, FINAL_EVAL_STATUS_SPEC, (err as Error).message).catch(() => {})
+		return json({ ok: false, error: (err as Error).message }, 500)
+	}
+}
 
 // 발송함 [평가 생성]: 잠금 확인 → ⏳ 대기열 → 큐. 계획 검사·발송함 구분 확인은 큐가 한다(발송함을 이미 읽으므로).
 async function queueEvaluations(body: Record<string, unknown>): Promise<Response> {
