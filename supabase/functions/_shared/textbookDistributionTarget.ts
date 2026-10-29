@@ -51,6 +51,16 @@ const STATUS_ELIGIBLE = "진행 중"
 const PROP_REGISTRATION_BOOKS = "진도교재"
 const PROP_REGISTRATION_CART = "교재비"
 
+// (v2.8.0 예체능) 라이브러리 `구분`이 프로그램이면 가격(= 재료비)이 있을 때만 교재비에 담는다.
+// 교재(구분 비어 있음 포함)는 가격과 상관없이 예전처럼 담는다. 교재비 수식 "담기 계획"도 같은 규칙.
+export const PROP_LIBRARY_KIND = "구분"
+export const PROP_LIBRARY_PRICE = "가격"
+export function isBillableLibrary(page: any): boolean {
+	const p = page?.properties ?? {}
+	if (String(p[PROP_LIBRARY_KIND]?.select?.name ?? "") !== "프로그램") return true
+	return Number(p[PROP_LIBRARY_PRICE]?.number ?? 0) > 0
+}
+
 // (2026-09-22, 처리 상태 관리 리팩토링 Phase 3) 기존 setCartStatus(makeSyncStatusSetter(PROP_CART_RUNNING),
 // 체크박스 잠금 + setStatus 콜백)를 상태(select)+처리 시작 시각 방식으로 전환했다. 이 DB에는 이미
 // "삭제 상태"/"교재비 생성 상태"(클래스 DB 쪽) 같은 접두사 붙은 상태 속성들이 있어서, sync-exam-scope
@@ -120,15 +130,20 @@ export async function distributeForRegistration(
 		for (const id of libraryIds(dist)) billedBookIds.add(id)
 	}
 
-	const newBookIds = [...eligibleBookIds].filter((id) => !billedBookIds.has(id))
-	if (newBookIds.length === 0) return { status: "already_billed" }
+	const unbilledIds = [...eligibleBookIds].filter((id) => !billedBookIds.has(id))
+	if (unbilledIds.length === 0) return { status: "already_billed" }
+
+	const newBookIds: string[] = []
+	const newBookPages: any[] = []
+	for (const id of unbilledIds) {
+		const page = await getPage(id)
+		if (!isBillableLibrary(page)) continue
+		newBookIds.push(id)
+		newBookPages.push(page)
+	}
+	if (newBookIds.length === 0) return { status: "no_eligible_books" }
 
 	const { cartId, cartCreated } = await ensureCartForRegistration(registrationId, registration)
-
-	const newBookPages: any[] = []
-	for (const id of newBookIds) {
-		newBookPages.push(await getPage(id))
-	}
 	const distributions: any[] = []
 	const distLibraryProp = newBookIds.length ? await libraryPropOf(DATA_SOURCE_TEXTBOOK_DISTRIBUTION) : LIBRARY_PROP
 	for (let idx = 0; idx < newBookIds.length; idx++) {

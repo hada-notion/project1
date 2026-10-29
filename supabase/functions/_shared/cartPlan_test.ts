@@ -72,3 +72,9 @@ Deno.test("v2.6.26 큐: 계획 형식 오류는 만들지 않고 ⚠️ 오류(�
 		eq(calls.errors.length, 1)
 	} finally { restore() }
 })
+
+Deno.test("v2.8.0 예체능: 프로그램은 가격(재료비)이 있을 때만 교재비에 담고, 교재는 가격과 상관없이 담는다", async () => {
+	const { isBillableLibrary } = await import("./textbookDistributionTarget.ts")
+	const lib = (kind: string | null, price: number | null) => ({ properties: { "구분": { type: "select", select: kind ? { name: kind } : null }, "가격": { type: "number", number: price } } })
+	eq([lib(null, null), lib("교재", 0), lib("프로그램", null), lib("프로그램", 0), lib("프로그램", 20000), { properties: {} }].map(isBillableLibrary), [true, true, false, false, true, true])
+})
