@@ -145,7 +145,7 @@ Deno.test("v2.8.0 월간 일정 안내: 반 이름은 이름순, 두 반 이상 
 	eq(m.withClassPrefix("11/14(토) 중1 B 보충 수업", ev1, names), "11/14(토) 중1 B 보충 수업")
 	// (v2.8.0 통일안) #{클래스목록}: 반 하나면 두 칸 띄워 옆에, 둘 이상이면 줄을 바꿔 · 목록
 	eq(m.classListText(["영어반"]), "  영어반")
-	eq(m.classListText(["국어반", "수학반"]), "\n· 국어반\n· 수학반")
+	eq(m.classListText(["국어반", "수학반"]), "\n  • 국어반\n  • 수학반")
 })
 
 const ev = (id: string, o: { name: string; cat?: string; start: string; end?: string; cls?: string[]; stu?: string[]; school?: string[]; grade?: string[] }) => ({ id, properties: {
@@ -197,13 +197,15 @@ Deno.test("v2.8.0 [가정통신문 생성]: 반 가정통신문 발송함을 찾
 	eq(c2.marks, ["done:cA"])
 })
 
-Deno.test("v2.8.0 가정통신문 보내기 변수: 학원 일정을 다시 넣고 (일정안내) 수식 우선, 없으면 서버 계산(학생·두 반·연결 안 된 일정), 0건이면 막음", async () => {
+Deno.test("v2.8.0 가정통신문 보내기 변수: 학원 일정을 다시 넣고 (일정안내) 수식 우선, 없으면 서버 계산(학생·두 반·연결 안 된 일정), 일정 0건이면 전달사항만, 둘 다 없으면 막음", async () => {
 	const rA = reg("rA", { student: "s1", name: "테스트학생", cls: "cA", clsName: "수학반" })
 	const rB = reg("rB", { student: "s1", name: "테스트학생", cls: "cB", clsName: "영어반" })
-	const letter = { id: "lA", properties: { "기간": date("2026-11-01", "2026-11-30"), "등록": rel("rA"), "학원 일정": rel(), "가정통신문 메모": rt("") } }
+	const letter = { id: "lA", properties: { "기간": date("2026-11-01", "2026-11-30"), "등록": rel("rA"), "학원 일정": rel(), "가정통신문 메모": rt(""), "알림톡 발송함": rel("bA"), "같은 달 가정통신문": rel("lB") } }
+	const letterB = { id: "lB", properties: { "기간": date("2026-11-01", "2026-11-30"), "등록": rel("rB"), "학원 일정": rel(), "가정통신문 메모": rt(""), "알림톡 발송함": rel("bB"), "같은 달 가정통신문": rel("lA") } }
 	const academy = ev("e-all", { name: "학원 설명회", start: "2026-11-14" })
 	const classB = ev("e-b", { name: "보충", start: "2026-11-07", cls: ["cB"] })
-	const pages: Record<string, any> = { rA, rB, lA: letter, s1: { id: "s1", properties: { "학교": rel(), "학년": rel() } }, cA: { id: "cA", properties: { "안내 메모": rt("") } }, cB: { id: "cB", properties: { "안내 메모": rt("교재 지참") } } }
+	const box = (id: string, memo: string) => ({ id, properties: { "가정통신문 전달사항": rt(memo) } })
+	const pages: Record<string, any> = { rA, rB, lA: letter, lB: letterB, s1: { id: "s1", properties: { "학교": rel(), "학년": rel() } }, bA: box("bA", ""), bB: box("bB", "교재 지참") }
 	let all = [academy, classB]
 	const q = (ds: string, filter: any) => {
 		if (ds === "registrations") return [rB, rA]
@@ -219,13 +221,24 @@ Deno.test("v2.8.0 가정통신문 보내기 변수: 학원 일정을 다시 넣�
 	const built = await m.buildLetterNotice(letter)
 	eq(c.updates.find((u) => u.id === "lA")?.props["학원 일정"].relation, [{ id: "e-all" }])
 	eq([built.registrationId, built.variables["#{클래스}"], built.variables["#{안내월}"], built.variables["#{학원일정}"], built.variables["#{전달사항}"], built.variables["#{페이지ID}"].endsWith("?token=tok")],
-		["rA", "수학반 · 영어반", "11월", "11/7(토)\n· 영어반 보충\n11/14(토)\n· 학원 설명회", "교재 지참", true])
+		["rA", "수학반 · 영어반", "11월", "  • 11.07(토) 영어반 보충\n  • 11.14(토) 학원 설명회", "교재 지참", true])
+	eq(built.variables["#{클래스목록}"], "\n  • 수학반\n  • 영어반")
+	// (10/29) 전달사항: 반 발송함 메모 "  • (반) 문구"(반 이름순) 뒤에 이 장 메모 "  • 문구"(머리 없이)
+	pages.lA = { ...letter, properties: { ...letter.properties, "가정통신문 메모": rt("11/12 상담이 있습니다.") } }
+	pages.bA = box("bA", "단원평가 범위는 3단원")
+	eq(await m.letterNote(pages.lA, [rB, rA]), "  • (수학반) 단원평가 범위는 3단원\n  • (영어반) 교재 지참\n  • 11/12 상담이 있습니다.")
+	pages.bA = box("bA", "")
 	// 수식 값이 있으면 그것을 쓴다(다시 읽은 페이지 기준)
 	pages.lA = { ...letter, properties: { ...letter.properties, "학원일정(일정안내)": fx("수식 줄") } }
 	eq((await m.buildLetterNotice(letter)).variables["#{학원일정}"], "수식 줄")
-	// 그 달 일정 0건이면 막음
+	// 그 달 일정 0건이어도 전달사항(영어반 발송함 메모 "교재 지참" 하나 → 머리 없이)이 있으면 보낸다: 일정 구역 없이 전달사항만
 	all = []
+	pages.lA = letter
+	const noteOnly = await m.buildLetterNotice(letter)
+	eq([noteOnly.variables["#{일정목록}"], noteOnly.variables["#{학원일정}"], noteOnly.variables["#{전달사항}"]], ["📝 전달사항\n교재 지참", "없음", "교재 지참"])
+	// 일정도 전달사항도 없으면 막음
+	pages.bB = box("bB", "")
 	let msg = ""
 	try { await m.buildLetterNotice(letter) } catch (e) { msg = (e as Error).message; eq(e instanceof m.LetterBlocked, true) }
-	eq(msg.includes("일정이 없어 보내지 않았습니다"), true)
+	eq(msg.includes("일정과 전달사항이 없어 보내지 않았습니다"), true)
 })

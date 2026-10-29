@@ -10,7 +10,7 @@
 // (v2.8.0) 수강료는 같은 학생의 같은 달 수강료('같은 달 수강료')를 한 통으로 보낸다(아래 prepareTuition). 발송함 일괄은
 // 그중 하나라도 이미 보냈으면 잠그고(⚠️ 사유), 수강료 [안내문 전송](개별 전송 체크)은 잠금 없이 다시 보낸다.
 // (10/28) 가정통신문(월간 일정 안내, kind "letter")도 같다: '같은 달 가정통신문'을 한 통으로, 같은 잠금·개별 전송. 문구는
-// _shared/monthlyNotice.ts buildLetterNotice(보내기 직전 '학원 일정'을 다시 넣고 (일정안내) 수식 값 우선). 일정 0건이면 ⚠️.
+// _shared/monthlyNotice.ts buildLetterNotice(보내기 직전 '학원 일정'을 다시 넣고 (일정안내) 수식 값 우선). 일정도 전달사항도 없으면 ⚠️.
 //
 // 한 건 처리(필요한 만큼만 읽기):
 //   1) 페이지 1번 읽기 — 전송 상태가 ⚪ 대기가 아니면 건너뜀(두 번 눌러도·같은 항목이 두 번 들어와도 한 번만 보냄).
@@ -40,7 +40,7 @@ import {
 } from "./alimtalkShared.ts"
 import { refreshStudentReport } from "./dailyReportRefresh.ts"
 import { buildLetterNotice, LetterBlocked } from "./monthlyNotice.ts"
-import { alimtalkVar, reportStatusBlock, textbookBlock } from "./noticeBlocks.ts"
+import { alimtalkVar, BULLET, reportStatusBlock, textbookBlock } from "./noticeBlocks.ts"
 import { fitVariablesToTemplate } from "./templateFit.ts"
 
 export type NoticeKind = "report" | "tuition" | "textbook" | "letter"
@@ -181,7 +181,7 @@ function prepareTuition(page: any): Prepared {
 		"#{청구년월}": tuitionVar(page, "청구년월(수강료안내)", getFormulaText(page, "청구년월(보고서)")),
 		"#{청구기간}": tuitionVar(page, "청구기간(수강료안내)", getFormulaText(page, "청구기간(표시)")),
 		"#{학생이름}": tuitionVar(page, "학생이름(수강료안내)", studentName),
-		"#{수강내역}": tuitionVar(page, "수강내역(수강료안내)", `• ${getRollupText(page, "클래스(수강료)")}  ${amount}`),
+		"#{수강내역}": tuitionVar(page, "수강내역(수강료안내)", `${BULLET}${getRollupText(page, "클래스(수강료)")}  ${amount}`),
 		"#{청구금액}": tuitionVar(page, "청구금액(수강료안내)", amount),
 	}
 	return {
@@ -288,7 +288,7 @@ export async function processNoticeQueueItem(payload: NoticePayload): Promise<vo
 		config = await noticeDeps.config(prep.configCategory, { pfId: FALLBACK.pfId, templateId: FALLBACK[kind], senderNumber: FALLBACK.senderNumber })
 		recipients = await noticeDeps.recipients({ registrationId: prep.registrationId, primaryPhone: prep.primaryPhone, recipientTarget: config.recipientTarget })
 	} catch (err) {
-		// 일정 0건처럼 다시 해도 같은 막힘은 재시도 없이 ⚠️로 끝낸다.
+		// 일정도 전달사항도 없음처럼 다시 해도 같은 막힘은 재시도 없이 ⚠️로 끝낸다.
 		if (err instanceof LetterBlocked) return await finish(kind, pageId, "⚠️ 오류", err.message, false, forcedReset)
 		await noticeDeps.patch(pageId, { "마지막 오류": { rich_text: [{ text: { content: extractErrorMessage(err).slice(0, 1900) } }] } }).catch(() => {})
 		throw err

@@ -15,7 +15,7 @@ import { enqueueSync } from "./syncQueue.ts"
 import { markDone, markError, markRunning, type StatusSpec } from "./statusTracking.ts"
 import { seoulDay } from "./classReportPlan.ts"
 import { formatClassTime, LessonConfigError, noteText, sameInstant, sendConfiguredAlimtalk } from "./lessonNotice.ts"
-import { alimtalkVar, eventInfoBlock } from "./noticeBlocks.ts"
+import { alimtalkVar, BULLET, eventInfoBlock } from "./noticeBlocks.ts"
 
 export const SCHEDULE_NOTICE_STATUS_SPEC: StatusSpec = {
 	statusProp: "일정 안내 상태",
@@ -102,27 +102,25 @@ export function sectionOf(event: any): Section {
 	return cat.includes("휴원") ? "휴원" : cat.includes("학사") ? "학교" : "학원"
 }
 
-// 월간 일정 안내 한 구역의 일정 수 한도(넘치면 "외 N건"). 날짜로 묶으면 줄이 늘어 알림톡 1,000자를 넘지 않게 한다.
+// 월간 일정 안내 한 구역의 일정 수 한도(넘치면 "외 N건"). 알림톡 1,000자를 넘지 않게 한다.
 const SECTION_EVENTS = 8
-// (10/28 사용자, A안) 한 구역 목록: 날짜 한 줄 아래 그날 일정을 "· 이름"으로 모은다(같은 날짜 표기는 한 번). 비면 "없음".
-//   11/7(토)
-//   · 중1 영어 보충 수업
-//   11/14(토)
-//   · 학원 설명회
-//   · 중1 수학 보강
+// 가정통신문 날짜 표기: 점·두 자리. "11/7(토)" → "11.07(토)", "11/9(월)~11(수)" → "11.09(월)~11(수)", "11/30(월)~12/2(수)" → "11.30(월)~12.02(수)".
+export const dotDate = (label: string) =>
+	label.replace(/(\d+)\/(\d+)/g, (_, m: string, d: string) => `${m.padStart(2, "0")}.${d.padStart(2, "0")}`).replace(/~(\d)\(/, "~0$1(")
+// (10/29 사용자) 한 구역 목록: 한 줄에 일정 하나 "  • 날짜 이름"(날짜순). 비면 "없음".
+//     • 11.07(토) 중1 영어 보충 수업
+//     • 11.09(월)~11(수) 겨울 특강 접수
+//     • 11.14(토) 학원 설명회
 // 한 줄(eventLine·반 이름 붙임)의 첫 칸이 날짜 표기("11/9(월)~11(수)"처럼 기간이어도 공백 없음)이고 나머지가 일정이다.
 export function sectionText(lines: { day: string; line: string; sec: Section }[], sec: Section): string {
 	const own = lines.filter((l) => l.sec === sec).sort((a, b) => a.day.localeCompare(b.day))
 	if (!own.length) return "없음"
 	const out: string[] = []
-	let prev = ""
 	for (const l of own.slice(0, SECTION_EVENTS)) {
 		const cut = l.line.indexOf(" ")
 		const date = cut < 0 ? l.line : l.line.slice(0, cut)
 		const what = cut < 0 ? "" : l.line.slice(cut + 1).trim()
-		if (date !== prev) out.push(date)
-		prev = date
-		if (what) out.push(`· ${what}`)
+		out.push(`${BULLET}${dotDate(date)}${what ? ` ${what}` : ""}`)
 	}
 	if (own.length > SECTION_EVENTS) out.push(`외 ${own.length - SECTION_EVENTS}건`)
 	return out.join("\n")
