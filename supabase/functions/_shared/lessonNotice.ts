@@ -33,6 +33,8 @@ import { fitVariablesToTemplate } from "./templateFit.ts"
 
 export const LESSON_NOTICE_STATUS_PROP = "수업 안내 상태"
 export const LESSON_NOTICE_SENT_PROP = "수업 안내 일시"
+// 출석 [수업 안내 전송](개별)이 켠다. 켜져 있으면 같은 일시로 이미 안내했어도 보내고, 처리 뒤 끈다.
+export const LESSON_NOTICE_FORCE_PROP = "개별 전송"
 export const LESSON_MEMO_PROP = "수업 안내 메모"
 // 출석 "마지막 오류"는 일일 보고서 칸이다(실시간 처리 상태·학생별 전송 상태가 읽음). 수업 안내는 따로 쓴다.
 export const LESSON_NOTICE_ERROR_PROP = "수업 안내 오류"
@@ -82,8 +84,9 @@ export function planLessonNotice(attendance: any, session: any | null, makeupOfI
   if (p["출석 상태"]?.select?.name === "🔴 결석") return { skip: "결석으로 표시된 학생이라 보내지 않았습니다." }
   const classIso = String(p["수업일시"]?.date?.start ?? "")
   if (!classIso) return { skip: "출석의 수업일시가 비어 있습니다." }
+  // (10/29 사용자) 일괄은 같은 일시로 이미 안내한 학생을 건너뛰고, 개별 [수업 안내 전송]('개별 전송' 체크)은 다시 보낸다.
   const sentIso = String(p[LESSON_NOTICE_SENT_PROP]?.date?.start ?? "")
-  if (sentIso && sameInstant(sentIso, classIso)) return { skip: "" }
+  if (sentIso && sameInstant(sentIso, classIso) && p[LESSON_NOTICE_FORCE_PROP]?.checkbox !== true) return { skip: "" }
   const makeup = session?.properties?.["보강"]?.checkbox === true
   const label = makeup ? "보강 수업" : "정규 수업"
   const memo = (session?.properties?.[LESSON_MEMO_PROP]?.rich_text ?? []).map((t: any) => t.plain_text ?? "").join("").trim()
@@ -144,6 +147,7 @@ async function finish(attendanceId: string, status: "✅ 완료" | "⚠️ 오�
   await lessonNoticeDeps.patch(attendanceId, {
     [LESSON_NOTICE_STATUS_PROP]: { select: { name: status } },
     [LESSON_NOTICE_ERROR_PROP]: { rich_text: message ? [{ text: { content: message.slice(0, 1900) } }] : [] },
+    [LESSON_NOTICE_FORCE_PROP]: { checkbox: false },
     ...extra,
   }).catch((err: unknown) => console.error("[lesson-notice] 출석 상태 쓰기 실패:", attendanceId, extractErrorMessage(err)))
 }

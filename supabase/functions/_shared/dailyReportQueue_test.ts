@@ -50,10 +50,10 @@ Deno.test("v2.6.20 일일 보고서 한 건: 출석 1번 읽고 최신화(공용
  assert(att.length === 1 && statusOf(att[0]) === "✅ 완료" && att[0].properties["전송완료 체크"].checkbox === true, JSON.stringify(r.patches))
 })
 
-Deno.test("v2.6.20 이미 보낸 출석은 최신화·발송 없이 안내만 남긴다", async () => {
+Deno.test("10/29 이미 보낸 출석도 개별 [보고서 전송]이면 다시 보낸다(일괄은 버튼 필터가 거른다)", async () => {
  const r = await run(attendance({ "전송완료 체크": { checkbox: true } }))
- assert(r.sent.length === 0 && r.refreshed.length === 0)
- assert(r.patches.length === 1 && statusOf(r.patches[0]) === "⚠️ 오류")
+ assert(r.sent.length === 1 && r.refreshed.length === 1, JSON.stringify(r.sent))
+ assert(r.patches.length === 1 && statusOf(r.patches[0]) === "✅ 완료")
 })
 
 Deno.test("v2.6.20 발송 실패는 다시 보내지 않고 오류로 남긴다, 발송 전 실패는 큐 재시도", async () => {

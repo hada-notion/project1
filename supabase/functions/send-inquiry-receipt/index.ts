@@ -266,10 +266,13 @@ async function reconcileSent(studentId: string, state: DeliveryState) {
   }
 }
 
-async function processStudent(studentId: string, webhookPage: any | null) {
+// (10/29 사용자) resend: 학생 [접수안내 전송](개별) 버튼은 웹훅 주소 끝이 /resend다. 이미 보낸 학생도 다시 보낸다.
+// 신청서 제출 자동화(주소 끝 없음)는 그대로 한 번만 보낸다.
+async function processStudent(studentId: string, webhookPage: any | null, resend = false) {
   const store = await getKvStore()
   const deliveryKey = ["inquiry_receipt", "delivery", studentId]
   let state = store ? (await store.get<DeliveryState>(deliveryKey)).value : null
+  if (resend && state?.status === "sent") state = null
 
   if (state?.status === "sent" && state.snapshot) {
     console.log(`[${FUNCTION_NAME}] 이미 발송됨, Notion 기록만 재확인:`, studentId)
@@ -290,7 +293,7 @@ async function processStudent(studentId: string, webhookPage: any | null) {
     } else {
       console.log(`[${FUNCTION_NAME}] 웹훅 속성으로 우선 발송 처리:`, studentId)
     }
-    if (snapshot.status === "✅ 완료") {
+    if (snapshot.status === "✅ 완료" && !resend) {
       console.log(`[${FUNCTION_NAME}] Notion에 이미 발송 완료로 표시되어 건너뜀:`, studentId)
       return
     }
@@ -407,7 +410,8 @@ Deno.serve(async (req: Request) => {
 
   // 자동화 웹훅은 선택한 DB 속성을 함께 보낼 수 있으므로 그 스냅샷으로 먼저 발송한다.
   // 데이터베이스 버튼처럼 속성이 없는 요청만 Notion 페이지 조회로 보완한다.
-  runInBackground(() => processStudent(studentId, payloadPage(body)))
+  const resend = new URL(req.url).pathname.replace(/\/+$/, "").endsWith("/resend")
+  runInBackground(() => processStudent(studentId, payloadPage(body), resend))
 
   return respondAccepted({ studentId })
 })
