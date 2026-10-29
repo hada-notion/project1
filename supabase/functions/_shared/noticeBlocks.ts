@@ -7,10 +7,12 @@ import { getFormulaText } from "./alimtalkShared.ts"
 export const NO_NOTE = "없음"
 
 // 템플릿 변수 하나의 값: "이름(알림톡)" → 옛 이름(있으면) → 계산값.
+// 앞 공백은 남긴다: 목록 블록 첫 줄 "  • …"·반 하나 "  수학반"의 두 칸이 값의 맨 앞이다(10/29 실발송에서 첫 줄 들여쓰기가 빠짐).
+const keepLead = (v: string) => (v.trim() ? v.replace(/\s+$/, "") : "")
 export function alimtalkVar(page: any, name: string, fallback: string, legacy?: string): string {
-	const own = getFormulaText(page, `${name}(알림톡)`).trim()
+	const own = keepLead(getFormulaText(page, `${name}(알림톡)`))
 	if (own) return own
-	const old = legacy ? getFormulaText(page, legacy).trim() : ""
+	const old = legacy ? keepLead(getFormulaText(page, legacy)) : ""
 	return old || fallback
 }
 
