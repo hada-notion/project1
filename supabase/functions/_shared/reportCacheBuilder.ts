@@ -250,7 +250,8 @@ async function buildRegistrationOverview(reg: any, accessToken: string, cachedGe
             units = unitPages.map((up: any) => anyTitle(up)).filter(Boolean)
           }
         }
-        return { title, series, pages, status: statusText, progress, range, cover, units }
+        // (v2.8.0) 진도교재 ID: 화면이 교재 상세를 이름이 아니라 이 ID로 묶는다(같은 교재·프로그램 2회독).
+        return { id: String(mp.id).replace(/-/g, ""), title, series, pages, status: statusText, progress, range, cover, units }
       }),
   )
 
@@ -403,6 +404,18 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
   } catch (err) {
     console.warn("[report-cache] 기존 결석 조회 건너뜀:", (err as Error).message)
   }
+  // (v2.8.0) 리포트 교재 상세를 진도교재 단위로 묶는다(같은 교재·프로그램을 두 번 할 때 회차가 섞이지 않게).
+  // 학습기록의 진도교재가 이 등록의 진도교재면 그 ID, 이 등록 진도교재의 반별교재(개별 진도 반의 반 교재)면 그 학생 진도교재 ID.
+  // 반별교재가 같은 진도교재가 둘 이상이거나 찾지 못하면 빈 값 → 화면이 예전처럼 교재 이름으로 묶는다.
+  const cid = (id: string | null | undefined) => String(id ?? "").replace(/-/g, "")
+  const bookKeyById = new Map<string, string>()
+  const ownBookPages = await Promise.all(relationIds(reg.properties["진도교재"]).map((id: string) => cachedGetPage(id)))
+  ownBookPages.forEach((bp: any) => bookKeyById.set(cid(bp.id), cid(bp.id)))
+  const aliasOwners = new Map<string, string[]>()
+  ownBookPages.forEach((bp: any) => relationIds(bp.properties?.["반별교재"]).forEach((t: string) => {
+    if (!bookKeyById.has(cid(t))) aliasOwners.set(cid(t), [...(aliasOwners.get(cid(t)) ?? []), cid(bp.id)])
+  }))
+  aliasOwners.forEach((owners, alias) => { if (owners.length === 1) bookKeyById.set(alias, owners[0]) })
   const logPages = await Promise.all(logIds.map((id) => cachedGetPage(id)))
   const logUnitNames = await unitNamesOf(logPages) // 학습기록 "선택 단원" 이름(v2.5.126)
   const readLogDetail = async (lp: any) => {
@@ -438,7 +451,8 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
     const evalType = text(lprops["평가 구분"])
     const evalStart = dateStartOf(lprops["평가 기간"])
     const evalEnd = dateEndOf(lprops["평가 기간"])
-    return { id: lp.id, category, iso, content, range, unit, bookTitle, evalType, evalStart, evalEnd }
+    const bookKey = bookKeyById.get(cid(firstRelationId(lprops["진도교재"]))) ?? ""
+    return { id: lp.id, category, iso, content, range, unit, bookTitle, bookKey, evalType, evalStart, evalEnd }
   }
   const logDetails = await Promise.all(logPages.map(readLogDetail))
   const logDetailById = new Map(logDetails.map((detail) => [detail.id, detail]))
@@ -456,7 +470,7 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
     await mapWithConcurrency(studyLogCandidates, 6, async (l) => [l.id, await readPageBodyBlocks(l.id)] as const),
   )
   const study_logs = studyLogCandidates
-    .map((l) => ({ iso: l.iso, date: fmtDateKr(l.iso), book: l.bookTitle, range: l.range, unit: l.unit, note: l.content, body: studyLogBodies.get(l.id) ?? [], ...(makeupOfByLog.get(l.id.replace(/-/g, "")) ? { makeup_of: makeupOfByLog.get(l.id.replace(/-/g, "")) } : {}) }))
+    .map((l) => ({ iso: l.iso, date: fmtDateKr(l.iso), book: l.bookTitle, book_id: l.bookKey, range: l.range, unit: l.unit, note: l.content, body: studyLogBodies.get(l.id) ?? [], ...(makeupOfByLog.get(l.id.replace(/-/g, "")) ? { makeup_of: makeupOfByLog.get(l.id.replace(/-/g, "")) } : {}) }))
 
   const activityPages = await shareQueriedPages(
     await queryAllPages(DS_STUDY_ACTIVITY, {
@@ -503,6 +517,7 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
         // (v2.8.0 진도 평가, 항목 16) 학생별 선생님 한마디. 리포트 교재 상세의 진도 평가 카드에 보인다(칸이 없으면 빈 값).
         comment: text(props["선생님 한마디"]),
         bookTitle: source?.bookTitle ?? "",
+        bookKey: source?.bookKey ?? "",
         range: source?.range ?? "",
         unit: source?.unit ?? "",
         content: source?.content ?? "",
@@ -576,6 +591,7 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
   const homeworkAll = homeworkActivities.map((a) => ({
     title: "",
     book: a.bookTitle,
+    book_id: a.bookKey,
     range: a.range,
     unit: a.unit,
     note: a.content,
@@ -632,6 +648,7 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
     .map((a, i) => ({
       title: "",
       book: a.bookTitle,
+      book_id: a.bookKey,
       range: a.range,
       unit: a.unit,
       note: a.content,

@@ -131,3 +131,32 @@ Deno.test("v2.8.0 리포트 캐시: 보강 출석의 기존 결석 수업일(서
 		globalThis.fetch = realFetch
 	}
 })
+
+Deno.test("v2.8.0 리포트 캐시: 기록마다 진도교재 ID(book_id)를 싣는다(반별교재면 학생 진도교재, 모르면 빈 값)", async () => {
+	const REG = "reg-1", CLS = "cls-1", B1 = "b1", B2 = "b2", CB = "cb", X = "x"
+	const sel = (name: string) => ({ type: "select", select: { name } })
+	const rel = (...ids: string[]) => ({ type: "relation", relation: ids.map((id) => ({ id })) })
+	const day = daysAgo(3)
+	const rec = (id: string, book: string, act: string) => ({ id, properties: { "구분": sel("평가"), "평가 구분": sel("단원 평가"), "평가 기간": { type: "date", date: { start: day, end: null } }, "진도교재": rel(book), "학습활동": rel(act) } })
+	const pages: Record<string, any> = {
+		[CLS]: { id: CLS, properties: { "반 평균 숨김": { type: "checkbox", checkbox: false }, "담당강사": rel() } },
+		[B1]: { id: B1, properties: {} }, [B2]: { id: B2, properties: { "반별교재": rel(CB) } },
+		r1: rec("r1", B1, "a1"), r2: rec("r2", CB, "a2"), r3: rec("r3", X, "a3"),
+	}
+	const activity = (id: string, r: string) => ({ id, properties: { "구분": sel("평가"), "학습기록": rel(r), "출석": rel(), "정답 문항": { type: "number", number: 1 }, "전체 문항": { type: "number", number: 2 } } })
+	const realFetch = globalThis.fetch
+	globalThis.fetch = (async (input: Request | URL | string) => {
+		const url = String(input instanceof Request ? input.url : input)
+		const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { "Content-Type": "application/json" } })
+		if (url.startsWith("https://mock.supabase")) return json([])
+		if (url.includes("/data_sources/activities/query")) return json({ results: [activity("a1", "r1"), activity("a2", "r2"), activity("a3", "r3")], has_more: false })
+		return json({ results: [], has_more: false })
+	}) as typeof fetch
+	try {
+		const reg = { id: REG, properties: { "클래스": rel(CLS), "진도교재": rel(B1, B2) } }
+		const detail: any = await buildRegistrationDetail(reg, async (id: string) => pages[id] ?? { id, properties: {} })
+		eq(detail.tests.map((t: any) => t.book_id).sort(), ["", B1, B2])
+	} finally {
+		globalThis.fetch = realFetch
+	}
+})

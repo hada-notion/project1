@@ -516,7 +516,7 @@ function buildHomeTabHtml(r) {
       <div class="card">${pending.length ? pending.slice(0, 3).map((h) => kindBlockHtml("과제", { title: [h.book, h.range].filter(Boolean).join(" · ") || "과제", pill: h.status, pillTone: homeworkPillTone(h.status), sub: `마감 ${shortDateDow(h.due)}` })).join("") : `<div class="empty">남은 과제가 없어요.</div>`}</div>`}
       <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></span>교재 진도</h3>
       <div class="card">${books.length ? books.map((b) => `
-        <div class="home-progress-row" onclick="openBookStudy(${jsArg(b.title)})" style="cursor:pointer">
+        <div class="home-progress-row" onclick="openBookStudy(${jsArg(b.title)}, ${jsArg(b.id)})" style="cursor:pointer">
           <div class="home-progress-title">${esc(b.title)}</div>
           <div class="progress-line"><div class="track"><div class="fill" style="width:${b.progress ?? 0}%"></div></div><b>${b.progress ?? 0}%</b></div>
         </div>`).join("") : `<div class="empty">진행 중인 교재가 없어요.</div>`}</div>
@@ -527,9 +527,8 @@ function buildHomeTabHtml(r) {
 }
 
 // ===== 교재 탭 =====
-function latestBookRange(r, title) {
-  const target = normBookTitle(title)
-  const logs = (r.study_logs || []).filter((l) => normBookTitle(l.book) === target && l.date).sort((a, b) => b.date.localeCompare(a.date))
+function latestBookRange(r, b) {
+  const logs = (r.study_logs || []).filter((l) => inBook(l, b.title, b.id) && l.date).sort((a, b) => b.date.localeCompare(a.date))
   const last = logs[0]
   return last ? [last.range, last.unit].filter(Boolean).join(" · ") : ""
 }
@@ -547,9 +546,9 @@ function buildBooksTabHtml(r) {
     </div>
     <div class="feed-narrow-wrap">
       <div class="book-list">${filtered.length ? filtered.map((b) => {
-        const recent = latestBookRange(r, b.title)
+        const recent = latestBookRange(r, b)
         return `
-        <div class="book-row" onclick="openBookStudy(${jsArg(b.title)})">
+        <div class="book-row" onclick="openBookStudy(${jsArg(b.title)}, ${jsArg(b.id)})">
           <div class="book-row-cover">${b.cover ? `<img src="${esc(b.cover)}" alt="${esc(b.title)}">` : `<span>${esc(b.title)}</span>`}</div>
           <div class="book-row-body">
             <div class="book-row-title">${esc(b.title)}</div>
