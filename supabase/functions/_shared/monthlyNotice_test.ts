@@ -145,7 +145,7 @@ Deno.test("v2.8.0 월간 일정 안내: 반 이름은 이름순, 두 반 이상 
 	eq(m.withClassPrefix("11/14(토) 중1 B 보충 수업", ev1, names), "11/14(토) 중1 B 보충 수업")
 	// (v2.8.0 통일안) #{클래스목록}: 반 하나면 두 칸 띄워 옆에, 둘 이상이면 줄을 바꿔 · 목록
 	eq(m.classListText(["영어반"]), "  영어반")
-	eq(m.classListText(["국어반", "수학반"]), "\n• 국어반\n• 수학반")
+	eq(m.classListText(["국어반", "수학반"]), "\n  • 국어반\n  • 수학반")
 })
 
 const ev = (id: string, o: { name: string; cat?: string; start: string; end?: string; cls?: string[]; stu?: string[]; school?: string[]; grade?: string[] }) => ({ id, properties: {
@@ -221,12 +221,12 @@ Deno.test("v2.8.0 가정통신문 보내기 변수: 학원 일정을 다시 넣�
 	const built = await m.buildLetterNotice(letter)
 	eq(c.updates.find((u) => u.id === "lA")?.props["학원 일정"].relation, [{ id: "e-all" }])
 	eq([built.registrationId, built.variables["#{클래스}"], built.variables["#{안내월}"], built.variables["#{학원일정}"], built.variables["#{전달사항}"], built.variables["#{페이지ID}"].endsWith("?token=tok")],
-		["rA", "수학반 · 영어반", "11월", "• 11.07(토) 영어반 보충\n• 11.14(토) 학원 설명회", "교재 지참", true])
-	eq(built.variables["#{클래스목록}"], "\n• 수학반\n• 영어반")
-	// (10/29) 전달사항: 이 장 메모(공통) + 반 발송함 메모(반 이름순), 둘 이상이면 "• (머리) 문구" 줄
+		["rA", "수학반 · 영어반", "11월", "  • 11.07(토) 영어반 보충\n  • 11.14(토) 학원 설명회", "교재 지참", true])
+	eq(built.variables["#{클래스목록}"], "\n  • 수학반\n  • 영어반")
+	// (10/29) 전달사항: 반 발송함 메모 "  • (반) 문구"(반 이름순) 뒤에 이 장 메모 "  • 문구"(머리 없이)
 	pages.lA = { ...letter, properties: { ...letter.properties, "가정통신문 메모": rt("11/12 상담이 있습니다.") } }
 	pages.bA = box("bA", "단원평가 범위는 3단원")
-	eq(await m.letterNote(pages.lA, [rB, rA]), "• (공통) 11/12 상담이 있습니다.\n• (수학반) 단원평가 범위는 3단원\n• (영어반) 교재 지참")
+	eq(await m.letterNote(pages.lA, [rB, rA]), "  • (수학반) 단원평가 범위는 3단원\n  • (영어반) 교재 지참\n  • 11/12 상담이 있습니다.")
 	pages.bA = box("bA", "")
 	// 수식 값이 있으면 그것을 쓴다(다시 읽은 페이지 기준)
 	pages.lA = { ...letter, properties: { ...letter.properties, "학원일정(일정안내)": fx("수식 줄") } }

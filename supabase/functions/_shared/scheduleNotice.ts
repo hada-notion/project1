@@ -15,7 +15,7 @@ import { enqueueSync } from "./syncQueue.ts"
 import { markDone, markError, markRunning, type StatusSpec } from "./statusTracking.ts"
 import { seoulDay } from "./classReportPlan.ts"
 import { formatClassTime, LessonConfigError, noteText, sameInstant, sendConfiguredAlimtalk } from "./lessonNotice.ts"
-import { alimtalkVar, eventInfoBlock } from "./noticeBlocks.ts"
+import { alimtalkVar, BULLET, eventInfoBlock } from "./noticeBlocks.ts"
 
 export const SCHEDULE_NOTICE_STATUS_SPEC: StatusSpec = {
 	statusProp: "일정 안내 상태",
@@ -107,10 +107,10 @@ const SECTION_EVENTS = 8
 // 가정통신문 날짜 표기: 점·두 자리. "11/7(토)" → "11.07(토)", "11/9(월)~11(수)" → "11.09(월)~11(수)", "11/30(월)~12/2(수)" → "11.30(월)~12.02(수)".
 export const dotDate = (label: string) =>
 	label.replace(/(\d+)\/(\d+)/g, (_, m: string, d: string) => `${m.padStart(2, "0")}.${d.padStart(2, "0")}`).replace(/~(\d)\(/, "~0$1(")
-// (10/29 사용자) 한 구역 목록: 한 줄에 일정 하나 "• 날짜 이름"(날짜순). 비면 "없음".
-//   • 11.07(토) 중1 영어 보충 수업
-//   • 11.09(월)~11(수) 겨울 특강 접수
-//   • 11.14(토) 학원 설명회
+// (10/29 사용자) 한 구역 목록: 한 줄에 일정 하나 "  • 날짜 이름"(날짜순). 비면 "없음".
+//     • 11.07(토) 중1 영어 보충 수업
+//     • 11.09(월)~11(수) 겨울 특강 접수
+//     • 11.14(토) 학원 설명회
 // 한 줄(eventLine·반 이름 붙임)의 첫 칸이 날짜 표기("11/9(월)~11(수)"처럼 기간이어도 공백 없음)이고 나머지가 일정이다.
 export function sectionText(lines: { day: string; line: string; sec: Section }[], sec: Section): string {
 	const own = lines.filter((l) => l.sec === sec).sort((a, b) => a.day.localeCompare(b.day))
@@ -120,7 +120,7 @@ export function sectionText(lines: { day: string; line: string; sec: Section }[]
 		const cut = l.line.indexOf(" ")
 		const date = cut < 0 ? l.line : l.line.slice(0, cut)
 		const what = cut < 0 ? "" : l.line.slice(cut + 1).trim()
-		out.push(`• ${dotDate(date)}${what ? ` ${what}` : ""}`)
+		out.push(`${BULLET}${dotDate(date)}${what ? ` ${what}` : ""}`)
 	}
 	if (own.length > SECTION_EVENTS) out.push(`외 ${own.length - SECTION_EVENTS}건`)
 	return out.join("\n")

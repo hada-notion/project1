@@ -18,7 +18,7 @@ import { isParentPublicEvent } from "./scheduleVisibility.ts"
 import { inPeriodRegistration, resolveBatchDataSourceId, seoulDay, studentNameOf } from "./classReportPlan.ts"
 import { eventLine, inMonth, isAcademyWide, monthFilter, monthLabel, nextMonthKey, type Section, sectionOf, sectionText } from "./scheduleNotice.ts"
 import { noteText } from "./lessonNotice.ts"
-import { alimtalkVar, classListBlock, letterScheduleBlock, NO_NOTE } from "./noticeBlocks.ts"
+import { alimtalkVar, BULLET, classListBlock, letterScheduleBlock, NO_NOTE } from "./noticeBlocks.ts"
 
 export const KIND_MONTHLY = "가정통신문"
 // (10/28) 수강료 생성은 보고서처럼 반 발송함(구분 "수강료", 반 × 달)을 만든다.
@@ -428,12 +428,10 @@ const classNamesOf = (regs: any[]) => Array.from(new Set(regs.map(classNameOfReg
 // (v2.8.0 통일안) 템플릿 "🏛 클래스#{클래스목록}"용: 반 하나면 "  영어반"(두 칸), 둘 이상이면 줄을 바꿔 "· 반" 목록.
 export const classListText = classListBlock
 
-// (10/29 사용자) 전달사항: 이 장의 '가정통신문 메모'(공통) + 같은 달 반마다 가정통신문 발송함의 '가정통신문 전달사항'(반 이름순).
-// 하나뿐이면 문장만, 둘 이상이면 "• (공통) …" / "• (반 이름) …" 한 줄씩. 모두 비면 없음. 문구마다 50자까지.
+// (10/29 사용자) 전달사항: 같은 달 반마다 가정통신문 발송함의 '가정통신문 전달사항'(반 이름순) + 맨 아래 이 장의 '가정통신문 메모'(학생 개별).
+// 하나뿐이면 문장만, 둘 이상이면 "  • (반 이름) …" 줄들 뒤에 "  • …"(개별은 머리 없이). 모두 비면 없음. 문구마다 50자까지.
 export async function letterNote(letter: any, regs: any[]): Promise<string> {
-	const items: [string, string][] = []
 	const own = textOf(letter?.properties?.[PROP_LETTER_NOTE]?.rich_text).trim()
-	if (own) items.push(["공통", noteText(own)])
 	const className = new Map(regs.map((r: any) => [key(r.id), classNameOfReg(r)]))
 	const sibs = await Promise.all(relIds(letter?.properties?.[PROP_LETTER_SIBLINGS]).map((id) => monthlyDeps.getPage(id).catch(() => null)))
 	const seen = new Set<string>()
@@ -447,10 +445,11 @@ export async function letterNote(letter: any, regs: any[]): Promise<string> {
 		const memo = textOf(box?.properties?.[PROP_BOX_LETTER_NOTE]?.rich_text).trim()
 		if (memo) perClass.push([name, noteText(memo)])
 	}
-	items.push(...perClass.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)))
-	if (!items.length) return noteText("")
-	if (items.length === 1) return items[0][1]
-	return items.map(([label, text]) => `• (${label}) ${text}`).join("\n")
+	const lines = perClass.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).map(([name, text]) => [`(${name}) ${text}`, text])
+	if (own) lines.push([noteText(own), noteText(own)])
+	if (!lines.length) return noteText("")
+	if (lines.length === 1) return lines[0][1]
+	return lines.map(([line]) => `${BULLET}${line}`).join("\n")
 }
 
 // 월간 일정 안내 한 통의 변수. 보내기 직전에 '학원 일정'을 다시 넣고 페이지를 다시 읽어 (일정안내) 수식 값을 먼저 쓴다.

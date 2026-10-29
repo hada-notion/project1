@@ -40,7 +40,7 @@ import {
 } from "./alimtalkShared.ts"
 import { refreshStudentReport } from "./dailyReportRefresh.ts"
 import { buildLetterNotice, LetterBlocked } from "./monthlyNotice.ts"
-import { alimtalkVar, reportStatusBlock, textbookBlock } from "./noticeBlocks.ts"
+import { alimtalkVar, BULLET, reportStatusBlock, textbookBlock } from "./noticeBlocks.ts"
 import { fitVariablesToTemplate } from "./templateFit.ts"
 
 export type NoticeKind = "report" | "tuition" | "textbook" | "letter"
@@ -181,7 +181,7 @@ function prepareTuition(page: any): Prepared {
 		"#{청구년월}": tuitionVar(page, "청구년월(수강료안내)", getFormulaText(page, "청구년월(보고서)")),
 		"#{청구기간}": tuitionVar(page, "청구기간(수강료안내)", getFormulaText(page, "청구기간(표시)")),
 		"#{학생이름}": tuitionVar(page, "학생이름(수강료안내)", studentName),
-		"#{수강내역}": tuitionVar(page, "수강내역(수강료안내)", `• ${getRollupText(page, "클래스(수강료)")}  ${amount}`),
+		"#{수강내역}": tuitionVar(page, "수강내역(수강료안내)", `${BULLET}${getRollupText(page, "클래스(수강료)")}  ${amount}`),
 		"#{청구금액}": tuitionVar(page, "청구금액(수강료안내)", amount),
 	}
 	return {

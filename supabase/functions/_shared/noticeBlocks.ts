@@ -40,7 +40,9 @@ export function eventInfoBlock(o: { time: string; note?: string }): string {
 }
 
 // 가정통신문 #{클래스목록}: 반 하나면 "  중2 B"(템플릿 "🏛 클래스" 바로 뒤에 붙음), 둘 이상이면 줄바꿈 + "· 반" 목록.
-export const classListBlock = (names: string[]) => (names.length <= 1 ? `  ${names[0] ?? NO_NOTE}` : "\n" + names.map((n) => `• ${n}`).join("\n"))
+// (10/29 사용자) 알림톡 목록 줄은 모두 두 칸 들여 "  • 내용"(일일 보고서 학습내용·Notion 텍스트 목록과 같은 모양).
+export const BULLET = "  • "
+export const classListBlock = (names: string[]) => (names.length <= 1 ? `  ${names[0] ?? NO_NOTE}` : "\n" + names.map((n) => `${BULLET}${n}`).join("\n"))
 
 // 가정통신문 #{일정목록}: 일정이 있는 구역만(휴원 → 학원 → 학사) + [📝 전달사항]. 구역 값이 비었거나 "없음"이면 뺀다.
 export function letterScheduleBlock(o: { 휴원: string; 학원: string; 학사: string; note?: string }): string {
@@ -73,7 +75,7 @@ export function reportStatusBlock(summary: string): string {
 }
 
 // 교재비 #{교재내역}: 미납교재 수식("📘 교재 : 15,000원" 줄들 + "📚 청구 금액 : 31,000원")을
-// "📚 교재 내역" + "• 교재  15,000원" 줄들 + "🧾 합계  31,000원"으로.
+// "📚 교재 내역" + "  • 교재  15,000원" 줄들 + "🧾 합계  31,000원"으로.
 export function textbookBlock(unpaid: string): string {
 	const items: string[] = []
 	let total = ""
@@ -83,9 +85,9 @@ export function textbookBlock(unpaid: string): string {
 		const sum = l.match(/^📚\s*청구 금액\s*:\s*(.+)$/u)
 		if (sum) { total = sum[1].trim(); continue }
 		const item = l.match(/^📘\s*(.+?)\s*:\s*(.+)$/u)
-		items.push(item ? `• ${item[1]}  ${item[2].trim()}` : l)
+		items.push(item ? `${BULLET}${item[1]}  ${item[2].trim()}` : l)
 	}
-	return ["📚 교재 내역", ...(items.length ? items : ["• 없음"])].join("\n") + (total ? `\n\n🧾 합계  ${total}` : "")
+	return ["📚 교재 내역", ...(items.length ? items : [`${BULLET}없음`])].join("\n") + (total ? `\n\n🧾 합계  ${total}` : "")
 }
 
 // 상담 신청 접수 안내 #{접수내용}: 👤 학생(항상) + [🏫 학교] + [🎓 학년]. "미입력"·빈 값은 뺀다.
