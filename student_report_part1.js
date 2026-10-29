@@ -478,8 +478,20 @@ function splitClassNameEmoji(rawClassName) {
 
 // Supabase RPC 응답(같은 학생의 모든 등록을 registrations[] 배열로 집계)을 앞단의 UI가 사용하는
 // STUDENT/registrations[] 형태로 변환합니다.
+// (v2.8.0 예체능) 프로그램 기록의 범위가 숫자뿐이면("3", "1-3", "4~5") 뒤에 "차시"를 붙인다(목록 "최근 3차시", 제목 "수채화 1 · 3차시").
+// 기록의 진도교재 ID로 프로그램인지 보고, ID가 없으면(예전 캐시) 같은 이름의 교재가 모두 프로그램일 때만 붙인다.
+function withProgramRanges(m) {
+  const books = m.books || []
+  const programOf = (item) => {
+    if (item.bookId && books.some((b) => b.id === item.bookId)) return books.some((b) => b.id === item.bookId && isProgram(b))
+    const same = books.filter((b) => normBookTitle(b.title) && normBookTitle(b.title) === normBookTitle(item.book))
+    return same.length > 0 && same.every(isProgram)
+  }
+  const fix = (item) => (/^\d+(\s*[-~]\s*\d+)?$/.test(String(item.range || "").trim()) && programOf(item) ? { ...item, range: `${String(item.range).trim()}차시` } : item)
+  return { ...m, study_logs: m.study_logs.map(fix), homework: m.homework.map(fix), tests: m.tests.map(fix) }
+}
 function mapRegistration(reg) {
-  return {
+  return withProgramRanges({
     token: reg.access_token || "",
     // [NEW, 2026-09-19] 캘린더 탭의 "동기화" 버튼이 sync-report-cache를 호출할 때 필요하다.
     registration_id: reg.registration_id || null,
@@ -518,7 +530,7 @@ function mapRegistration(reg) {
     // 주간/월간 보고서: 보고서(학원) DB 자체의 "선생님 한마디"를 보고서 구분·학습 기간과 함께 보관한다.
     report_comments: (reg.report_comments || []).map((c) => ({ kind: c.kind || "", start: c.start || null, end: c.end || c.start || null, comment: c.comment || "" })),
     report_mode: reg.report_mode === "tests_only" ? "tests_only" : "all",
-  }
+  })
 }
 
 function mapReportToStudent(r) {
