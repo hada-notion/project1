@@ -113,3 +113,15 @@ export function inquiryBlock(o: { studentName: string; school?: string; grade?: 
 		...(keep(o.grade) ? [line("🎓", "학년", keep(o.grade))] : []),
 	].join("\n")
 }
+
+// (10/29 다시 신청한 본문) 상담 신청 접수 안내 #{접수정보}: 머리줄 "📋 접수 내용" + "  • 학생  이름"(항상)
+// + 적은 경우만 학교·학년 줄. 본문에서 이 아래에 "  • 연락처  #{학부모연락처}"가 이어진다.
+export function inquiryInfoBlock(o: { studentName: string; school?: string; grade?: string }): string {
+	const keep = (v?: string) => { const t = String(v ?? "").trim(); return t && t !== "미입력" ? t : "" }
+	return [
+		"📋 접수 내용",
+		`${BULLET}학생  ${o.studentName}`,
+		...(keep(o.school) ? [`${BULLET}학교  ${keep(o.school)}`] : []),
+		...(keep(o.grade) ? [`${BULLET}학년  ${keep(o.grade)}`] : []),
+	].join("\n")
+}
