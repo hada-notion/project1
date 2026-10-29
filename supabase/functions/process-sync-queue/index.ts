@@ -87,6 +87,7 @@ import { processCartPlanQueueItem } from "../_shared/cartPlan.ts"
 import { processClassReportsQueueItem, processRegistrationReportQueueItem } from "../_shared/classReportPlan.ts"
 import { processBatchEvaluationsQueueItem } from "../_shared/evaluationPlan.ts"
 import { processFinalEvaluationQueueItem } from "../_shared/finalEvaluation.ts"
+import { processBookEvalBatchItem } from "../_shared/bookEvalNotice.ts"
 import { processLessonNoticeQueueItem } from "../_shared/lessonNotice.ts"
 import { processScheduleEventItem, processScheduleEventStudentItem } from "../_shared/scheduleNotice.ts"
 import { processLetterCreateClassItem, processLetterCreateRegItem, processMonthlyCreateClassItem, processMonthlyCreateRegItem } from "../_shared/monthlyNotice.ts"
@@ -138,6 +139,8 @@ const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Pro
   "batch-evaluations": processBatchEvaluationsQueueItem,
   // (v2.8.0) 진도교재 [단원 평가 만들기]·[마무리 평가 만들기] → create-class-reports/unit-evaluation·final-evaluation. 교재 1건 → 평가 기록 → create-assignment 큐.
   "final-evaluation": processFinalEvaluationQueueItem,
+  // (v2.8.0) 학습기록 [교재 평가 안내 일괄 전송] → send-report/book-evaluation-batch. 안 보낸 학습활동마다 notice(kind bookEval).
+  "book-eval-batch": processBookEvalBatchItem,
   // (v2.8.0) 출석 DB "수업 안내 상태 ⚪ 대기" 자동화 → send-lesson-notice/queue (수업 안내 한 건씩, 일일 보고서와 같은 방식)
   "lesson-notice": processLessonNoticeQueueItem,
   // (v2.8.0) 일정 [일정 안내 전송] → send-schedule-notice/event. 일정 1건이 학생 1건씩을 다시 넣는다.
