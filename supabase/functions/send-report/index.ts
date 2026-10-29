@@ -166,8 +166,8 @@ Deno.serve(async (req) => {
     return respondAccepted({ pageId: queuedId, queued: true })
   }
 
-  // (v2.8.0 교재 평가, 항목 16) 학습활동 [교재 평가 안내 전송](개별, 이미 보냈어도 다시) → 그 학습활동 ⚪ 대기 + 큐.
-  // 학습기록 [교재 평가 안내 일괄 전송] → 큐 book-eval-batch(안 보낸 학습활동만). _shared/bookEvalNotice.ts
+  // (v2.8.0 진도 평가, 항목 16) 학습활동 [진도 평가 안내 전송](개별, 이미 보냈어도 다시) → 그 학습활동 ⚪ 대기 + 큐.
+  // 학습기록 [진도 평가 안내 일괄 전송] → 큐 book-eval-batch(안 보낸 학습활동만). _shared/bookEvalNotice.ts
   const route = new URL(req.url).pathname.split("/").pop()
   if (route === "book-evaluation" || route === "book-evaluation-batch") {
     const pageId = body?.data?.id ?? body?.pageId ?? null

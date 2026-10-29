@@ -80,7 +80,7 @@ type Prepared = {
 	variables: (notice: string) => Record<string, string>
 	log: { reportId?: string; tuitionId?: string; textbookCartId?: string; letterId?: string; periodStart?: string; periodEnd?: string }
 	clearBulkSelect: boolean
-	// 보낸 뒤 ✅ 완료와 함께 쓸 칸(교재 평가: 안내 일시)
+	// 보낸 뒤 ✅ 완료와 함께 쓸 칸(진도 평가: 안내 일시)
 	doneExtra?: Record<string, unknown>
 }
 
@@ -257,7 +257,7 @@ async function prepareLetter(page: any): Promise<Prepared> {
 	}
 }
 
-// (v2.8.0 교재 평가, 항목 16) 학습활동 한 장 → 교재 평가 결과 안내. 보내기 직전 리포트를 최신화해 링크를 열면 최신 점수·한마디가 보인다.
+// (v2.8.0 진도 평가, 항목 16) 학습활동 한 장 → 진도 평가 결과 안내. 보내기 직전 리포트를 최신화해 링크를 열면 최신 점수·한마디가 보인다.
 async function prepareBookEval(page: any): Promise<Prepared> {
 	const c = await noticeDeps.bookEval(page)
 	const runKey = `notice:bookeval:${c.registrationId}:${Math.floor(noticeDeps.now() / RUN_BUCKET_MS)}`

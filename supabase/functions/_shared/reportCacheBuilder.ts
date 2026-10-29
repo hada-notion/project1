@@ -283,7 +283,7 @@ export function reportModeOf(cls: any): "all" | "tests_only" {
 
 // (v2.8.0) 평가 구분 묶음: 주간·월간·종합은 그 이름, 나머지(빈 값·일일 평가·기타)는 일일 평가.
 export const TESTS_PER_KIND = 6
-// (v2.8.0 교재 평가, 항목 16) 단원 평가·마무리 평가는 교재 평가(교재 상세에만). 예전 이름 "종합 평가"는 마무리 평가로 읽는다.
+// (v2.8.0 진도 평가, 항목 16) 단원 평가·마무리 평가는 진도 평가(교재 상세에만). 예전 이름 "종합 평가"는 마무리 평가로 읽는다.
 export function testKindOf(evalType: string | null | undefined): string {
   if (evalType === "종합 평가") return "마무리 평가"
   return evalType === "주간 평가" || evalType === "월간 평가" || evalType === "단원 평가" || evalType === "마무리 평가" ? evalType : "일일 평가"
@@ -500,7 +500,7 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
         status: normalizeStatus(text(props["과제상태"])),
         correct: numberOf(props["정답 문항"]) ?? 0,
         total: numberOf(props["전체 문항"]) ?? 0,
-        // (v2.8.0 교재 평가, 항목 16) 학생별 선생님 한마디. 리포트 교재 상세의 교재 평가 카드에 보인다(칸이 없으면 빈 값).
+        // (v2.8.0 진도 평가, 항목 16) 학생별 선생님 한마디. 리포트 교재 상세의 진도 평가 카드에 보인다(칸이 없으면 빈 값).
         comment: text(props["선생님 한마디"]),
         bookTitle: source?.bookTitle ?? "",
         range: source?.range ?? "",

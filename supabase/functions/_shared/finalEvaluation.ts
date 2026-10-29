@@ -1,8 +1,11 @@
 // _shared/finalEvaluation.ts
 //
-// (v2.8.0 교재 평가, 항목 16) 진도교재 [단원 평가 만들기]·[마무리 평가 만들기] → create-class-reports/unit-evaluation·
-// /final-evaluation 웹훅 → 큐 "final-evaluation"(kind unit|final). 교재에 묶인 평가다. 일일·주간·월간 보고서와는 별개로,
-// 학부모 리포트에서 그 교재를 열었을 때 "교재 평가" 구역에 보인다.
+// (v2.8.0 진도 평가, 항목 16) 진도교재 [진도 평가 생성] → create-class-reports/progress-evaluation 웹훅 → 큐 "final-evaluation"
+// (kind auto). 진도교재 `진행상태`가 완료면 마무리 평가, 아니면 단원 평가로 만든다. 다르면 선생님이 학습기록 `평가 구분`만 바꾼다
+// (리포트·알림톡은 보낼 때 평가 구분을 다시 읽는다). 예전 버튼 경로 /unit-evaluation·/final-evaluation(kind unit|final)도 그대로 받는다.
+// 교재에 묶인 평가다. 일일·주간·월간 보고서와는 별개로, 학부모 리포트에서 그 교재를 열었을 때 "진도 평가" 구역에 보인다.
+// (10/30 사용자) 이름 "교재 평가" → "진도 평가": 예체능(교재 없는 진도)까지 같은 말로 쓴다. 수업 중에 본 평가는 수업에서
+// [학습기록 생성] 뒤 구분 평가·평가 구분 단원/마무리로 바꾸면 같은 진도 평가가 된다.
 //   - 단원 평가: 단원을 하나 끝냈을 때(여러 번). 이 교재 학습기록 중 `범위`나 `선택 단원`이 들어 있는 가장 최근 것의 값을
 //     미리 채운다(빈 기록은 건너뜀, 선생님이 고친다).
 //   - 마무리 평가: 교재를 다 끝냈을 때. 범위·단원 없음. (예전 이름 "종합 평가" — 선택지 이름을 바꿔도 옛 값은 마무리 평가로 읽는다.)
@@ -20,16 +23,24 @@ import { seoulDay } from "./classReportPlan.ts"
 import { unitIdsOf, unitRelationNameOf } from "./selectedUnits.ts"
 
 export const FINAL_EVAL_STATUS_SPEC: StatusSpec = {
-	statusProp: "교재 평가 상태",
+	statusProp: "진도 평가 상태",
 	errorProp: PROP_LAST_ERROR,
-	startedAtProp: "교재 평가 처리 시작 시각",
+	startedAtProp: "진도 평가 처리 시작 시각",
 }
 export const TARGET_FINAL_EVALUATION = "final-evaluation"
 export const UNIT_EVAL_TYPE = "단원 평가"
 export const FINAL_EVAL_TYPE = "마무리 평가"
 
 export type BookEvalKind = "unit" | "final"
-export type FinalEvaluationPayload = { bookId: string; kind?: BookEvalKind }
+export type FinalEvaluationPayload = { bookId: string; kind?: BookEvalKind | "auto" }
+export const PROGRESS_EVAL_BUTTON = "[진도 평가 생성]"
+
+// 진도교재 `진행상태`(상태·선택·수식 어느 것이든)가 완료면 마무리 평가, 그 밖(진행 중·빈 값)은 단원 평가.
+export function autoEvalKindOf(book: any): BookEvalKind {
+	const prop = book?.properties?.["진행상태"]
+	const name = String(prop?.status?.name ?? prop?.select?.name ?? prop?.formula?.string ?? "")
+	return name.includes("완료") ? "final" : "unit"
+}
 
 const plain = (prop: any): string => (prop?.title ?? prop?.rich_text ?? []).map((t: any) => t.plain_text ?? t.text?.content ?? "").join("").trim()
 const isActive = (reg: any) => !reg?.in_trash && !reg?.archived && String(reg?.properties?.["수강상태"]?.formula?.string ?? "").includes("수강 중")
@@ -74,21 +85,21 @@ export const finalEvaluationDeps = {
 	markError: (id: string, message: string) => markError(id, FINAL_EVAL_STATUS_SPEC, message),
 }
 
-// 큐 "교재 평가 만들기"(단원·마무리).
+// 큐 "진도 평가 생성"(단원·마무리, kind auto면 진행상태로).
 export async function processFinalEvaluationQueueItem(payload: FinalEvaluationPayload): Promise<void> {
 	const deps = finalEvaluationDeps
 	const bookId = payload.bookId
-	const kind: BookEvalKind = payload.kind === "unit" ? "unit" : "final"
-	const label = kind === "unit" ? UNIT_EVAL_TYPE : FINAL_EVAL_TYPE
+	let kind: BookEvalKind = payload.kind === "unit" || payload.kind === "final" ? payload.kind : "unit"
 	let book: any
 	let regs: string[]
 	try {
 		await deps.markRunning(bookId)
 		book = await deps.getPage(bookId)
 		if (book?.in_trash || book?.archived) return
+		if (payload.kind !== "unit" && payload.kind !== "final") kind = autoEvalKindOf(book)
 		const linked = relIds(book?.properties?.["등록"])
 		if (!linked.length) {
-			if (relIds(book?.properties?.["개별교재"]).length) throw new Error(`개별 진도 교재는 학생의 개별교재(학생 페이지의 진도교재)에서 [${label} 만들기]를 눌러 주세요.`)
+			if (relIds(book?.properties?.["개별교재"]).length) throw new Error(`개별 진도 교재는 학생의 개별교재(학생 페이지의 진도교재)에서 ${PROGRESS_EVAL_BUTTON}을 눌러 주세요.`)
 			throw new Error("이 진도교재에 연결된 등록(학생)이 없습니다.")
 		}
 		const pages = await Promise.all(linked.map((id) => deps.getPage(id).catch(() => null)))
@@ -99,6 +110,7 @@ export async function processFinalEvaluationQueueItem(payload: FinalEvaluationPa
 		await deps.markError(bookId, (err as Error).message).catch(() => {})
 		return
 	}
+	const label = kind === "unit" ? UNIT_EVAL_TYPE : FINAL_EVAL_TYPE
 	try {
 		const p = book.properties ?? {}
 		const libId = relIds(p["라이브러리"])[0] ?? null
@@ -115,7 +127,7 @@ export async function processFinalEvaluationQueueItem(payload: FinalEvaluationPa
 			kind, bookId, title: `[${label}] ${name}`, day, regs, classId, libId, subjects: relIds(p["과목"]), range: latest.range, units: latest.units, unitProp: latest.unitProp,
 		}))
 		await deps.enqueue("create-assignment", { recordId: String(rec.id), plan: null })
-		console.log(`[book-evaluation] ${kind} book=${bookId} ${day} 학생 ${regs.length}명 → 학습기록 ${rec.id}`)
+		console.log(`[progress-evaluation] ${kind} book=${bookId} ${day} 학생 ${regs.length}명 → 학습기록 ${rec.id}`)
 		await deps.markDone(bookId)
 	} catch (err) {
 		await deps.markError(bookId, (err as Error).message).catch(() => {})

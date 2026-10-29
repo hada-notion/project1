@@ -126,7 +126,7 @@ export function inquiryInfoBlock(o: { studentName: string; school?: string; grad
 	].join("\n")
 }
 
-// (v2.8.0 교재 평가, 항목 16) 교재 평가 결과 안내 #{평가정보}: "📝 단원 평가  p.10~20" + 단원마다 "  • 1-2. 정수와 유리수",
+// (v2.8.0 진도 평가, 항목 16) 진도 평가 결과 안내 #{평가정보}: "📝 단원 평가  p.10~20" + 단원마다 "  • 1-2. 정수와 유리수",
 // 마무리 평가는 "📝 마무리 평가" 한 줄. 머리줄로 시작한다(솔라피가 값 맨 앞 공백을 지우므로).
 export function bookEvalInfoBlock(o: { evalType: string; range?: string; units?: string[] }): string {
 	const head = `📝 ${o.evalType}${o.range ? `  ${o.range}` : ""}`

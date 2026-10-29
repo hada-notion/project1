@@ -850,7 +850,7 @@ function buildReportTabHtml(r) {
   const kindName = reportPeriod === "week" ? "주간 평가" : reportPeriod === "month" ? "월간 평가" : "일일 평가"
   const kindTests = tests.filter((t) => testKind(t) === kindName)
   const hasKind = reportPeriod !== "day" && kindTests.length > 0
-  // (v2.8.0 교재 평가, 항목 16) 그 구분 평가가 없어 기간 안 모든 평가로 계산할 때도 교재 평가(단원·마무리)는 뺀다(교재 상세에서만 보인다).
+  // (v2.8.0 진도 평가, 항목 16) 그 구분 평가가 없어 기간 안 모든 평가로 계산할 때도 진도 평가(단원·마무리)는 뺀다(교재 상세에서만 보인다).
   const testItems = (hasKind ? kindTests : tests.filter((t) => !isBookEval(t))).filter((t) => t.date >= rangeStart && t.date <= rangeEnd)
   // 출석률은 상태가 확정된 출석만 계산한다. 빈 상태(미입력/미래 수업)는 분모에서 제외하고,
   // 보강은 실제 수업 참여로 보아 출석과 함께 분자에 포함한다.
