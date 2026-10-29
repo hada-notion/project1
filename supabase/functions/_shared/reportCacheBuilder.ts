@@ -228,6 +228,8 @@ async function buildRegistrationOverview(reg: any, accessToken: string, cachedGe
         const progressRaw = numberOf(bp["진행도"])
         const progress = progressRaw != null ? Math.round(progressRaw * 100) : null
         const range = text(bp["최근 학습 범위"])
+        // (v2.8.0 예체능) 진도교재 `주제`(예: "기억에 남는 풍경 그리기"). 있으면 리포트가 교재명 대신 이 이름을 크게 보여 준다.
+        const topic = text(bp["주제"])
         const regularId = libraryIds(bp)[0]
         let title = "",
           series = "",
@@ -254,7 +256,7 @@ async function buildRegistrationOverview(reg: any, accessToken: string, cachedGe
           }
         }
         // (v2.8.0) 진도교재 ID: 화면이 교재 상세를 이름이 아니라 이 ID로 묶는다(같은 교재·프로그램 2회독).
-        return { id: String(mp.id).replace(/-/g, ""), title, series, pages, status: statusText, progress, range, cover, units, ...(kind ? { kind } : {}) }
+        return { id: String(mp.id).replace(/-/g, ""), title, series, pages, status: statusText, progress, range, cover, units, ...(kind ? { kind } : {}), ...(topic ? { topic } : {}) }
       }),
   )
 

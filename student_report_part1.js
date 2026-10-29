@@ -478,16 +478,22 @@ function splitClassNameEmoji(rawClassName) {
 
 // Supabase RPC 응답(같은 학생의 모든 등록을 registrations[] 배열로 집계)을 앞단의 UI가 사용하는
 // STUDENT/registrations[] 형태로 변환합니다.
+// (v2.8.0) 진도교재에 주제가 있으면 그 진도교재 기록의 교재 이름도 주제로 보인다("기억에 남는 풍경 그리기 · 3차시").
 // (v2.8.0 예체능) 프로그램 기록의 범위가 숫자뿐이면("3", "1-3", "4~5") 뒤에 "차시"를 붙인다(목록 "최근 3차시", 제목 "수채화 1 · 3차시").
 // 기록의 진도교재 ID로 프로그램인지 보고, ID가 없으면(예전 캐시) 같은 이름의 교재가 모두 프로그램일 때만 붙인다.
 function withProgramRanges(m) {
   const books = m.books || []
   const programOf = (item) => {
     if (item.bookId && books.some((b) => b.id === item.bookId)) return books.some((b) => b.id === item.bookId && isProgram(b))
-    const same = books.filter((b) => normBookTitle(b.title) && normBookTitle(b.title) === normBookTitle(item.book))
+    const same = books.filter((b) => normBookTitle(b.libTitle || b.title) && normBookTitle(b.libTitle || b.title) === normBookTitle(item.book))
     return same.length > 0 && same.every(isProgram)
   }
-  const fix = (item) => (/^\d+(\s*[-~]\s*\d+)?$/.test(String(item.range || "").trim()) && programOf(item) ? { ...item, range: `${String(item.range).trim()}차시` } : item)
+  const topicOf = (item) => (item.bookId ? (books.find((b) => b.id === item.bookId) || {}).topic || "" : "")
+  const fix = (item) => {
+    const ranged = /^\d+(\s*[-~]\s*\d+)?$/.test(String(item.range || "").trim()) && programOf(item) ? { ...item, range: `${String(item.range).trim()}차시` } : item
+    const topic = topicOf(item)
+    return topic ? { ...ranged, book: topic } : ranged
+  }
   return { ...m, study_logs: m.study_logs.map(fix), homework: m.homework.map(fix), tests: m.tests.map(fix) }
 }
 function mapRegistration(reg) {
@@ -506,7 +512,8 @@ function mapRegistration(reg) {
     teacher: reg.teacher_name || "",
     class_mode: reg.class_mode || "",
     schedule: (reg.schedule || []).map((s) => ({ day: s.day, start: s.start, end: s.end })),
-    books: (reg.books || []).map((b) => ({ id: b.id || "", kind: b.kind || "", title: b.title || "", progress: b.progress ?? 0, status: normalizeBookStatus(b.status), cover: b.cover || "", pages: b.pages ?? null, units: b.units || [] })),
+    // (v2.8.0) 진도교재 `주제`가 있으면 제목은 주제, 라이브러리 교재명은 libTitle(카드 아랫줄·상세 배지).
+    books: (reg.books || []).map((b) => ({ id: b.id || "", kind: b.kind || "", topic: b.topic || "", libTitle: b.title || "", title: b.topic || b.title || "", progress: b.progress ?? 0, status: normalizeBookStatus(b.status), cover: b.cover || "", pages: b.pages ?? null, units: b.units || [] })),
     attendance_summary: reg.attendance_summary || { present: 0, absent: 0, makeup: 0 },
     attendance_rows: (reg.attendance_rows || []).map((a) => {
       const rawDate = a.iso || a.date_iso || (typeof a.date === "string" && /^\d{4}-\d{2}-\d{2}/.test(a.date) ? a.date : null)
@@ -846,6 +853,7 @@ function renderBookDetail() {
       <div class="reg-tab-content">
         <div class="feed-narrow-wrap">
         <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></span>${esc(selectedBookTitle)}</h2>
+        ${book.topic && book.libTitle ? `<div class="section-hint">${esc(book.libTitle)}${book.pages ? ` · ${isProgram(book) ? `총 ${esc(book.pages)}차시` : `${esc(book.pages)}쪽`}` : ""}</div>` : ""}
         <div class="book-cover-card">
           <div class="book-cover-top">
             <div class="book-cover-card-img">${book.cover ? `<img src="${esc(book.cover)}" alt="${esc(selectedBookTitle)}">` : `<span class="cover-fallback-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></span>`}</div>

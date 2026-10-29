@@ -54,3 +54,18 @@ Deno.test("v2.8.0 교재 평가 일괄: 이미 받은 학생은 건너뛰고 나
 	await m.processBookEvalBatchItem({ recordId: REC })
 	eq([updates, queued], [["x2", "x3"], [["notice", "bookEval", "x2"], ["notice", "bookEval", "x3"]]])
 })
+
+Deno.test("v2.8.0 예체능: 진도교재 주제가 있으면 #{교재명}은 주제(교재명)", async () => {
+	const PB = "3eeba040586b81e3a977f3fb68b99d60", A1 = "a1"
+	const pages: Record<string, any> = {
+		[REC]: { id: REC, properties: { "구분": sel("평가"), "평가 구분": sel("마무리 평가"), "교재": rel(LIB), "진도교재": rel(PB), "학습활동": rel(A1) } },
+		[LIB]: { id: LIB, properties: { "교재명": { type: "title", title: [{ plain_text: "수채화 1" }] } } },
+		[PB]: { id: PB, properties: { "주제": txt("기억에 남는 풍경 그리기") } },
+		[REG]: { id: REG, properties: {} },
+		[A1]: act(A1, null, null),
+	}
+	Object.assign(deps, { getPage: async (id: string) => { if (id in pages) return pages[id]; throw new Error(`unexpected ${id}`) }, unitNames: async () => new Map() })
+	eq((await m.bookEvalContent(pages[A1])).variables["#{교재명}"], "기억에 남는 풍경 그리기(수채화 1)")
+	pages[PB].properties["주제"] = txt("")
+	eq((await m.bookEvalContent(pages[A1])).variables["#{교재명}"], "수채화 1")
+})

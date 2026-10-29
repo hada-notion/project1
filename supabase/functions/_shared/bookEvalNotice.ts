@@ -61,7 +61,12 @@ export async function bookEvalContent(activity: any): Promise<{ registrationId: 
 	if (!evalType) throw new Error("진도 평가(단원 평가·마무리 평가) 학습활동에서만 보낼 수 있습니다.")
 	const libId = relIds(rp["교재"])[0]
 	const lib = libId ? await deps.getPage(libId).catch(() => null) : null
-	const bookName = plain(lib?.properties?.["교재명"]) || plain(rp["학습"]).replace(/^\[[^\]]*\]\s*/, "").replace(/\s*·.*$/, "") || "교재"
+	const libName = plain(lib?.properties?.["교재명"]) || plain(rp["학습"]).replace(/^\[[^\]]*\]\s*/, "").replace(/\s*·.*$/, "") || "교재"
+	// (v2.8.0 예체능) 진도교재 `주제`가 있으면 "주제(교재명)"(예: "기억에 남는 풍경 그리기(수채화 1)").
+	const progressBookId = relIds(rp["진도교재"])[0]
+	const progressBook = progressBookId ? await deps.getPage(progressBookId).catch(() => null) : null
+	const topic = plain(progressBook?.properties?.["주제"])
+	const bookName = topic ? `${topic}(${libName})` : libName
 	const names = evalType === "단원 평가" ? await deps.unitNames([record]) : new Map<string, string>()
 	const units = evalType === "단원 평가" ? unitIdsOf(record).map((id) => names.get(id) ?? "").filter(Boolean) : []
 	const classId = relIds(rp["클래스"])[0]
