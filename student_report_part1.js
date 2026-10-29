@@ -538,6 +538,8 @@ function mapRegistration(reg) {
     // 주간/월간 보고서: 보고서(학원) DB 자체의 "선생님 한마디"를 보고서 구분·학습 기간과 함께 보관한다.
     report_comments: (reg.report_comments || []).map((c) => ({ kind: c.kind || "", start: c.start || null, end: c.end || c.start || null, comment: c.comment || "" })),
     report_mode: reg.report_mode === "tests_only" ? "tests_only" : "all",
+    // (v2.8.0 루틴, 항목 18) 루틴 체크: 루틴 이름·날짜(서울)·했음. 루틴을 안 쓰는 반은 빈 목록이고 화면에 루틴 칸이 없다.
+    routines: (reg.routines || []).map((x) => ({ name: x.name || "", date: x.date || "", done: !!x.done })).filter((x) => x.name && x.date),
   })
 }
 
@@ -601,6 +603,7 @@ async function loadReportFromServer() {
               ...r,
               attendance_summary: detail.attendance_summary,
               attendance_rows: detail.attendance_rows,
+              routines: detail.routines,
               study_logs: detail.study_logs,
               homework: detail.homework,
               homework_days: detail.homework_days,

@@ -14,6 +14,9 @@
 // (v2.8.0) 경로 /progress-evaluation: 진도교재 [진도 평가 생성](진행상태 완료면 마무리, 아니면 단원). 예전 두 버튼 경로
 // /unit-evaluation·/final-evaluation도 받는다. 그 교재의 수강 중 학생으로 진도 평가 학습기록을 만든다.
 // 처리는 _shared/finalEvaluation.ts. 상태는 진도교재 '진도 평가 상태'.
+//
+// (v2.8.0 루틴, 항목 18) 경로 /routine-checks: 수업 [루틴 체크 생성]. 이 수업 반의 루틴 × 출석으로 루틴 체크 행을 만든다.
+// 처리는 _shared/routineCheck.ts. 상태는 수업 '루틴 체크 상태'.
 import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 import { getCurrentAdminKey, resolveAdminKeyFromRequest } from "../_shared/adminShared.ts"
 import { describeBody, extractPageId, getPage } from "../_shared/notionClient.ts"
@@ -23,6 +26,7 @@ import { isRunning, markError, markQueued } from "../_shared/statusTracking.ts"
 import { CLASS_REPORT_GEN_STATUS_SPEC, TARGET_CLASS_REPORTS, reportRequestFromProps, type ClassReportsPayload } from "../_shared/classReportPlan.ts"
 import { BATCH_EVAL_STATUS_SPEC, EVAL_PLAN_PROP, TARGET_BATCH_EVALUATIONS, evalPlanText } from "../_shared/evaluationPlan.ts"
 import { type BookEvalKind, FINAL_EVAL_STATUS_SPEC, TARGET_FINAL_EVALUATION } from "../_shared/finalEvaluation.ts"
+import { ROUTINE_STATUS_SPEC, TARGET_ROUTINE_CHECKS } from "../_shared/routineCheck.ts"
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } })
 
@@ -41,6 +45,7 @@ Deno.serve(async (req: Request) => {
 	if (route === "final-evaluation") return await queueFinalEvaluation(body, "final")
 	if (route === "unit-evaluation") return await queueFinalEvaluation(body, "unit")
 	if (route === "progress-evaluation") return await queueFinalEvaluation(body, "auto")
+	if (route === "routine-checks") return await queueRoutineChecks(body)
 
 	const classId = extractPageId(body)
 	if (!classId) return json({ error: "pageId를 찾을 수 없음" }, 400)
@@ -83,6 +88,24 @@ async function queueFinalEvaluation(body: Record<string, unknown>, kind: BookEva
 	} catch (err) {
 		console.error("[create-class-reports/final-evaluation] ERROR:", (err as Error).message)
 		await markError(bookId, FINAL_EVAL_STATUS_SPEC, (err as Error).message).catch(() => {})
+		return json({ ok: false, error: (err as Error).message }, 500)
+	}
+}
+
+// 수업 [루틴 체크 생성]: 잠금 확인 → ⏳ 대기열 → 큐. 루틴·출석 확인은 큐가 한다.
+async function queueRoutineChecks(body: Record<string, unknown>): Promise<Response> {
+	const sessionId = extractPageId(body)
+	if (!sessionId) return json({ error: "pageId를 찾을 수 없음" }, 400)
+	try {
+		const page = await getPage(sessionId)
+		if (isRunning(page, ROUTINE_STATUS_SPEC)) return json({ ok: true, message: "already_processing", sessionId })
+		await markQueued(sessionId, ROUTINE_STATUS_SPEC)
+		await enqueueSync(TARGET_ROUTINE_CHECKS, { sessionId })
+		wakeSyncQueueWorker()
+		return respondAccepted({ sessionId, queued: true })
+	} catch (err) {
+		console.error("[create-class-reports/routine-checks] ERROR:", (err as Error).message)
+		await markError(sessionId, ROUTINE_STATUS_SPEC, (err as Error).message).catch(() => {})
 		return json({ ok: false, error: (err as Error).message }, 500)
 	}
 }

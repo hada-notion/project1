@@ -834,6 +834,35 @@ function buildTestTrendChartHtml(points) {
     ${emptyOverlay}
   `
 }
+// (v2.8.0 루틴, 항목 18) 루틴 체크. 루틴 이름은 데이터로 읽어 루틴이 늘어도 줄이 저절로 늘어난다.
+const ROUTINE_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>`
+// 기간 안 루틴별 했음/전체(루틴 이름 첫 등장 순서). 루틴을 안 쓰는 반은 빈 목록.
+function routineSummary(r, start, end) {
+  const byName = new Map()
+  ;(r.routines || []).filter((x) => x.date >= start && x.date <= end).forEach((x) => {
+    const s = byName.get(x.name) || { name: x.name, done: 0, total: 0 }
+    s.total += 1
+    if (x.done) s.done += 1
+    byName.set(x.name, s)
+  })
+  return [...byName.values()]
+}
+function routinePeriodHtml(r, start, end) {
+  if (!(r.routines || []).length) return ""
+  const rows = routineSummary(r, start, end)
+  const inner = rows.length
+    ? rows.map((s) => {
+        const pct = Math.round((s.done / s.total) * 100)
+        return `
+        <div class="home-progress-row">
+          <div class="home-progress-title">${esc(s.name)}</div>
+          <div class="progress-line"><div class="track"><div class="fill" style="width:${pct}%"></div></div><b>${s.done}/${s.total}회</b></div>
+        </div>`
+      }).join("")
+    : `<div class="empty">이 기간 루틴 체크가 없어요.</div>`
+  return `<h3 class="sec-title"><span class="sec-icon">${ROUTINE_ICON}</span>루틴</h3><div class="card">${inner}</div>`
+}
+
 function buildReportTabHtml(r) {
   // (v2.8.0) 평가만 보는 반은 일간 보고서가 없다(출석이 없음). 주간부터 보여 준다.
   const testsOnly = isTestsOnly(r)
@@ -922,6 +951,7 @@ function buildReportTabHtml(r) {
     <div class="card">
       ${buildTestTrendChartHtml(computeKindTestPoints(kindTests, rangeEnd, reportPeriod === "week" ? 4 : 6, reportPeriod))}
     </div>` : ""}
+    ${routinePeriodHtml(r, rangeStart, rangeEnd)}
     <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></span>선생님 한마디</h3>
     <div class="card">
       ${(() => {
@@ -1030,6 +1060,11 @@ function buildDailyBodyHtml(r, date) {
     groupBand(todaysTests, (t) => reportItemHtml(r, t, { pill: testPillText(t), pillTone: testPillTone(t), compare: testCompareBarsHtml(t) }), "이날 평가가 없어요.") +
     sub("최근 평가 추이") +
     band(buildTestTrendChartHtml(computeRecentTestPoints(dailyTests, date, 3)))
+  // (v2.8.0 루틴) 그날 루틴: 했으면 "했어요", 아니면 "안 했어요". 루틴을 안 쓰는 반은 칸이 없다.
+  const todaysRoutines = (r.routines || []).filter((x) => x.date === date)
+  const routineHtml = todaysRoutines.length
+    ? groupBand(todaysRoutines, (x) => `<div class="rep-item"><div class="rep-title">${esc(x.name)}<span class="log-pill ${homeworkPillTone(x.done ? "제출" : "미제출")}">${x.done ? "했어요" : "안 했어요"}</span></div></div>`, "")
+    : empty("이날 루틴 체크가 없어요.")
   const commentHtml = comment
     ? band(`<div class="speech">${esc(comment.text)}${comment.by ? `<small>${esc(comment.by)}</small>` : ""}</div>`)
     : empty("아직 등록된 한마디가 없어요.")
@@ -1057,6 +1092,7 @@ function buildDailyBodyHtml(r, date) {
     </div>
     ${session(KIND_ICONS["학습"], "학습", studyHtml)}
     ${session(KIND_ICONS["과제"], "과제", homeworkHtml)}
+    ${(r.routines || []).length ? session(ROUTINE_ICON, "루틴", routineHtml) : ""}
     ${session(KIND_ICONS["평가"], "평가", testHtml)}
     ${session(msgIcon, "선생님 한마디", commentHtml)}
   `

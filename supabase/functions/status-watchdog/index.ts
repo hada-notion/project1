@@ -48,6 +48,7 @@ import { ASSIGNMENT_GEN_STATUS_SPEC } from "../_shared/createAssignmentTarget.ts
 import { CLASS_REPORT_GEN_STATUS_SPEC, resolveBatchDataSourceId } from "../_shared/classReportPlan.ts"
 import { BATCH_EVAL_STATUS_SPEC } from "../_shared/evaluationPlan.ts"
 import { FINAL_EVAL_STATUS_SPEC } from "../_shared/finalEvaluation.ts"
+import { ROUTINE_STATUS_SPEC } from "../_shared/routineCheck.ts"
 import { SCHEDULE_NOTICE_STATUS_SPEC } from "../_shared/scheduleNotice.ts"
 import { CLASS_LETTER_GEN_STATUS_SPEC, CLASS_TUITION_GEN_STATUS_SPEC } from "../_shared/monthlyNotice.ts"
 import { resolveMenuDataSourceId } from "../_shared/menuDataSource.ts"
@@ -98,6 +99,8 @@ const TARGETS: Array<{ label: string; dataSourceId: string | (() => Promise<stri
 	{ label: "발송함:평가생성", dataSourceId: resolveBatchDataSourceId, spec: BATCH_EVAL_STATUS_SPEC },
 	// (v2.8.0) 진도교재 [진도 평가 생성](예전 단원·마무리 두 버튼 포함).
 	{ label: "진도교재:진도평가", dataSourceId: DS_PROGRESS_BOOK, spec: FINAL_EVAL_STATUS_SPEC },
+	// (v2.8.0 루틴) 수업 [루틴 체크 생성].
+	{ label: "수업:루틴체크", dataSourceId: DS_CLASS_SESSION, spec: ROUTINE_STATUS_SPEC },
 	// (v2.8.0) 일정 안내(일정 한 건).
 	{ label: "일정:일정안내", dataSourceId: DS_SCHEDULE_EVENT, spec: SCHEDULE_NOTICE_STATUS_SPEC },
 	// (v2.8.0) 클래스 [월 수강료 생성].
