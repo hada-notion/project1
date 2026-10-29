@@ -78,12 +78,16 @@ function scorePillText(correct, total) {
   const pct = Math.round(((correct ?? 0) / total) * 100)
   return `${pct}점 (${correct ?? 0}/${total})`
 }
-// (v2.8.0 종합 평가, 항목 16) 평가 알약: 점수가 없는 종합 평가(예체능 등)는 "수료".
+// (v2.8.0 교재 평가, 항목 16) 단원 평가·마무리 평가(예전 "종합 평가")는 교재 평가: 교재 상세에만 보이고 보고서에는 넣지 않는다.
+function isBookEval(t) {
+  return !!t && ["단원 평가", "마무리 평가", "종합 평가"].includes(t.evalType)
+}
+// 평가 알약: 점수가 없는 교재 평가(예체능 등)는 "수료".
 function testPillText(t) {
-  return t && t.evalType === "종합 평가" && !t.total ? "수료" : scorePillText(t.correct ?? 0, t.total ?? 0)
+  return isBookEval(t) && !t.total ? "수료" : scorePillText(t.correct ?? 0, t.total ?? 0)
 }
 function testPillTone(t) {
-  return t && t.evalType === "종합 평가" && !t.total ? "tone-green" : scorePillTone(t.correct ?? 0, t.total ?? 0)
+  return isBookEval(t) && !t.total ? "tone-green" : scorePillTone(t.correct ?? 0, t.total ?? 0)
 }
 // (v2.8.0) 평가 구분·기간 한 줄(평가 카드 아래 줄). 일일 평가(수업에서 본 평가)는 날짜 묶음과 같아 적지 않고,
 // 출석 없이 만든 평가만 평가 기간을 적는다. 교재·범위가 없어 제목이 평가 구분이면 아래 줄에는 기간만 적는다.
@@ -100,7 +104,8 @@ function testEvalRow(t) {
 // (v2.8.0) 평가 구분 묶음(서버 testKindOf와 같음): 주간·월간·종합은 그 이름, 나머지는 일일 평가.
 // 보고서는 구분마다 같은 구분의 평가만 추이로 그린다(일간=일일, 주간=주간, 월간=월간).
 function testKind(t) {
-  return t && ["주간 평가", "월간 평가", "종합 평가"].includes(t.evalType) ? t.evalType : "일일 평가"
+  if (t && t.evalType === "종합 평가") return "마무리 평가"
+  return t && ["주간 평가", "월간 평가", "단원 평가", "마무리 평가"].includes(t.evalType) ? t.evalType : "일일 평가"
 }
 // (v2.8.0) 클래스 '리포트 구성'이 "평가만"인 반: 출결·과제·일간 보고서를 숨기고 평가 중심으로 보여 준다.
 function isTestsOnly(r) {
@@ -733,25 +738,25 @@ function renderBookDetail() {
   ;((r.homework) || []).filter((h) => normBookTitle(h.book) === targetTitle).forEach((h) => items.push({
     type: "과제", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>`, date: h.classDate || h.due, due: h.due, classDate: h.classDate, book: h.book, range: h.range, unit: h.unit, note: h.note || h.title, pill: h.status, pillTone: homeworkPillTone(h.status), photo: null, sourceBody: h.sourceBody, activityBody: h.activityBody,
   }))
-  // 종합 평가는 아래 "종합 평가" 구역에만 보인다(학습기록 목록에 같은 평가가 한 번 더 나오지 않게).
-  ;((r.tests) || []).filter((t) => normBookTitle(t.book) === targetTitle && t.evalType !== "종합 평가").forEach((t) => items.push({
+  // 교재 평가(단원·마무리)는 위 "교재 평가" 구역에만 보인다(학습기록 목록에 같은 평가가 한 번 더 나오지 않게).
+  ;((r.tests) || []).filter((t) => normBookTitle(t.book) === targetTitle && !isBookEval(t)).forEach((t) => items.push({
     type: "평가", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`, date: t.date, book: t.book, range: t.range, unit: t.unit, note: t.note || t.title, pill: testPillText(t), pillTone: testPillTone(t), photo: null, sourceBody: t.sourceBody, activityBody: t.activityBody,
   }))
-  // (v2.8.0 종합 평가, 항목 16) 이 교재의 종합 평가(교재를 끝내고 본 평가)와 이 교재 평가 추이. 일일·주간·월간 보고서와 별개로 여기서만 보인다.
+  // (v2.8.0 교재 평가, 항목 16) 이 교재의 단원 평가·마무리 평가와 이 교재 평가 추이. 일일·주간·월간 보고서와 별개로 여기서만 보인다.
   const bookTests = ((r.tests) || []).filter((t) => normBookTitle(t.book) === targetTitle)
-  const finalTests = bookTests.filter((t) => t.evalType === "종합 평가").sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+  const finalTests = bookTests.filter(isBookEval).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
   const trendPoints = computeRecentTestPoints(bookTests, MOCK_TODAY, 8)
   const finalHtml = finalTests.length ? `
-        <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg></span>종합 평가</h3>
-        <div class="section-hint">이 교재를 마치고 본 평가예요</div>
+        <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg></span>교재 평가</h3>
+        <div class="section-hint">단원을 마치거나 교재를 마무리하며 본 평가예요</div>
         ${finalTests.map((t) => `
           <div class="log-card 평가">
             <div class="log-top">
               <div class="log-body">
-                <div class="log-title-row"><div class="log-title">${esc(withDow(t.date))}</div><span class="log-pill ${testPillTone(t)}">${esc(testPillText(t))}</span></div>
+                <div class="log-title-row"><div class="log-title">${esc([testKind(t), t.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${testPillTone(t)}">${esc(testPillText(t))}</span></div>
               </div>
             </div>
-            <div class="log-meta">${renderLogMetaRows("", t.comment ? `선생님 한마디: ${t.comment}` : "", typeof t.classAvg === "number" ? [`반 평균 ${t.classAvg}점`] : [])}</div>
+            <div class="log-meta">${renderLogMetaRows(t.unit, t.comment ? `선생님 한마디: ${t.comment}` : "", [withDow(t.date), typeof t.classAvg === "number" ? `반 평균 ${t.classAvg}점` : null].filter(Boolean))}</div>
           </div>`).join("")}
         ${trendPoints.filter((p) => p.avg !== null).length >= 2 ? `<h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></span>이 교재 평가 추이</h3>${buildTestTrendChartHtml(trendPoints)}` : ""}` : ""
   const sorted = items.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
@@ -1145,7 +1150,7 @@ function showTestPeriodModal(rangeStart, rangeEnd, label, kind) {
   const r = STUDENT.registrations.find((x) => x.token === selectedToken)
   if (!r) return
   // (v2.8.0) kind가 있으면 그 평가 구분만(주간·월간 보고서의 평가 평균이 그 구분으로 계산될 때와 같게).
-  const items = (r.tests || []).filter((t) => { const d = String(t.date || "").slice(0, 10); return d && d >= rangeStart && d <= rangeEnd && (kind ? testKind(t) === kind : testKind(t) !== "종합 평가") })
+  const items = (r.tests || []).filter((t) => { const d = String(t.date || "").slice(0, 10); return d && d >= rangeStart && d <= rangeEnd && (kind ? testKind(t) === kind : !isBookEval(t)) })
     .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
   document.getElementById("test-detail-modal-title").textContent = label
   document.getElementById("test-detail-modal-body").innerHTML = items.length

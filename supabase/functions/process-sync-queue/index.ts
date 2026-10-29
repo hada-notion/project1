@@ -136,7 +136,7 @@ const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Pro
   "registration-report": processRegistrationReportQueueItem,
   // (v2.8.0) 알림톡 발송함 [평가 생성] → create-class-reports/evaluations. 교재마다 평가 기록 → create-assignment 큐.
   "batch-evaluations": processBatchEvaluationsQueueItem,
-  // (v2.8.0) 진도교재 [종합 평가 만들기] → create-class-reports/final-evaluation. 교재 1건 → 평가 기록 → create-assignment 큐.
+  // (v2.8.0) 진도교재 [단원 평가 만들기]·[마무리 평가 만들기] → create-class-reports/unit-evaluation·final-evaluation. 교재 1건 → 평가 기록 → create-assignment 큐.
   "final-evaluation": processFinalEvaluationQueueItem,
   // (v2.8.0) 출석 DB "수업 안내 상태 ⚪ 대기" 자동화 → send-lesson-notice/queue (수업 안내 한 건씩, 일일 보고서와 같은 방식)
   "lesson-notice": processLessonNoticeQueueItem,
