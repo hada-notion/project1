@@ -25,28 +25,37 @@ function mock(pages: Record<string, any>): Calls {
 }
 const book = (extra: Record<string, unknown>) => ({ id: BOOK, properties: { "진도교재": { type: "title", title: [{ plain_text: "쎈 공통수학1(고1 A)" }] }, "라이브러리": rel(LIB), "과목": rel(SUB), ...extra } })
 
-Deno.test("v2.8.0 종합 평가: 반 교재는 수강 중 학생 모두로 평가 학습기록 1개 → 학습활동 큐", async () => {
+Deno.test("v2.8.0 교재 평가: 반 교재는 수강 중 학생 모두로 평가 학습기록 1개 → 학습활동 큐", async () => {
 	const c = mock({ [BOOK]: book({ "등록": rel(R1, R2, R3), "클래스": rel(CLS) }), [R1]: reg(R1, "🟢 수강 중"), [R2]: reg(R2, "🟢 수강 중"), [R3]: reg(R3, "🔴 퇴원") })
 	await m.processFinalEvaluationQueueItem({ bookId: BOOK })
 	eq(c.marks, ["running", "done"])
 	const p = c.created[0].props
-	eq([c.created[0].ds, p["학습"].title[0].text.content, p["구분"].select.name, p["평가 구분"].select.name, p["평가 기간"].date], ["records", "[종합 평가] 쎈 공통수학1(고1 A)", "평가", "종합 평가", { start: "2026-10-29" }])
+	eq([c.created[0].ds, p["학습"].title[0].text.content, p["구분"].select.name, p["평가 구분"].select.name, p["평가 기간"].date], ["records", "[마무리 평가] 쎈 공통수학1(고1 A)", "평가", "마무리 평가", { start: "2026-10-29" }])
 	eq([p["등록"].relation.map((r: any) => r.id), p["진도교재"].relation[0].id, p["교재"].relation[0].id, p["과목"].relation[0].id, p["클래스"].relation[0].id], [[R1, R2], BOOK, LIB, SUB, CLS])
 	eq(c.enqueued, [{ target: "create-assignment", payload: { recordId: "rec-1", plan: null } }])
 })
 
-Deno.test("v2.8.0 종합 평가: 학생 개별교재는 그 학생 한 명, 클래스는 등록에서", async () => {
+Deno.test("v2.8.0 교재 평가: 학생 개별교재는 그 학생 한 명, 클래스는 등록에서", async () => {
 	const c = mock({ [BOOK]: book({ "등록": rel(R1), "반별교재": rel("3faba040586b8011b3dacfb3f2462efe") }), [R1]: reg(R1, "🟢 수강 중") })
 	await m.processFinalEvaluationQueueItem({ bookId: BOOK })
 	const p = c.created[0].props
 	eq([p["등록"].relation.map((r: any) => r.id), p["클래스"].relation[0].id, c.marks], [[R1], CLS, ["running", "done"]])
 })
 
-Deno.test("v2.8.0 종합 평가: 개별 진도 반 교재(템플릿)·수강 중 학생 없음은 만들지 않고 안내", async () => {
+Deno.test("v2.8.0 교재 평가: 개별 진도 반 교재(템플릿)·수강 중 학생 없음은 만들지 않고 안내", async () => {
 	const a = mock({ [BOOK]: book({ "등록": rel(), "개별교재": rel(R2) }) })
 	await m.processFinalEvaluationQueueItem({ bookId: BOOK })
 	eq([a.created.length, a.marks[1].includes("개별교재")], [0, true])
 	const b = mock({ [BOOK]: book({ "등록": rel(R3) }), [R3]: reg(R3, "🔴 퇴원") })
 	await m.processFinalEvaluationQueueItem({ bookId: BOOK })
 	eq([b.created.length, b.marks[1].includes("수강 중인 학생이 없습니다")], [0, true])
+})
+
+Deno.test("v2.8.0 교재 평가: 단원 평가는 가장 최근 학습기록의 범위·선택 단원을 미리 채운다", async () => {
+	const S_OLD = "3eeba040586b81e3a977f3fb68b99d30", S_NEW = "3eeba040586b81e3a977f3fb68b99d31", U1 = "3eeba040586b81e3a977f3fb68b99d40"
+	const study = (id: string, created: string, range: string, units: string[]) => ({ id, created_time: created, properties: { "구분": { type: "select", select: { name: "학습" } }, "범위": { type: "rich_text", rich_text: [{ plain_text: range }] }, "선택 단원": rel(...units) } })
+	const c = mock({ [BOOK]: book({ "등록": rel(R1), "클래스": rel(CLS), "학습기록": rel(S_NEW, S_OLD) }), [R1]: reg(R1, "🟢 수강 중"), [S_OLD]: study(S_OLD, "2026-10-01T00:00:00Z", "p.1~9", []), [S_NEW]: study(S_NEW, "2026-10-20T00:00:00Z", "p.10~20", [U1]) })
+	await m.processFinalEvaluationQueueItem({ bookId: BOOK, kind: "unit" })
+	const p = c.created[0].props
+	eq([p["학습"].title[0].text.content, p["평가 구분"].select.name, p["범위"].rich_text[0].text.content, p["선택 단원"].relation.map((r: any) => r.id)], ["[단원 평가] 쎈 공통수학1(고1 A)", "단원 평가", "p.10~20", [U1]])
 })
