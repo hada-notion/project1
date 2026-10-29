@@ -3,7 +3,8 @@
 // (v2.8.0 교재 평가, 항목 16) 진도교재 [단원 평가 만들기]·[마무리 평가 만들기] → create-class-reports/unit-evaluation·
 // /final-evaluation 웹훅 → 큐 "final-evaluation"(kind unit|final). 교재에 묶인 평가다. 일일·주간·월간 보고서와는 별개로,
 // 학부모 리포트에서 그 교재를 열었을 때 "교재 평가" 구역에 보인다.
-//   - 단원 평가: 단원을 하나 끝냈을 때(여러 번). 이 교재의 가장 최근 학습기록의 `범위`·`선택 단원`을 미리 채운다(선생님이 고친다).
+//   - 단원 평가: 단원을 하나 끝냈을 때(여러 번). 이 교재 학습기록 중 `범위`나 `선택 단원`이 들어 있는 가장 최근 것의 값을
+//     미리 채운다(빈 기록은 건너뜀, 선생님이 고친다).
 //   - 마무리 평가: 교재를 다 끝냈을 때. 범위·단원 없음. (예전 이름 "종합 평가" — 선택지 이름을 바꿔도 옛 값은 마무리 평가로 읽는다.)
 //   - 대상: 누른 진도교재에 연결된 등록 중 수강 중인 학생. 그룹 진도 교재(반 교재)는 반 학생 모두, 학생의 개별교재는 그 학생.
 //     개별 진도 반 교재(템플릿, 아래에 개별교재가 달림)에는 등록이 없다 → 학생의 개별교재에서 누르라고 ⚠️ 오류.
@@ -31,7 +32,7 @@ export type FinalEvaluationPayload = { bookId: string; kind?: BookEvalKind }
 
 const plain = (prop: any): string => (prop?.title ?? prop?.rich_text ?? []).map((t: any) => t.plain_text ?? t.text?.content ?? "").join("").trim()
 const isActive = (reg: any) => !reg?.in_trash && !reg?.archived && String(reg?.properties?.["수강상태"]?.formula?.string ?? "").includes("수강 중")
-const LATEST_LOOKUP = 8
+const LATEST_LOOKUP = 20
 
 export function finalRecordProps(o: { kind: BookEvalKind; bookId: string; title: string; day: string; regs: string[]; classId: string | null; libId: string | null; subjects: string[]; range?: string; units?: string[] }): Record<string, unknown> {
 	return {
@@ -49,13 +50,14 @@ export function finalRecordProps(o: { kind: BookEvalKind; bookId: string; title:
 	}
 }
 
-// 이 교재의 가장 최근 학습 기록(구분 학습)의 범위·선택 단원. 관계 끝쪽 몇 개만 읽는다(최근 기록이 뒤에 붙는다). 없으면 빈 값.
+// 이 교재 학습 기록(구분 학습) 중 범위나 선택 단원이 들어 있는 가장 최근 것의 범위·선택 단원. 관계 끝쪽 몇 개만 읽는다
+// (최근 기록이 뒤에 붙는다). 범위·단원을 적지 않은 기록(10/29 원본: 최근 2건이 빈 기록)은 건너뛴다. 없으면 빈 값.
 async function latestStudyOf(book: any, getPageFn: (id: string) => Promise<any>): Promise<{ range: string; units: string[] }> {
 	const ids = relIds(book?.properties?.["학습기록"]).slice(-LATEST_LOOKUP)
 	const pages = (await Promise.all(ids.map((id) => getPageFn(id).catch(() => null))))
 		.filter((p: any) => p && !p.in_trash && !p.archived && p.properties?.["구분"]?.select?.name === "학습")
 		.sort((a: any, b: any) => String(b.created_time ?? "").localeCompare(String(a.created_time ?? "")))
-	const last = pages[0]
+	const last = pages.find((pg: any) => plain(pg.properties?.["범위"]) || relIds(pg.properties?.["선택 단원"]).length)
 	return { range: plain(last?.properties?.["범위"]), units: relIds(last?.properties?.["선택 단원"]) }
 }
 
