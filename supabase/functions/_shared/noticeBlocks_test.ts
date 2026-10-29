@@ -24,6 +24,8 @@ Deno.test("v2.8.0 통일안 블록: 기존·전달사항은 있을 때만, 일�
 	eq(b.textbookBlock("📘 RPM 1-2 : 15,000원\n📘 쎈 1-2 : 16,000원\n\n📚 청구 금액 : 31,000원"), "📚 교재 내역\n  • RPM 1-2  15,000원\n  • 쎈 1-2  16,000원\n\n🧾 합계  31,000원")
 	eq(b.inquiryBlock({ studentName: "이도윤", school: "하다중학교", grade: "중1" }), "👤 학생  이도윤\n🏫 학교  하다중학교\n🎓 학년  중1")
 	eq(b.inquiryBlock({ studentName: "김하윤", school: "미입력", grade: "" }), "👤 학생  김하윤")
+	eq(b.inquiryInfoBlock({ studentName: "강하을", school: "우리중", grade: "중1" }), "📋 접수 내용\n  • 학생  강하을\n  • 학교  우리중\n  • 학년  중1")
+	eq(b.inquiryInfoBlock({ studentName: "김하윤", school: "미입력", grade: "" }), "📋 접수 내용\n  • 학생  김하윤")
 	eq(b.dateOnly("26.10.12(월) 18:00"), "26.10.12(월)")
 	// 변수 값: "이름(알림톡)" → 옛 이름 → 계산값
 	const page = { properties: { "학생이름(알림톡)": formula("새"), "학생이름(보고서)": formula("옛"), "클래스(보고서)": formula("옛반") } }
