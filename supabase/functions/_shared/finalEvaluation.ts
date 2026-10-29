@@ -1,6 +1,6 @@
 // _shared/finalEvaluation.ts
 //
-// (v2.9.0 종합 평가) 진도교재 [종합 평가 만들기] → create-class-reports/final-evaluation 웹훅 → 큐 "final-evaluation".
+// (v2.8.0 종합 평가, 항목 16) 진도교재 [종합 평가 만들기] → create-class-reports/final-evaluation 웹훅 → 큐 "final-evaluation".
 // 교재 하나를 끝냈을 때 보는 평가다. 일일·주간·월간 보고서와는 별개로, 학부모 리포트에서 그 교재를 열었을 때 보인다.
 //   - 대상: 누른 진도교재에 연결된 등록 중 수강 중인 학생. 그룹 진도 교재(반 교재)는 반 학생 모두, 학생의 개별교재는 그 학생.
 //     개별 진도 반 교재(템플릿, 아래에 개별교재가 달림)에는 등록이 없다 → 학생의 개별교재에서 누르라고 ⚠️ 오류.

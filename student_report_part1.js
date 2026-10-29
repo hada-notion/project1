@@ -78,6 +78,13 @@ function scorePillText(correct, total) {
   const pct = Math.round(((correct ?? 0) / total) * 100)
   return `${pct}점 (${correct ?? 0}/${total})`
 }
+// (v2.8.0 종합 평가, 항목 16) 평가 알약: 점수가 없는 종합 평가(예체능 등)는 "수료".
+function testPillText(t) {
+  return t && t.evalType === "종합 평가" && !t.total ? "수료" : scorePillText(t.correct ?? 0, t.total ?? 0)
+}
+function testPillTone(t) {
+  return t && t.evalType === "종합 평가" && !t.total ? "tone-green" : scorePillTone(t.correct ?? 0, t.total ?? 0)
+}
 // (v2.8.0) 평가 구분·기간 한 줄(평가 카드 아래 줄). 일일 평가(수업에서 본 평가)는 날짜 묶음과 같아 적지 않고,
 // 출석 없이 만든 평가만 평가 기간을 적는다. 교재·범위가 없어 제목이 평가 구분이면 아래 줄에는 기간만 적는다.
 function testTitle(t) {
@@ -501,7 +508,7 @@ function mapRegistration(reg) {
     // 마감일이 아니라 수업일(그 과제를 실제로 내준 날) 기준으로 판단하려면 이 값이 있어야 한다.
     homework: (reg.homework || []).map((h) => ({ type: "과제", title: h.title || "", book: h.book || "", range: h.range || "", unit: h.unit || "", note: h.note || "", due: h.due_iso || null, classDate: isoToKstDate(h.iso) || null, status: h.status || "미제출", sourceBody: normalizeFeedBody(h.source_body), activityBody: normalizeFeedBody(h.activity_body) })),
     homework_days: (reg.homework_days || []).map((h) => ({ date: h.date || null, status: h.status || "미완료", submitted: h.submitted ?? 0, total: h.total ?? 0 })),
-    tests: (reg.tests || []).map((t) => ({ type: "평가", title: t.title || "", book: t.book || "", range: t.range || "", unit: t.unit || "", note: t.note || "", date: isoToKstDate(t.iso) || (t.iso ? String(t.iso).slice(0, 10) : null), correct: t.correct ?? 0, total: t.total ?? 0, classAvg: typeof t.class_avg === "number" ? t.class_avg : null, evalType: t.eval_type || "", evalStart: t.eval_start || null, evalEnd: t.eval_end || null, standalone: !!t.standalone, sourceBody: normalizeFeedBody(t.source_body), activityBody: normalizeFeedBody(t.activity_body) })),
+    tests: (reg.tests || []).map((t) => ({ type: "평가", title: t.title || "", book: t.book || "", range: t.range || "", unit: t.unit || "", note: t.note || "", date: isoToKstDate(t.iso) || (t.iso ? String(t.iso).slice(0, 10) : null), correct: t.correct ?? 0, total: t.total ?? 0, classAvg: typeof t.class_avg === "number" ? t.class_avg : null, evalType: t.eval_type || "", evalStart: t.eval_start || null, evalEnd: t.eval_end || null, standalone: !!t.standalone, comment: t.comment || "", sourceBody: normalizeFeedBody(t.source_body), activityBody: normalizeFeedBody(t.activity_body) })),
     teacher_comments: (reg.teacher_comments || []).map((c) => ({ text: c.text || "", date: c.iso || null, by: c.by || "" })),
     // 주간/월간 보고서: 보고서(학원) DB 자체의 "선생님 한마디"를 보고서 구분·학습 기간과 함께 보관한다.
     report_comments: (reg.report_comments || []).map((c) => ({ kind: c.kind || "", start: c.start || null, end: c.end || c.start || null, comment: c.comment || "" })),
@@ -727,8 +734,25 @@ function renderBookDetail() {
     type: "과제", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>`, date: h.classDate || h.due, due: h.due, classDate: h.classDate, book: h.book, range: h.range, unit: h.unit, note: h.note || h.title, pill: h.status, pillTone: homeworkPillTone(h.status), photo: null, sourceBody: h.sourceBody, activityBody: h.activityBody,
   }))
   ;((r.tests) || []).filter((t) => normBookTitle(t.book) === targetTitle).forEach((t) => items.push({
-    type: "평가", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`, date: t.date, book: t.book, range: t.range, unit: t.unit, note: t.note || t.title, pill: scorePillText(t.correct ?? 0, t.total ?? 0), pillTone: scorePillTone(t.correct ?? 0, t.total ?? 0), photo: null, sourceBody: t.sourceBody, activityBody: t.activityBody,
+    type: "평가", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`, date: t.date, book: t.book, range: t.range, unit: t.unit, note: t.note || t.title, pill: testPillText(t), pillTone: testPillTone(t), photo: null, sourceBody: t.sourceBody, activityBody: t.activityBody,
   }))
+  // (v2.8.0 종합 평가, 항목 16) 이 교재의 종합 평가(교재를 끝내고 본 평가)와 이 교재 평가 추이. 일일·주간·월간 보고서와 별개로 여기서만 보인다.
+  const bookTests = ((r.tests) || []).filter((t) => normBookTitle(t.book) === targetTitle)
+  const finalTests = bookTests.filter((t) => t.evalType === "종합 평가").sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+  const trendPoints = computeRecentTestPoints(bookTests, MOCK_TODAY, 8)
+  const finalHtml = finalTests.length ? `
+        <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg></span>종합 평가</h3>
+        <div class="section-hint">이 교재를 마치고 본 평가예요</div>
+        ${finalTests.map((t) => `
+          <div class="log-card 평가">
+            <div class="log-top">
+              <div class="log-body">
+                <div class="log-title-row"><div class="log-title">${esc(withDow(t.date))}</div><span class="log-pill ${testPillTone(t)}">${esc(testPillText(t))}</span></div>
+              </div>
+            </div>
+            <div class="log-meta">${renderLogMetaRows("", t.comment ? `선생님 한마디: ${t.comment}` : "", typeof t.classAvg === "number" ? [`반 평균 ${t.classAvg}점`] : [])}</div>
+          </div>`).join("")}
+        ${trendPoints.filter((p) => p.avg !== null).length >= 2 ? `<h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></span>이 교재 평가 추이</h3>${buildTestTrendChartHtml(trendPoints)}` : ""}` : ""
   const sorted = items.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
   const studiedUnitKeys = new Set()
   const studiedUnitList = []
@@ -801,6 +825,7 @@ function renderBookDetail() {
             <div class="progress-label">진도 ${book.progress}%</div>
           </div>` : ""}
         </div>
+        ${finalHtml}
         <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg></span>학습기록</h3>
         <div class="section-hint">이 교재의 학습 · 과제 · 평가 기록을 최근 순서로 보여줘요</div>
         <div class="seg-toggle">
@@ -1106,7 +1131,7 @@ function showTestDetailModal(i) {
   document.getElementById("test-detail-modal-body").innerHTML = items.length
     ? items.map((t) => `
       <div class="log-row 평가">
-        <div class="log-title-row"><div class="log-title">${esc([t.book, t.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${scorePillTone(t.correct ?? 0, t.total ?? 0)}">${scorePillText(t.correct ?? 0, t.total ?? 0)}</span></div>
+        <div class="log-title-row"><div class="log-title">${esc([t.book, t.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${testPillTone(t)}">${testPillText(t)}</span></div>
         ${testCompareBarsHtml(t)}
         ${renderLogMetaRows(t.unit, t.note, [`날짜: ${t.date ? String(t.date).slice(0, 10) : "-"}`])}
       </div>
@@ -1125,7 +1150,7 @@ function showTestPeriodModal(rangeStart, rangeEnd, label, kind) {
   document.getElementById("test-detail-modal-body").innerHTML = items.length
     ? items.map((t) => `
       <div class="log-row 평가">
-        <div class="log-title-row"><div class="log-title">${esc([t.book, t.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${scorePillTone(t.correct ?? 0, t.total ?? 0)}">${scorePillText(t.correct ?? 0, t.total ?? 0)}</span></div>
+        <div class="log-title-row"><div class="log-title">${esc([t.book, t.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${testPillTone(t)}">${testPillText(t)}</span></div>
         ${testCompareBarsHtml(t)}
         ${renderLogMetaRows(t.unit, t.note, rangeStart === rangeEnd ? [] : [`날짜: ${withDow(String(t.date).slice(0, 10))}`])}
       </div>
