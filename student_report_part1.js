@@ -494,7 +494,7 @@ function mapRegistration(reg) {
     teacher: reg.teacher_name || "",
     class_mode: reg.class_mode || "",
     schedule: (reg.schedule || []).map((s) => ({ day: s.day, start: s.start, end: s.end })),
-    books: (reg.books || []).map((b) => ({ title: b.title || "", progress: b.progress ?? 0, status: normalizeBookStatus(b.status), cover: b.cover || "", pages: b.pages ?? null, units: b.units || [] })),
+    books: (reg.books || []).map((b) => ({ id: b.id || "", title: b.title || "", progress: b.progress ?? 0, status: normalizeBookStatus(b.status), cover: b.cover || "", pages: b.pages ?? null, units: b.units || [] })),
     attendance_summary: reg.attendance_summary || { present: 0, absent: 0, makeup: 0 },
     attendance_rows: (reg.attendance_rows || []).map((a) => {
       const rawDate = a.iso || a.date_iso || (typeof a.date === "string" && /^\d{4}-\d{2}-\d{2}/.test(a.date) ? a.date : null)
@@ -508,12 +508,12 @@ function mapRegistration(reg) {
       return { date: kstDate || (rawDate ? String(rawDate).slice(0, 10) : null), weekday: a.weekday || "", status: a.status || "", arrived: isoToKstTime(a.arrived), left: isoToKstTime(a.left) }
     }),
     // 학습·과제·평가를 같은 수업일로 묶을 수 있도록 시각 포함 ISO 값을 모두 KST 날짜로 통일한다.
-    study_logs: (reg.study_logs || []).map((s) => ({ type: "학습", book: s.book || "", range: s.range || "", unit: s.unit || "", date: isoToKstDate(s.iso) || (s.iso ? String(s.iso).slice(0, 10) : null), note: s.note || "", body: normalizeFeedBody(s.body), sourceBody: normalizeFeedBody(s.source_body || s.body), activityBody: normalizeFeedBody(s.activity_body), makeupOf: s.makeup_of || "" })),
+    study_logs: (reg.study_logs || []).map((s) => ({ type: "학습", book: s.book || "", bookId: s.book_id || "", range: s.range || "", unit: s.unit || "", date: isoToKstDate(s.iso) || (s.iso ? String(s.iso).slice(0, 10) : null), note: s.note || "", body: normalizeFeedBody(s.body), sourceBody: normalizeFeedBody(s.source_body || s.body), activityBody: normalizeFeedBody(s.activity_body), makeupOf: s.makeup_of || "" })),
     // classDate(수업일)는 백엔드가 h.iso로 내려주지만 지금까지 프론트에서 버려지고 있었다. "다음과제"를
     // 마감일이 아니라 수업일(그 과제를 실제로 내준 날) 기준으로 판단하려면 이 값이 있어야 한다.
-    homework: (reg.homework || []).map((h) => ({ type: "과제", title: h.title || "", book: h.book || "", range: h.range || "", unit: h.unit || "", note: h.note || "", due: h.due_iso || null, classDate: isoToKstDate(h.iso) || null, status: h.status || "미제출", sourceBody: normalizeFeedBody(h.source_body), activityBody: normalizeFeedBody(h.activity_body) })),
+    homework: (reg.homework || []).map((h) => ({ type: "과제", title: h.title || "", book: h.book || "", bookId: h.book_id || "", range: h.range || "", unit: h.unit || "", note: h.note || "", due: h.due_iso || null, classDate: isoToKstDate(h.iso) || null, status: h.status || "미제출", sourceBody: normalizeFeedBody(h.source_body), activityBody: normalizeFeedBody(h.activity_body) })),
     homework_days: (reg.homework_days || []).map((h) => ({ date: h.date || null, status: h.status || "미완료", submitted: h.submitted ?? 0, total: h.total ?? 0 })),
-    tests: (reg.tests || []).map((t) => ({ type: "평가", title: t.title || "", book: t.book || "", range: t.range || "", unit: t.unit || "", note: t.note || "", date: isoToKstDate(t.iso) || (t.iso ? String(t.iso).slice(0, 10) : null), correct: t.correct ?? 0, total: t.total ?? 0, classAvg: typeof t.class_avg === "number" ? t.class_avg : null, evalType: t.eval_type || "", evalStart: t.eval_start || null, evalEnd: t.eval_end || null, standalone: !!t.standalone, comment: t.comment || "", sourceBody: normalizeFeedBody(t.source_body), activityBody: normalizeFeedBody(t.activity_body) })),
+    tests: (reg.tests || []).map((t) => ({ type: "평가", title: t.title || "", book: t.book || "", bookId: t.book_id || "", range: t.range || "", unit: t.unit || "", note: t.note || "", date: isoToKstDate(t.iso) || (t.iso ? String(t.iso).slice(0, 10) : null), correct: t.correct ?? 0, total: t.total ?? 0, classAvg: typeof t.class_avg === "number" ? t.class_avg : null, evalType: t.eval_type || "", evalStart: t.eval_start || null, evalEnd: t.eval_end || null, standalone: !!t.standalone, comment: t.comment || "", sourceBody: normalizeFeedBody(t.source_body), activityBody: normalizeFeedBody(t.activity_body) })),
     teacher_comments: (reg.teacher_comments || []).map((c) => ({ text: c.text || "", date: c.iso || null, by: c.by || "" })),
     // 주간/월간 보고서: 보고서(학원) DB 자체의 "선생님 한마디"를 보고서 구분·학습 기간과 함께 보관한다.
     report_comments: (reg.report_comments || []).map((c) => ({ kind: c.kind || "", start: c.start || null, end: c.end || c.start || null, comment: c.comment || "" })),
@@ -607,6 +607,7 @@ const app = document.getElementById("app")
 let view = "intro" // "intro" | "detail" | "schedule" | "book"
 let selectedToken = null
 let selectedBookTitle = null
+let selectedBookId = "" // (v2.8.0) 진도교재 ID. 같은 교재·프로그램을 두 번 하면 이름이 같아 ID로 나눈다.
 let scheduleMonthIndex = 0
 let expandedSection = null // "basic" | "registrations" | null
 let selectedCalDate = null
@@ -680,6 +681,7 @@ function openRegistration(token) {
   selectedCalDate = null
   bookStatusTab = "진행중"
   selectedBookTitle = null
+  selectedBookId = ""
   calMode = "attendance"
   regCalMonthIndex = 0
   reportPeriod = "day"
@@ -690,8 +692,9 @@ function openRegistration(token) {
   window.scrollTo({ top: 0 })
 }
 
-function openBookStudy(title) {
+function openBookStudy(title, id) {
   selectedBookTitle = normBookTitle(title)
+  selectedBookId = String(id || "")
   bookLogFilter = "전체"
   view = "book"
   renderApp()
@@ -700,11 +703,17 @@ function openBookStudy(title) {
 function closeBookDetail() {
   view = "detail"
   selectedBookTitle = null
+  selectedBookId = ""
   renderApp()
   window.scrollTo({ top: 0 })
 }
 function normBookTitle(v) {
   return String(v || "").trim()
+}
+// (v2.8.0) 기록이 이 교재(진도교재)의 것인지. 둘 다 진도교재 ID가 있으면 ID로, 아니면(예전 캐시·교재 없는 기록) 이름으로 본다.
+function inBook(item, title, id) {
+  if (id && item.bookId) return item.bookId === id
+  return normBookTitle(item.book) === normBookTitle(title)
 }
 function regTabsList() {
   // (v2.8.0) 평가만 보는 반은 출결·과제 달력이 없어 캘린더 탭을 뺀다.
@@ -730,20 +739,21 @@ function renderBookDetail() {
   if (!r || !selectedBookTitle) return renderDetail()
   const books = r.books || []
   const targetTitle = normBookTitle(selectedBookTitle)
-  const book = books.find((b) => normBookTitle(b.title) === targetTitle) || {}
+  const book = books.find((b) => (selectedBookId && b.id ? b.id === selectedBookId : normBookTitle(b.title) === targetTitle)) || {}
+  const ofBook = (item) => inBook(item, targetTitle, selectedBookId)
   const items = []
-  ;((r.study_logs) || []).filter((l) => normBookTitle(l.book) === targetTitle).forEach((l) => items.push({
+  ;((r.study_logs) || []).filter(ofBook).forEach((l) => items.push({
     type: "학습", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`, date: l.date, book: l.book, range: l.range, unit: l.unit, note: l.note, pill: null, photo: l.photo, body: l.body, sourceBody: l.sourceBody, activityBody: l.activityBody,
   }))
-  ;((r.homework) || []).filter((h) => normBookTitle(h.book) === targetTitle).forEach((h) => items.push({
+  ;((r.homework) || []).filter(ofBook).forEach((h) => items.push({
     type: "과제", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>`, date: h.classDate || h.due, due: h.due, classDate: h.classDate, book: h.book, range: h.range, unit: h.unit, note: h.note || h.title, pill: h.status, pillTone: homeworkPillTone(h.status), photo: null, sourceBody: h.sourceBody, activityBody: h.activityBody,
   }))
   // 진도 평가(단원·마무리)는 위 "진도 평가" 구역에만 보인다(학습기록 목록에 같은 평가가 한 번 더 나오지 않게).
-  ;((r.tests) || []).filter((t) => normBookTitle(t.book) === targetTitle && !isBookEval(t)).forEach((t) => items.push({
+  ;((r.tests) || []).filter((t) => ofBook(t) && !isBookEval(t)).forEach((t) => items.push({
     type: "평가", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`, date: t.date, book: t.book, range: t.range, unit: t.unit, note: t.note || t.title, pill: testPillText(t), pillTone: testPillTone(t), photo: null, sourceBody: t.sourceBody, activityBody: t.activityBody,
   }))
   // (v2.8.0 진도 평가, 항목 16) 이 교재의 단원 평가·마무리 평가와 이 교재 평가 추이. 일일·주간·월간 보고서와 별개로 여기서만 보인다.
-  const bookTests = ((r.tests) || []).filter((t) => normBookTitle(t.book) === targetTitle)
+  const bookTests = ((r.tests) || []).filter(ofBook)
   const finalTests = bookTests.filter(isBookEval).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
   const trendPoints = computeRecentTestPoints(bookTests, MOCK_TODAY, 8)
   const finalHtml = finalTests.length ? `
