@@ -6,7 +6,7 @@
 // 큐에 남아 이어서 끝난다. 빠르게보다 끝까지 정확하게.
 //
 // 한 건 처리(필요한 만큼만 읽기):
-//   1) 출석 1번 읽기 — 두 번 발송 막기(전송완료 체크)와 보고서 수식 값·연락처·리포트 토큰(롤업)을 한 번에.
+//   1) 출석 1번 읽기 — 보고서 수식 값·연락처·리포트 토큰(롤업)을 한 번에. 이미 보낸 출석은 일괄 버튼 필터가 거른다(10/29).
 //   2) 리포트 최신화 — 학부모가 링크를 열었을 때 오늘 기록이 보이도록 발송 전에 한다(꼭 필요한 읽기). 같은 수업
 //      학생들은 공용 캐시(report_source_cache, 5분 단위 실행 키)로 반 공통 학습기록·교재 페이지를 한 번만 읽는다.
 //      출석의 "리포트 토큰" 롤업이 있으면 등록을 다시 읽지 않는다.
@@ -51,7 +51,6 @@ export function dailyReportFromAttendance(page: any) {
   return {
     registrationId: relIds(p["등록"])[0] ?? null,
     sessionId: relIds(p["수업"])[0] ?? null,
-    alreadySent: p["전송완료 체크"]?.checkbox === true,
     studentName: getFormulaText(page, "학생이름(보고서)"),
     className: getFormulaText(page, "클래스(보고서)"),
     classDate: getFormulaText(page, "수업일(보고서)"),
@@ -83,9 +82,8 @@ export async function processDailyReportQueueItem(payload: { attendanceId: strin
   const page = await notionGetPage(attendanceId)
   if (page?.archived || page?.in_trash) return
   const v = dailyReportFromAttendance(page)
-  if (v.alreadySent) {
-    return await finish(attendanceId, "⚠️ 오류", "이미 전송 완료된 건입니다. 다시 보내려면 '전송완료 체크'를 해제한 뒤 버튼을 눌러주세요.")
-  }
+  // (10/29 사용자) 이미 보낸 출석을 건너뛰는 것은 수업 [보고서 일괄 전송] 버튼의 필터(전송완료 체크 아님)가 한다.
+  // 출석 [보고서 전송](개별)은 이미 보냈어도 다시 보낸다. 그래서 서버는 전송완료 체크로 막지 않는다.
   if (!v.registrationId) return await finish(attendanceId, "⚠️ 오류", "등록 관계가 비어 있습니다.")
 
   // 발송 전 단계: 실패하면 예외 → 큐 재시도(아직 보내지 않음).

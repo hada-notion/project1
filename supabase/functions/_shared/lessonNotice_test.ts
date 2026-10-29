@@ -61,6 +61,10 @@ Deno.test("v2.8.0 수업 안내: 받은 뒤 일시가 바뀌면 새 시간으로
 	eq(ch.variables["#{수업일시}"], "26.10.30(금) 17:00")
 	eq(ch.variables["#{기존일시}"], undefined)
 	eq(m.planLessonNotice(att({ sent: "2026-10-30T08:00:00.000Z" }), ses(true)), { skip: "" })
+	// 개별 [수업 안내 전송]('개별 전송' 체크)은 같은 일시로 이미 안내했어도 보낸다(10/29).
+	const forcedAtt = att({ sent: "2026-10-30T08:00:00.000Z" }) as any
+	forcedAtt.properties["개별 전송"] = { type: "checkbox", checkbox: true }
+	eq("skip" in m.planLessonNotice(forcedAtt, ses(true)), false)
 	eq((m.planLessonNotice(att({ status: "🔴 결석" }), ses(true)) as any).skip.includes("결석"), true)
 	eq((m.planLessonNotice(att({ at: null }), ses(true)) as any).skip.includes("수업일시"), true)
 })
