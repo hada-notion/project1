@@ -73,7 +73,7 @@ type Prepared = {
 	configCategory: AlimtalkConfigCategory
 	primaryPhone: string
 	variables: (notice: string) => Record<string, string>
-	log: { reportId?: string; tuitionId?: string; textbookCartId?: string; periodStart?: string; periodEnd?: string }
+	log: { reportId?: string; tuitionId?: string; textbookCartId?: string; letterId?: string; periodStart?: string; periodEnd?: string }
 	clearBulkSelect: boolean
 }
 
@@ -240,7 +240,7 @@ async function prepareLetter(page: any): Promise<Prepared> {
 		configCategory: "월간 일정 안내",
 		primaryPhone: "", // 가정통신문에는 연락처 롤업이 없다 → 우선 연락 대상이면 등록을 한 번 읽는다
 		variables: () => built.variables,
-		log: { periodStart: built.period.start, periodEnd: built.period.end },
+		log: { letterId: page.id, periodStart: built.period.start, periodEnd: built.period.end },
 		clearBulkSelect: false,
 	}
 }
@@ -309,7 +309,7 @@ export async function processNoticeQueueItem(payload: NoticePayload): Promise<vo
 	await finish(kind, pageId, "✅ 완료", null, prep.clearBulkSelect, forcedReset)
 	// 같은 달 장도 이 한 통에 들어갔으므로 ✅로 맞추고 전송 로그를 남긴다(다른 반 발송함에서 다시 보내지 않게).
 	for (const sib of siblings) {
-		const sibLog = kind === "tuition" ? { tuitionId: String(sib.id) } : { registrationId: getRelationFirstId(sib, "등록") ?? prep.registrationId }
+		const sibLog = kind === "tuition" ? { tuitionId: String(sib.id) } : { registrationId: getRelationFirstId(sib, "등록") ?? prep.registrationId, letterId: String(sib.id) }
 		await noticeDeps.log({ ...logBase, ...sibLog, status: "성공" }).catch((err: unknown) => console.error("[notice] 전송 로그 실패:", extractErrorMessage(err)))
 		await finish(kind, String(sib.id), "✅ 완료", null, bulkReset)
 	}

@@ -263,6 +263,8 @@ export async function createSendLogEntry(args: {
   // 없어서 send-textbook-notice가 로그를 만들어도 교재비 페이지 쪽에는 항상 빈 관계로 남아,
   // "전송 내역"이 계속 비어 보이는 버그가 있었다.
   textbookCartId?: string
+  // (v2.8.0) 가정통신문 페이지 id. 전송로그 "가정통신문" 관계를 채워 가정통신문 "전송 내역"이 이 로그를 찾게 한다.
+  letterId?: string
   senderUserId?: string
   attendanceType?: "등원" | "하원"
   title: string
@@ -300,6 +302,9 @@ export async function createSendLogEntry(args: {
     // [NEW, 2026-09-23] 위 보고서/수강료와 동일한 패턴으로 교재비도 전송로그에 연결한다.
     if (args.textbookCartId) {
       properties["교재비"] = { relation: [{ id: args.textbookCartId }] }
+    }
+    if (args.letterId) {
+      properties["가정통신문"] = { relation: [{ id: args.letterId }] }
     }
     if (args.senderUserId) {
       properties["발송자"] = { people: [{ id: args.senderUserId }] }
