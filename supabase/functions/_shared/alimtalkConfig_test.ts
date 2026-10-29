@@ -27,3 +27,20 @@ Deno.test("v2.8.0 알림톡 설정 캐시: 행 값만 저장하고 기본값은 
 	// 행에 값이 있으면 행이 먼저
 	eq(withConfigFallback({ pfId: "a", templateId: "", senderNumber: "0101", notice: "", recipientTarget: "우선 연락 대상" }, { pfId: "x", templateId: "y", senderNumber: "z" }).senderNumber, "0101")
 })
+
+Deno.test("v2.8.0 주간·월간 보고서 행이 없으면 옛 보고서 행을 쓴다(fallbackCategory)", async () => {
+	const asked: string[] = []
+	const realFetch = globalThis.fetch
+	globalThis.fetch = (async (_url: string, init: any) => {
+		const code = JSON.parse(init.body).filter.rich_text.equals
+		asked.push(code)
+		const results = code === "보고서" ? [{ id: "row", properties: { "활성 여부": { checkbox: true }, "템플릿 ID": rt("tpl-report"), "알림 수신 대상": { select: { name: "어머니" } } } }] : []
+		return new Response(JSON.stringify({ results }), { status: 200, headers: { "Content-Type": "application/json" } })
+	}) as typeof fetch
+	try {
+		const c = await getAlimtalkConfig("주간 보고서", { pfId: "", templateId: "env", senderNumber: "" }, "보고서")
+		eq([c.templateId, c.recipientTarget, asked], ["tpl-report", "어머니", ["주간 보고서", "보고서"]])
+	} finally {
+		globalThis.fetch = realFetch
+	}
+})

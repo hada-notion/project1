@@ -71,6 +71,7 @@ type Prepared = {
 	title: string
 	logCategory: SendLogCategory
 	configCategory: AlimtalkConfigCategory
+	configFallback?: AlimtalkConfigCategory
 	primaryPhone: string
 	variables: (notice: string) => Record<string, string>
 	log: { reportId?: string; tuitionId?: string; textbookCartId?: string; letterId?: string; periodStart?: string; periodEnd?: string }
@@ -158,7 +159,9 @@ async function prepareReport(page: any): Promise<Prepared> {
 		registrationId,
 		title: studentName || reportType,
 		logCategory: reportType as SendLogCategory,
-		configCategory: "보고서",
+		// (v2.8.0) 주간·월간 템플릿을 나눴다. "주간 보고서"/"월간 보고서" 행이 없으면 옛 "보고서" 행.
+		configCategory: reportType as AlimtalkConfigCategory,
+		configFallback: "보고서",
 		primaryPhone: getFormulaText(page, "학부모 연락처(보고서)"),
 		variables: () => fixed,
 		log: { reportId, periodStart: period.start || undefined, periodEnd: period.end || undefined },
@@ -287,7 +290,7 @@ export async function processNoticeQueueItem(payload: NoticePayload): Promise<vo
 	let recipients: { phone: string }[]
 	try {
 		prep = kind === "report" ? await prepareReport(page) : kind === "tuition" ? prepareTuition(page) : kind === "letter" ? await prepareLetter(page) : prepareTextbook(page)
-		config = await noticeDeps.config(prep.configCategory, { pfId: FALLBACK.pfId, templateId: FALLBACK[kind], senderNumber: FALLBACK.senderNumber })
+		config = await noticeDeps.config(prep.configCategory, { pfId: FALLBACK.pfId, templateId: FALLBACK[kind], senderNumber: FALLBACK.senderNumber }, prep.configFallback)
 		recipients = await noticeDeps.recipients({ registrationId: prep.registrationId, primaryPhone: prep.primaryPhone, recipientTarget: config.recipientTarget })
 	} catch (err) {
 		// 일정도 전달사항도 없음처럼 다시 해도 같은 막힘은 재시도 없이 ⚠️로 끝낸다.

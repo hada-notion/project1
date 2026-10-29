@@ -11,13 +11,13 @@ const rel = (id: string) => ({ relation: [{ id }] })
 const select = (name: string) => ({ select: { name } })
 
 function fake(page: any, opts: { sendFails?: boolean; refreshFails?: boolean; pages?: Record<string, any> } = {}) {
-	const calls = { reads: 0, patched: [] as any[], patches: [] as any[], sent: [] as any[], logs: [] as any[], refresh: [] as any[], recipients: [] as any[] }
+	const calls = { reads: 0, patched: [] as any[], patches: [] as any[], sent: [] as any[], logs: [] as any[], refresh: [] as any[], recipients: [] as any[], config: [] as string[][] }
 	const saved = { ...noticeDeps }
 	Object.assign(noticeDeps, {
+		config: async (...args: any[]) => { calls.config.push(args.filter((x) => typeof x === "string")); return { pfId: "pf", templateId: "tpl", senderNumber: "0200000000", notice: "안내", recipientTarget: "우선 연락 대상" } },
 		getPage: async (id: string) => { calls.reads++; return opts.pages?.[id] ?? page },
 		patch: async (id: string, props: any) => { calls.patches.push(props); calls.patched.push({ id, props }) },
 		refresh: async (reg: string, o: any) => { calls.refresh.push({ reg, ...o }); if (opts.refreshFails) throw new Error("최신화 실패"); return { access_token: "tok", cacheRow: { registration_detail: { report_comments: [] } } } },
-		config: async () => ({ pfId: "pf", templateId: "tpl", senderNumber: "0200000000", notice: "안내", recipientTarget: "우선 연락 대상" }),
 		recipients: async (a: any) => { calls.recipients.push(a); return [{ label: "우선 연락 대상", phone: "01000000000" }] },
 		send: async (to: string, vars: any) => { if (opts.sendFails) throw new Error("발송 실패"); calls.sent.push({ to, vars }) },
 		log: async (a: any) => { calls.logs.push(a) },
@@ -49,6 +49,7 @@ Deno.test("v2.6.24 보고서: 한 번 읽고 공용 캐시·토큰 롤업으로 
 		eq(calls.reads, 1)
 		eq(calls.refresh, [{ reg: REG, sharedRunKey: "notice:batch-1:0", tokenRaw: "raw-token" }])
 		eq(calls.recipients[0].primaryPhone, "010-0000-0000")
+		eq(calls.config, [["월간 보고서", "보고서"]])
 		eq(calls.sent.length, 1)
 		eq(calls.sent[0].vars["#{페이지ID}"].endsWith("?token=tok"), true)
 		eq(calls.logs.map((l) => [l.status, l.reportId, l.senderUserId, l.category]), [["성공", "report-1", "teacher", "월간 보고서"]])
