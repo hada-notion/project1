@@ -733,7 +733,8 @@ function renderBookDetail() {
   ;((r.homework) || []).filter((h) => normBookTitle(h.book) === targetTitle).forEach((h) => items.push({
     type: "과제", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>`, date: h.classDate || h.due, due: h.due, classDate: h.classDate, book: h.book, range: h.range, unit: h.unit, note: h.note || h.title, pill: h.status, pillTone: homeworkPillTone(h.status), photo: null, sourceBody: h.sourceBody, activityBody: h.activityBody,
   }))
-  ;((r.tests) || []).filter((t) => normBookTitle(t.book) === targetTitle).forEach((t) => items.push({
+  // 종합 평가는 아래 "종합 평가" 구역에만 보인다(학습기록 목록에 같은 평가가 한 번 더 나오지 않게).
+  ;((r.tests) || []).filter((t) => normBookTitle(t.book) === targetTitle && t.evalType !== "종합 평가").forEach((t) => items.push({
     type: "평가", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`, date: t.date, book: t.book, range: t.range, unit: t.unit, note: t.note || t.title, pill: testPillText(t), pillTone: testPillTone(t), photo: null, sourceBody: t.sourceBody, activityBody: t.activityBody,
   }))
   // (v2.8.0 종합 평가, 항목 16) 이 교재의 종합 평가(교재를 끝내고 본 평가)와 이 교재 평가 추이. 일일·주간·월간 보고서와 별개로 여기서만 보인다.
@@ -1144,7 +1145,7 @@ function showTestPeriodModal(rangeStart, rangeEnd, label, kind) {
   const r = STUDENT.registrations.find((x) => x.token === selectedToken)
   if (!r) return
   // (v2.8.0) kind가 있으면 그 평가 구분만(주간·월간 보고서의 평가 평균이 그 구분으로 계산될 때와 같게).
-  const items = (r.tests || []).filter((t) => { const d = String(t.date || "").slice(0, 10); return d && d >= rangeStart && d <= rangeEnd && (!kind || testKind(t) === kind) })
+  const items = (r.tests || []).filter((t) => { const d = String(t.date || "").slice(0, 10); return d && d >= rangeStart && d <= rangeEnd && (kind ? testKind(t) === kind : testKind(t) !== "종합 평가") })
     .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
   document.getElementById("test-detail-modal-title").textContent = label
   document.getElementById("test-detail-modal-body").innerHTML = items.length
