@@ -64,6 +64,7 @@ import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 import { reportStatusBlock } from "../_shared/noticeBlocks.ts"
 import { fitVariablesToTemplate } from "../_shared/templateFit.ts"
+import { BOOK_EVAL_NOTICE_STATUS_PROP, TARGET_BOOK_EVAL_BATCH } from "../_shared/bookEvalNotice.ts"
 
 const ALIMTALK_CONFIG_CATEGORY = "보고서" as const
 
@@ -163,6 +164,25 @@ Deno.serve(async (req) => {
     await enqueueSync("notice", { kind: "report", pageId: queuedId, clickerUserId })
     wakeSyncQueueWorker()
     return respondAccepted({ pageId: queuedId, queued: true })
+  }
+
+  // (v2.8.0 교재 평가, 항목 16) 학습활동 [교재 평가 안내 전송](개별, 이미 보냈어도 다시) → 그 학습활동 ⚪ 대기 + 큐.
+  // 학습기록 [교재 평가 안내 일괄 전송] → 큐 book-eval-batch(안 보낸 학습활동만). _shared/bookEvalNotice.ts
+  const route = new URL(req.url).pathname.split("/").pop()
+  if (route === "book-evaluation" || route === "book-evaluation-batch") {
+    const pageId = body?.data?.id ?? body?.pageId ?? null
+    if (!pageId) {
+      return new Response(JSON.stringify({ error: "페이지 id를 찾지 못했어요." }), { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } })
+    }
+    const clickerUserId = body?.data?.properties?.["실행자"]?.people?.[0]?.id ?? null
+    if (route === "book-evaluation") {
+      await notionPatchPageProperties(pageId, { [BOOK_EVAL_NOTICE_STATUS_PROP]: { select: { name: "⚪ 대기" } } })
+      await enqueueSync("notice", { kind: "bookEval", pageId, clickerUserId })
+    } else {
+      await enqueueSync(TARGET_BOOK_EVAL_BATCH, { recordId: pageId, clickerUserId })
+    }
+    wakeSyncQueueWorker()
+    return respondAccepted({ pageId, queued: true })
   }
 
   try {

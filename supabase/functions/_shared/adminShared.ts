@@ -239,6 +239,8 @@ export type SendLogCategory =
   // (v2.8.0) 일정 안내 알림톡. _shared/scheduleNotice.ts
   | "일정 안내"
   | "월간 일정 안내"
+  // (v2.8.0) 교재 평가 결과 안내(단원·마무리 평가). _shared/bookEvalNotice.ts
+  | "교재 평가 안내"
 export type SendLogStatus = "성공" | "실패"
 
 function formatSendLogDate(periodStart?: string): string {
