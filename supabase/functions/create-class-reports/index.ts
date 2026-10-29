@@ -11,7 +11,7 @@
 // (v2.8.0) 경로 /evaluations: 알림톡 발송함 [평가 생성]. 본문의 발송함 수식 '평가 계획'(체크한 진도교재마다 평가 1개)을
 // 큐에 넣는다. 처리는 _shared/evaluationPlan.ts. 상태는 발송함 '평가 생성 상태'.
 //
-// (v2.9.0) 경로 /final-evaluation: 진도교재 [종합 평가 만들기]. 그 교재의 수강 중 학생으로 종합 평가 학습기록을 만든다.
+// (v2.8.0) 경로 /final-evaluation: 진도교재 [종합 평가 만들기]. 그 교재의 수강 중 학생으로 종합 평가 학습기록을 만든다.
 // 처리는 _shared/finalEvaluation.ts. 상태는 진도교재 '종합 평가 상태'.
 import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 import { getCurrentAdminKey, resolveAdminKeyFromRequest } from "../_shared/adminShared.ts"
