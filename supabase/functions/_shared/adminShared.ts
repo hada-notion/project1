@@ -475,9 +475,12 @@ export function extractErrorMessage(err: unknown): string {
   return base
 }
 
+// (v2.8.0) fallbackCategory: 이 코드의 행이 없거나 꺼져 있으면 그 코드의 행을 쓴다
+// (주간·월간 보고서 템플릿을 나눈 뒤 "주간 보고서"/"월간 보고서" 행이 아직 없는 학원은 옛 "보고서" 행으로).
 export async function getAlimtalkConfig(
   category: AlimtalkConfigCategory,
   fallback: { pfId: string; templateId: string; senderNumber: string },
+  fallbackCategory?: AlimtalkConfigCategory,
 ): Promise<AlimtalkConfig> {
   const cached = alimtalkConfigCache.get(category)
   if (cached && cached.expiresAt > Date.now()) {
@@ -506,12 +509,14 @@ export async function getAlimtalkConfig(
       console.warn(
         `[getAlimtalkConfig][${category}] ALIMTALK_CONFIG_DB_ID=${ALIMTALK_CONFIG_DB_ID}에서 일치하는 행을 못 찾음`,
       )
+      if (fallbackCategory) return await getAlimtalkConfig(fallbackCategory, fallback)
       return { ...fallback, notice: "", recipientTarget: "우선 연락 대상" }
     }
 
     const active = page.properties?.["활성 여부"]?.checkbox
     if (active === false) {
       console.warn(`[getAlimtalkConfig][${category}] 해당 행의 활성 여부가 꺼져있어 fallback 사용 (pageId=${page.id})`)
+      if (fallbackCategory) return await getAlimtalkConfig(fallbackCategory, fallback)
       return { ...fallback, notice: "", recipientTarget: "우선 연락 대상" }
     }
 

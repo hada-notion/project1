@@ -50,6 +50,8 @@ import {
   withSendingLock,
 } from "../_shared/alimtalkShared.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
+import { alimtalkVar, textbookBlock } from "../_shared/noticeBlocks.ts"
+import { fitVariablesToTemplate } from "../_shared/templateFit.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 
 const SOLAPI_API_KEY = Deno.env.get("SOLAPI_API_KEY")!
@@ -81,13 +83,15 @@ async function sendAlimtalk(
   }
   const { SolapiMessageService } = await import("npm:solapi")
   const messageService = new SolapiMessageService(SOLAPI_API_KEY, SOLAPI_API_SECRET)
+  // 옛·새 템플릿 변수를 함께 만들었으므로 그 템플릿에 있는 것만 남긴다(다른 발송 경로와 같음).
+  const fitted = await fitVariablesToTemplate(messageService, config.templateId, variables)
   return messageService.send({
     to: normalizePhone(to),
     from: normalizePhone(config.senderNumber),
     kakaoOptions: {
       pfId: config.pfId,
       templateId: config.templateId,
-      variables,
+      variables: fitted,
       disableSms: false,
     },
   }, { allowDuplicates: true })
@@ -187,6 +191,8 @@ Deno.serve(async (req) => {
           "#{클래스}": className,
           "#{교재비안내}": textbookNotice,
           "#{안내멘트}": config.notice,
+          // (v2.8.0 통일안) 큐 경로(_shared/noticeQueue.ts)와 같은 새 템플릿 변수. 보낼 때 템플릿에 있는 것만 남는다.
+          "#{교재내역}": alimtalkVar(cartPage, "교재내역", textbookBlock(textbookNotice)),
         }
 
         const sendResult = await withSendingLock(cartId, "안내문 발송중", async () => {

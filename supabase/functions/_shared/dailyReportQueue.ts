@@ -23,6 +23,8 @@ import {
 } from "./adminShared.ts"
 import { getFormulaText, sendDailyReportAlimtalk, appendSendLog } from "./alimtalkShared.ts"
 import { refreshDailyReportForSend } from "./dailyReportRefresh.ts"
+import { formatClassTime } from "./lessonNotice.ts"
+import { alimtalkVar, arrivalBlock, dateOnly, studyContentOrDefault } from "./noticeBlocks.ts"
 import { relIds } from "./notionClient.ts"
 import { cleanupExpiredReportPageCache } from "./persistentReportPageCache.ts"
 
@@ -58,6 +60,8 @@ export function dailyReportFromAttendance(page: any) {
     parentPhone: getFormulaText(page, "학부모 연락처"),
     clickerUserId: p["실행자"]?.people?.[0]?.id ?? null,
     tokenRaw: plain(p["리포트 토큰"]) || null,
+    classIso: String(p["수업일시"]?.date?.start ?? ""),
+    makeupId: relIds(p["기존 결석"])[0] ?? null,
   }
 }
 
@@ -88,12 +92,23 @@ export async function processDailyReportQueueItem(payload: { attendanceId: strin
   const runKey = `daily:${v.sessionId ?? "none"}:${Math.floor(Date.now() / RUN_BUCKET_MS)}`
   const { access_token } = await dailyReportDeps.refresh(v.registrationId, { sharedRunKey: runKey, tokenRaw: v.tokenRaw })
   const REPORT_PATH = Deno.env.get("REPORT_PATH") ?? "/project1/student_report.html"
+  // (v2.8.0 통일안) send-daily-report와 같은 값. 새 템플릿의 #{등원정보}는 출석 수업일시로 서울 날짜를 만들고(수식 날짜는 UTC),
+  // 보강 출석이면 기존 결석의 수업일 줄을 앞에 붙인다(그때만 기존 결석을 한 번 더 읽고, 못 읽으면 그 줄 없이).
+  // 옛 템플릿 변수도 함께 넣고, 보낼 때 그 템플릿에 있는 것만 남긴다(_shared/templateFit.ts).
+  const makeupPage = v.makeupId ? await notionGetPage(v.makeupId).catch(() => null) : null
+  const makeupIso = String(makeupPage?.properties?.["수업일시"]?.date?.start ?? "")
+  const arrival = arrivalBlock({
+    classDate: dateOnly(formatClassTime(v.classIso)) || v.classDate,
+    status: v.attendanceStatus,
+    makeupOf: makeupIso ? dateOnly(formatClassTime(makeupIso)) : undefined,
+  })
   const variables: Record<string, string> = {
-    "#{학생이름}": v.studentName,
-    "#{클래스}": v.className,
+    "#{학생이름}": alimtalkVar(page, "학생이름", v.studentName),
+    "#{클래스}": alimtalkVar(page, "클래스", v.className),
+    "#{등원정보}": arrival,
     "#{수업일}": v.classDate,
     "#{출석상태}": v.attendanceStatus,
-    "#{학습내용}": v.studyContent,
+    "#{학습내용}": studyContentOrDefault(alimtalkVar(page, "학습내용", v.studyContent), v.attendanceStatus),
     "#{페이지ID}": REPORT_PATH + "?token=" + access_token,
   }
   const senderUserId = (payload.clickerUserId ?? v.clickerUserId ?? (await getBotUserId().catch(() => null))) ?? undefined

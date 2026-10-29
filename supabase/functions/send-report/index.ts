@@ -62,6 +62,8 @@ import {
 import { refreshStudentReport } from "../_shared/dailyReportRefresh.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
+import { reportStatusBlock } from "../_shared/noticeBlocks.ts"
+import { fitVariablesToTemplate } from "../_shared/templateFit.ts"
 
 const ALIMTALK_CONFIG_CATEGORY = "보고서" as const
 
@@ -114,13 +116,15 @@ async function sendAlimtalk(
   }
   const { SolapiMessageService } = await import("npm:solapi")
   const messageService = new SolapiMessageService(SOLAPI_API_KEY, SOLAPI_API_SECRET)
+  // 옛·새 템플릿 변수를 함께 만들었으므로 그 템플릿에 있는 것만 남긴다(다른 발송 경로와 같음).
+  const fitted = await fitVariablesToTemplate(messageService, config.templateId, variables)
   return messageService.send({
     to: normalizePhone(to),
     from: normalizePhone(config.senderNumber),
     kakaoOptions: {
       pfId: config.pfId,
       templateId: config.templateId,
-      variables,
+      variables: fitted,
       disableSms: false,
     },
   }, { allowDuplicates: true })
@@ -234,11 +238,12 @@ Deno.serve(async (req) => {
             if (!included) throw new Error("선생님 코멘트가 최신 보고서 캐시에 포함되지 않았습니다.")
           }
 
-          const config = await getAlimtalkConfig(ALIMTALK_CONFIG_CATEGORY, {
+          // (v2.8.0) 주간·월간 템플릿을 나눴다. "주간 보고서"/"월간 보고서" 행이 없으면 옛 "보고서" 행(큐 경로와 같음).
+          const config = await getAlimtalkConfig(reportType as SendLogCategory, {
             pfId: SOLAPI_PF_ID_FALLBACK,
             templateId: templateFallbackFor(reportType),
             senderNumber: SOLAPI_SENDER_NUMBER_FALLBACK,
-          })
+          }, ALIMTALK_CONFIG_CATEGORY)
 
           const variables: Record<string, string> = {
             "#{보고서기간}": reportPeriodLabel,
@@ -247,6 +252,8 @@ Deno.serve(async (req) => {
             "#{클래스}": className,
             "#{학습기간}": studyPeriod,
             "#{보고서요약}": reportSummary,
+            // (v2.8.0 통일안) 큐 경로와 같은 새 템플릿 변수. 보낼 때 템플릿에 있는 것만 남는다.
+            "#{학습현황}": reportStatusBlock(reportSummary),
             "#{페이지ID}": tokenQueryString,
           }
 
