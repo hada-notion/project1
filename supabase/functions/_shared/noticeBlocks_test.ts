@@ -44,4 +44,7 @@ Deno.test("v2.8.0 통일안 템플릿 맞춤: 본문·제목·버튼에 있는 �
 	eq(await fit.fitVariablesToTemplate(reader, "", vars), vars)
 	const withButton = { getKakaoAlimtalkTemplate: async () => ({ content: "#{학습내용}", buttons: [{ linkMo: "https://x/#{페이지ID}" }] }) }
 	eq(await fit.fitVariablesToTemplate(withButton, "T3", { "#{학습내용}": "a", "#{페이지ID}": "b", "#{수업일}": "c" }), { "#{학습내용}": "a", "#{페이지ID}": "b" })
+	// 공백으로 시작하는 값은 맨 앞에 폭 없는 공백(U+200B)을 붙인다(솔라피가 맨 앞 공백을 지움). 나머지는 그대로.
+	eq(await fit.fitVariablesToTemplate(withButton, "T3", { "#{학습내용}": "  • 첫 줄\n  • 둘째 줄", "#{페이지ID}": "b" }), { "#{학습내용}": "\u200B  • 첫 줄\n  • 둘째 줄", "#{페이지ID}": "b" })
+	eq(await fit.fitVariablesToTemplate(broken, "T2", { "#{클래스목록}": "  수학반" }), { "#{클래스목록}": "\u200B  수학반" })
 })
