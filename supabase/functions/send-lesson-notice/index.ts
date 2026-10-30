@@ -6,6 +6,9 @@
 //
 // (v2.8.0, 10/31) 경로 /timetable: 클래스 [시간표 변경 안내]. 반 수강 중 학생마다 시간표 변경 안내(_shared/timetableNotice.ts).
 // 상태는 클래스 '시간표 안내 상태'. 이미 대기열·작업중이면 두 번 넣지 않는다.
+//
+// (v2.8.0, 10/31) 경로 /registration·/class-change: 등록 [등록 안내]·[클래스 변경 안내](_shared/registrationNotice.ts).
+// 상태는 등록 '안내 상태'.
 import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 import { getCurrentAdminKey, resolveAdminKeyFromRequest } from "../_shared/adminShared.ts"
 import { describeBody, extractPageId, getPage } from "../_shared/notionClient.ts"
@@ -14,6 +17,7 @@ import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 import { TARGET_LESSON_NOTICE } from "../_shared/lessonNotice.ts"
 import { isRunning, markError, markQueued } from "../_shared/statusTracking.ts"
 import { TARGET_CLASS_TIMETABLE_NOTICE, TIMETABLE_NOTICE_STATUS_SPEC } from "../_shared/timetableNotice.ts"
+import { REGISTRATION_NOTICE_STATUS_SPEC, TARGET_REGISTRATION_NOTICE, type RegistrationNoticeKind } from "../_shared/registrationNotice.ts"
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } })
 
@@ -29,6 +33,8 @@ Deno.serve(async (req: Request) => {
 
 	const route = new URL(req.url).pathname.split("/").pop()
 	if (route === "timetable") return await queueTimetable(body)
+	if (route === "registration") return await queueRegistration(body, "등록 안내")
+	if (route === "class-change") return await queueRegistration(body, "클래스 변경 안내")
 	if (route !== "queue") return json({ error: "주소 끝에 /queue를 붙여 주세요." }, 400)
 	const attendanceId = extractPageId(body)
 	if (!attendanceId) return json({ error: "출석 페이지 id를 찾지 못했어요." }, 400)
@@ -52,6 +58,24 @@ async function queueTimetable(body: Record<string, any>): Promise<Response> {
 		return respondAccepted({ classId, queued: true })
 	} catch (err) {
 		await markError(classId, TIMETABLE_NOTICE_STATUS_SPEC, (err as Error).message).catch(() => {})
+		return json({ ok: false, error: (err as Error).message }, 500)
+	}
+}
+
+// 등록 [등록 안내]·[클래스 변경 안내]: 등록 한 건을 큐에 넣는다.
+async function queueRegistration(body: Record<string, any>, kind: RegistrationNoticeKind): Promise<Response> {
+	const regId = extractPageId(body)
+	if (!regId) return json({ error: "등록 페이지 id를 찾지 못했어요." }, 400)
+	try {
+		const page = await getPage(regId)
+		if (isRunning(page, REGISTRATION_NOTICE_STATUS_SPEC)) return json({ ok: true, message: "already_processing", regId })
+		const clickerUserId = body?.data?.properties?.["실행자"]?.people?.[0]?.id ?? null
+		await enqueueSync(TARGET_REGISTRATION_NOTICE, { regId, kind, clickerUserId })
+		await markQueued(regId, REGISTRATION_NOTICE_STATUS_SPEC)
+		wakeSyncQueueWorker()
+		return respondAccepted({ regId, kind, queued: true })
+	} catch (err) {
+		await markError(regId, REGISTRATION_NOTICE_STATUS_SPEC, (err as Error).message).catch(() => {})
 		return json({ ok: false, error: (err as Error).message }, 500)
 	}
 }
