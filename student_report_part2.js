@@ -792,15 +792,6 @@ function computeRecentTestPoints(tests, asOfDate, count) {
     }
   })
 }
-// (v2.8.0) 주간·월간 보고서: 그 구분 평가의 최근 count개(보고서 기간 끝까지). 같은 날 평가는 한 점(평균).
-// 주간은 날짜(MM.DD), 월간은 "n월"로 적는다.
-function computeKindTestPoints(tests, asOfDate, count, periodType) {
-  return computeRecentTestPoints(tests, asOfDate, count).map((p) => {
-    if (periodType !== "month") return p
-    const day = String(p.items[0]?.date || "").slice(0, 10)
-    return { ...p, label: day ? `${Number(day.slice(5, 7))}월` : p.label }
-  })
-}
 function buildTestTrendChartHtml(points) {
   testChartPoints = points
   const width = 400, height = 200, paddingX = 30, paddingTop = 20, paddingBottom = 34
@@ -873,13 +864,8 @@ function buildReportTabHtml(r) {
   const { rangeStart, rangeEnd } = reportRange()
   const attendanceRows = (r.attendance_rows || []).filter((a) => a.date >= rangeStart && a.date <= rangeEnd)
   const homeworkItems = (r.homework_days || []).filter((h) => h.date && h.date >= rangeStart && h.date <= rangeEnd)
-  // (v2.8.0) 주간 보고서는 주간 평가, 월간 보고서는 월간 평가로 추이·평가 평균을 계산한다. 그 구분 평가가 한 번도
-  // 없으면(주간·월간 평가를 안 보는 반) 추이는 숨기고, 평가 평균은 지금처럼 기간 안 모든 평가로 계산한다.
-  const kindName = reportPeriod === "week" ? "주간 평가" : reportPeriod === "month" ? "월간 평가" : "일일 평가"
-  const kindTests = tests.filter((t) => testKind(t) === kindName)
-  const hasKind = reportPeriod !== "day" && kindTests.length > 0
-  // (v2.8.0 진도 평가, 항목 16) 그 구분 평가가 없어 기간 안 모든 평가로 계산할 때도 진도 평가(단원·마무리)는 뺀다(교재 상세에서만 보인다).
-  const testItems = (hasKind ? kindTests : tests.filter((t) => !isBookEval(t))).filter((t) => t.date >= rangeStart && t.date <= rangeEnd)
+  // (10/30 사용자) 일일 수업 기록 기반으로 되돌림: 주간·월간 보고서는 그 기간 모든 평가(평가 구분과 상관없이)로 추이·평균을 낸다.
+  const testItems = tests.filter((t) => t.date >= rangeStart && t.date <= rangeEnd)
   // 출석률은 상태가 확정된 출석만 계산한다. 빈 상태(미입력/미래 수업)는 분모에서 제외하고,
   // 보강은 실제 수업 참여로 보아 출석과 함께 분자에 포함한다.
   const countedAttendanceRows = attendanceRows.filter((a) => ["출석", "보강", "결석"].includes(a.status))
@@ -941,15 +927,15 @@ function buildReportTabHtml(r) {
         <div class="donut" style="background: conic-gradient(${bandChartColor(hwRate)} 0% ${hwRate}%, var(--brand-soft) ${hwRate}% 100%)"><div class="donut-hole">${hwRate}%</div></div>
         <div class="donut-count-below">(${doneHomework}/${homeworkItems.length})</div>
       </div>`}
-      <div class="donut-card${testItems.length ? " clickable" : ""}"${testItems.length ? ` onclick="showTestPeriodModal('${rangeStart}','${rangeEnd}','${esc(periodLabel)} 평가','${hasKind ? kindName : ""}')"` : ""}>
+      <div class="donut-card${testItems.length ? " clickable" : ""}"${testItems.length ? ` onclick="showTestPeriodModal('${rangeStart}','${rangeEnd}','${esc(periodLabel)} 평가','')"` : ""}>
         <div class="donut-title"><span class="inline-icon">${KIND_ICONS["평가"]}</span>평가 평균</div>
         <div class="donut" style="background: conic-gradient(${bandChartColor(testAvg ?? 0)} 0% ${testAvg ?? 0}%, var(--brand-soft) ${testAvg ?? 0}% 100%)"><div class="donut-hole">${testAvg !== null ? testAvg.toFixed(1) + "점" : "–"}</div></div>
         <div class="donut-count-below">${scoredTests.length ? `(평가 ${scoredTests.length}개)` : "(평가 없음)"}</div>
       </div>
     </div>
-    ${hasKind ? `<h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span>${kindName} 추이</h3>
+    ${testItems.length ? `<h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span>평가 추이</h3>
     <div class="card">
-      ${buildTestTrendChartHtml(computeKindTestPoints(kindTests, rangeEnd, reportPeriod === "week" ? 4 : 6, reportPeriod))}
+      ${buildTestTrendChartHtml(computeRecentTestPoints(testItems, rangeEnd, reportPeriod === "week" ? 7 : 12))}
     </div>` : ""}
     ${routinePeriodHtml(r, rangeStart, rangeEnd)}
     <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></span>선생님 한마디</h3>
@@ -1038,8 +1024,8 @@ function buildDailyBodyHtml(r, date) {
   const todaysLogs = (r.study_logs || []).filter((l) => l.date === date)
   // 이번 과제: 출제일 기준(findNextHomeworkItems). 지난 과제: 이날 마감인 과제(위 이날 마감 과제와 같은 기준).
   const nextHomeworkItems = findNextHomeworkItems(r, date)
-  // (v2.8.0) 일간 보고서는 일일 평가만(주간·월간 평가는 각 보고서, 단원·마무리 평가는 교재 상세에서).
-  const dailyTests = (r.tests || []).filter((t) => testKind(t) === "일일 평가")
+  // (10/30 사용자) 일일 수업 기록 기반: 그날 본 평가는 평가 구분(일일·주간·월간·단원·마무리)과 상관없이 모두 일간 보고서에 나온다.
+  const dailyTests = r.tests || []
   const todaysTests = dailyTests.filter((t) => String(t.date || "").slice(0, 10) === date)
   const comment = findLatestComment(r, date)
   const attStatus = attendanceRow ? (attendanceRow.status || "상태 미입력") : "해당 없음"
@@ -1053,13 +1039,12 @@ function buildDailyBodyHtml(r, date) {
   const sub = (text) => `<div class="rep-sub">${text}</div>`
 
   const studyHtml = todaysLogs.length ? todaysLogs.map((l) => band(reportItemHtml(r, l, { extraRows: makeupMetaRows(l) }))).join("") : empty("이날 기록된 학습 내용이 없어요.")
-  const homeworkHtml =
-    sub("지난 과제") +
-    groupBand(dueTodayHomework, (h) => reportItemHtml(r, h, { pill: h.status, pillTone: homeworkPillTone(h.status), extraRows: [h.classDate ? `출제: ${withDow(h.classDate)}` : null, h.due ? `마감: ${withDow(h.due)}` : null].filter(Boolean) }), "이날 마감인 과제가 없어요.") +
-    sub("이번 과제") +
+  // (10/30 사용자) 일간 보고서 순서는 일일 보고서 알림톡과 같다: 과제 체크 → 루틴 → 학습 → 다음 과제 → 오늘 평가 → 선생님 한마디.
+  const pastHomeworkHtml =
+    groupBand(dueTodayHomework, (h) => reportItemHtml(r, h, { pill: h.status, pillTone: homeworkPillTone(h.status), extraRows: [h.classDate ? `출제: ${withDow(h.classDate)}` : null, h.due ? `마감: ${withDow(h.due)}` : null].filter(Boolean) }), "이날 마감인 과제가 없어요.")
+  const nextHomeworkHtml =
     groupBand(nextHomeworkItems, (h) => reportItemHtml(r, h, { pill: h.status, pillTone: homeworkPillTone(h.status), extraRows: [h.classDate ? `출제: ${withDow(h.classDate)}` : null, h.due ? `마감: ${withDow(h.due)}` : "마감: 출제 전"].filter(Boolean) }), "출제된 과제가 없어요.")
   const testHtml =
-    sub("이번 평가") +
     groupBand(todaysTests, (t) => reportItemHtml(r, t, { pill: testPillText(t), pillTone: testPillTone(t), compare: testCompareBarsHtml(t) }), "이날 평가가 없어요.") +
     sub("최근 평가 추이") +
     band(buildTestTrendChartHtml(computeRecentTestPoints(dailyTests, date, 3)))
@@ -1093,10 +1078,11 @@ function buildDailyBodyHtml(r, date) {
         <div class="donut-count-below">${scoredToday.length ? `${scoredToday.length}건` : ""}</div>
       </div>
     </div>
-    ${session(KIND_ICONS["학습"], "학습", studyHtml)}
-    ${session(KIND_ICONS["과제"], "과제", homeworkHtml)}
+    ${session(KIND_ICONS["과제"], "과제 체크", pastHomeworkHtml)}
     ${(r.routines || []).length ? session(ROUTINE_ICON, "루틴", routineHtml) : ""}
-    ${session(KIND_ICONS["평가"], "평가", testHtml)}
+    ${session(KIND_ICONS["학습"], "학습", studyHtml)}
+    ${session(KIND_ICONS["과제"], "다음 과제", nextHomeworkHtml)}
+    ${session(KIND_ICONS["평가"], "오늘 평가", testHtml)}
     ${session(msgIcon, "선생님 한마디", commentHtml)}
   `
 }
