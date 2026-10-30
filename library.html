@@ -433,7 +433,7 @@ $('sheet').addEventListener('close',()=>{const m=sheet?.mode;sheet=null;if(m==='
 function nextName(units){const last=[...units].reverse().find(u=>u.name&&u.include!==false)?.name||'';let m=last.match(/^(\d+)-(\d+)\./);if(m)return `${m[1]}-${+m[2]+1}. `;m=last.match(/^(\d+)\./);if(m)return `${+m[1]+1}. `;return ''}
 function unitEditor(units,{onChange,saved=[]}={}){
  const box=el('div','units');
- const head=el('div','unit-head');head.append(el('span'),el('span',null,'단원명'),el('span',null,'시작쪽'));
+ const head=el('div','unit-head');head.append(el('span'),el('span',null,'단원명'),el('span',null,'범위 시작'));
  if(saved.length||units.length)box.append(head);
  for(const s of saved){const row=el('div','unit saved');row.append(el('span'),el('span',null,s.name),el('span',null,s.page??'–'));box.append(row)}
  let lastBig=null;
@@ -442,7 +442,7 @@ function unitEditor(units,{onChange,saved=[]}={}){
   const row=el('div','unit'+(u.include?'':' off'));
   const c=el('label','check');const cb=el('input');cb.type='checkbox';cb.checked=u.include;cb.setAttribute('aria-label',(u.name||'새 단원')+' 만들기');cb.onchange=()=>{u.include=cb.checked;row.classList.toggle('off',!cb.checked);onChange?.()};c.append(cb);
   const name=el('input');name.type='text';name.value=u.name;name.maxLength=100;name.placeholder='단원명';name.setAttribute('aria-label','단원명');name.oninput=()=>{u.name=name.value;onChange?.()};
-  const page=el('input');page.type='number';page.min='1';page.max='2000';page.inputMode='numeric';page.value=u.page??'';page.placeholder='–';page.setAttribute('aria-label','시작쪽');page.oninput=()=>{u.page=page.value?Number(page.value):null};
+  const page=el('input');page.type='number';page.min='1';page.max='2000';page.inputMode='numeric';page.value=u.page??'';page.placeholder='–';page.setAttribute('aria-label','범위 시작');page.oninput=()=>{u.page=page.value?Number(page.value):null};
   row.append(c,name,page);box.append(row)});
  const add=el('button','secondary unit-add','단원 추가');add.type='button';
  add.onclick=()=>{units.push({name:nextName([...saved.map(s=>({...s,include:true})),...units]),page:null,include:true,big:''});drawSheet();const inputs=$('sheet-body').querySelectorAll('.unit:not(.saved) input[type=text]');inputs[inputs.length-1]?.focus()};
@@ -507,7 +507,7 @@ function titleRow(text,pageId){const r=el('div','title-row');r.append(el('strong
 // 시리즈·출판사 고르기: Notion 선택지 그대로 + 맨 위 "없음". 지금 값이 선택지에 없으면 "없음"으로 보인다.
 function optionSelect(id,label,options,value,set){const w=el('div'),l=el('label',null,label);l.htmlFor=id;const s=el('select');s.id=id;s.append(new Option('없음',''),...options.map(o=>new Option(o,o)));s.value=options.includes(value)?value:'';s.onchange=()=>set(s.value);w.append(l,s);return w}
 function pickFields(o,onChange){const box=el('div','pick-fields');box.append(optionSelect('sheet-series','시리즈',lists.series,o.series,v=>{o.series=v;onChange?.()}),optionSelect('sheet-publisher','출판사',lists.publishers,o.publisher,v=>{o.publisher=v;onChange?.()}));return box}
-function unitHead(){const h=el('div','unit-head');h.append(el('span'),el('span',null,'단원명'),el('span',null,'시작쪽'));return h}
+function unitHead(){const h=el('div','unit-head');h.append(el('span'),el('span',null,'단원명'),el('span',null,'범위 시작'));return h}
 function savedList(saved){const box=el('div','units');box.append(unitHead());for(const s of saved){const row=el('div','unit saved');row.append(el('span'),el('span',null,s.name),el('span',null,s.page??'–'));box.append(row)}return box}
 const kyoboCover=isbn=>`https://contents.kyobobook.co.kr/sih/fit-in/458x0/pdt/${isbn}.jpg`;
 function startEdit(){sheet.edit={cover:sheet.book.cover||'',series:sheet.book.series||'',publisher:sheet.book.publisher||'',rows:new Map(sheet.saved.map(s=>[s.id,{name:s.name,page:s.page,del:false}])),add:[]};drawSheet();$('sheet-body').querySelector('.unit input[type=text]')?.focus()}
@@ -526,7 +526,7 @@ function coverEditor(b,ed){
 function editRows(ed){
  const box=el('div','units');box.append(unitHead());
  const inputs=(v,on)=>{const n=el('input');n.type='text';n.value=v.name;n.maxLength=100;n.placeholder='단원명';n.setAttribute('aria-label','단원명');n.disabled=!!v.del;n.oninput=()=>{v.name=n.value;on?.()};
-  const pg=el('input');pg.type='number';pg.min='1';pg.max='2000';pg.inputMode='numeric';pg.value=v.page??'';pg.placeholder='–';pg.setAttribute('aria-label','시작쪽');pg.disabled=!!v.del;pg.oninput=()=>{v.page=pg.value?Number(pg.value):null;on?.()};return [n,pg]};
+  const pg=el('input');pg.type='number';pg.min='1';pg.max='2000';pg.inputMode='numeric';pg.value=v.page??'';pg.placeholder='–';pg.setAttribute('aria-label','범위 시작');pg.disabled=!!v.del;pg.oninput=()=>{v.page=pg.value?Number(pg.value):null;on?.()};return [n,pg]};
  let locked=0;
  for(const s of sheet.saved){const v=ed.rows.get(s.id);const row=el('div','unit'+(v.del?' gone':''));
   const d=el('button','icon-btn del');d.type='button';d.setAttribute('aria-pressed',String(v.del));d.setAttribute('aria-label',(v.del?'삭제 취소: ':'삭제: ')+s.name);

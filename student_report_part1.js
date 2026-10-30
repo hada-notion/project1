@@ -191,11 +191,12 @@ function buildCompletionLineChartHtml(points, unit) {
 }
 // (v2.8.0 작품 모아보기) 프로그램(예체능) 상세의 "작품" 구역: 이 프로그램 학습기록·학습활동 본문의 사진을 수업 순서대로
 // 3칸 바둑판으로 모은다(처음엔 9장, 더 보기로 전부). 누르면 크게 보고 좌우로 넘긴다. 사진 주소가 만료되면 한 번 새로 받는다.
-let galleryPhotos = []
+let galleryPhotos = [], galleryBook = null
 const GALLERY_FIRST = 9
 function buildGalleryHtml(r, book) {
   const photos = (r.gallery || []).filter((g) => g.bookId && book.id && g.bookId === book.id)
   galleryPhotos = photos
+  galleryBook = book
   if (!photos.length) return ""
   const thumbs = photos.map((g, i) => `<button type="button" class="gallery-thumb" onclick="openGalleryPhoto(${i})" aria-label="${esc(galleryCaption(g))} 사진 크게 보기"><img src="${esc(safeUrl(g.url))}" loading="lazy" alt="" onerror="refreshGalleryImage(this, ${jsArg(g.blockId)})" /></button>`).join("")
   const more = photos.length > GALLERY_FIRST
@@ -210,7 +211,7 @@ function buildGalleryHtml(r, book) {
         </div>`
 }
 function galleryCaption(g) {
-  return [g.range ? `${g.range}차시` : "", g.date ? withDow(g.date) : "", g.caption || ""].filter(Boolean).join(" · ")
+  return [g.range ? withUnit(galleryBook, g.range) : "", g.date ? withDow(g.date) : "", g.caption || ""].filter(Boolean).join(" · ")
 }
 function toggleGalleryAll(btn) {
   const grid = btn.closest(".rep-card").querySelector(".gallery-grid")
@@ -634,18 +635,20 @@ function splitClassNameEmoji(rawClassName) {
 // Supabase RPC 응답(같은 학생의 모든 등록을 registrations[] 배열로 집계)을 앞단의 UI가 사용하는
 // STUDENT/registrations[] 형태로 변환합니다.
 // (v2.8.0) 진도교재에 주제가 있으면 그 진도교재 기록의 교재 이름도 주제로 보인다("기억에 남는 풍경 그리기 · 3차시").
-// (v2.8.0 예체능) 프로그램 기록의 범위가 숫자뿐이면("3", "1-3", "4~5") 뒤에 "차시"를 붙인다(목록 "최근 3차시", 제목 "수채화 1 · 3차시").
-// 기록의 진도교재 ID로 프로그램인지 보고, ID가 없으면(예전 캐시) 같은 이름의 교재가 모두 프로그램일 때만 붙인다.
+// 기록의 범위가 숫자뿐이면("3", "1-3", "4~5") 그 교재의 진도 단위를 붙인다(목록 "최근 3차시", 제목 "수채화 1 · 3차시", 교과 "P.10-20").
+// 기록의 진도교재 ID로 교재를 찾고, ID가 없으면(예전 캐시) 같은 이름의 교재가 모두 같은 단위일 때만 붙인다.
 function withProgramRanges(m) {
   const books = m.books || []
-  const programOf = (item) => {
-    if (item.bookId && books.some((b) => b.id === item.bookId)) return books.some((b) => b.id === item.bookId && isProgram(b))
-    const same = books.filter((b) => normBookTitle(b.libTitle || b.title) && normBookTitle(b.libTitle || b.title) === normBookTitle(item.book))
-    return same.length > 0 && same.every(isProgram)
-  }
   const topicOf = (item) => (item.bookId ? (books.find((b) => b.id === item.bookId) || {}).topic || "" : "")
+  // (10/31) 프로그램만 "차시"를 붙이던 것을 모든 교재로 넓혔다: 그 교재의 `진도 단위`로(withUnit). 교재를 못 찾으면 그대로.
+  const bookOf = (item) => {
+    if (item.bookId) { const hit = books.find((b) => b.id === item.bookId); if (hit) return hit }
+    const same = books.filter((b) => normBookTitle(b.libTitle || b.title) && normBookTitle(b.libTitle || b.title) === normBookTitle(item.book))
+    return same.length && same.every((b) => unitTemplate(b) === unitTemplate(same[0])) ? same[0] : null
+  }
   const fix = (item) => {
-    const ranged = /^\d+(\s*[-~]\s*\d+)?$/.test(String(item.range || "").trim()) && programOf(item) ? { ...item, range: `${String(item.range).trim()}차시` } : item
+    const bk = bookOf(item)
+    const ranged = bk && item.range ? { ...item, range: withUnit(bk, item.range) } : item
     const topic = topicOf(item)
     return topic ? { ...ranged, book: topic } : ranged
   }
@@ -668,7 +671,7 @@ function mapRegistration(reg) {
     class_mode: reg.class_mode || "",
     schedule: (reg.schedule || []).map((s) => ({ day: s.day, start: s.start, end: s.end })),
     // (v2.8.0) 진도교재 `주제`가 있으면 제목은 주제, 라이브러리 교재명은 libTitle(카드 아랫줄·상세 배지).
-    books: (reg.books || []).map((b) => ({ id: b.id || "", kind: b.kind || "", topic: b.topic || "", libTitle: b.title || "", title: b.topic || b.title || "", progress: b.progress ?? 0, status: normalizeBookStatus(b.status), cover: b.cover || "", pages: b.pages ?? null, units: b.units || [], completedOn: b.completed_on || "" })),
+    books: (reg.books || []).map((b) => ({ id: b.id || "", kind: b.kind || "", unit: b.unit || "", topic: b.topic || "", libTitle: b.title || "", title: b.topic || b.title || "", progress: b.progress ?? 0, status: normalizeBookStatus(b.status), cover: b.cover || "", pages: b.pages ?? null, units: b.units || [], completedOn: b.completed_on || "" })),
     attendance_summary: reg.attendance_summary || { present: 0, absent: 0, makeup: 0 },
     attendance_rows: (reg.attendance_rows || []).map((a) => {
       const rawDate = a.iso || a.date_iso || (typeof a.date === "string" && /^\d{4}-\d{2}-\d{2}/.test(a.date) ? a.date : null)
@@ -897,6 +900,28 @@ function bookNoun(b) { return isProgram(b) ? "프로그램" : "교재" }
 function regBookNoun(r) { const bs = (r && r.books) || []; return bs.length && bs.every(isProgram) ? "프로그램" : "교재" }
 // 받침: 프로그램(ㅁ) → 을·이·과, 교재 → 를·가·와
 function josa(noun, withFinal, withoutFinal) { return noun + (noun === "프로그램" ? withFinal : withoutFinal) }
+// (10/31 사용자) 라이브러리 `진도 단위`: 적은 글자 그대로 보이고 "-"가 숫자 자리다("P.-" → P.50-70, "-차시" → 3-4차시, "DAY -" → DAY 7-8).
+// "-"가 없으면 한글은 숫자 뒤, 영문은 앞. 비어 있으면 교재 "P.-", 프로그램 "-차시". Notion 수식 `범위(표시)`와 같은 규칙.
+function unitTemplate(b) {
+  const t = String((b && b.unit) || "").trim()
+  if (!t) return isProgram(b) ? "-차시" : "P.-"
+  if (t.includes("-")) return t
+  return /^[A-Za-z]/.test(t) ? `${t} -` : `-${t}`
+}
+// 범위가 숫자뿐일 때만("10-20", "3", "4~5") 단위를 붙인다. "p.31-35"처럼 이미 글자가 있으면 그대로.
+function withUnit(b, range) {
+  const r = String(range || "").trim()
+  if (!/^\d+(\s*[-~]\s*\d+)?$/.test(r)) return r
+  const t = unitTemplate(b), i = t.indexOf("-")
+  return t.slice(0, i) + r.replace(/\s+/g, "") + t.slice(i + 1)
+}
+// 전체 분량: 범위와 같은 모양으로 "P.1-160", "1-12차시", "DAY 1-30".
+function totalWithUnit(b) { return b && b.pages ? withUnit(b, `1-${b.pages}`) : "" }
+// 목록 이름: 쪽 단위면 "단원목록", 아니면 "차시 목록"·"DAY 목록"처럼 단위 글자로.
+function unitListLabel(b) {
+  const word = unitTemplate(b).replace("-", "").replace(/[.\s]+/g, " ").trim()
+  return /^(p|쪽|페이지|page)$/i.test(word) ? "단원목록" : `${word} 목록`
+}
 // (v2.8.0) 기록이 이 교재(진도교재)의 것인지. 둘 다 진도교재 ID가 있으면 ID로, 아니면(예전 캐시·교재 없는 기록) 이름으로 본다.
 function inBook(item, title, id) {
   if (id && item.bookId) return item.bookId === id
@@ -1001,13 +1026,13 @@ function renderBookDetail() {
       <div class="reg-tab-content">
         <div class="feed-narrow-wrap">
         <h2><span class="page-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></span>${esc(selectedBookTitle)}</h2>
-        ${book.topic && book.libTitle ? `<div class="section-hint">${esc(book.libTitle)}${book.pages ? ` · ${isProgram(book) ? `총 ${esc(book.pages)}차시` : `${esc(book.pages)}쪽`}` : ""}</div>` : ""}
+        ${book.topic && book.libTitle ? `<div class="section-hint">${esc(book.libTitle)}${book.pages ? ` · ${esc(totalWithUnit(book))}` : ""}</div>` : ""}
         <div class="book-cover-card">
           <div class="book-cover-top">
             <div class="book-cover-card-img">${book.cover ? `<img src="${esc(book.cover)}" alt="${esc(selectedBookTitle)}">` : `<span class="cover-fallback-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></span>`}</div>
             <div class="book-cover-card-info">
               <div class="book-cover-info-row">
-                <span class="info-label">${isProgram(book) ? "차시 목록" : "단원목록"}</span>
+                <span class="info-label">${esc(unitListLabel(book))}</span>
                 <ul class="unit-list">
                   ${unitList.length ? unitList.map((u) => `<li>${esc(u.text)}${u.done ? ' <span class="inline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg></span>' : ""}</li>`).join("") : `<li class="empty">-</li>`}
                 </ul>

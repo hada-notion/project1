@@ -1,4 +1,4 @@
-import { queryAllPages, mapWithConcurrency } from "./notionClient.ts"
+import { queryAllPages, mapWithConcurrency, pickProp } from "./notionClient.ts"
 import { routineRowsForRegistration, type RoutineRow } from "./routineCheck.ts"
 import { readPageBodyBlocks } from "./feedBody.ts"
 import { parseTokenValue } from "./adminShared.ts"
@@ -239,16 +239,20 @@ async function buildRegistrationOverview(reg: any, accessToken: string, cachedGe
           pages: number | null = null,
           cover: string | undefined,
           units: string[] = [],
-          kind = ""
+          kind = "",
+          unit = ""
         if (regularId) {
           const rb = await cachedGetPage(regularId)
           const rp = rb.properties
           title = text(rp["교재명"])
           series = text(rp["시리즈"])
-          pages = numberOf(rp["전체 페이지"])
+          // (10/31) `전체 분량`(예전 이름 `전체 페이지`, 저장된 페이지 캐시에는 예전 이름만 있을 수 있다).
+          pages = numberOf(pickProp(rp, "전체 분량"))
           cover = fileUrlOf(rp["북커버"])
           // (v2.8.0 예체능) 라이브러리 구분이 프로그램이면 화면이 교재→프로그램, 단원→차시로 보여 준다(칸이 없으면 교재).
           if (text(rp["구분"]) === "프로그램") kind = "프로그램"
+          // (10/31 사용자) 라이브러리 `진도 단위`(선택, 적은 글자 그대로): "P.-"·"-차시"·"DAY -"처럼 "-"가 숫자 자리. 화면이 범위·전체 분량에 붙인다.
+          unit = text(rp["진도 단위"]).trim()
           // v2.5.125: 라이브러리 복사본이 있으면 단원 이름을 Supabase에서 한 번에(단원마다 Notion을 읽지 않음, 시작쪽 순).
           const copied = (await libraryCopyReady()) ? await readUnits([regularId]).catch(() => null) : null
           if (copied && copied.length) units = copied.map((u) => u.name).filter(Boolean)
@@ -259,7 +263,7 @@ async function buildRegistrationOverview(reg: any, accessToken: string, cachedGe
           }
         }
         // (v2.8.0) 진도교재 ID: 화면이 교재 상세를 이름이 아니라 이 ID로 묶는다(같은 교재·프로그램 2회독).
-        return { id: String(mp.id).replace(/-/g, ""), title, series, pages, status: statusText, progress, range, cover, units, ...(kind ? { kind } : {}), ...(topic ? { topic } : {}), ...(completedOn ? { completed_on: completedOn } : {}) }
+        return { id: String(mp.id).replace(/-/g, ""), title, series, pages, status: statusText, progress, range, cover, units, ...(kind ? { kind } : {}), ...(unit ? { unit } : {}), ...(topic ? { topic } : {}), ...(completedOn ? { completed_on: completedOn } : {}) }
       }),
   )
 

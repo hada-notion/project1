@@ -128,10 +128,10 @@ Deno.test("register: one textbook page with manual cover rule and units linked t
 		const [book, u1, u2] = m.created
 		const p = book.properties
 		assert(book.parent.data_source_id === "books" && p["교재명"].title[0].text.content === "쎈 중등 수학 1-1" && p.ISBN13.rich_text[0].text.content === "9788928334858")
-		assert(p["북커버"].files[0].external.url === "https://contents.kyobobook.co.kr/sih/fit-in/458x0/pdt/9788928334858.jpg" && p["가격"].number === 19000 && p["전체 페이지"].number === 264 && p["사용중"].checkbox === true)
+		assert(p["북커버"].files[0].external.url === "https://contents.kyobobook.co.kr/sih/fit-in/458x0/pdt/9788928334858.jpg" && p["가격"].number === 19000 && p["전체 분량"].number === 264 && p["사용중"].checkbox === true)
 		assert(p["출판사"].select.name === "좋은책신사고" && p["시리즈"].select.name === "쎈")
-		assert(u1.parent.data_source_id === "units" && u1.properties["단원명"].title[0].text.content === "1-1. 소인수분해" && u1.properties["시작페이지"].number === 8 && u1.properties["라이브러리"].relation[0].id === "new1")
-		assert(!("시작페이지" in u2.properties), "no page when empty")
+		assert(u1.parent.data_source_id === "units" && u1.properties["단원명"].title[0].text.content === "1-1. 소인수분해" && u1.properties["범위 시작"].number === 8 && u1.properties["라이브러리"].relation[0].id === "new1")
+		assert(!("범위 시작" in u2.properties), "no page when empty")
 	})
 })
 
@@ -147,7 +147,7 @@ Deno.test("register: cover choice (alt / none / old noCover), duplicate ISBN13 r
 		await tb.registerBook({ isbn13: "9788928334858", noCover: true, units: [] })
 		const covers = m.created.map((c) => c.properties["북커버"]?.files[0].external.url ?? "")
 		assert(covers.join("|") === "https://seoji.nl.go.kr/cover/x.jpg|https://t1.daumcdn.net/lbook/image/123||", covers.join("|"))
-		assert(m.created[1].properties["가격"].number === 5400 && !("전체 페이지" in m.created[1].properties), "Kakao-only book has price, no pages")
+		assert(m.created[1].properties["가격"].number === 5400 && !("전체 분량" in m.created[1].properties), "Kakao-only book has price, no pages")
 	})
 	const f = mock({ failUnitAt: 1 })
 	await withMock(f, async () => {
@@ -233,10 +233,10 @@ Deno.test("register-custom: title required, optional ISBN/cover/price, https cov
 	await withMock(m, async () => {
 		const r: any = await tb.registerCustom({ title: " 학원 자체 교재 ", units: [{ name: "1. 소개" }] })
 		const p = m.created[0].properties
-		assert(r.ok && r.units === 1 && p["교재명"].title[0].text.content === "학원 자체 교재" && !("ISBN13" in p) && !("북커버" in p) && !("가격" in p) && !("전체 페이지" in p), JSON.stringify(p))
+		assert(r.ok && r.units === 1 && p["교재명"].title[0].text.content === "학원 자체 교재" && !("ISBN13" in p) && !("북커버" in p) && !("가격" in p) && !("전체 분량" in p), JSON.stringify(p))
 		await tb.registerCustom({ title: "Phonics Monster 1 WB", isbn13: "979-11-6951-337-1", cover: "https://ecimg.cafe24img.com/a/big/1/abc.jpg", price: 5400, pages: 286, publisher: "", units: [] })
 		const q = m.created[2].properties
-		assert(q.ISBN13.rich_text[0].text.content === "9791169513371" && q["북커버"].files[0].external.url.endsWith("abc.jpg") && q["가격"].number === 5400 && q["전체 페이지"].number === 286 && !("출판사" in q), JSON.stringify(q))
+		assert(q.ISBN13.rich_text[0].text.content === "9791169513371" && q["북커버"].files[0].external.url.endsWith("abc.jpg") && q["가격"].number === 5400 && q["전체 분량"].number === 286 && !("출판사" in q), JSON.stringify(q))
 		await rejects(() => tb.registerCustom({ title: "", units: [] }), 400)
 		await rejects(() => tb.registerCustom({ title: "x", publisher: "AList", units: [] }), 400, /출판사 선택지에 없는/)
 		await rejects(() => tb.registerCustom({ title: "x", isbn13: "123", units: [] }), 400)
@@ -263,7 +263,7 @@ Deno.test("edit-units: update, trash and add in one save; linked units are kept"
 		const r: any = await tb.editUnits({ bookId: BOOK, update: [{ id: "u1", name: "1-1. 다항식의 연산", page: 9 }, { id: "u2", name: "1-2. 일차부등식", page: 30 }], remove: ["u2", "u3"], add: [{ name: "1-3. 연립방정식", page: 44 }, { name: "1-1. 다항식의 연산" }] })
 		assert(r.ok && r.updated === 1 && r.removed === 1 && r.added === 1 && r.skipped === 1 && r.blocked.join() === "부록", JSON.stringify(r))
 		const [up, del] = m.patched
-		assert(up.id === "u1" && up.body.properties["단원명"].title[0].text.content === "1-1. 다항식의 연산" && up.body.properties["시작페이지"].number === 9, JSON.stringify(up))
+		assert(up.id === "u1" && up.body.properties["단원명"].title[0].text.content === "1-1. 다항식의 연산" && up.body.properties["범위 시작"].number === 9, JSON.stringify(up))
 		assert(del.id === "u2" && del.body.archived === true && m.patched.length === 2, "only the unlinked unit goes to trash, unchanged rows not patched")
 		assert(m.created.length === 1 && m.created[0].properties["라이브러리"].relation[0].id === BOOK)
 	})

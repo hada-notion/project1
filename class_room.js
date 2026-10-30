@@ -261,6 +261,13 @@ const regsKey=d=>[...new Set((d?.students||[]).map(s=>s.registrationId).filter(B
 async function booksFor(id){state.bookCache=state.bookCache||{};if(state.bookCache[id])return state.bookCache[id];
  booksFor.pending=booksFor.pending||{};if(!booksFor.pending[id])booksFor.pending[id]=api('books',{sessionId:id}).finally(()=>{delete booksFor.pending[id];});
  state.bookCache[id]=await booksFor.pending[id];return state.bookCache[id];}
+// (10/31 사용자) 라이브러리 `진도 단위`: 적은 글자 그대로, "-"가 숫자 자리("P.-" → P.50-70, "-차시" → 3-4차시, "DAY -" → DAY 7-8).
+// "-"가 없으면 한글은 뒤·영문은 앞, 비어 있으면 교재 "P.-"·프로그램 "-차시". 학부모 리포트·Notion `범위(표시)`와 같은 규칙.
+const unitTpl=b=>{const t=String(b?.unit||'').trim();if(!t)return b?.kind==='프로그램'?'-차시':'P.-';return t.includes('-')?t:/^[A-Za-z]/.test(t)?t+' -':'-'+t;};
+const withUnit=(b,range)=>{const r=String(range||'').trim();if(!b||!/^\d+(\s*[-~]\s*\d+)?$/.test(r))return r;const t=unitTpl(b),i=t.indexOf('-');return t.slice(0,i)+r.replace(/\s+/g,'')+t.slice(i+1);};
+const totalWithUnit=b=>b?.pages?withUnit(b,'1-'+b.pages):'';
+const bookById=id=>id?Object.values(state.bookCache||{}).flatMap(d=>d?.books||[]).find(b=>b.id===id)||null:null;
+const doneMark=b=>b?.completedOn?' · 수료 '+b.completedOn.slice(5,10).replace('-','.'):'';
 // 교재 카드 묶음: 반 교재 / 개별 교재 묶음("n명 모두"·학생 한 명) / 학생별 교재. 진행 중인 교재만(없으면 전체).
 // 묶음 카드의 진도는 평균, 최근 범위는 "첫 학생 범위 외 n명". 기록 카드에서 바꿀 때(single)는 교재 하나만 고르므로 묶음 카드를 빼고, 지금 교재(include)는 진행 중이 아니어도 보인다.
 function bookChoices(data,{single=false,include=''}={}){
@@ -269,12 +276,12 @@ function bookChoices(data,{single=false,include=''}={}){
  const group=shown.filter(b=>b.mode==='그룹 진도'),ind=shown.filter(b=>b.mode!=='그룹 진도'),tpl={};
  ind.forEach(b=>{if(b.templateId)(tpl[b.templateId]=tpl[b.templateId]||[]).push(b);});
  const loose=ind.filter(b=>!b.templateId||tpl[b.templateId].length<2),base=n=>n.replace(/\(.*\)$/,'').trim();
- const card=(b,sub)=>({value:b.id,title:base(b.name)||b.name,sub,cover:b.cover,progress:b.progress,recent:b.recent});
+ const card=(b,sub)=>({value:b.id,title:base(b.name)||b.name,sub:sub+doneMark(b),cover:b.cover,progress:b.progress,recent:withUnit(b,b.recent)});
  const out=[];
- if(group.length)out.push({label:'반 교재',items:group.map(b=>card(b,`반 교재 · ${b.ownerIds.length}명${b.pages?` · ${b.pages}쪽`:''}`))});
+ if(group.length)out.push({label:'반 교재',items:group.map(b=>card(b,`반 교재 · ${b.ownerIds.length}명${b.pages?` · ${totalWithUnit(b)}`:''}`))});
  Object.values(tpl).filter(l=>l.length>1).forEach(list=>{const p=list.map(b=>b.progress).filter(x=>x!==null),first=list.find(b=>b.recent);
   out.push({label:`${base(list[0].name)} · 개별 ${list.length}명`,items:[...(single?[]:[{value:list.map(b=>b.id).join(','),title:base(list[0].name),sub:`개별 · ${list.length}명 모두 · 학생마다 기록`,cover:list[0].cover,
-   progress:p.length?Math.round(p.reduce((a,x)=>a+x,0)/p.length):null,recent:first?`${names(first)} ${first.recent}${list.length>1?` 외 ${list.length-1}명`:''}`:''}]),...list.map(b=>card(b,`개별 · ${names(b)}`))]});});
+   progress:p.length?Math.round(p.reduce((a,x)=>a+x,0)/p.length):null,recent:first?`${names(first)} ${withUnit(first,first.recent)}${list.length>1?` 외 ${list.length-1}명`:''}`:''}]),...list.map(b=>card(b,`개별 · ${names(b)}`))]});});
  if(loose.length)out.push({label:'학생별 교재',items:loose.map(b=>card(b,`학생별 · ${names(b)}`))});
  return out;
 }
@@ -322,7 +329,7 @@ function unitsOfBook(data,value){const id=String(value||'').split(',')[0];return
 function unitsInRange(units,range){
  const segs=String(range||'').split(/[,，]/).map(p=>{const n=(p.match(/\d+/g)||[]).map(Number).filter(x=>x>0&&x<=5000);return n.length?{a:Math.min(...n),b:Math.max(...n)}:null;}).filter(Boolean);
  if(!units.length||!segs.length)return null;
- const paged=units.filter(u=>u.page!==null&&u.page!==undefined);if(!paged.length)return {none:'이 교재 단원에는 시작쪽이 없어 범위로 찾을 수 없어요.'};
+ const paged=units.filter(u=>u.page!==null&&u.page!==undefined);if(!paged.length)return {none:'이 교재 단원에는 범위 시작이 없어 범위로 찾을 수 없어요.'};
  const hit=paged.filter((u,i)=>{const next=paged[i+1]?.page,end=next===undefined||next===null?Infinity:next-1;return segs.some(s=>u.page<=s.b&&end>=s.a);});
  return hit.length?{units:hit}:{none:'범위에 맞는 단원이 없어요.'};
 }
@@ -520,7 +527,7 @@ function paneBook(el){
  el.innerHTML=`<div class="br-list feed">${bookRow(it,{feed:true}).replace('<button class="book-row ','<div class="book-row static ').replace(/<\/button>$/,'</div>')}</div>
  ${live?`<div class="actions"><button class="primary wide" type="button" id="bk-new">${icon('plus','inline-icon')} 이 교재로 기록 만들기</button></div>`:`<p class="page-hint bk-note">${books.length?'진행 중인 교재만 기록을 만들 수 있어요.':''}</p>`}
  <h2 class="sec-title">${icon('users')}학생 <span class="cnt">${owners.length}명</span></h2>
- <div class="list">${owners.map(({o,b})=>`<div class="row"><span class="meta"><span class="t">${esc(regName(o))}</span><span class="d">${esc(b.recent?'최근 '+b.recent:'최근 기록 없음')}</span></span>${each&&b.progress!==null&&b.progress!==undefined?`<span class="pct">${b.progress}%</span>`:''}</div>`).join('')||'<p class="empty">교재 정보를 불러오는 중…</p>'}</div>
+ <div class="list">${owners.map(({o,b})=>`<div class="row"><span class="meta"><span class="t">${esc(regName(o))}</span><span class="d">${esc(b.recent?'최근 '+withUnit(b,b.recent):'최근 기록 없음')}</span></span>${each&&b.progress!==null&&b.progress!==undefined?`<span class="pct">${b.progress}%</span>`:''}</div>`).join('')||'<p class="empty">교재 정보를 불러오는 중…</p>'}</div>
  <h2 class="sec-title">${icon('학습')}이 교재 학습기록 <span class="cnt">${recs?recs.length:''}</span></h2>
  ${recs?recTimeline(recs,'이 반 앞뒤 수업에 이 교재 기록이 없어요.'):'<div class="list"><p class="empty">기록을 불러오는 중…</p></div>'}`;
  bindCovers(el);
@@ -698,7 +705,7 @@ function paneRoster(el){
 const pillTone=(n,t)=>n>=t?'done':n*2>=t?'mid':'miss';
 const withDow=ymd=>ymd?`${ymd} (${'일월화수목금토'[new Date(ymd+'T00:00:00Z').getUTCDay()]})`:'';
 function recCard(r){
- const subject=r.subject||'',title=[subject,r.range].filter(Boolean).join(' · ')||r.topic||r.title;
+ const subject=r.subject||'',title=[subject,withUnit(bookById(r.bookId),r.range)].filter(Boolean).join(' · ')||r.topic||r.title;
  const units=(r.unit||'').split(/(?=\d+-\d+\.)/).map(x=>x.trim()).filter(Boolean);
  const note=(r.content||'').split('\n').map(l=>l.trim()).join('\n').trim();
  // 기록 카드는 늘 날짜·수업으로 묶인 곳에 보이므로(학습기록 탭·홈·캘린더·교재 상세) 출제일은 묶음 날짜와 겹쳐 빼고 마감만(v2.5.98)
