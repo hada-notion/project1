@@ -8,7 +8,8 @@
 //   - 클래스 변경 안내: 반을 옮기면 예전 등록을 종료하고 새 반 등록을 만든다(등록 = 학생 × 클래스). 새 등록에서 누르면
 //     같은 학생의 다른 반 등록 중 종료일이 이 등록일 이전(또는 같은 날)이고 가장 늦은 것을 "기존"으로 찾는다.
 //     [변경 정보] 🔁 기존 반 · 🏛 변경 반 · 🕒 시간 · 📅 적용(등록일). 못 찾으면 보내지 않는다.
-//   - 보낸 뒤 등록 `안내한 시간표`에 지금 시간표를 적는다(다음 시간표 변경 안내의 🔁 기존 줄, _shared/timetableNotice.ts).
+//   - 보낸 뒤 등록 `안내한 시간표`에 지금 시간표를 적고(다음 시간표 변경 안내의 🔁 기존 줄, _shared/timetableNotice.ts),
+//     한 번 쓰는 `안내 메모`는 비운다.
 //   - 날짜는 서버가 서울 날짜로 만든다(Notion 수식 UTC 문제, 알림톡 기준 3장). 설정 행이 꺼져 있으면 보내지 않는다.
 //   - 상태는 등록 `안내 상태`(⏳→🔄→✅/⚠️), 실패 사유는 등록 `마지막 오류`.
 import { createSendLogEntry, extractErrorMessage, getBotUserId, type SendLogCategory } from "./adminShared.ts"
@@ -19,7 +20,7 @@ import { markDone, markError, markRunning, type StatusSpec } from "./statusTrack
 import { alimtalkVar } from "./noticeBlocks.ts"
 import { LessonConfigError, noteText, sendConfiguredAlimtalk } from "./lessonNotice.ts"
 import { seoulDay, studentNameOf } from "./classReportPlan.ts"
-import { shortDay, slotOf, timetableText, TIMETABLE_SENT_PROP, type Slot } from "./timetableNotice.ts"
+import { ownTimetables, REG_MEMO_PROP, shortDay, slotOf, timetableText, TIMETABLE_SENT_PROP, type Slot } from "./timetableNotice.ts"
 
 export const REGISTRATION_NOTICE_STATUS_SPEC: StatusSpec = {
 	statusProp: "안내 상태",
@@ -27,7 +28,7 @@ export const REGISTRATION_NOTICE_STATUS_SPEC: StatusSpec = {
 	startedAtProp: "안내 처리 시작 시각",
 }
 export const TARGET_REGISTRATION_NOTICE = "registration-notice"
-export const REGISTRATION_MEMO_PROP = "안내 메모" // 등록(학원) DB
+export const REGISTRATION_MEMO_PROP = REG_MEMO_PROP // 등록(학원) DB, 보낸 뒤 비운다(시간표 변경 안내와 함께 씀)
 
 export type RegistrationNoticeKind = "등록 안내" | "클래스 변경 안내"
 export type RegistrationNoticePayload = { regId: string; kind: RegistrationNoticeKind; clickerUserId?: string | null }
@@ -112,12 +113,9 @@ export async function processRegistrationNoticeQueueItem(payload: RegistrationNo
 	const reg: any = await deps.getPage(p.regId)
 	const classId = relIds(reg?.properties?.["클래스"])[0]
 	const cls: any = classId ? await deps.getPage(classId) : null
-	const timetables = []
-	for (const id of relIds(reg?.properties?.[PROP_TIMETABLE])) {
-		const t: any = await deps.getPage(id).catch(() => null)
-		const tCls = relIds(t?.properties?.["클래스"])
-		if (t && !gone(t) && (!tCls.length || !classId || tCls.some((c) => key(c) === key(classId)))) timetables.push(t)
-	}
+	const all = []
+	for (const id of relIds(reg?.properties?.[PROP_TIMETABLE])) all.push(await deps.getPage(id).catch(() => null))
+	const timetables = ownTimetables(all, classId)
 	let prevClass: any = null
 	if (p.kind === "클래스 변경 안내") {
 		const studentId = relIds(reg?.properties?.["학생정보"])[0]
@@ -142,7 +140,11 @@ export async function processRegistrationNoticeQueueItem(payload: RegistrationNo
 		return await deps.markError(p.regId, reason)
 	}
 	await deps.log({ registrationId: p.regId, senderUserId, title: name, category, status: "성공" })
-	if (plan.timetable) await deps.update(p.regId, { [TIMETABLE_SENT_PROP]: { rich_text: [{ text: { content: plan.timetable.slice(0, 1900) } }] } }).catch(() => {})
+	// 안내한 시간표를 적고(다음 시간표 변경 안내의 🔁 기존 줄), 한 번 쓰는 안내 메모는 비운다.
+	await deps.update(p.regId, {
+		...(plan.timetable ? { [TIMETABLE_SENT_PROP]: { rich_text: [{ text: { content: plan.timetable.slice(0, 1900) } }] } } : {}),
+		[REGISTRATION_MEMO_PROP]: { rich_text: [] },
+	}).catch(() => {})
 	await deps.markDone(p.regId)
 	console.log(`[registration-notice] ${p.kind} sent: reg=${p.regId}`)
 }

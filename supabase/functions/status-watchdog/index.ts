@@ -108,8 +108,8 @@ const TARGETS: Array<{ label: string; dataSourceId: string | (() => Promise<stri
 	// (v2.8.0) 클래스 [월 수강료 생성].
 	{ label: "클래스:수강료생성", dataSourceId: DS_CLASS, spec: CLASS_TUITION_GEN_STATUS_SPEC },
 	{ label: "클래스:가정통신문생성", dataSourceId: DS_CLASS, spec: CLASS_LETTER_GEN_STATUS_SPEC },
-	// (v2.8.0, 10/31) 클래스 [시간표 변경 안내].
-	{ label: "클래스:시간표안내", dataSourceId: DS_CLASS, spec: TIMETABLE_NOTICE_STATUS_SPEC },
+	// (v2.8.0, 10/31) 등록 시간표 변경 안내(클래스·등록 [시간표 변경 안내] → 등록 ⚪ 대기 → 자동화).
+	{ label: "등록:시간표안내", dataSourceId: DS_REGISTRATION, spec: TIMETABLE_NOTICE_STATUS_SPEC },
 	// (v2.8.0, 10/31) 등록 [등록 안내]·[클래스 변경 안내].
 	{ label: "등록:안내", dataSourceId: DS_REGISTRATION, spec: REGISTRATION_NOTICE_STATUS_SPEC },
 	{ label: "클래스:교재생성", dataSourceId: DS_CLASS, spec: CLASS_TEXTBOOK_STATUS_SPEC },

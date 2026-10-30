@@ -82,7 +82,7 @@ Deno.test("v2.8.0 클래스 변경 안내: 한 건 — 직전 반을 찾아 보�
 		eq(sent[0][3]["#{변경정보}"], "🔁 기존  중1 A 수학\n🏛 변경  중1 B 수학\n🕒 시간  화 17:00~19:00\n📅 적용  11.03(화)부터")
 		eq(sent[0][3]["#{페이지ID}"].endsWith("?token=tok"), true)
 		eq(logs, [["클래스 변경 안내", "성공"]])
-		eq(updates, [["reg-new", ["안내한 시간표"]]])
+		eq(updates, [["reg-new", ["안내한 시간표", "안내 메모"]]])
 		eq(marks, ["done:reg-new"])
 		// 직전 반이 없으면 보내지 않고 ⚠️
 		sent.length = 0; marks.length = 0
