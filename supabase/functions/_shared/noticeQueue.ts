@@ -40,11 +40,10 @@ import {
 } from "./alimtalkShared.ts"
 import { refreshStudentReport } from "./dailyReportRefresh.ts"
 import { buildLetterNotice, LetterBlocked } from "./monthlyNotice.ts"
-import { BOOK_EVAL_LOG_CATEGORY, BOOK_EVAL_NOTICE_SENT_PROP, BOOK_EVAL_NOTICE_STATUS_PROP, bookEvalContent } from "./bookEvalNotice.ts"
 import { alimtalkVar, BULLET, reportStatusBlock, textbookBlock, tuitionInfoBlock, reportConfigChain, reportSectionVars, textbookListBlock } from "./noticeBlocks.ts"
 import { fitVariablesToTemplate } from "./templateFit.ts"
 
-export type NoticeKind = "report" | "tuition" | "textbook" | "letter" | "bookEval"
+export type NoticeKind = "report" | "tuition" | "textbook" | "letter"
 export type NoticePayload = { kind: NoticeKind; pageId: string; clickerUserId?: string | null }
 
 export const NOTICE_STATUS_PROP: Record<NoticeKind, string> = {
@@ -52,8 +51,6 @@ export const NOTICE_STATUS_PROP: Record<NoticeKind, string> = {
 	tuition: "안내문 전송 상태",
 	textbook: "안내문 전송 상태",
 	letter: "안내문 전송 상태",
-	// (v2.8.0 교재 평가, 항목 16) 학습활동 한 장 = 학생 한 명의 교재 평가 결과 안내(_shared/bookEvalNotice.ts).
-	bookEval: BOOK_EVAL_NOTICE_STATUS_PROP,
 }
 // 같은 학생의 같은 달 다른 반 장(한 통으로 보내는 묶음)
 const SIBLING_PROP: Partial<Record<NoticeKind, string>> = { tuition: "같은 달 수강료", letter: "같은 달 가정통신문" }
@@ -67,7 +64,6 @@ const FALLBACK = {
 	tuition: Deno.env.get("SOLAPI_TEMPLATE_ID_TUITION") ?? "",
 	textbook: Deno.env.get("SOLAPI_TEMPLATE_ID_TEXTBOOK") ?? "",
 	letter: "",
-	bookEval: "",
 }
 
 type Prepared = {
@@ -123,7 +119,6 @@ export const noticeDeps = {
 	log: createSendLogEntry,
 	botUserId: getBotUserId,
 	letter: buildLetterNotice,
-	bookEval: bookEvalContent,
 	now: () => Date.now(),
 }
 
@@ -268,24 +263,6 @@ async function prepareLetter(page: any): Promise<Prepared> {
 	}
 }
 
-// (v2.8.0 진도 평가, 항목 16) 학습활동 한 장 → 진도 평가 결과 안내. 보내기 직전 리포트를 최신화해 링크를 열면 최신 점수·한마디가 보인다.
-async function prepareBookEval(page: any): Promise<Prepared> {
-	const c = await noticeDeps.bookEval(page)
-	const runKey = `notice:bookeval:${c.registrationId}:${Math.floor(noticeDeps.now() / RUN_BUCKET_MS)}`
-	const { access_token } = await noticeDeps.refresh(c.registrationId, { sharedRunKey: runKey, tokenRaw: null })
-	return {
-		registrationId: c.registrationId,
-		title: c.studentName,
-		logCategory: BOOK_EVAL_LOG_CATEGORY as SendLogCategory,
-		configCategory: BOOK_EVAL_LOG_CATEGORY as AlimtalkConfigCategory,
-		primaryPhone: "", // 학습활동에는 연락처가 없다 → 우선 연락 대상이면 등록을 한 번 읽는다
-		variables: () => ({ ...c.variables, "#{페이지ID}": REPORT_PATH + "?token=" + access_token }),
-		log: {},
-		clearBulkSelect: false,
-		doneExtra: { [BOOK_EVAL_NOTICE_SENT_PROP]: { date: { start: new Date(noticeDeps.now()).toISOString() } } },
-	}
-}
-
 async function finish(kind: NoticeKind, pageId: string, status: "✅ 완료" | "⚠️ 오류", message: string | null, clearBulkSelect: boolean, extra: Record<string, unknown> = {}) {
 	await noticeDeps.patch(pageId, {
 		[NOTICE_STATUS_PROP[kind]]: { select: { name: status } },
@@ -325,7 +302,7 @@ export async function processNoticeQueueItem(payload: NoticePayload): Promise<vo
 	let config: Awaited<ReturnType<typeof getAlimtalkConfig>>
 	let recipients: { phone: string }[]
 	try {
-		prep = kind === "report" ? await prepareReport(page) : kind === "tuition" ? prepareTuition(page) : kind === "letter" ? await prepareLetter(page) : kind === "bookEval" ? await prepareBookEval(page) : prepareTextbook(page)
+		prep = kind === "report" ? await prepareReport(page) : kind === "tuition" ? prepareTuition(page) : kind === "letter" ? await prepareLetter(page) : prepareTextbook(page)
 		config = await noticeDeps.config(prep.configCategory, { pfId: FALLBACK.pfId, templateId: prep.noEnvTemplate ? "" : FALLBACK[kind], senderNumber: FALLBACK.senderNumber }, prep.configFallback)
 		recipients = await noticeDeps.recipients({ registrationId: prep.registrationId, primaryPhone: prep.primaryPhone, recipientTarget: config.recipientTarget })
 	} catch (err) {

@@ -47,7 +47,7 @@ import { CASCADE_DELETE_STATUS_SPEC } from "../_shared/cascadeDeleteTarget.ts"
 import { ASSIGNMENT_GEN_STATUS_SPEC } from "../_shared/createAssignmentTarget.ts"
 import { CLASS_REPORT_GEN_STATUS_SPEC, resolveBatchDataSourceId } from "../_shared/classReportPlan.ts"
 import { BATCH_EVAL_STATUS_SPEC } from "../_shared/evaluationPlan.ts"
-import { FINAL_EVAL_STATUS_SPEC } from "../_shared/finalEvaluation.ts"
+import { COMPLETION_STATUS_SPEC } from "../_shared/completionReport.ts"
 import { ROUTINE_STATUS_SPEC } from "../_shared/routineCheck.ts"
 import { SCHEDULE_NOTICE_STATUS_SPEC } from "../_shared/scheduleNotice.ts"
 import { CLASS_LETTER_GEN_STATUS_SPEC, CLASS_TUITION_GEN_STATUS_SPEC } from "../_shared/monthlyNotice.ts"
@@ -97,8 +97,8 @@ const TARGETS: Array<{ label: string; dataSourceId: string | (() => Promise<stri
 	{ label: "클래스:보고서생성", dataSourceId: DS_CLASS, spec: CLASS_REPORT_GEN_STATUS_SPEC },
 	// (v2.8.0) 알림톡 발송함 [평가 생성]. 발송함 DB는 전용 Secret 없이 보고서 DB 관계에서 찾는다.
 	{ label: "발송함:평가생성", dataSourceId: resolveBatchDataSourceId, spec: BATCH_EVAL_STATUS_SPEC },
-	// (v2.8.0 수료) 진도교재 [수료](예전 [진도 평가 생성]과 같은 칸 `수료 상태`).
-	{ label: "진도교재:수료", dataSourceId: DS_PROGRESS_BOOK, spec: FINAL_EVAL_STATUS_SPEC },
+	// (v2.8.0 수료) 진도교재 [수료] `수료 상태`.
+	{ label: "진도교재:수료", dataSourceId: DS_PROGRESS_BOOK, spec: COMPLETION_STATUS_SPEC },
 	// (v2.8.0 루틴) 수업 [루틴 체크 생성].
 	{ label: "수업:루틴체크", dataSourceId: DS_CLASS_SESSION, spec: ROUTINE_STATUS_SPEC },
 	// (v2.8.0) 일정 안내(일정 한 건).

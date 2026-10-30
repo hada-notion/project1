@@ -11,9 +11,8 @@
 // (v2.8.0) 경로 /evaluations: 알림톡 발송함 [평가 생성]. 본문의 발송함 수식 '평가 계획'(체크한 진도교재마다 평가 1개)을
 // 큐에 넣는다. 처리는 _shared/evaluationPlan.ts. 상태는 발송함 '평가 생성 상태'.
 //
-// (v2.8.0) 경로 /progress-evaluation: 진도교재 [진도 평가 생성](진행상태 완료면 마무리, 아니면 단원). 예전 두 버튼 경로
-// /unit-evaluation·/final-evaluation도 받는다. 그 교재의 수강 중 학생으로 진도 평가 학습기록을 만든다.
-// 처리는 _shared/finalEvaluation.ts. 상태는 진도교재 '진도 평가 상태'.
+// (10/31) 진도 평가 생성 경로(/progress-evaluation·/unit-evaluation·/final-evaluation)는 없앴다. 평가는 수업 기록에서만 만들고
+// 교재를 끝낸 표시는 [수료](/completion)가 한다. 예전 경로로 오면 아무것도 바꾸지 않고 410으로 답한다.
 //
 // (v2.8.0 루틴, 항목 18) 경로 /routine-checks: 수업 [루틴 체크 생성]. 이 수업 반의 루틴 × 출석으로 루틴 체크 행을 만든다.
 // 처리는 _shared/routineCheck.ts. 상태는 수업 '루틴 체크 상태'.
@@ -28,7 +27,6 @@ import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 import { isRunning, markError, markQueued } from "../_shared/statusTracking.ts"
 import { CLASS_REPORT_GEN_STATUS_SPEC, TARGET_CLASS_REPORTS, reportRequestFromProps, type ClassReportsPayload } from "../_shared/classReportPlan.ts"
 import { BATCH_EVAL_STATUS_SPEC, EVAL_PLAN_PROP, TARGET_BATCH_EVALUATIONS, evalPlanText } from "../_shared/evaluationPlan.ts"
-import { type BookEvalKind, FINAL_EVAL_STATUS_SPEC, TARGET_FINAL_EVALUATION } from "../_shared/finalEvaluation.ts"
 import { ROUTINE_STATUS_SPEC, TARGET_ROUTINE_CHECKS } from "../_shared/routineCheck.ts"
 import { COMPLETION_STATUS_SPEC, TARGET_COMPLETION } from "../_shared/completionReport.ts"
 
@@ -46,9 +44,7 @@ Deno.serve(async (req: Request) => {
 
 	const route = new URL(req.url).pathname.split("/").pop()
 	if (route === "evaluations") return await queueEvaluations(body)
-	if (route === "final-evaluation") return await queueFinalEvaluation(body, "final")
-	if (route === "unit-evaluation") return await queueFinalEvaluation(body, "unit")
-	if (route === "progress-evaluation") return await queueFinalEvaluation(body, "auto")
+	if (route === "final-evaluation" || route === "unit-evaluation" || route === "progress-evaluation") return json({ ok: false, error: "진도 평가 생성은 없어진 기능입니다. 교재를 마치면 [수료]를 눌러 주세요." }, 410)
 	if (route === "routine-checks") return await queueRoutineChecks(body)
 	if (route === "completion") return await queueCompletion(body)
 
@@ -78,24 +74,6 @@ Deno.serve(async (req: Request) => {
 		return json({ ok: false, error: (err as Error).message }, 500)
 	}
 })
-
-// 진도교재 [진도 평가 생성](예전 단원·마무리 두 버튼 포함): 잠금 확인 → ⏳ 대기열 → 큐. 대상 학생 확인은 큐가 한다.
-async function queueFinalEvaluation(body: Record<string, unknown>, kind: BookEvalKind | "auto"): Promise<Response> {
-	const bookId = extractPageId(body)
-	if (!bookId) return json({ error: "pageId를 찾을 수 없음" }, 400)
-	try {
-		const page = await getPage(bookId)
-		if (isRunning(page, FINAL_EVAL_STATUS_SPEC)) return json({ ok: true, message: "already_processing", bookId })
-		await markQueued(bookId, FINAL_EVAL_STATUS_SPEC)
-		await enqueueSync(TARGET_FINAL_EVALUATION, { bookId, kind })
-		wakeSyncQueueWorker()
-		return respondAccepted({ bookId, kind, queued: true })
-	} catch (err) {
-		console.error("[create-class-reports/final-evaluation] ERROR:", (err as Error).message)
-		await markError(bookId, FINAL_EVAL_STATUS_SPEC, (err as Error).message).catch(() => {})
-		return json({ ok: false, error: (err as Error).message }, 500)
-	}
-}
 
 // 진도교재 [수료]: 잠금 확인 → ⏳ 대기열 → 큐. 학생·발송함 확인은 큐가 한다(_shared/completionReport.ts).
 async function queueCompletion(body: Record<string, unknown>): Promise<Response> {
