@@ -82,6 +82,22 @@ export function studyContentOrDefault(content: string, status: string): string {
 	return status.includes("결석") ? "결석으로 이날 학습 기록이 없습니다." : "이날 학습 기록이 없습니다."
 }
 
+// (v2.8.0 루틴, 항목 18 · 10/30 사용자 시안 A) 일일 보고서 #{학습내용} 끝에 붙는 루틴 구역.
+// "☑️ 루틴" + "  • 단어 암기  했어요" 줄. 그날 루틴 체크가 없으면 빈 값(구역 없음).
+export function routineBlock(items: { name: string; done: boolean }[]): string {
+	const rows = items.filter((i) => i.name)
+	if (!rows.length) return ""
+	return ["☑️ 루틴", ...rows.map((i) => `${BULLET}${i.name}  ${i.done ? "했어요" : "안 했어요"}`)].join("\n")
+}
+
+// 학습내용 + 루틴 구역. 결석이면 루틴을 붙이지 않는다(결석 안내 한 줄만). 학습 기록이 없고 루틴만 있으면 루틴 구역만.
+export function studyWithRoutines(content: string, status: string, items: { name: string; done: boolean }[]): string {
+	const routines = status.includes("결석") ? "" : routineBlock(items)
+	const t = content.trim()
+	if (!routines) return studyContentOrDefault(t, status)
+	return t ? `${t}\n${routines}` : routines
+}
+
 // 주간·월간 보고서 #{학습현황}: 보고서요약(보고서)의 "✅ 출석: 100% (3/3)" 같은 줄을 "✅ 출석  100% (3/3)"로.
 // 출석·과제·평가·학습 줄만 바꾼다(선생님 한마디 본문의 콜론은 그대로).
 export function reportStatusBlock(summary: string): string {

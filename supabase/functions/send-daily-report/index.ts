@@ -35,7 +35,8 @@ import { refreshDailyReportForSend } from "../_shared/dailyReportRefresh.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 import { extractPageId } from "../_shared/notionClient.ts"
 import { formatClassTime } from "../_shared/lessonNotice.ts"
-import { alimtalkVar, arrivalBlock, dateOnly, studyContentOrDefault } from "../_shared/noticeBlocks.ts"
+import { alimtalkVar, arrivalBlock, dateOnly, studyWithRoutines } from "../_shared/noticeBlocks.ts"
+import { routineItemsForAttendance } from "../_shared/routineCheck.ts"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -132,7 +133,7 @@ Deno.serve(async (req) => {
         "#{등원정보}": arrival,
         "#{수업일}": classDate,
         "#{출석상태}": attendanceStatus,
-        "#{학습내용}": studyContentOrDefault(alimtalkVar(attendancePage, "학습내용", studyContent), attendanceStatus),
+        "#{학습내용}": studyWithRoutines(alimtalkVar(attendancePage, "학습내용", studyContent), attendanceStatus, await routineItemsForAttendance(attendancePage)),
         "#{페이지ID}": tokenQueryString,
       }
 

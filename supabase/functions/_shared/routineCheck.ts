@@ -29,6 +29,7 @@ export const P_CHECK = { title: "이름", routine: "루틴", attendance: "출석
 export const P_ROUTINE = { title: "이름", rest: "쉬기", order: "순서" } as const
 const P_SESSION_CHECKS = "루틴 체크"
 const P_REGISTRATION_CHECKS = "루틴 체크"
+const P_ATTENDANCE_CHECKS = "루틴 체크"
 
 const plain = (prop: any): string => (prop?.title ?? prop?.rich_text ?? []).map((t: any) => t.plain_text ?? t.text?.content ?? "").join("").trim()
 const cid = (id: unknown) => String(id ?? "").replace(/-/g, "")
@@ -115,6 +116,29 @@ export async function processRoutineChecksQueueItem(payload: RoutineChecksPayloa
 	} catch (err) {
 		await deps.markError(sessionId, (err as Error).message).catch(() => {})
 		throw err
+	}
+}
+
+// ---------- 일일 보고서 알림톡 ----------
+// 출석 한 장의 루틴 체크 → [{ name, done }](루틴 순서대로). 칸이 없거나 읽기에 실패하면 빈 목록(보고서는 루틴 없이 나간다).
+export async function routineItemsForAttendance(attendance: any, deps: { getPage: typeof getPage; fullRelationIds: typeof fullRelationIds } = { getPage, fullRelationIds }): Promise<{ name: string; done: boolean }[]> {
+	try {
+		if (!attendance?.properties?.[P_ATTENDANCE_CHECKS]) return []
+		const checks = (await Promise.all((await deps.fullRelationIds(attendance, P_ATTENDANCE_CHECKS)).map((id) => deps.getPage(id).catch(() => null)))).filter((p: any) => !gone(p))
+		const routineCache = new Map<string, any>()
+		const rows: { name: string; done: boolean; order: number }[] = []
+		for (const c of checks) {
+			const rid = relIds(c.properties?.[P_CHECK.routine])[0]
+			if (!rid) continue
+			if (!routineCache.has(rid)) routineCache.set(rid, await deps.getPage(rid).catch(() => null))
+			const r = routineCache.get(rid)
+			if (gone(r)) continue
+			rows.push({ name: plain(r.properties?.[P_ROUTINE.title]), done: c.properties?.[P_CHECK.done]?.checkbox === true, order: r.properties?.[P_ROUTINE.order]?.number ?? 999 })
+		}
+		return rows.filter((x) => x.name).sort((a, b) => a.order - b.order || a.name.localeCompare(b.name)).map(({ name, done }) => ({ name, done }))
+	} catch (err) {
+		console.warn("[routine] 일일 보고서 루틴 읽기 건너뜀:", (err as Error).message)
+		return []
 	}
 }
 

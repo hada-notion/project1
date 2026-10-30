@@ -24,7 +24,8 @@ import {
 import { getFormulaText, sendDailyReportAlimtalk, appendSendLog } from "./alimtalkShared.ts"
 import { refreshDailyReportForSend } from "./dailyReportRefresh.ts"
 import { formatClassTime } from "./lessonNotice.ts"
-import { alimtalkVar, arrivalBlock, dateOnly, studyContentOrDefault } from "./noticeBlocks.ts"
+import { alimtalkVar, arrivalBlock, dateOnly, studyWithRoutines } from "./noticeBlocks.ts"
+import { routineItemsForAttendance } from "./routineCheck.ts"
 import { relIds } from "./notionClient.ts"
 import { cleanupExpiredReportPageCache } from "./persistentReportPageCache.ts"
 
@@ -73,7 +74,7 @@ async function finish(attendanceId: string, status: "✅ 완료" | "⚠️ 오�
 }
 
 // 테스트에서 무거운 리포트 최신화와 실제 발송을 바꿔 끼울 수 있게 한다.
-export const dailyReportDeps = { refresh: refreshDailyReportForSend, send: sendDailyReportAlimtalk }
+export const dailyReportDeps = { refresh: refreshDailyReportForSend, send: sendDailyReportAlimtalk, routines: (page: any) => routineItemsForAttendance(page) }
 
 export async function processDailyReportQueueItem(payload: { attendanceId: string; clickerUserId?: string | null }): Promise<void> {
   const attendanceId = payload.attendanceId
@@ -106,7 +107,8 @@ export async function processDailyReportQueueItem(payload: { attendanceId: strin
     "#{등원정보}": arrival,
     "#{수업일}": v.classDate,
     "#{출석상태}": v.attendanceStatus,
-    "#{학습내용}": studyContentOrDefault(alimtalkVar(page, "학습내용", v.studyContent), v.attendanceStatus),
+    // (v2.8.0 루틴) 학습내용 끝에 그날 루틴 구역(☑️ 루틴 + 했어요/안 했어요). 템플릿 글자는 그대로.
+    "#{학습내용}": studyWithRoutines(alimtalkVar(page, "학습내용", v.studyContent), v.attendanceStatus, await dailyReportDeps.routines(page)),
     "#{페이지ID}": REPORT_PATH + "?token=" + access_token,
   }
   const senderUserId = (payload.clickerUserId ?? v.clickerUserId ?? (await getBotUserId().catch(() => null))) ?? undefined
