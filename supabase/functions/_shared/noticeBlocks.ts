@@ -90,12 +90,12 @@ export function routineBlock(items: { name: string; done: boolean }[]): string {
 	return ["☑️ 루틴", ...rows.map((i) => `${BULLET}${i.name}  ${i.done ? "했어요" : "안 했어요"}`)].join("\n")
 }
 
-// 학습내용 + 루틴 구역. 결석이면 루틴을 붙이지 않는다(결석 안내 한 줄만). 학습 기록이 없고 루틴만 있으면 루틴 구역만.
+// #{학습내용}의 서버 대체 값(출석 '학습내용(알림톡)' 수식이 없거나 빌 때만 쓴다 — 계산은 원래 그 수식 안에서 한다).
+// 수식과 같은 모양: 구역 사이 빈 줄, 루틴 구역은 학습·과제 뒤. 결석이면 루틴을 붙이지 않는다.
 export function studyWithRoutines(content: string, status: string, items: { name: string; done: boolean }[]): string {
 	const routines = status.includes("결석") ? "" : routineBlock(items)
 	const t = content.trim()
-	if (!routines) return studyContentOrDefault(t, status)
-	return t ? `${t}\n${routines}` : routines
+	return t && routines ? `${t}\n\n${routines}` : t || routines
 }
 
 // 주간·월간 보고서 #{학습현황}: 보고서요약(보고서)의 "✅ 출석: 100% (3/3)" 같은 줄을 "✅ 출석  100% (3/3)"로.
