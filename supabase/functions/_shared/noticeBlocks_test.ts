@@ -118,8 +118,6 @@ Deno.test("v2.8.0 수료: 교재·프로그램 수료 보고서 행만 쓰고(�
 	eq(await b.reportConfigChain("수료 보고서", "reg2", get), { category: "교재 수료 보고서", fallback: [], noEnvTemplate: true })
 	const page = { properties: { "보고서": { title: [{ plain_text: "이도윤 수료 보고서 개념원리 중학수학 1-1" }] } } }
 	eq(b.reportSectionVars(page)["#{수료과정}"], "📚 교재  개념원리 중학수학 1-1")
-	const course = "🎨 프로그램  정물화 그리기
-📅 기간  10.06(월)~27(월)
-✅ 출석  8/8회"
+	const course = "🎨 프로그램  정물화 그리기\n📅 기간  10.06(월)~27(월)\n✅ 출석  8/8회"
 	eq(b.reportSectionVars({ properties: { ...page.properties, "수료과정(알림톡)": formula(course) } })["#{수료과정}"], course)
 })
