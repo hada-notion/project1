@@ -293,11 +293,10 @@ export function reportModeOf(cls: any): "all" | "tests_only" {
 // (10/30 사용자, 일일 기록 기반) 리포트는 최근 6개월 평가를 모두 싣는다(평가 추이: 일간 7일·주간 4주·월간 6달, 기간마다 모든 평가 평균).
 // 본문(사진·글)과 반 평균은 무거워서 최근 TESTS_DETAILED개에만 붙인다(카드·목록에 주로 보이는 평가).
 export const TESTS_DETAILED = 20
-// (v2.8.0) 평가 구분 묶음: 주간·월간·종합은 그 이름, 나머지(빈 값·일일 평가·기타)는 일일 평가.
-// (v2.8.0 진도 평가, 항목 16) 단원 평가·마무리 평가는 진도 평가(교재 상세에만). 예전 이름 "종합 평가"는 마무리 평가로 읽는다.
+// (v2.8.0) 평가 구분 묶음: 주간·월간은 그 이름, 나머지(빈 값·일일·단원·마무리·종합 평가·기타)는 일일 평가.
+// (10/30 사용자) 진도 평가 구역은 없앴다. 단원·마무리 평가도 그날 수업의 평가로 보인다.
 export function testKindOf(evalType: string | null | undefined): string {
-  if (evalType === "종합 평가") return "마무리 평가"
-  return evalType === "주간 평가" || evalType === "월간 평가" || evalType === "단원 평가" || evalType === "마무리 평가" ? evalType : "일일 평가"
+  return evalType === "주간 평가" || evalType === "월간 평가" ? evalType : "일일 평가"
 }
 
 export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => Promise<any>) {
@@ -528,7 +527,7 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
         status: normalizeStatus(text(props["과제상태"])),
         correct: numberOf(props["정답 문항"]) ?? 0,
         total: numberOf(props["전체 문항"]) ?? 0,
-        // (v2.8.0 진도 평가, 항목 16) 학생별 선생님 한마디. 리포트 교재 상세의 진도 평가 카드에 보인다(칸이 없으면 빈 값).
+        // (v2.8.0) 학생별 선생님 한마디. 리포트 교재 상세의 평가 카드에 보인다(칸이 없으면 빈 값).
         comment: text(props["선생님 한마디"]),
         bookTitle: source?.bookTitle ?? "",
         bookKey: source?.bookKey ?? "",

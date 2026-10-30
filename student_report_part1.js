@@ -78,18 +78,14 @@ function scorePillText(correct, total) {
   const pct = Math.round(((correct ?? 0) / total) * 100)
   return `${pct}점 (${correct ?? 0}/${total})`
 }
-// (v2.8.0 진도 평가, 항목 16) 단원 평가·마무리 평가(예전 "종합 평가")는 진도 평가: 교재 상세에만 보이고 보고서에는 넣지 않는다.
-function isBookEval(t) {
-  return !!t && ["단원 평가", "마무리 평가", "종합 평가"].includes(t.evalType)
-}
-// 평가 알약: 점수가 없는 진도 평가(예체능 등)는 "수료".
 // (10/30 사용자) 알약에는 점수만("90점"). 정답/전체 문항은 아래 "OOO 학생" 줄에.
+// (10/30 사용자) 진도 평가 구역은 없앴다. 단원·마무리 평가도 다른 평가처럼 학습기록에 평가 구분과 함께 보인다.
+// 문항이 없는 평가(예체능 등, 점수 없이 본 평가)는 "완료".
 function testPillText(t) {
-  if (isBookEval(t) && !t.total) return "수료"
-  return t.total ? `${Math.round(((t.correct ?? 0) / t.total) * 100)}점` : scorePillText(t.correct ?? 0, t.total ?? 0)
+  return t.total ? `${Math.round(((t.correct ?? 0) / t.total) * 100)}점` : "완료"
 }
 function testPillTone(t) {
-  return isBookEval(t) && !t.total ? "tone-green" : scorePillTone(t.correct ?? 0, t.total ?? 0)
+  return t.total ? scorePillTone(t.correct ?? 0, t.total) : "tone-green"
 }
 // (v2.8.0) 평가 구분·기간 한 줄(평가 카드 아래 줄). 일일 평가(수업에서 본 평가)는 날짜 묶음과 같아 적지 않고,
 // 출석 없이 만든 평가만 평가 기간을 적는다. 교재·범위가 없어 제목이 평가 구분이면 아래 줄에는 기간만 적는다.
@@ -103,11 +99,10 @@ function testEvalRow(t) {
   const period = t.standalone && s ? (e && e !== s ? `${md(s)} ~ ${md(e)}` : md(s)) : ""
   return [type, period].filter(Boolean).join(" · ")
 }
-// (v2.8.0) 평가 구분 묶음(서버 testKindOf와 같음): 주간·월간·종합은 그 이름, 나머지는 일일 평가.
+// (v2.8.0) 평가 구분 묶음(서버 testKindOf와 같음): 주간·월간은 그 이름, 나머지(단원·마무리 평가 포함)는 일일 평가.
 // 보고서는 구분마다 같은 구분의 평가만 추이로 그린다(일간=일일, 주간=주간, 월간=월간).
 function testKind(t) {
-  if (t && t.evalType === "종합 평가") return "마무리 평가"
-  return t && ["주간 평가", "월간 평가", "단원 평가", "마무리 평가"].includes(t.evalType) ? t.evalType : "일일 평가"
+  return t && ["주간 평가", "월간 평가"].includes(t.evalType) ? t.evalType : "일일 평가"
 }
 // (v2.8.0) 클래스 '리포트 구성'이 "평가만"인 반: 출결·과제·일간 보고서를 숨기고 평가 중심으로 보여 준다.
 function isTestsOnly(r) {
@@ -787,13 +782,12 @@ function renderBookDetail() {
   ;((r.homework) || []).filter(ofBook).forEach((h) => items.push({
     type: "과제", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>`, date: h.classDate || h.due, due: h.due, classDate: h.classDate, book: h.book, range: h.range, unit: h.unit, note: h.note || h.title, pill: h.status, pillTone: homeworkPillTone(h.status), photo: null, sourceBody: h.sourceBody, activityBody: h.activityBody,
   }))
-  // 진도 평가(단원·마무리)는 위 "진도 평가" 구역에만 보인다(학습기록 목록에 같은 평가가 한 번 더 나오지 않게).
-  ;((r.tests) || []).filter((t) => ofBook(t) && !isBookEval(t)).forEach((t) => items.push({
+  ;((r.tests) || []).filter(ofBook).forEach((t) => items.push({
     type: "평가", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`, date: t.date, book: t.book, range: t.range, unit: t.unit, note: t.note || t.title, pill: testPillText(t), pillTone: testPillTone(t), photo: null, sourceBody: t.sourceBody, activityBody: t.activityBody,
+    metaRows: [testEvalRow(t), t.comment ? `선생님 한마디: ${t.comment}` : ""].filter(Boolean),
   }))
-  // (v2.8.0 진도 평가, 항목 16) 이 교재의 단원 평가·마무리 평가와 이 교재 평가 추이. 일일·주간·월간 보고서와 별개로 여기서만 보인다.
+  // 이 교재 평가 추이(평가 2회 이상일 때).
   const bookTests = ((r.tests) || []).filter(ofBook)
-  const finalTests = bookTests.filter(isBookEval).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
   const trendPoints = computeRecentTestPoints(bookTests, MOCK_TODAY, 8)
   // (v2.8.0 수료) [수료]로 마친 교재: 수료일과 수료 보고서 알림톡의 [수료 과정]·[학습(활동) 현황] 요약을 맨 위에 보인다.
   // 요약 수식이 비어 있는 옛 보고서는 선생님 한마디만 보인다.
@@ -813,23 +807,7 @@ function renderBookDetail() {
           </div>
           ${completionSummary ? `<div class="log-meta"><div class="log-note">${esc(completionSummary.split("\n").map((l) => l.trim()).join("\n"))}</div></div>` : ""}
         </div>` : ""
-  const finalHtml = finalTests.length ? `
-        <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg></span>진도 평가</h3>
-        <div class="section-hint">${isProgram(book) ? "차시를" : "단원을"} 마치거나 ${josa(bookNoun(book), "을", "를")} 마무리하며 본 평가예요</div>
-        ${finalTests.map((t) => {
-          // 마무리 평가는 교재 전체 평가라 범위·단원을 보이지 않는다(단원 평가로 만든 뒤 바꿔 남은 값).
-          const isFinal = testKind(t) === "마무리 평가"
-          return `
-          <div class="log-card 평가">
-            <div class="log-top">
-              <div class="log-body">
-                <div class="log-title-row"><div class="log-title">${esc([testKind(t), isFinal ? "" : t.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${testPillTone(t)}">${esc(testPillText(t))}</span></div>
-              </div>
-            </div>
-            <div class="log-meta">${renderLogMetaRows(isFinal ? "" : t.unit, t.comment ? `선생님 한마디: ${t.comment}` : "", [withDow(t.date), typeof t.classAvg === "number" ? `반 평균 ${t.classAvg}점` : null].filter(Boolean))}</div>
-          </div>`
-        }).join("")}
-        ${trendPoints.filter((p) => p.avg !== null).length >= 2 ? `<h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></span>이 ${bookNoun(book)} 평가 추이</h3>${buildTestTrendChartHtml(trendPoints)}` : ""}` : ""
+  const trendHtml = trendPoints.filter((p) => p.avg !== null).length >= 2 ? `<h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></span>이 ${bookNoun(book)} 평가 추이</h3>${buildTestTrendChartHtml(trendPoints)}` : ""
   const sorted = items.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
   const studiedUnitKeys = new Set()
   const studiedUnitList = []
@@ -904,7 +882,7 @@ function renderBookDetail() {
           </div>` : ""}
         </div>
         ${completionHtml}
-        ${finalHtml}
+        ${trendHtml}
         <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg></span>학습기록</h3>
         <div class="section-hint">이 ${bookNoun(book)}의 학습 · 과제 · 평가 기록을 최근 순서로 보여줘요</div>
         <div class="seg-toggle">
@@ -932,7 +910,7 @@ function renderBookDetail() {
                   </div>
                 </div>
                 ${(() => {
-                  const meta = renderLogMetaRows(l.unit, l.note, l.type === "과제" ? [l.classDate ? `출제: ${withDow(l.classDate)}` : null, l.due ? `마감: ${withDow(l.due)}` : null].filter(Boolean) : makeupMetaRows(l))
+                  const meta = renderLogMetaRows(l.unit, l.note, l.type === "과제" ? [l.classDate ? `출제: ${withDow(l.classDate)}` : null, l.due ? `마감: ${withDow(l.due)}` : null].filter(Boolean) : [...(l.metaRows || []), ...makeupMetaRows(l)])
                   const bodyHtml = buildLogBodyHtml(l)
                   const hasExtra = l.photo || !!bodyHtml
                   const chevronBtn = hasExtra ? `<button type="button" class="log-extra-chevron" onclick="toggleLogExtra(this)" aria-label="펼치기"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>` : ""

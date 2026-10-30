@@ -59,7 +59,7 @@ Deno.test("v2.8.0 리포트 캐시: 출석 없는 평가가 평가 기간 끝 �
 
 Deno.test("v2.8.0 리포트 캐시: 최근 6개월 평가를 구분과 상관없이 모두 싣는다(최근 순, 10/30 일일 기록 기반)", async () => {
 	const { testKindOf } = await import("./reportCacheBuilder.ts")
-	eq([testKindOf("주간 평가"), testKindOf("월간 평가"), testKindOf("종합 평가"), testKindOf("단원 평가"), testKindOf("마무리 평가"), testKindOf("일일 평가"), testKindOf("기타"), testKindOf("")], ["주간 평가", "월간 평가", "마무리 평가", "단원 평가", "마무리 평가", "일일 평가", "일일 평가", "일일 평가"])
+	eq([testKindOf("주간 평가"), testKindOf("월간 평가"), testKindOf("종합 평가"), testKindOf("단원 평가"), testKindOf("마무리 평가"), testKindOf("일일 평가"), testKindOf("기타"), testKindOf("")], ["주간 평가", "월간 평가", "일일 평가", "일일 평가", "일일 평가", "일일 평가", "일일 평가", "일일 평가"])
 	const sel = (name: string) => ({ type: "select", select: { name } })
 	const pages: Record<string, any> = { "cls-1": { id: "cls-1", properties: { "담당강사": { type: "relation", relation: [] } } } }
 	const acts: any[] = []
