@@ -14,9 +14,9 @@ Deno.test("v2.8.0 통일안 블록: 기존·전달사항은 있을 때만, 일�
 	eq(b.classListBlock(["중2 B 수학", "중2 영어 A"]), "\n  • 중2 B 수학\n  • 중2 영어 A")
 	eq(b.letterScheduleBlock({ 휴원: "없음", 학원: "11/13(금)\n· 보충", 학사: "11/9(월)~11(수)\n· 기말고사", note: "교재 지참" }), "📆 학원 일정\n11/13(금)\n· 보충\n\n🏫 학사 일정\n11/9(월)~11(수)\n· 기말고사\n\n📝 전달사항\n교재 지참")
 	eq(b.letterScheduleBlock({ 휴원: "12/31(목)\n· 연말 휴원", 학원: "없음", 학사: "", note: "없음" }), "💤 휴원 일정\n12/31(목)\n· 연말 휴원")
-	eq(b.arrivalBlock({ classDate: "26.10.31(토)", status: "🟢 출석", makeupOf: "26.10.12(월)" }), "🔁 기존  26.10.12(월) 결석\n📅 수업일  26.10.31(토)\n✅ 출결상태  출석")
-	eq(b.arrivalBlock({ classDate: "26.10.29(목)", status: "🔵 보강" }), "📅 수업일  26.10.29(목)\n✅ 출결상태  출석(보강)")
-	eq(b.arrivalBlock({ classDate: "26.10.28(수)", status: "결석" }), "📅 수업일  26.10.28(수)\n✅ 출결상태  결석")
+	eq(b.arrivalBlock({ classDate: "26.10.31(토)", status: "🟢 출석", makeupOf: "26.10.12(월)" }), "🔁 기존  26.10.12(월) 결석\n📅 수업일  26.10.31(토)\n✅ 출결  출석")
+	eq(b.arrivalBlock({ classDate: "26.10.29(목)", status: "🔵 보강" }), "📅 수업일  26.10.29(목)\n✅ 출결  출석(보강)")
+	eq(b.arrivalBlock({ classDate: "26.10.28(수)", status: "결석" }), "📅 수업일  26.10.28(수)\n✅ 출결  결석")
 	eq(b.studyContentOrDefault("  ", "🔴 결석"), "결석으로 이날 학습 기록이 없습니다.")
 	eq(b.studyContentOrDefault("", "🟢 출석"), "이날 학습 기록이 없습니다.")
 	eq(b.studyContentOrDefault("📐 수학", "결석"), "📐 수학")
@@ -48,4 +48,36 @@ Deno.test("v2.8.0 통일안 템플릿 맞춤: 본문·제목·버튼에 있는 �
 	eq(await fit.fitVariablesToTemplate(reader, "", vars), vars)
 	const withButton = { getKakaoAlimtalkTemplate: async () => ({ content: "#{학습내용}", buttons: [{ linkMo: "https://x/#{페이지ID}" }] }) }
 	eq(await fit.fitVariablesToTemplate(withButton, "T3", { "#{학습내용}": "a", "#{페이지ID}": "b", "#{수업일}": "c" }), { "#{학습내용}": "a", "#{페이지ID}": "b" })
+})
+
+Deno.test("v2.8.0 구역: 일일 구역 변수는 (알림톡) 수식을 따르고, 비면 기본 문구(결석은 결석 문구)", () => {
+	const page = { properties: { "학습준비(알림톡)": formula("📋 과제\n#개념원리 공통수학1\n  • 제출  제출"), "학습기록(알림톡)": formula(""), "학습결과(알림톡)": formula("") } }
+	eq(b.dailySectionVars(page, "출석"), {
+		"#{학습준비}": "📋 과제\n#개념원리 공통수학1\n  • 제출  제출",
+		"#{학습기록}": "이날 학습 기록이 없습니다.",
+		"#{학습결과}": "오늘은 평가와 새 과제가 없습니다.",
+	})
+	eq(b.dailySectionVars({ properties: {} }, "🔴 결석")["#{학습기록}"], "결석으로 이날 학습 기록이 없습니다.")
+	eq(b.dailySectionVars({ properties: {} }, "출석")["#{학습준비}"], "확인한 과제·루틴이 없습니다.")
+})
+
+Deno.test("v2.8.0 구역: 1,000자를 넘으면 세부 줄을 학습기록부터 빼고 리포트 안내를 붙인다", () => {
+	const short = { "#{학생이름}": "이도윤", "#{학습기록}": "📗 공통수학1\n#개념원리\n  • 1-2. 나머지정리" }
+	eq(b.fitDailyLength(short), short)
+	const detail = Array.from({ length: 60 }, (_, i) => `  • ${i}번 문제 풀이 정리`).join("\n")
+	const long = { "#{학생이름}": "이도윤", "#{학습준비}": "🎯 루틴\n  • 단어 시험  O", "#{학습기록}": `📗 공통수학1\n#개념원리 공통수학1 (p.40-52)\n${detail}`, "#{학습결과}": "💬 선생님 한마디\n잘했어요." }
+	const out = b.fitDailyLength(long)
+	eq(out["#{학습기록}"], `📗 공통수학1\n#개념원리 공통수학1 (p.40-52)\n${b.DAILY_TRIM_NOTE}`)
+	eq([out["#{학습준비}"], out["#{학습결과}"]], [long["#{학습준비}"], long["#{학습결과}"]])
+	eq(b.fitDailyLength({ "#{학습내용}": detail + detail }), { "#{학습내용}": detail + detail })
+})
+
+Deno.test("v2.8.0 구역: 클래스 알림톡 구분이 예체능이면 일일 활동 보고서, 아니면 일일 보고서", async () => {
+	const att = { properties: { "클래스": { type: "rollup", rollup: { type: "array", array: [{ type: "relation", relation: [{ id: "cls" }] }] } } } }
+	const cls = (v: string | null) => async () => ({ properties: { "알림톡 구분": { select: v ? { name: v } : null } } })
+	eq(await b.dailyConfigCategory(att, cls("예체능")), "일일 활동 보고서")
+	eq(await b.dailyConfigCategory(att, cls("교과")), "일일 보고서")
+	eq(await b.dailyConfigCategory(att, cls(null)), "일일 보고서")
+	eq(await b.dailyConfigCategory({ properties: {} }, cls("예체능")), "일일 보고서")
+	eq(await b.dailyConfigCategory(att, async () => { throw new Error("x") }), "일일 보고서")
 })

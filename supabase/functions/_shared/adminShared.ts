@@ -413,7 +413,8 @@ export function withConfigFallback(row: AlimtalkConfig, fallback: { pfId: string
 // "주간/월간 보고서"로 바꾸자 조회가 조용히 실패해 fallback(Secrets 기본값)으로 넘어가는 사고가
 // 있었다. 지금은 화면용 제목과 무관한 별도 텍스트 속성 "코드"를 두고 이 값으로만 조회한다.
 // "발송 구분"(제목)은 자유롭게 바꿔도 되지만, "코드" 값은 여기 나열된 문자열과 정확히 같아야 한다.
-export type AlimtalkConfigCategory = SendLogCategory | "보고서"
+// "일일 활동 보고서": 클래스 `알림톡 구분`이 예체능인 반의 일일 보고서(v2.8.0 구역). 전송 로그 구분은 "일일 보고서" 그대로.
+export type AlimtalkConfigCategory = SendLogCategory | "보고서" | "일일 활동 보고서"
 
 // [NEW, 복원 2026-09-18] "알림톡 설정(학원) DB"에서 발송 구분별 행 ID와 안내멘트만 가져온다.
 // generate-tuition/textbookDistributionTarget이 표시용 "알림톡 설정" 관계를 채울 rowId로,

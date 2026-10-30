@@ -66,13 +66,61 @@ export function arrivalBlock(o: { classDate: string; status: string; makeupOf?: 
 		...(o.makeupOf ? [line("🔁", "기존", `${o.makeupOf} 결석`)] : []),
 		line("📅", "수업일", o.classDate),
 		// 출석 상태 앞의 색 이모지("🟢 출석")는 뺀다. 줄 머리가 이미 ✅다.
-		line("✅", "출결상태", attendanceLabel(o.status)),
+		line("✅", "출결", attendanceLabel(o.status)),
 	].join("\n")
 }
 
 function attendanceLabel(status: string): string {
 	const s = status.trim().replace(/^[^\p{L}\p{N}\s]+\s*/u, "")
 	return s === "보강" ? "출석(보강)" : s || "-"
+}
+
+// (v2.8.0 구역, 10/30 사용자) 일일 학습·활동 보고서의 구역 변수. 값은 출석 `학습준비(알림톡)`·`학습기록(알림톡)`·
+// `학습결과(알림톡)` 수식을 그대로 따른다. 서버는 모양을 만들지 않고, 수식이 비었을 때만 기본 문구를 넣는다(솔라피는 빈 변수를 못 보냄).
+export const DAILY_SECTION_DEFAULTS = {
+	prep: "확인한 과제·루틴이 없습니다.",
+	result: "오늘은 평가와 새 과제가 없습니다.",
+}
+export function dailySectionVars(page: any, status: string): Record<string, string> {
+	return {
+		"#{학습준비}": alimtalkVar(page, "학습준비", DAILY_SECTION_DEFAULTS.prep),
+		"#{학습기록}": alimtalkVar(page, "학습기록", studyContentOrDefault("", status)),
+		"#{학습결과}": alimtalkVar(page, "학습결과", DAILY_SECTION_DEFAULTS.result),
+	}
+}
+
+// 일일 보고서 본문은 1,000자까지다(넘으면 솔라피가 거절). 새 구역 템플릿의 고정 글자([기본 정보]·라벨·구역 머리)는 80자 안팎.
+// 넘으면 4단계 세부 줄(`  • …`)을 학습기록 → 학습준비 → 학습결과 순으로 빼고, 학습기록 끝에 리포트 안내 한 줄을 붙인다.
+export const DAILY_BODY_LIMIT = 1000
+const DAILY_FIXED_CHARS = 80
+const DAILY_LENGTH_KEYS = ["#{학생이름}", "#{클래스}", "#{등원정보}", "#{학습준비}", "#{학습기록}", "#{학습결과}"]
+export const DAILY_TRIM_NOTE = "자세한 내용은 아래 버튼에서 확인해 주세요."
+const chars = (s: string) => [...s].length
+export function fitDailyLength(vars: Record<string, string>): Record<string, string> {
+	const total = (v: Record<string, string>) => DAILY_FIXED_CHARS + DAILY_LENGTH_KEYS.reduce((n, k) => n + chars(v[k] ?? ""), 0)
+	if (!("#{학습기록}" in vars) || total(vars) <= DAILY_BODY_LIMIT) return vars
+	const out = { ...vars }
+	const dropDetails = (s: string) => s.split("\n").filter((l) => !/^\s+•/.test(l)).join("\n").replace(/\n{3,}/g, "\n\n").trim()
+	for (const key of ["#{학습기록}", "#{학습준비}", "#{학습결과}"]) {
+		out[key] = dropDetails(out[key] ?? "")
+		if (key === "#{학습기록}") out[key] = `${out[key]}\n${DAILY_TRIM_NOTE}`.trim()
+		if (total(out) <= DAILY_BODY_LIMIT) return out
+	}
+	// 그래도 넘으면 학습결과 뒤를 자른다(선생님 한마디가 아주 긴 경우).
+	const over = total(out) - DAILY_BODY_LIMIT
+	const r = [...out["#{학습결과}"]]
+	out["#{학습결과}"] = r.slice(0, Math.max(1, r.length - over - 1)).join("") + "…"
+	return out
+}
+
+// 출석의 클래스(등록 → 클래스 롤업)에서 일일 보고서 설정 행을 고른다. 클래스 `알림톡 구분`이 예체능이면 "일일 활동 보고서".
+// 클래스를 못 읽으면 교과(일일 보고서)로 보낸다.
+export async function dailyConfigCategory(page: any, getPage: (id: string) => Promise<any>): Promise<"일일 보고서" | "일일 활동 보고서"> {
+	const arr = page?.properties?.["클래스"]?.rollup?.array ?? []
+	const classId = arr.flatMap((x: any) => (x?.relation ?? []).map((r: any) => r?.id)).find(Boolean)
+	if (!classId) return "일일 보고서"
+	const cls = await getPage(classId).catch(() => null)
+	return cls?.properties?.["알림톡 구분"]?.select?.name === "예체능" ? "일일 활동 보고서" : "일일 보고서"
 }
 
 // 일일 보고서 #{학습내용}: 그날 기록이 하나도 없을 때(결석 등) 대신 넣는 한 줄.

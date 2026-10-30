@@ -35,7 +35,7 @@ import { refreshDailyReportForSend } from "../_shared/dailyReportRefresh.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 import { extractPageId } from "../_shared/notionClient.ts"
 import { formatClassTime } from "../_shared/lessonNotice.ts"
-import { alimtalkVar, arrivalBlock, dateOnly, studyContentOrDefault, studyWithRoutines } from "../_shared/noticeBlocks.ts"
+import { alimtalkVar, arrivalBlock, dailyConfigCategory, dailySectionVars, dateOnly, fitDailyLength, studyContentOrDefault, studyWithRoutines } from "../_shared/noticeBlocks.ts"
 import { routineItemsForAttendance } from "../_shared/routineCheck.ts"
 
 const corsHeaders = {
@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
       const tokenQueryString = REPORT_PATH + "?token=" + access_token
       // 변수 값은 "변수(알림톡)" 수식 → 옛 "(보고서)" 수식. 옛 템플릿(#{수업일}·#{출석상태})과 새 템플릿(#{등원정보})
       // 변수를 함께 넣고, 보낼 때 그 템플릿에 있는 것만 남긴다(_shared/templateFit.ts).
-      const variables: Record<string, string> = {
+      const variables: Record<string, string> = fitDailyLength({
         "#{학생이름}": alimtalkVar(attendancePage, "학생이름", studentName),
         "#{클래스}": alimtalkVar(attendancePage, "클래스", className),
         "#{등원정보}": arrival,
@@ -135,8 +135,11 @@ Deno.serve(async (req) => {
         "#{출석상태}": attendanceStatus,
         // (v2.8.0 루틴) 루틴 구역은 '학습내용(알림톡)' 수식이 만든다. 수식이 없거나 비었을 때만 서버가 같은 모양으로.
         "#{학습내용}": studyContentOrDefault(alimtalkVar(attendancePage, "학습내용", getFormulaText(attendancePage, "학습내용(알림톡)") ? "" : studyWithRoutines(studyContent, attendanceStatus, await routineItemsForAttendance(attendancePage))), attendanceStatus),
+        // (v2.8.0 구역) 일일 학습·활동 보고서의 구역 변수. 출석 (알림톡) 수식을 따른다.
+        ...dailySectionVars(attendancePage, attendanceStatus),
         "#{페이지ID}": tokenQueryString,
-      }
+      })
+      const configCategory = await dailyConfigCategory(attendancePage, (id) => notionGetPage(id))
 
       const clickerUserId =
         body?.data?.properties?.["실행자"]?.people?.[0]?.id ??
@@ -146,7 +149,7 @@ Deno.serve(async (req) => {
 
       let sendResult: unknown
       try {
-        sendResult = await sendDailyReportAlimtalk({ registrationId, primaryPhone: parentPhone, variables })
+        sendResult = await sendDailyReportAlimtalk({ registrationId, primaryPhone: parentPhone, variables, configCategory })
       } catch (sendErr) {
         await createSendLogEntry({
           registrationId,
