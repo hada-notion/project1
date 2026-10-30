@@ -198,13 +198,16 @@ export async function sendDailyReportAlimtalk(payload: {
   registrationId: string
   primaryPhone: string
   variables: Record<string, string>
+  // (v2.8.0 구역) 예체능 반은 "일일 활동 보고서" 행. 그 행이 없거나 꺼져 있으면 "일일 보고서" 행(변수는 같고 구역 이름만 다름).
+  configCategory?: "일일 보고서" | "일일 활동 보고서"
 }) {
 
-  const config = await getAlimtalkConfig("일일 보고서", {
+  const category = payload.configCategory ?? "일일 보고서"
+  const config = await getAlimtalkConfig(category, {
     pfId: SOLAPI_PF_ID_FALLBACK,
     templateId: SOLAPI_TEMPLATE_ID_DAILY_FALLBACK,
     senderNumber: SOLAPI_SENDER_NUMBER_FALLBACK,
-  })
+  }, category === "일일 보고서" ? undefined : "일일 보고서")
 
   const { SolapiMessageService } = await import("npm:solapi")
   const messageService = new SolapiMessageService(SOLAPI_API_KEY, SOLAPI_API_SECRET)
