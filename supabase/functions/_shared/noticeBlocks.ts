@@ -83,11 +83,11 @@ export function studyContentOrDefault(content: string, status: string): string {
 }
 
 // (v2.8.0 루틴, 항목 18 · 10/30 사용자 시안 A) 일일 보고서 #{학습내용} 끝에 붙는 루틴 구역.
-// "☑️ 루틴" + "  • 단어 암기  했어요" 줄. 그날 루틴 체크가 없으면 빈 값(구역 없음).
+// "☑️ 루틴" + "  • 단어 암기  O"(했음) / "  • 영어 일기  X" 줄(10/30 사용자: 알림톡은 O·X, 리포트 화면은 했어요·안 했어요). 그날 루틴 체크가 없으면 빈 값(구역 없음).
 export function routineBlock(items: { name: string; done: boolean }[]): string {
 	const rows = items.filter((i) => i.name)
 	if (!rows.length) return ""
-	return ["☑️ 루틴", ...rows.map((i) => `${BULLET}${i.name}  ${i.done ? "했어요" : "안 했어요"}`)].join("\n")
+	return ["☑️ 루틴", ...rows.map((i) => `${BULLET}${i.name}  ${i.done ? "O" : "X"}`)].join("\n")
 }
 
 // #{학습내용}의 서버 대체 값(출석 '학습내용(알림톡)' 수식이 없거나 빌 때만 쓴다 — 계산은 원래 그 수식 안에서 한다).
