@@ -240,6 +240,8 @@ export type SendLogCategory =
   // (v2.8.0) 일정 안내 알림톡. _shared/scheduleNotice.ts
   | "일정 안내"
   | "월간 일정 안내"
+  // (v2.8.0, 10/31) 시간표 변경 안내 알림톡. _shared/timetableNotice.ts
+  | "시간표 변경 안내"
 export type SendLogStatus = "성공" | "실패"
 
 function formatSendLogDate(periodStart?: string): string {
