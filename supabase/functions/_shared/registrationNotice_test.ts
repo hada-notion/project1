@@ -99,3 +99,14 @@ Deno.test("v2.8.0 클래스 변경 안내: 한 건 — 직전 반을 찾아 보�
 		Object.assign(deps, saved)
 	}
 })
+
+Deno.test("v2.8.0 등록 안내·클래스 변경 안내: 등록의 (알림톡) 수식 값을 먼저 쓴다", () => {
+	const f = (s: string) => ({ type: "formula", formula: { type: "string", string: s } })
+	const r: any = reg()
+	Object.assign(r.properties, { "학교(알림톡)": f("하다고"), "등록정보(알림톡)": f("📅 시작  11.04(수)부터"), "변경정보(알림톡)": f("🔁 기존  A반\n🏛 변경  B반\n📅 적용  11.03(화)부터"), "전달사항(알림톡)": f("수식 메모") })
+	const p: any = m.planRegistrationNotice("등록 안내", r, cls("cls-b", "중1 B 수학"), [], null, "/r", { school: "서버값" })
+	eq([p.variables["#{학교}"], p.variables["#{등록정보}"], p.variables["#{전달사항}"]], ["하다고", "📅 시작  11.04(수)부터", "수식 메모"])
+	// 직전 반을 서버가 못 찾아도 변경정보 수식이 있으면 그 값으로 보낸다
+	const c: any = m.planRegistrationNotice("클래스 변경 안내", r, cls("cls-b", "중1 B 수학"), [], null, "/r")
+	eq(c.variables["#{변경정보}"], "🔁 기존  A반\n🏛 변경  B반\n📅 적용  11.03(화)부터")
+})

@@ -11,7 +11,8 @@
 //     [변경 정보] 🔁 기존 반 · 🏛 변경 반 · 🕒 시간 · 📅 적용(등록일). 못 찾으면 보내지 않는다.
 //   - 보낸 뒤 등록 `안내한 시간표`에 지금 시간표를 적고(다음 시간표 변경 안내의 🔁 기존 줄, _shared/timetableNotice.ts),
 //     한 번 쓰는 `안내 메모`는 비운다.
-//   - 날짜는 서버가 서울 날짜로 만든다(Notion 수식 UTC 문제, 알림톡 기준 3장). 설정 행이 꺼져 있으면 보내지 않는다.
+//   - 변수는 등록의 `이름(알림톡)` 수식(학생이름·학교·학년·클래스·등록정보·변경정보·전달사항)을 먼저 쓰고, 수식이 없거나 비면
+//     서버가 같은 모양으로 만든다(등록일은 날짜만이라 수식의 UTC 문제가 없다). 설정 행이 꺼져 있으면 보내지 않는다.
 //   - 상태는 등록 `안내 상태`(⏳→🔄→✅/⚠️), 실패 사유는 등록 `마지막 오류`.
 import { createSendLogEntry, extractErrorMessage, getBotUserId, type SendLogCategory } from "./adminShared.ts"
 import { syncStudentReport } from "./alimtalkShared.ts"
@@ -87,7 +88,7 @@ export function planRegistrationNotice(kind: RegistrationNoticeKind, reg: any, c
 	const time = timetableText(timetables.map(slotOf).filter((s): s is Slot => !!s))
 	const common = {
 		"#{학생이름}": alimtalkVar(reg, "학생이름", studentNameOf(reg)),
-		"#{전달사항}": noteText(textOf(reg?.properties?.[REGISTRATION_MEMO_PROP]?.rich_text)),
+		"#{전달사항}": alimtalkVar(reg, "전달사항", noteText(textOf(reg?.properties?.[REGISTRATION_MEMO_PROP]?.rich_text))),
 		"#{페이지ID}": reportLink,
 	}
 	if (kind === "등록 안내") {
@@ -96,9 +97,12 @@ export function planRegistrationNotice(kind: RegistrationNoticeKind, reg: any, c
 			"#{학교}": alimtalkVar(reg, "학교", student.school || "-"),
 			"#{학년}": alimtalkVar(reg, "학년", student.grade || "-"),
 			"#{클래스}": alimtalkVar(reg, "클래스", className),
-			"#{등록정보}": enrollInfoBlock({ startOn, time }),
+			"#{등록정보}": alimtalkVar(reg, "등록정보", enrollInfoBlock({ startOn, time })),
 		} }
 	}
+	// 등록 `변경정보(알림톡)` 수식이 있으면 그 값(수식이 직전 반을 찾는다), 없으면 서버가 찾은 직전 반으로.
+	const own = alimtalkVar(reg, "변경정보", "")
+	if (own) return { timetable: time, variables: { ...common, "#{변경정보}": own } }
 	const before = classNameOf(prevClass)
 	if (!before) return { error: "직전 반 등록을 찾지 못했습니다. 같은 학생의 예전 반 등록에 종료일(이 등록일 이전)이 있어야 합니다." }
 	return { timetable: time, variables: { ...common, "#{변경정보}": classChangeBlock({ before, after: className, time, applyOn: startOn }) } }
