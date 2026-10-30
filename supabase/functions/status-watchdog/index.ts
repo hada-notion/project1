@@ -52,6 +52,7 @@ import { ROUTINE_STATUS_SPEC } from "../_shared/routineCheck.ts"
 import { SCHEDULE_NOTICE_STATUS_SPEC } from "../_shared/scheduleNotice.ts"
 import { CLASS_LETTER_GEN_STATUS_SPEC, CLASS_TUITION_GEN_STATUS_SPEC } from "../_shared/monthlyNotice.ts"
 import { TIMETABLE_NOTICE_STATUS_SPEC } from "../_shared/timetableNotice.ts"
+import { REGISTRATION_NOTICE_STATUS_SPEC } from "../_shared/registrationNotice.ts"
 import { resolveMenuDataSourceId } from "../_shared/menuDataSource.ts"
 
 // 메뉴(학원) DB는 전용 Secret이 없다. 이 워치독은 그 안의 "시간표" 단일 행만 상태 관리 대상이다.
@@ -107,8 +108,10 @@ const TARGETS: Array<{ label: string; dataSourceId: string | (() => Promise<stri
 	// (v2.8.0) 클래스 [월 수강료 생성].
 	{ label: "클래스:수강료생성", dataSourceId: DS_CLASS, spec: CLASS_TUITION_GEN_STATUS_SPEC },
 	{ label: "클래스:가정통신문생성", dataSourceId: DS_CLASS, spec: CLASS_LETTER_GEN_STATUS_SPEC },
-	// (v2.8.0, 10/31) 클래스 [시간표 변경 안내].
-	{ label: "클래스:시간표안내", dataSourceId: DS_CLASS, spec: TIMETABLE_NOTICE_STATUS_SPEC },
+	// (v2.8.0, 10/31) 등록 시간표 변경 안내(클래스·등록 [시간표 변경 안내] → 등록 ⚪ 대기 → 자동화).
+	{ label: "등록:시간표안내", dataSourceId: DS_REGISTRATION, spec: TIMETABLE_NOTICE_STATUS_SPEC },
+	// (v2.8.0, 10/31) 등록 [등록 안내]·[클래스 변경 안내].
+	{ label: "등록:안내", dataSourceId: DS_REGISTRATION, spec: REGISTRATION_NOTICE_STATUS_SPEC },
 	{ label: "클래스:교재생성", dataSourceId: DS_CLASS, spec: CLASS_TEXTBOOK_STATUS_SPEC },
 	// (2026-09-22, Phase 3) cascade-delete가 공유하는 "삭제 처리중" 상태 — 7개 DB(원래 마스터플랜
 	// 표엔 4개만 있었으나 코드 확인 후 교재비 계열 3개까지 범위 확장, cascadeDeleteTarget.ts 참고).

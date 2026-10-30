@@ -5,26 +5,27 @@ const m = await import("./timetableNotice.ts")
 const { timetableNoticeDeps: deps } = m
 
 const rt = (s: string) => ({ type: "rich_text", rich_text: s ? [{ plain_text: s }] : [] })
-const tt = (id: string, day: string, start: string, end: string, cls = "cls-1") => ({
+const tt = (id: string, day: string, start: string, end: string, cls: string | null = "cls-1") => ({
 	id,
-	properties: { "요일": { type: "select", select: { name: day } }, "등원시간(HH:mm)": rt(start), "하원시간(HH:mm)": rt(end), "클래스": { type: "relation", relation: [{ id: cls }] } },
+	properties: { "요일": { type: "select", select: { name: day } }, "등원시간(HH:mm)": rt(start), "하원시간(HH:mm)": rt(end), "클래스": { type: "relation", relation: cls ? [{ id: cls }] : [] } },
 })
-const reg = (o: { sent?: string; tts?: string[]; status?: string } = {}) => ({
+const reg = (o: { sent?: string; tts?: string[]; apply?: string; memo?: string } = {}) => ({
 	id: "reg-1",
 	properties: {
 		"학생이름(등록)": { type: "rollup", rollup: { array: [{ title: [{ plain_text: "김하윤" }] }] } },
+		"클래스": { type: "relation", relation: [{ id: "cls-1" }] },
 		"시간표": { type: "relation", relation: (o.tts ?? ["t1", "t2"]).map((id) => ({ id })) },
 		"안내한 시간표": rt(o.sent ?? ""),
-		"수강상태": { type: "formula", formula: { string: o.status ?? "🟢 수강 중" } },
+		"시간표 적용일": { type: "date", date: o.apply ? { start: o.apply } : null },
+		"안내 메모": rt(o.memo ?? ""),
 	},
 })
-const cls = (o: { apply?: string; memo?: string; error?: string } = {}) => ({
+const cls = (o: { apply?: string; memo?: string } = {}) => ({
 	id: "cls-1",
 	properties: {
 		"클래스명": { type: "title", title: [{ plain_text: "중1 A 수학" }] },
 		"시간표 적용일": { type: "date", date: o.apply ? { start: o.apply } : null },
 		"시간표 안내 메모": rt(o.memo ?? ""),
-		"마지막 오류": rt(o.error ?? ""),
 	},
 })
 
@@ -42,94 +43,77 @@ Deno.test("v2.8.0 시간표 변경 안내: 블록은 기존(있고 다를 때)·
 	eq(m.shortDay(""), "")
 })
 
-Deno.test("v2.8.0 시간표 변경 안내: 계획 — 변수, 이미 안내한 학생 건너뛰기, 시간표 없음", () => {
+Deno.test("v2.8.0 시간표 변경 안내: 이 반 시간표와 반 없는(개별) 시간표만", () => {
+	const list = [tt("t1", "화", "17:00", "19:00"), tt("t2", "목", "17:00", "19:00", "other"), tt("t3", "토", "10:00", "11:00", null), null]
+	eq(m.ownTimetables(list, "cls-1").map((t: any) => t.id), ["t1", "t3"])
+	eq(m.ownTimetables(list, undefined).map((t: any) => t.id), ["t1", "t2", "t3"])
+})
+
+Deno.test("v2.8.0 시간표 변경 안내: 계획 — 등록 값이 클래스 값보다 먼저, 이미 안내한 학생 건너뛰기", () => {
 	const tts = [tt("t1", "화", "17:00", "19:00"), tt("t2", "목", "17:00", "19:00")]
 	const p: any = m.planTimetableNotice(reg({ sent: "월·수 16:00~18:00" }), tts, cls({ apply: "2026-11-03", memo: "새 시간표로 안내드립니다." }))
-	eq(p.now, "화·목 17:00~19:00")
 	eq(p.variables, {
 		"#{학생이름}": "김하윤",
 		"#{클래스}": "중1 A 수학",
 		"#{시간표정보}": "🔁 기존  월·수 16:00~18:00\n🕒 변경  화·목 17:00~19:00\n📅 적용  11.03(화)부터",
 		"#{전달사항}": "새 시간표로 안내드립니다.",
 	})
+	eq([p.usedRegApply, p.usedRegMemo], [false, false])
+	// 개별 수업: 등록의 적용일·메모가 있으면 그것을 쓴다
+	const own: any = m.planTimetableNotice(reg({ apply: "2026-11-10", memo: "개인 일정으로 옮깁니다." }), tts, cls({ apply: "2026-11-03", memo: "반 메모" }))
+	eq([own.variables["#{시간표정보}"], own.variables["#{전달사항}"], own.usedRegApply, own.usedRegMemo], ["🕒 변경  화·목 17:00~19:00\n📅 적용  11.10(화)부터", "개인 일정으로 옮깁니다.", true, true])
 	eq(m.planTimetableNotice(reg({ sent: "화·목 17:00~19:00" }), tts, cls()), { skip: "" })
 	eq(m.planTimetableNotice(reg({ tts: [] }), [], cls()), { skip: "등록에 연결된 시간표가 없습니다." })
-	const first: any = m.planTimetableNotice(reg(), tts, cls())
-	eq([first.variables["#{시간표정보}"], first.variables["#{전달사항}"]], ["🕒 변경  화·목 17:00~19:00", "없음"])
 })
 
-Deno.test("v2.8.0 시간표 변경 안내: 수강 중 판단(수식 우선, 없으면 종료일)", () => {
-	eq(m.activeRegistration(reg(), "2026-10-31"), true)
-	eq(m.activeRegistration(reg({ status: "⚫ 종료" }), "2026-10-31"), false)
-	eq(m.activeRegistration({ properties: { "종료일": { date: { start: "2026-10-01" } } } }, "2026-10-31"), false)
-	eq(m.activeRegistration({ properties: {} }, "2026-10-31"), true)
-	eq(m.activeRegistration({ in_trash: true, properties: {} }, "2026-10-31"), false)
-})
-
-Deno.test("v2.8.0 시간표 변경 안내: 학생 1건 — 보내고 안내한 시간표를 적고, 마지막이면 반 ✅ 완료", async () => {
+Deno.test("v2.8.0 시간표 변경 안내: 한 건 — 보내고 안내한 시간표를 적고 등록 적용일·메모를 비운 뒤 ✅", async () => {
 	const saved = { ...deps }
-	const pages: Record<string, any> = { "reg-1": reg({ sent: "월·수 16:00~18:00" }), "cls-1": cls({ apply: "2026-11-03" }), t1: tt("t1", "화", "17:00", "19:00"), t2: tt("t2", "목", "17:00", "19:00", "other-class") }
+	const pages: Record<string, any> = { "reg-1": reg({ sent: "월·수 16:00~18:00", apply: "2026-11-10", memo: "개인 일정" }), "cls-1": cls(), t1: tt("t1", "화", "17:00", "19:00"), t2: tt("t2", "목", "17:00", "19:00", "other-class") }
 	const sent: any[] = [], updates: any[] = [], logs: any[] = [], marks: string[] = []
 	Object.assign(deps, {
+		markRunning: async () => {},
 		getPage: async (id: string) => pages[id],
 		send: async (...a: any[]) => { sent.push(a); return [] },
 		log: async (a: any) => { logs.push(a) },
 		update: async (id: string, props: any) => { updates.push([id, props]) },
 		botUser: async () => "bot",
 		markDone: async (id: string) => { marks.push("done:" + id) },
-		markError: async (id: string, msg: string) => { marks.push("error:" + id + ":" + msg) },
+		markError: async (id: string, msg: string) => { marks.push("error:" + msg) },
 	})
 	try {
-		await m.processTimetableNoticeQueueItem({ classId: "cls-1", regId: "reg-1", last: true })
-		// 다른 반 시간표(t2)는 빼고 이 반 것만
+		await m.processTimetableNoticeQueueItem({ regId: "reg-1" })
 		eq(sent[0][0], "시간표 변경 안내")
-		eq(sent[0][3]["#{시간표정보}"], "🔁 기존  월·수 16:00~18:00\n🕒 변경  화 17:00~19:00\n📅 적용  11.03(화)부터")
+		eq(sent[0][3]["#{시간표정보}"], "🔁 기존  월·수 16:00~18:00\n🕒 변경  화 17:00~19:00\n📅 적용  11.10(화)부터")
 		eq(logs.map((l) => [l.category, l.status]), [["시간표 변경 안내", "성공"]])
-		eq(updates, [["reg-1", { "안내한 시간표": { rich_text: [{ text: { content: "화 17:00~19:00" } }] } }]])
-		eq(marks, ["done:cls-1"])
+		eq(updates, [["reg-1", { "안내한 시간표": { rich_text: [{ text: { content: "화 17:00~19:00" } }] }, "시간표 적용일": { date: null }, "안내 메모": { rich_text: [] } }]])
+		eq(marks, ["done:reg-1"])
+		// 이미 같은 시간표로 안내했으면 보내지 않고 ✅
+		sent.length = 0; marks.length = 0
+		pages["reg-1"] = reg({ sent: "화 17:00~19:00" })
+		await m.processTimetableNoticeQueueItem({ regId: "reg-1" })
+		eq([sent.length, marks], [0, ["done:reg-1"]])
 	} finally {
 		Object.assign(deps, saved)
 	}
 })
 
-Deno.test("v2.8.0 시간표 변경 안내: 발송 실패는 반 마지막 오류에 모으고 마지막에 ⚠️", async () => {
+Deno.test("v2.8.0 시간표 변경 안내: 연락처 오류는 로그 없이 ⚠️", async () => {
 	const saved = { ...deps }
 	const pages: Record<string, any> = { "reg-1": reg(), "cls-1": cls(), t1: tt("t1", "화", "17:00", "19:00"), t2: tt("t2", "목", "17:00", "19:00") }
 	const marks: string[] = []
 	Object.assign(deps, {
+		markRunning: async () => {},
 		getPage: async (id: string) => pages[id],
 		send: async () => { throw new Error("연락처 오류: 우선 연락처가 비어 있습니다.") },
-		log: async () => { throw new Error("should not log config errors") },
-		update: async (id: string, props: any) => { if (id === "cls-1") pages["cls-1"] = cls({ error: props["마지막 오류"].rich_text[0]?.text?.content ?? "" }) },
-		botUser: async () => "bot",
-		markDone: async (id: string) => { marks.push("done:" + id) },
-		markError: async (id: string, msg: string) => { marks.push("error:" + msg) },
-	})
-	try {
-		await m.processTimetableNoticeQueueItem({ classId: "cls-1", regId: "reg-1", last: true })
-		eq(marks, ["error:김하윤: 연락처 오류: 우선 연락처가 비어 있습니다."])
-	} finally {
-		Object.assign(deps, saved)
-	}
-})
-
-Deno.test("v2.8.0 시간표 변경 안내: 반 1건 — 수강 중 학생만 넣고 마지막 표시, 없으면 ⚠️", async () => {
-	const saved = { ...deps }
-	const queued: any[] = [], marks: string[] = []
-	Object.assign(deps, {
-		markRunning: async () => {},
+		log: async () => { throw new Error("should not log contact errors") },
 		update: async () => {},
-		today: () => "2026-10-31",
-		queryAllPages: async () => [{ ...reg(), id: "r1" }, { ...reg({ status: "⚫ 종료" }), id: "r2" }, { ...reg(), id: "r3" }],
-		enqueue: async (target: string, p: any) => { queued.push([target, p.regId, p.last ?? false]) },
-		markError: async (_id: string, msg: string) => { marks.push(msg) },
+		botUser: async () => "bot",
+		markDone: async () => { marks.push("done") },
+		markError: async (_id: string, msg: string) => { marks.push("error:" + msg) },
 	})
 	try {
-		await m.processClassTimetableNoticeQueueItem({ classId: "cls-1" })
-		eq(queued, [["timetable-notice", "r1", false], ["timetable-notice", "r3", true]])
-		deps.queryAllPages = async () => []
-		await m.processClassTimetableNoticeQueueItem({ classId: "cls-1" })
-		eq(marks, ["이 반에 수강 중인 학생이 없습니다."])
+		await m.processTimetableNoticeQueueItem({ regId: "reg-1" })
+		eq(marks, ["error:연락처 오류: 우선 연락처가 비어 있습니다."])
 	} finally {
 		Object.assign(deps, saved)
 	}

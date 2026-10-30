@@ -89,7 +89,8 @@ import { processBatchEvaluationsQueueItem } from "../_shared/evaluationPlan.ts"
 import { processRoutineChecksQueueItem } from "../_shared/routineCheck.ts"
 import { processCompletionQueueItem, processCompletionReportQueueItem } from "../_shared/completionReport.ts"
 import { processLessonNoticeQueueItem } from "../_shared/lessonNotice.ts"
-import { processClassTimetableNoticeQueueItem, processTimetableNoticeQueueItem } from "../_shared/timetableNotice.ts"
+import { processTimetableNoticeQueueItem } from "../_shared/timetableNotice.ts"
+import { processRegistrationNoticeQueueItem } from "../_shared/registrationNotice.ts"
 import { processScheduleEventItem, processScheduleEventStudentItem } from "../_shared/scheduleNotice.ts"
 import { processLetterCreateClassItem, processLetterCreateRegItem, processMonthlyCreateClassItem, processMonthlyCreateRegItem } from "../_shared/monthlyNotice.ts"
 
@@ -145,9 +146,10 @@ const HANDLERS: Record<string, (payload: any, cachedGetPage: (id: string) => Pro
   "completion-report": processCompletionReportQueueItem,
   // (v2.8.0) 출석 DB "수업 안내 상태 ⚪ 대기" 자동화 → send-lesson-notice/queue (수업 안내 한 건씩, 일일 보고서와 같은 방식)
   "lesson-notice": processLessonNoticeQueueItem,
-  // (v2.8.0, 10/31) 클래스 [시간표 변경 안내] → send-lesson-notice/timetable. 반 1건이 수강 중 학생 1건씩을 다시 넣는다.
-  "class-timetable-notice": processClassTimetableNoticeQueueItem,
+  // (v2.8.0, 10/31) 등록 "시간표 안내 상태 ⚪ 대기" 자동화 → send-lesson-notice/timetable (등록 한 건)
   "timetable-notice": processTimetableNoticeQueueItem,
+  // (v2.8.0, 10/31) 등록 [등록 안내]·[클래스 변경 안내] → send-lesson-notice/registration · /class-change (등록 한 건)
+  "registration-notice": processRegistrationNoticeQueueItem,
   // (v2.8.0) 일정 [일정 안내 전송] → send-schedule-notice/event. 일정 1건이 학생 1건씩을 다시 넣는다.
   "schedule-event": processScheduleEventItem,
   "schedule-event-student": processScheduleEventStudentItem,
