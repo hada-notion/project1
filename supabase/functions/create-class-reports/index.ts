@@ -17,6 +17,9 @@
 //
 // (v2.8.0 루틴, 항목 18) 경로 /routine-checks: 수업 [루틴 체크 생성]. 이 수업 반의 루틴 × 출석으로 루틴 체크 행을 만든다.
 // 처리는 _shared/routineCheck.ts. 상태는 수업 '루틴 체크 상태'.
+//
+// (v2.8.0 수료, 10/30) 경로 /completion: 진도교재 [수료]. 발송함(수료 보고서)과 학생마다 수료 보고서를 만들고 진도교재를 완료로.
+// 처리는 _shared/completionReport.ts. 상태는 진도교재 '수료 상태'.
 import { authorizeKey, securityEnabled } from "../_shared/adminSecurity.ts"
 import { getCurrentAdminKey, resolveAdminKeyFromRequest } from "../_shared/adminShared.ts"
 import { describeBody, extractPageId, getPage } from "../_shared/notionClient.ts"
@@ -27,6 +30,7 @@ import { CLASS_REPORT_GEN_STATUS_SPEC, TARGET_CLASS_REPORTS, reportRequestFromPr
 import { BATCH_EVAL_STATUS_SPEC, EVAL_PLAN_PROP, TARGET_BATCH_EVALUATIONS, evalPlanText } from "../_shared/evaluationPlan.ts"
 import { type BookEvalKind, FINAL_EVAL_STATUS_SPEC, TARGET_FINAL_EVALUATION } from "../_shared/finalEvaluation.ts"
 import { ROUTINE_STATUS_SPEC, TARGET_ROUTINE_CHECKS } from "../_shared/routineCheck.ts"
+import { COMPLETION_STATUS_SPEC, TARGET_COMPLETION } from "../_shared/completionReport.ts"
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } })
 
@@ -46,6 +50,7 @@ Deno.serve(async (req: Request) => {
 	if (route === "unit-evaluation") return await queueFinalEvaluation(body, "unit")
 	if (route === "progress-evaluation") return await queueFinalEvaluation(body, "auto")
 	if (route === "routine-checks") return await queueRoutineChecks(body)
+	if (route === "completion") return await queueCompletion(body)
 
 	const classId = extractPageId(body)
 	if (!classId) return json({ error: "pageId를 찾을 수 없음" }, 400)
@@ -88,6 +93,24 @@ async function queueFinalEvaluation(body: Record<string, unknown>, kind: BookEva
 	} catch (err) {
 		console.error("[create-class-reports/final-evaluation] ERROR:", (err as Error).message)
 		await markError(bookId, FINAL_EVAL_STATUS_SPEC, (err as Error).message).catch(() => {})
+		return json({ ok: false, error: (err as Error).message }, 500)
+	}
+}
+
+// 진도교재 [수료]: 잠금 확인 → ⏳ 대기열 → 큐. 학생·발송함 확인은 큐가 한다(_shared/completionReport.ts).
+async function queueCompletion(body: Record<string, unknown>): Promise<Response> {
+	const bookId = extractPageId(body)
+	if (!bookId) return json({ error: "pageId를 찾을 수 없음" }, 400)
+	try {
+		const page = await getPage(bookId)
+		if (isRunning(page, COMPLETION_STATUS_SPEC)) return json({ ok: true, message: "already_processing", bookId })
+		await markQueued(bookId, COMPLETION_STATUS_SPEC)
+		await enqueueSync(TARGET_COMPLETION, { bookId })
+		wakeSyncQueueWorker()
+		return respondAccepted({ bookId, queued: true })
+	} catch (err) {
+		console.error("[create-class-reports/completion] ERROR:", (err as Error).message)
+		await markError(bookId, COMPLETION_STATUS_SPEC, (err as Error).message).catch(() => {})
 		return json({ ok: false, error: (err as Error).message }, 500)
 	}
 }
