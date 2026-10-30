@@ -14,7 +14,7 @@ function fake(page: any, opts: { sendFails?: boolean; refreshFails?: boolean; pa
 	const calls = { reads: 0, patched: [] as any[], patches: [] as any[], sent: [] as any[], logs: [] as any[], refresh: [] as any[], recipients: [] as any[], config: [] as unknown[][] }
 	const saved = { ...noticeDeps }
 	Object.assign(noticeDeps, {
-		config: async (...args: any[]) => { calls.config.push(args.filter((x) => typeof x === "string" || Array.isArray(x))); return { pfId: "pf", templateId: "tpl", senderNumber: "0200000000", notice: "안내", recipientTarget: "우선 연락 대상" } },
+		config: async (...args: any[]) => { calls.config.push(args.filter((x) => typeof x === "string" || Array.isArray(x))); return { pfId: "pf", templateId: "tpl", senderNumber: "0200000000", notice: "안내", recipientTarget: ["우선 연락 대상"] } },
 		getPage: async (id: string) => { calls.reads++; return opts.pages?.[id] ?? page },
 		patch: async (id: string, props: any) => { calls.patches.push(props); calls.patched.push({ id, props }) },
 		refresh: async (reg: string, o: any) => { calls.refresh.push({ reg, ...o }); if (opts.refreshFails) throw new Error("최신화 실패"); return { access_token: "tok", cacheRow: { registration_detail: { report_comments: [] } } } },

@@ -103,7 +103,7 @@ export async function resolveParentPhone(attendancePage: any, registrationId: st
   return ""
 }
 
-export type AlimtalkRecipient = { label: "우선 연락 대상" | "어머니" | "아버지" | "기타 보호자"; phone: string }
+export type AlimtalkRecipient = { label: "우선 연락 대상" | "어머니" | "아버지" | "기타 보호자" | "학생"; phone: string }
 
 function getPropertyText(property: any): string {
   if (!property) return ""
@@ -117,56 +117,69 @@ function getPropertyText(property: any): string {
   return ""
 }
 
-// 알림톡 설정의 수신 대상에 맞춰 등록→학생정보에서 어머니/아버지/기타 보호자 연락처를 찾는다.
-// (2026-09-26, 기타 보호자 옵션 추가) 기존 '둘 다'(어머니+아버지)를 '모든 연락처'로 바꾸면서 기타
-// 보호자 연락처도 함께 포함하도록 확장했다. '모든 연락처'는 같은 번호를 중복 발송하지 않으며,
-// 일부만 등록돼 있으면 등록된 연락처에만 보낸다.
+// 알림톡 설정의 수신 대상에 맞춰 연락처를 모은다. 우선 연락 대상은 등록 `학부모 연락처`(또는 넘겨받은 번호),
+// 어머니·아버지·기타 보호자·학생은 등록 → 학생정보의 각 연락처. 같은 번호는 한 번만 보낸다.
+// (10/31 사용자, 다중 선택) 대상을 하나만 골랐으면 그 번호가 없거나 잘못됐을 때 지금처럼 오류.
+// 여럿을 골랐으면 없는 사람은 건너뛰고(예: 휴대폰 없는 학생) 한 명에게도 못 보낼 때만 오류.
+// "모든 연락처"(예전 값)는 어머니·아버지·기타 보호자를 고른 것과 같다(그중 하나라도 있으면 보냄).
 export async function resolveAlimtalkRecipients(args: {
   registrationId: string
   primaryPhone?: string
-  recipientTarget: AlimtalkRecipientTarget
+  recipientTarget: AlimtalkRecipientTarget | AlimtalkRecipientTarget[]
 }): Promise<AlimtalkRecipient[]> {
-  if (args.recipientTarget === "우선 연락 대상") {
-    let phone = args.primaryPhone ?? ""
-    if (!phone) {
-      const registrationPage = await notionGetPage(args.registrationId)
-      phone = getRollupText(registrationPage, PARENT_PHONE_PROPERTY)
-    }
-    assertValidPhone(phone, "우선 연락처")
-    return [{ label: "우선 연락 대상", phone: normalizePhone(phone) }]
-  }
+  const raw = Array.isArray(args.recipientTarget) ? args.recipientTarget : [args.recipientTarget]
+  const allGuardians = raw.includes("모든 연락처")
+  const targets = [...new Set(raw.flatMap((t) => (t === "모든 연락처" ? ["어머니", "아버지", "기타 보호자"] : [t])))] as AlimtalkRecipient["label"][]
+  if (!targets.length) targets.push("우선 연락 대상")
+  const strict = targets.length === 1 && !allGuardians
 
-  const registrationPage = await notionGetPage(args.registrationId)
-  const studentId = getRelationFirstId(registrationPage, "학생정보")
-  if (!studentId) throw new Error("연락처 오류: 등록 페이지에 연결된 학생정보가 없습니다.")
-  const studentPage = await notionGetPage(studentId)
-  const motherPhone = getPropertyText(studentPage.properties?.["어머니 연락처"])
-  const fatherPhone = getPropertyText(studentPage.properties?.["아버지 연락처"])
-  const otherGuardianPhone = getPropertyText(studentPage.properties?.["기타 보호자 연락처"])
+  let registrationPage: any = null
+  const registration = async () => (registrationPage ??= await notionGetPage(args.registrationId))
+  let studentPage: any = null
+  const student = async () => {
+    if (studentPage) return studentPage
+    const studentId = getRelationFirstId(await registration(), "학생정보")
+    if (!studentId) throw new Error("연락처 오류: 등록 페이지에 연결된 학생정보가 없습니다.")
+    return (studentPage = await notionGetPage(studentId))
+  }
+  const STUDENT_PROP: Record<string, string> = { "어머니": "어머니 연락처", "아버지": "아버지 연락처", "기타 보호자": "기타 보호자 연락처", "학생": "학생 연락처" }
 
-  const candidates: AlimtalkRecipient[] = []
-  if (args.recipientTarget === "어머니" || args.recipientTarget === "모든 연락처") {
-    if (motherPhone) candidates.push({ label: "어머니", phone: motherPhone })
-    else if (args.recipientTarget === "어머니") throw new Error("연락처 오류: 어머니 연락처가 비어 있습니다.")
-  }
-  if (args.recipientTarget === "아버지" || args.recipientTarget === "모든 연락처") {
-    if (fatherPhone) candidates.push({ label: "아버지", phone: fatherPhone })
-    else if (args.recipientTarget === "아버지") throw new Error("연락처 오류: 아버지 연락처가 비어 있습니다.")
-  }
-  if (args.recipientTarget === "기타 보호자" || args.recipientTarget === "모든 연락처") {
-    if (otherGuardianPhone) candidates.push({ label: "기타 보호자", phone: otherGuardianPhone })
-    else if (args.recipientTarget === "기타 보호자") throw new Error("연락처 오류: 기타 보호자 연락처가 비어 있습니다.")
-  }
-  if (!candidates.length) throw new Error("연락처 오류: 어머니·아버지·기타 보호자 연락처가 모두 비어 있습니다.")
-
+  const out: AlimtalkRecipient[] = []
   const seen = new Set<string>()
-  return candidates.filter((recipient) => {
-    assertValidPhone(recipient.phone, `${recipient.label} 연락처`)
-    recipient.phone = normalizePhone(recipient.phone)
-    if (seen.has(recipient.phone)) return false
-    seen.add(recipient.phone)
-    return true
-  })
+  const skipped: string[] = []
+  for (const label of targets) {
+    let phone = ""
+    if (label === "우선 연락 대상") {
+      phone = args.primaryPhone ?? ""
+      if (!phone) phone = getRollupText(await registration(), PARENT_PHONE_PROPERTY)
+    } else {
+      phone = getPropertyText((await student()).properties?.[STUDENT_PROP[label]])
+    }
+    const name = label === "우선 연락 대상" ? "우선 연락처" : `${label} 연락처`
+    if (!phone) {
+      if (strict && label === "우선 연락 대상") assertValidPhone(phone, name) // 예전과 같은 오류 문구
+      if (strict) throw new Error(`연락처 오류: ${name}가 비어 있습니다.`)
+      skipped.push(label)
+      continue
+    }
+    try {
+      assertValidPhone(phone, name)
+    } catch (err) {
+      if (strict) throw err
+      skipped.push(label)
+      continue
+    }
+    const normalized = normalizePhone(phone)
+    if (seen.has(normalized)) continue
+    seen.add(normalized)
+    out.push({ label, phone: normalized })
+  }
+  if (!out.length) {
+    throw new Error(allGuardians && targets.length === 3
+      ? "연락처 오류: 어머니·아버지·기타 보호자 연락처가 모두 비어 있습니다."
+      : `연락처 오류: 고른 수신 대상(${targets.join("·")})의 연락처가 모두 비어 있거나 잘못됐습니다.`)
+  }
+  return out
 }
 
 const SITE_BASE_URL = Deno.env.get("SITE_BASE_URL") ?? ""
