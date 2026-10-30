@@ -115,8 +115,7 @@ function studentLabel() {
 }
 // 단원·내용 아래 줄(알림톡과 같은 순서). renderLogMetaRows의 extraRows로 넣는다.
 // (v2.8.0 수료) 교재 상세 "수료" 구역(10/30 사용자 시안). 내용은 학습기록 카드처럼 처음엔 접혀 있고, 화살표로 펼치면
-// 카드 아래 베이지 칸 안에 흰 상자로 보인다: 머리(수료일·기간) → 출석 칸(캘린더 위 수업 칸과 같은 모양)
-// → 진도 그래프 → 평가 그래프(둘 다 시작일~수료일) → 선생님 한마디. 보고서 탭과 겹치는 출석률·과제·평가 평균 도넛은 넣지 않는다.
+// 카드 아래 베이지 칸 안에 흰 상자로 보인다: 머리(수료일·기간·수업 횟수) → 진도 그래프 → 평가 그래프(둘 다 시작일~수료일) → 선생님 한마디. 보고서 탭과 겹치는 출석률·과제·평가 평균 도넛은 넣지 않는다.
 // 기간은 수료 보고서의 보고서 기간, 없으면 이 교재 첫 기록부터 수료일까지.
 function buildCompletionHtml(r, book, items, bookTests) {
   const note = (r.report_comments || []).filter((c) => c.kind === "수료 보고서" && c.bookId && book.id && c.bookId === book.id).pop() || null
@@ -128,13 +127,8 @@ function buildCompletionHtml(r, book, items, bookTests) {
   const sub = (text) => `<div class="rep-sub">${text}</div>`
   const card = (inner) => `<div class="card rep-card">${inner}</div>`
 
-  // 출석 칸: 기간 안 출석 한 번에 한 칸(출석·결석·보강 색은 캘린더 수업 칸과 같다).
-  const att = (r.attendance_rows || []).filter((a) => inRange(a.date) && a.status).sort((x, y) => (x.date < y.date ? -1 : 1))
-  const present = att.filter((a) => a.status === "출석" || a.status === "보강").length
-  const attCells = att.map((a) => `<i class="${["출석", "결석", "보강"].find((k) => String(a.status).includes(k)) || "지남"}"></i>`).join("")
-  const attHtml = att.length
-    ? sub("출석") + card(`<div class="session-bar"><div class="cells">${attCells}</div></div><div class="completion-count">${present} / ${att.length}회</div>`)
-    : ""
+  // (10/31 사용자) 출석률 대신 "몇 회 만에 마쳤는지": 이 교재 학습기록이 있는 수업 날의 수(결석은 세지 않는다).
+  const lessonCount = new Set(items.filter((l) => l.type === "학습" && inRange(l.date)).map((l) => l.date)).size
 
   // 진도 그래프: 학습기록마다 그날까지 간 곳(쪽수 범위의 끝 ÷ 교재 쪽수, 아니면 단원 순서 ÷ 단원 수)을 누적 최댓값으로. 수료일은 100%.
   const units = book.units || []
@@ -160,7 +154,7 @@ function buildCompletionHtml(r, book, items, bookTests) {
   thinChartLabels(testPoints)
   const testHtml = testPoints.filter((p) => p.avg !== null).length ? sub("평가") + card(buildTestTrendChartHtml(testPoints)) : ""
 
-  const detail = attHtml + progressHtml + testHtml + (note && note.comment ? sub("선생님 한마디") + card(`<div class="speech">${esc(note.comment)}</div>`) : "")
+  const detail = progressHtml + testHtml + (note && note.comment ? sub("선생님 한마디") + card(`<div class="speech">${esc(note.comment)}</div>`) : "")
   return `
         <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg></span>수료</h3>
         <div class="log-card 학습">
@@ -169,7 +163,7 @@ function buildCompletionHtml(r, book, items, bookTests) {
               <div class="log-title-row"><div class="log-title">${esc(josa(bookNoun(book), "을", "를"))} 모두 마쳤어요</div><span class="log-pill tone-green">${esc(withDow(book.completedOn))}</span></div>
             </div>
           </div>
-          <div class="log-meta">${start ? renderLogMetaRows("", "", [`기간: ${md(start)} ~ ${md(end)}`]) : ""}${detail ? `<button type="button" class="log-extra-chevron" onclick="toggleLogExtra(this)" aria-label="수료 내용 펼치기">${CHEVRON_DOWN_SVG}</button>` : ""}</div>
+          <div class="log-meta">${renderLogMetaRows("", "", [start ? `기간: ${md(start)} ~ ${md(end)}` : "", lessonCount ? `수업: ${lessonCount}회` : ""].filter(Boolean))}${detail ? `<button type="button" class="log-extra-chevron" onclick="toggleLogExtra(this)" aria-label="수료 내용 펼치기">${CHEVRON_DOWN_SVG}</button>` : ""}</div>
           ${detail ? `<div class="log-extra completion-detail">${detail}</div>` : ""}
         </div>`
 }
