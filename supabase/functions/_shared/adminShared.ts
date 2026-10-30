@@ -379,7 +379,17 @@ export async function createSyncFailureLogEntry(args: {
 // [NEW] "알림톡 설정(학원) DB"에서 발송 구분별 pfId/템플릿ID/발신번호를 가져옵니다.
 // 카카오 채널이나 템플릿이 바뀌면 코드 수정 없이 이 Notion DB의 값만 바꾸면 됩니다.
 // 설정 DB에 해당 행이 없거나 "활성 여부"가 꺼져 있거나 조회가 실패하면 fallback(Secrets 기본값)을 사용합니다.
-export type AlimtalkRecipientTarget = "우선 연락 대상" | "어머니" | "아버지" | "기타 보호자" | "모든 연락처"
+// (10/31 사용자) `알림 수신 대상`은 다중 선택: 우선 연락 대상·어머니·아버지·기타 보호자·학생. 비어 있으면 우선 연락 대상.
+// 예전 단일 선택 값과 "모든 연락처"(어머니·아버지·기타 보호자)도 그대로 읽는다.
+export type AlimtalkRecipientTarget = "우선 연락 대상" | "어머니" | "아버지" | "기타 보호자" | "학생" | "모든 연락처"
+const RECIPIENT_TARGETS: AlimtalkRecipientTarget[] = ["우선 연락 대상", "어머니", "아버지", "기타 보호자", "학생", "모든 연락처"]
+export function recipientTargetsOf(prop: any): AlimtalkRecipientTarget[] {
+  const names: string[] = prop?.type === "multi_select" || Array.isArray(prop?.multi_select)
+    ? (prop.multi_select ?? []).map((o: any) => String(o?.name ?? ""))
+    : [String(prop?.select?.name ?? "")]
+  const picked = RECIPIENT_TARGETS.filter((t) => names.includes(t))
+  return picked.length ? picked : ["우선 연락 대상"]
+}
 
 export type AlimtalkConfig = {
   pfId: string
@@ -391,7 +401,7 @@ export type AlimtalkConfig = {
   // 이제 발송 코드가 이 config.notice를 쓰도록 바꿔서 알림톡 설정 DB의 "안내멘트" 값이 그대로 반영된다.
   notice: string
   // 발송 종류별 실제 수신자를 Notion 설정에서 선택한다. 미설정은 우선 연락 대상으로 처리한다.
-  recipientTarget: AlimtalkRecipientTarget
+  recipientTarget: AlimtalkRecipientTarget[]
 }
 
 const alimtalkConfigCache = new Map<string, { value: AlimtalkConfig; expiresAt: number }>()
@@ -504,7 +514,7 @@ export async function getAlimtalkConfig(
 
   if (!ALIMTALK_CONFIG_DB_ID) {
     console.warn(`[getAlimtalkConfig][${category}] ALIMTALK_CONFIG_DB_ID env var가 비어있어 fallback 사용`)
-    return { ...fallback, notice: "", recipientTarget: "우선 연락 대상" }
+    return { ...fallback, notice: "", recipientTarget: ["우선 연락 대상"] }
   }
 
   try {
@@ -521,27 +531,20 @@ export async function getAlimtalkConfig(
         `[getAlimtalkConfig][${category}] ALIMTALK_CONFIG_DB_ID=${ALIMTALK_CONFIG_DB_ID}에서 일치하는 행을 못 찾음`,
       )
       if (chain.length) return await next()
-      return { ...fallback, notice: "", recipientTarget: "우선 연락 대상" }
+      return { ...fallback, notice: "", recipientTarget: ["우선 연락 대상"] }
     }
 
     const active = page.properties?.["활성 여부"]?.checkbox
     if (active === false) {
       console.warn(`[getAlimtalkConfig][${category}] 해당 행의 활성 여부가 꺼져있어 fallback 사용 (pageId=${page.id})`)
       if (chain.length) return await next()
-      return { ...fallback, notice: "", recipientTarget: "우선 연락 대상" }
+      return { ...fallback, notice: "", recipientTarget: ["우선 연락 대상"] }
     }
 
     const getText = (name: string) =>
       (page.properties?.[name]?.rich_text ?? []).map((t: any) => t.plain_text).join("").trim()
 
-    const rawRecipientTarget = page.properties?.["알림 수신 대상"]?.select?.name
-    const recipientTarget: AlimtalkRecipientTarget =
-      rawRecipientTarget === "어머니" ||
-      rawRecipientTarget === "아버지" ||
-      rawRecipientTarget === "기타 보호자" ||
-      rawRecipientTarget === "모든 연락처"
-        ? rawRecipientTarget
-        : "우선 연락 대상"
+    const recipientTarget = recipientTargetsOf(page.properties?.["알림 수신 대상"])
 
     const row: AlimtalkConfig = {
       pfId: getText("카카오 채널 ID (pfId)"),
@@ -560,6 +563,6 @@ export async function getAlimtalkConfig(
     return withConfigFallback(row, fallback)
   } catch (e) {
     console.error(`[getAlimtalkConfig][${category}] 조회 실패, Secrets 기본값 사용:`, e)
-    return { ...fallback, notice: "", recipientTarget: "우선 연락 대상" }
+    return { ...fallback, notice: "", recipientTarget: ["우선 연락 대상"] }
   }
 }
