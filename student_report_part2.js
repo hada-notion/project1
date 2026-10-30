@@ -998,10 +998,12 @@ function findNextHomeworkItems(r, date) {
   // 마감·출제일은 시각이 붙은 값("2026-10-21T19:00…")일 수 있어 날짜만 비교한다. 그대로 비교하면 이날 마감인
   // 과제가 "날짜 뒤"로 판정되어 지난 과제와 이번 과제에 함께 나왔다(v2.7.16).
   const day = (v) => String(v || "").slice(0, 10)
+  // (v2.8.0) 마감이 아직 없는 과제(다음 수업이 아직 없어 "출제 전")도 그날 낸 것이면 이번 과제로 보인다.
+  const givenToday = (r.homework || []).filter((h) => !day(h.due) && day(h.classDate) === date)
   const upcoming = (r.homework || []).filter((h) => day(h.due) > date && (!h.classDate || day(h.classDate) <= date))
-  if (!upcoming.length) return []
+  if (!upcoming.length) return givenToday
   const minDue = upcoming.reduce((min, h) => (day(h.due) < min ? day(h.due) : min), day(upcoming[0].due))
-  return upcoming.filter((h) => day(h.due) === minDue)
+  return [...upcoming.filter((h) => day(h.due) === minDue), ...givenToday]
 }
 
 function findLatestComment(r, date) {
@@ -1029,7 +1031,8 @@ function buildDailyBodyHtml(r, date) {
   const dueTodayHomework = (r.homework || []).filter((h) => String(h.due || "").slice(0, 10) === date)
   const homeworkStatusToday = dueTodayHomework.length
     ? dueTodayHomework.every((h) => h.status === "제출") ? { text: "제출", cls: "제출" }
-      : dueTodayHomework.some((h) => h.status === "제출") ? { text: "일부 제출", cls: "부분완료" }
+      // (v2.8.0) 과제 하나가 "일부 제출"이어도 일부 제출이다(예전에는 미제출로 보였다).
+      : dueTodayHomework.some((h) => h.status === "제출" || h.status === "일부 제출") ? { text: "일부 제출", cls: "부분완료" }
       : { text: "미제출", cls: "미제출" }
     : null
   const todaysLogs = (r.study_logs || []).filter((l) => l.date === date)
@@ -1052,9 +1055,9 @@ function buildDailyBodyHtml(r, date) {
   const studyHtml = todaysLogs.length ? todaysLogs.map((l) => band(reportItemHtml(r, l, { extraRows: makeupMetaRows(l) }))).join("") : empty("이날 기록된 학습 내용이 없어요.")
   const homeworkHtml =
     sub("지난 과제") +
-    groupBand(dueTodayHomework, (h) => reportItemHtml(r, h, { pill: h.status, pillTone: homeworkPillTone(h.status), extraRows: h.classDate ? [`출제: ${withDow(h.classDate)}`] : [] }), "이날 마감인 과제가 없어요.") +
+    groupBand(dueTodayHomework, (h) => reportItemHtml(r, h, { pill: h.status, pillTone: homeworkPillTone(h.status), extraRows: [h.classDate ? `출제: ${withDow(h.classDate)}` : null, h.due ? `마감: ${withDow(h.due)}` : null].filter(Boolean) }), "이날 마감인 과제가 없어요.") +
     sub("이번 과제") +
-    groupBand(nextHomeworkItems, (h) => reportItemHtml(r, h, { pill: h.status, pillTone: homeworkPillTone(h.status), extraRows: [h.classDate ? `출제: ${withDow(h.classDate)}` : null, `마감: ${withDow(h.due)}`].filter(Boolean) }), "출제된 과제가 없어요.")
+    groupBand(nextHomeworkItems, (h) => reportItemHtml(r, h, { pill: h.status, pillTone: homeworkPillTone(h.status), extraRows: [h.classDate ? `출제: ${withDow(h.classDate)}` : null, h.due ? `마감: ${withDow(h.due)}` : "마감: 출제 전"].filter(Boolean) }), "출제된 과제가 없어요.")
   const testHtml =
     sub("이번 평가") +
     groupBand(todaysTests, (t) => reportItemHtml(r, t, { pill: testPillText(t), pillTone: testPillTone(t), compare: testCompareBarsHtml(t) }), "이날 평가가 없어요.") +
