@@ -81,3 +81,26 @@ Deno.test("v2.8.0 구역: 클래스 알림톡 구분이 예체능이면 일일 �
 	eq(await b.dailyConfigCategory({ properties: {} }, cls("예체능")), "일일 보고서")
 	eq(await b.dailyConfigCategory(att, async () => { throw new Error("x") }), "일일 보고서")
 })
+
+Deno.test("v2.8.0 구역: 주간·월간 구역 변수는 (알림톡) 수식을 따르고, 예체능 반은 활동 보고서 행부터", async () => {
+	eq(b.reportSectionVars({ properties: { "학습기록(알림톡)": formula("📗 공통수학1\n#개념원리 공통수학1 (~73%)") } }), {
+		"#{학습기록}": "📗 공통수학1\n#개념원리 공통수학1 (~73%)",
+		"#{학습요약}": "이 기간 출석 기록이 없습니다.",
+	})
+	const pages: Record<string, any> = {
+		reg: { properties: { "클래스": { relation: [{ id: "art" }] } } },
+		reg2: { properties: { "클래스": { relation: [{ id: "math" }] } } },
+		art: { properties: { "알림톡 구분": { select: { name: "예체능" } } } },
+		math: { properties: { "알림톡 구분": { select: null } } },
+	}
+	const get = async (id: string) => { if (id in pages) return pages[id]; throw new Error("no") }
+	eq(await b.reportConfigChain("주간 보고서", "reg", get), { category: "주간 활동 보고서", fallback: ["주간 보고서", "보고서"] })
+	eq(await b.reportConfigChain("월간 보고서", "reg2", get), { category: "월간 보고서", fallback: ["보고서"] })
+	eq(await b.reportConfigChain("월간 보고서", "missing", get), { category: "월간 보고서", fallback: ["보고서"] })
+})
+
+Deno.test("v2.8.0 구역: 길이는 이모지를 2자로 세는 UTF-16 길이로 잰다", () => {
+	const emoji = "🎯".repeat(470)
+	const out = b.fitDailyLength({ "#{학습기록}": "📗 a\n  • b", "#{학습결과}": emoji })
+	eq(out["#{학습기록}"], `📗 a\n${b.DAILY_TRIM_NOTE}`)
+})

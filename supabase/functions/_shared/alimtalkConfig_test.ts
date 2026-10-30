@@ -44,3 +44,21 @@ Deno.test("v2.8.0 주간·월간 보고서 행이 없으면 옛 보고서 행을
 		globalThis.fetch = realFetch
 	}
 })
+
+Deno.test("v2.8.0 구역: 예체능 활동 보고서 행이 없으면 주간 보고서 → 보고서 순으로 넘어간다", async () => {
+	const asked: string[] = []
+	const realFetch = globalThis.fetch
+	globalThis.fetch = (async (_url: string, init: any) => {
+		const code = JSON.parse(init.body).filter.rich_text.equals
+		asked.push(code)
+		const results = code === "보고서" ? [{ id: "row", properties: { "활성 여부": { checkbox: true }, "템플릿 ID": rt("tpl-old") } }] : []
+		return new Response(JSON.stringify({ results }), { status: 200, headers: { "Content-Type": "application/json" } })
+	}) as typeof fetch
+	try {
+		const c = await getAlimtalkConfig("월간 활동 보고서", { pfId: "", templateId: "env", senderNumber: "" }, ["월간 보고서", "보고서"])
+		// "보고서" 행은 앞 테스트가 캐시에 넣어 두어 다시 묻지 않는다(tpl-report).
+		eq([c.templateId, asked], ["tpl-report", ["월간 활동 보고서", "월간 보고서"]])
+	} finally {
+		globalThis.fetch = realFetch
+	}
+})

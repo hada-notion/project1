@@ -414,7 +414,8 @@ export function withConfigFallback(row: AlimtalkConfig, fallback: { pfId: string
 // 있었다. 지금은 화면용 제목과 무관한 별도 텍스트 속성 "코드"를 두고 이 값으로만 조회한다.
 // "발송 구분"(제목)은 자유롭게 바꿔도 되지만, "코드" 값은 여기 나열된 문자열과 정확히 같아야 한다.
 // "일일 활동 보고서": 클래스 `알림톡 구분`이 예체능인 반의 일일 보고서(v2.8.0 구역). 전송 로그 구분은 "일일 보고서" 그대로.
-export type AlimtalkConfigCategory = SendLogCategory | "보고서" | "일일 활동 보고서"
+// "주간 활동 보고서"·"월간 활동 보고서": 예체능 반의 주간·월간 보고서(v2.8.0 구역).
+export type AlimtalkConfigCategory = SendLogCategory | "보고서" | "일일 활동 보고서" | "주간 활동 보고서" | "월간 활동 보고서"
 
 // [NEW, 복원 2026-09-18] "알림톡 설정(학원) DB"에서 발송 구분별 행 ID와 안내멘트만 가져온다.
 // generate-tuition/textbookDistributionTarget이 표시용 "알림톡 설정" 관계를 채울 rowId로,
@@ -483,8 +484,11 @@ export function extractErrorMessage(err: unknown): string {
 export async function getAlimtalkConfig(
   category: AlimtalkConfigCategory,
   fallback: { pfId: string; templateId: string; senderNumber: string },
-  fallbackCategory?: AlimtalkConfigCategory,
+  // 행이 없거나 꺼져 있으면 다음 구분을 차례로 본다(예: 주간 활동 보고서 → 주간 보고서 → 보고서).
+  fallbackCategory?: AlimtalkConfigCategory | AlimtalkConfigCategory[],
 ): Promise<AlimtalkConfig> {
+  const chain = fallbackCategory === undefined ? [] : Array.isArray(fallbackCategory) ? fallbackCategory : [fallbackCategory]
+  const next = () => getAlimtalkConfig(chain[0], fallback, chain.length > 1 ? chain.slice(1) : undefined)
   const cached = alimtalkConfigCache.get(category)
   if (cached && cached.expiresAt > Date.now()) {
     // [DEBUG, 2026-09-17] 안내멘트 누락 원인 추적용 임시 로그. 원인 파악 후 제거 예정.
@@ -512,14 +516,14 @@ export async function getAlimtalkConfig(
       console.warn(
         `[getAlimtalkConfig][${category}] ALIMTALK_CONFIG_DB_ID=${ALIMTALK_CONFIG_DB_ID}에서 일치하는 행을 못 찾음`,
       )
-      if (fallbackCategory) return await getAlimtalkConfig(fallbackCategory, fallback)
+      if (chain.length) return await next()
       return { ...fallback, notice: "", recipientTarget: "우선 연락 대상" }
     }
 
     const active = page.properties?.["활성 여부"]?.checkbox
     if (active === false) {
       console.warn(`[getAlimtalkConfig][${category}] 해당 행의 활성 여부가 꺼져있어 fallback 사용 (pageId=${page.id})`)
-      if (fallbackCategory) return await getAlimtalkConfig(fallbackCategory, fallback)
+      if (chain.length) return await next()
       return { ...fallback, notice: "", recipientTarget: "우선 연락 대상" }
     }
 
