@@ -62,11 +62,10 @@ import {
 import { refreshStudentReport } from "../_shared/dailyReportRefresh.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
-import { reportStatusBlock } from "../_shared/noticeBlocks.ts"
+import { alimtalkVar, reportConfigChain, reportSectionVars, reportStatusBlock } from "../_shared/noticeBlocks.ts"
 import { fitVariablesToTemplate } from "../_shared/templateFit.ts"
 import { BOOK_EVAL_NOTICE_STATUS_PROP, TARGET_BOOK_EVAL_BATCH } from "../_shared/bookEvalNotice.ts"
 
-const ALIMTALK_CONFIG_CATEGORY = "보고서" as const
 
 const SOLAPI_API_KEY = Deno.env.get("SOLAPI_API_KEY")!
 const SOLAPI_API_SECRET = Deno.env.get("SOLAPI_API_SECRET")!
@@ -258,22 +257,25 @@ Deno.serve(async (req) => {
             if (!included) throw new Error("선생님 코멘트가 최신 보고서 캐시에 포함되지 않았습니다.")
           }
 
-          // (v2.8.0) 주간·월간 템플릿을 나눴다. "주간 보고서"/"월간 보고서" 행이 없으면 옛 "보고서" 행(큐 경로와 같음).
-          const config = await getAlimtalkConfig(reportType as SendLogCategory, {
+          // (v2.8.0) 주간·월간 템플릿을 나눴다. 예체능 반은 "주간/월간 활동 보고서" 행부터, 없으면 "주간/월간 보고서" → 옛 "보고서" 행(큐 경로와 같음).
+          const chain = await reportConfigChain(reportType as "주간 보고서" | "월간 보고서", registrationId, (id) => notionGetPage(id))
+          const config = await getAlimtalkConfig(chain.category, {
             pfId: SOLAPI_PF_ID_FALLBACK,
             templateId: templateFallbackFor(reportType),
             senderNumber: SOLAPI_SENDER_NUMBER_FALLBACK,
-          }, ALIMTALK_CONFIG_CATEGORY)
+          }, chain.fallback)
 
           const variables: Record<string, string> = {
             "#{보고서기간}": reportPeriodLabel,
             "#{보고서구분}": reportType,
             "#{학생이름}": studentName,
             "#{클래스}": className,
-            "#{학습기간}": studyPeriod,
+            "#{학습기간}": alimtalkVar(reportPage, "학습기간", studyPeriod),
             "#{보고서요약}": reportSummary,
             // (v2.8.0 통일안) 큐 경로와 같은 새 템플릿 변수. 보낼 때 템플릿에 있는 것만 남는다.
             "#{학습현황}": reportStatusBlock(reportSummary),
+            // (v2.8.0 구역) 주간·월간 학습·활동 보고서의 구역 변수.
+            ...reportSectionVars(reportPage),
             "#{페이지ID}": tokenQueryString,
           }
 

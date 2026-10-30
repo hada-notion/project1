@@ -41,7 +41,7 @@ import {
 import { refreshStudentReport } from "./dailyReportRefresh.ts"
 import { buildLetterNotice, LetterBlocked } from "./monthlyNotice.ts"
 import { BOOK_EVAL_LOG_CATEGORY, BOOK_EVAL_NOTICE_SENT_PROP, BOOK_EVAL_NOTICE_STATUS_PROP, bookEvalContent } from "./bookEvalNotice.ts"
-import { alimtalkVar, BULLET, reportStatusBlock, textbookBlock, tuitionInfoBlock } from "./noticeBlocks.ts"
+import { alimtalkVar, BULLET, reportStatusBlock, textbookBlock, tuitionInfoBlock, reportConfigChain, reportSectionVars } from "./noticeBlocks.ts"
 import { fitVariablesToTemplate } from "./templateFit.ts"
 
 export type NoticeKind = "report" | "tuition" | "textbook" | "letter" | "bookEval"
@@ -75,7 +75,7 @@ type Prepared = {
 	title: string
 	logCategory: SendLogCategory
 	configCategory: AlimtalkConfigCategory
-	configFallback?: AlimtalkConfigCategory
+	configFallback?: AlimtalkConfigCategory | AlimtalkConfigCategory[]
 	primaryPhone: string
 	variables: (notice: string) => Record<string, string>
 	log: { reportId?: string; tuitionId?: string; textbookCartId?: string; letterId?: string; periodStart?: string; periodEnd?: string }
@@ -160,15 +160,18 @@ async function prepareReport(page: any): Promise<Prepared> {
 		"#{학습기간}": v("학습기간"),
 		"#{학습현황}": alimtalkVar(page, "학습현황", reportStatusBlock(summary)),
 		"#{보고서요약}": summary,
+		// (v2.8.0 구역) 주간·월간 학습·활동 보고서의 구역 변수.
+		...reportSectionVars(page),
 		"#{페이지ID}": REPORT_PATH + "?token=" + access_token,
 	}
+	const chain = await reportConfigChain(reportType, registrationId, (id) => noticeDeps.getPage(id))
 	return {
 		registrationId,
 		title: studentName || reportType,
 		logCategory: reportType as SendLogCategory,
 		// (v2.8.0) 주간·월간 템플릿을 나눴다. "주간 보고서"/"월간 보고서" 행이 없으면 옛 "보고서" 행.
-		configCategory: reportType as AlimtalkConfigCategory,
-		configFallback: "보고서",
+		configCategory: chain.category,
+		configFallback: chain.fallback,
 		primaryPhone: getFormulaText(page, "학부모 연락처(보고서)"),
 		variables: () => fixed,
 		log: { reportId, periodStart: period.start || undefined, periodEnd: period.end || undefined },

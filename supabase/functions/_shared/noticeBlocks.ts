@@ -3,6 +3,7 @@
 // 변수 값은 그 알림톡을 보내는 페이지의 "변수이름(알림톡)" 수식 속성을 먼저 쓰고(alimtalkVar), 없거나 비면 옛 이름,
 // 그것도 없으면 서버 계산값. 날짜·시각이 든 블록은 수식을 읽지 않는다(Notion API가 수식의 날짜를 UTC로 계산한다).
 import { getFormulaText } from "./alimtalkShared.ts"
+import type { AlimtalkConfigCategory } from "./adminShared.ts"
 
 export const NO_NOTE = "없음"
 
@@ -95,7 +96,8 @@ export const DAILY_BODY_LIMIT = 1000
 const DAILY_FIXED_CHARS = 80
 const DAILY_LENGTH_KEYS = ["#{학생이름}", "#{클래스}", "#{등원정보}", "#{학습준비}", "#{학습기록}", "#{학습결과}"]
 export const DAILY_TRIM_NOTE = "자세한 내용은 아래 버튼에서 확인해 주세요."
-const chars = (s: string) => [...s].length
+// 카카오는 이모지를 2자로 셀 수 있어 더 엄격한 UTF-16 길이로 센다.
+const chars = (s: string) => s.length
 export function fitDailyLength(vars: Record<string, string>): Record<string, string> {
 	const total = (v: Record<string, string>) => DAILY_FIXED_CHARS + DAILY_LENGTH_KEYS.reduce((n, k) => n + chars(v[k] ?? ""), 0)
 	if (!("#{학습기록}" in vars) || total(vars) <= DAILY_BODY_LIMIT) return vars
@@ -113,14 +115,42 @@ export function fitDailyLength(vars: Record<string, string>): Record<string, str
 	return out
 }
 
+// (v2.8.0 구역, 10/30 사용자) 주간·월간 학습·활동 보고서의 구역 변수. 보고서 DB `학습기록(알림톡)`·`학습요약(알림톡)` 수식을
+// 따르고, 비었을 때만 기본 문구를 넣는다.
+export const REPORT_SECTION_DEFAULTS = {
+	record: "이 기간 학습 기록이 없습니다.",
+	summary: "이 기간 출석 기록이 없습니다.",
+}
+export function reportSectionVars(page: any): Record<string, string> {
+	return {
+		"#{학습기록}": alimtalkVar(page, "학습기록", REPORT_SECTION_DEFAULTS.record),
+		"#{학습요약}": alimtalkVar(page, "학습요약", REPORT_SECTION_DEFAULTS.summary),
+	}
+}
+
+// 클래스 `알림톡 구분`이 예체능인지. 클래스를 못 읽으면 교과로 본다.
+export async function isArtsClass(classId: string | null | undefined, getPage: (id: string) => Promise<any>): Promise<boolean> {
+	if (!classId) return false
+	const cls = await getPage(classId).catch(() => null)
+	return cls?.properties?.["알림톡 구분"]?.select?.name === "예체능"
+}
+
+// 주간·월간 보고서의 설정 행과 넘어갈 순서. 예체능 반이면 "주간 활동 보고서" → "주간 보고서" → "보고서".
+export async function reportConfigChain(reportType: "주간 보고서" | "월간 보고서", registrationId: string, getPage: (id: string) => Promise<any>): Promise<{ category: AlimtalkConfigCategory; fallback: AlimtalkConfigCategory[] }> {
+	const reg = await getPage(registrationId).catch(() => null)
+	const classId = (reg?.properties?.["클래스"]?.relation ?? [])[0]?.id
+	if (await isArtsClass(classId, getPage)) {
+		return { category: reportType === "주간 보고서" ? "주간 활동 보고서" : "월간 활동 보고서", fallback: [reportType, "보고서"] }
+	}
+	return { category: reportType, fallback: ["보고서"] }
+}
+
 // 출석의 클래스(등록 → 클래스 롤업)에서 일일 보고서 설정 행을 고른다. 클래스 `알림톡 구분`이 예체능이면 "일일 활동 보고서".
 // 클래스를 못 읽으면 교과(일일 보고서)로 보낸다.
 export async function dailyConfigCategory(page: any, getPage: (id: string) => Promise<any>): Promise<"일일 보고서" | "일일 활동 보고서"> {
 	const arr = page?.properties?.["클래스"]?.rollup?.array ?? []
 	const classId = arr.flatMap((x: any) => (x?.relation ?? []).map((r: any) => r?.id)).find(Boolean)
-	if (!classId) return "일일 보고서"
-	const cls = await getPage(classId).catch(() => null)
-	return cls?.properties?.["알림톡 구분"]?.select?.name === "예체능" ? "일일 활동 보고서" : "일일 보고서"
+	return (await isArtsClass(classId, getPage)) ? "일일 활동 보고서" : "일일 보고서"
 }
 
 // 일일 보고서 #{학습내용}: 그날 기록이 하나도 없을 때(결석 등) 대신 넣는 한 줄.
