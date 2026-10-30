@@ -114,37 +114,52 @@ function studentLabel() {
   return "점수"
 }
 // 단원·내용 아래 줄(알림톡과 같은 순서). renderLogMetaRows의 extraRows로 넣는다.
-// (v2.8.0 수료) 교재 상세 "수료" 구역. 출석률은 보고서 탭과 같은 규칙(출석·보강 ÷ 확정된 출석), 과제는 이 교재 과제 중 제출,
-// 평가는 이 교재의 점수 있는 평가 평균. 과제·점수가 없는 교재(예체능 등)는 그 도넛을 숨긴다.
+// (v2.8.0 수료) 교재 상세 "수료" 구역(10/30 사용자 시안): 머리(수료일·기간) → 출석 칸(캘린더 위 수업 칸과 같은 모양)
+// → 진도 그래프 → 평가 그래프(둘 다 시작일~수료일) → 선생님 한마디. 보고서 탭과 겹치는 출석률·과제·평가 평균 도넛은 넣지 않는다.
+// 기간은 수료 보고서의 보고서 기간, 없으면 이 교재 첫 기록부터 수료일까지.
 function buildCompletionHtml(r, book, items, bookTests) {
   const note = (r.report_comments || []).filter((c) => c.kind === "수료 보고서" && c.bookId && book.id && c.bookId === book.id).pop() || null
   const firstDate = items.map((l) => l.date).filter(Boolean).sort()[0] || ""
   const start = (note && note.start) || firstDate
   const end = (note && note.end) || book.completedOn
   const inRange = (d) => !!d && (!start || d >= start) && d <= end
-  const att = (r.attendance_rows || []).filter((a) => inRange(a.date) && ["출석", "보강", "결석"].includes(a.status))
-  const present = att.filter((a) => a.status === "출석" || a.status === "보강").length
-  const hw = (r.homework || []).filter((h) => h.bookId === book.id && inRange(h.classDate || h.due))
-  const hwDone = hw.filter((h) => h.status === "제출").length
-  const scored = bookTests.filter((t) => t.total && inRange(t.date))
-  const avg = scored.length ? Math.round(scored.reduce((n, t) => n + (t.correct ?? 0) / t.total * 100, 0) / scored.length * 10) / 10 : null
-  const donut = (icon, title, pct, center, below) => `
-        <div class="donut-card">
-          <div class="donut-title"><span class="inline-icon">${icon}</span>${title}</div>
-          <div class="donut" style="background: conic-gradient(${bandChartColor(pct)} 0% ${pct}%, var(--brand-soft) ${pct}% 100%)"><div class="donut-hole">${center}</div></div>
-          <div class="donut-count-below">${below}</div>
-        </div>`
-  const cards = []
-  if (att.length) {
-    const rate = Math.round((present / att.length) * 100)
-    cards.push(donut(`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>`, "출석률", rate, `${rate}%`, `(${present}/${att.length})`))
-  }
-  if (hw.length) {
-    const rate = Math.round((hwDone / hw.length) * 100)
-    cards.push(donut(KIND_ICONS["과제"], "과제이행률", rate, `${rate}%`, `(${hwDone}/${hw.length})`))
-  }
-  if (avg !== null) cards.push(donut(KIND_ICONS["평가"], "평가 평균", avg, `${avg.toFixed(1)}점`, `(${scored.length}회)`))
   const md = (d) => String(d).slice(5, 10).replace("-", ".")
+  const sub = (text) => `<div class="rep-sub">${text}</div>`
+  const card = (inner) => `<div class="card rep-card">${inner}</div>`
+
+  // 출석 칸: 기간 안 출석 한 번에 한 칸(출석·결석·보강 색은 캘린더 수업 칸과 같다).
+  const att = (r.attendance_rows || []).filter((a) => inRange(a.date) && a.status).sort((x, y) => (x.date < y.date ? -1 : 1))
+  const present = att.filter((a) => a.status === "출석" || a.status === "보강").length
+  const attCells = att.map((a) => `<i class="${["출석", "결석", "보강"].find((k) => String(a.status).includes(k)) || "지남"}"></i>`).join("")
+  const attHtml = att.length
+    ? `<div class="session-bar-card"><div class="session-bar"><span class="lbl">출석</span><div class="cells">${attCells}</div><b>${present} / ${att.length}회</b></div></div>`
+    : ""
+
+  // 진도 그래프: 학습기록마다 그날까지 간 곳(쪽수 범위의 끝 ÷ 교재 쪽수, 아니면 단원 순서 ÷ 단원 수)을 누적 최댓값으로. 수료일은 100%.
+  const units = book.units || []
+  const reachOf = (l) => {
+    const nums = String(l.range || "").match(/\d+/g)
+    if (book.pages && nums) return Math.min(100, Math.round((Math.max(...nums.map(Number)) / book.pages) * 100))
+    const idx = units.reduce((m, u, i) => (l.unit && String(l.unit).includes(u) ? i : m), -1)
+    return units.length && idx >= 0 ? Math.round(((idx + 1) / units.length) * 100) : null
+  }
+  let best = 0
+  const progressPoints = items
+    .filter((l) => l.type === "학습" && inRange(l.date))
+    .sort((x, y) => (x.date < y.date ? -1 : 1))
+    .map((l) => ({ date: l.date, pct: reachOf(l) }))
+    .filter((p) => p.pct !== null)
+    .map((p) => ({ date: p.date, pct: (best = Math.max(best, p.pct)) }))
+  if (!progressPoints.length || progressPoints[progressPoints.length - 1].date !== book.completedOn) progressPoints.push({ date: book.completedOn, pct: 100 })
+  else progressPoints[progressPoints.length - 1].pct = 100
+  const progressHtml = progressPoints.length >= 2 ? sub("진도") + card(buildCompletionLineChartHtml(progressPoints.map((p) => ({ label: md(p.date), value: p.pct })), "%")) : ""
+
+  // 평가 그래프: 보고서 탭 평가 추이와 같은 그림. 평가가 있던 날마다 한 점(같은 날 여럿이면 평균).
+  const testPoints = computeRecentTestPoints(bookTests.filter((t) => inRange(t.date)), end, 999)
+  thinChartLabels(testPoints)
+  const testHtml = testPoints.filter((p) => p.avg !== null).length ? sub("평가") + card(buildTestTrendChartHtml(testPoints)) : ""
+
+  const detail = attHtml + progressHtml + testHtml + (note && note.comment ? sub("선생님 한마디") + card(`<div class="speech">${esc(note.comment)}</div>`) : "")
   return `
         <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg></span>수료</h3>
         <div class="log-card 학습">
@@ -153,10 +168,40 @@ function buildCompletionHtml(r, book, items, bookTests) {
               <div class="log-title-row"><div class="log-title">${esc(josa(bookNoun(book), "을", "를"))} 모두 마쳤어요</div><span class="log-pill tone-green">${esc(withDow(book.completedOn))}</span></div>
             </div>
           </div>
-          ${start ? `<div class="log-meta">${renderLogMetaRows("", "", [`기간: ${md(start)} ~ ${md(end)}`])}</div>` : ""}
+          <div class="log-meta">${start ? renderLogMetaRows("", "", [`기간: ${md(start)} ~ ${md(end)}`]) : ""}${detail ? `<button type="button" class="log-extra-chevron" onclick="toggleCompletion(this)" aria-label="수료 내용 펼치기" aria-expanded="false">${CHEVRON_DOWN_SVG}</button>` : ""}</div>
         </div>
-        ${cards.length ? `<div class="report-donut-row${cards.length === 3 ? " three" : ""}">${cards.join("")}</div>` : ""}
-        ${note && note.comment ? `<div class="card rep-card"><div class="speech">${esc(note.comment)}<small>선생님 한마디</small></div></div>` : ""}`
+        ${detail ? `<div class="completion-detail" hidden>${detail}</div>` : ""}`
+}
+// (10/30 사용자) 수료 내용(출석·진도·평가·한마디)은 처음에 접어 두고 머리 카드의 화살표로 펼친다.
+function toggleCompletion(btn) {
+  const detail = btn.closest(".log-card").nextElementSibling
+  if (!detail || !detail.classList.contains("completion-detail")) return
+  const show = detail.hidden
+  detail.hidden = !show
+  btn.classList.toggle("open", show)
+  btn.setAttribute("aria-expanded", String(show))
+}
+// 점이 많으면 날짜 글씨가 겹치므로 처음·끝과 몇 칸마다 하나만 남긴다(점·값은 그대로).
+function thinChartLabels(points, max = 6) {
+  if (points.length <= max) return points
+  const step = Math.ceil((points.length - 1) / (max - 1))
+  points.forEach((p, i) => { if (i % step !== 0 && i !== points.length - 1) p.label = "" })
+  return points
+}
+// 수료 진도 그래프. 평가 추이(buildTestTrendChartHtml)와 같은 크기·색·눈금으로 그린다(0~100).
+function buildCompletionLineChartHtml(points, unit) {
+  thinChartLabels(points)
+  const width = 400, height = 200, paddingX = 30, paddingTop = 20, paddingBottom = 34
+  const xStep = points.length > 1 ? (width - paddingX * 2) / (points.length - 1) : 0
+  const yFor = (v) => paddingTop + (height - paddingTop - paddingBottom) - (v / 100) * (height - paddingTop - paddingBottom)
+  const xFor = (i) => paddingX + i * xStep
+  const grid = [0, 20, 40, 60, 80, 100].map((v) => `<line x1="${paddingX}" y1="${yFor(v)}" x2="${width - paddingX}" y2="${yFor(v)}" stroke="#eee" stroke-width="1" /><text x="2" y="${yFor(v) + 4}" font-size="9" fill="#bbb">${v}</text>`).join("")
+  const path = points.map((p, i) => `${xFor(i)},${yFor(p.value)}`).join(" ")
+  const dots = points.map((p, i) => `<circle cx="${xFor(i)}" cy="${yFor(p.value)}" r="4" fill="#6b5d4d" />`).join("")
+  const last = points[points.length - 1]
+  const lastLabel = `<text x="${xFor(points.length - 1)}" y="${yFor(last.value) - 10}" font-size="11" font-weight="700" fill="#6b5d4d" text-anchor="end">${last.value}${unit}</text>`
+  const xLabels = points.map((p, i) => (p.label ? `<text x="${xFor(i)}" y="${height - 10}" font-size="10" fill="#999" text-anchor="middle">${esc(p.label)}</text>` : "")).join("")
+  return `<div class="chart-wrap"><svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">${grid}<polyline points="${path}" fill="none" stroke="#6b5d4d" stroke-width="2" />${dots}${lastLabel}${xLabels}</svg></div>`
 }
 function testScoreRows(t) {
   if (!t || !t.total) return []
@@ -836,7 +881,8 @@ function renderBookDetail() {
   // (v2.8.0 수료) [수료]로 마친 교재: 수료 보고서 알림톡과 같은 내용(기간·출석·과제·평가·선생님 한마디)을
   // 보고서 탭과 같은 부품(도넛 줄·한마디 카드)으로 맨 위에 보인다. 기간은 수료 보고서의 보고서 기간, 없으면 이 교재 첫 기록부터 수료일까지.
   const completionHtml = book.completedOn ? buildCompletionHtml(r, book, items, bookTests) : ""
-  const trendHtml = trendPoints.filter((p) => p.avg !== null).length >= 2 ? `<h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></span>이 ${bookNoun(book)} 평가 추이</h3>${buildTestTrendChartHtml(trendPoints)}` : ""
+  // 수료한 교재는 수료 구역의 평가 그래프(시작일~수료일)가 대신한다.
+  const trendHtml = !book.completedOn && trendPoints.filter((p) => p.avg !== null).length >= 2 ? `<h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></span>이 ${bookNoun(book)} 평가 추이</h3>${buildTestTrendChartHtml(trendPoints)}` : ""
   const sorted = items.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
   const studiedUnitKeys = new Set()
   const studiedUnitList = []
