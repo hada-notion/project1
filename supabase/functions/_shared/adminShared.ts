@@ -231,6 +231,7 @@ export type SendLogCategory =
   | "일일 보고서"
   | "주간 보고서"
   | "월간 보고서"
+  | "수료 보고서"
   | "수강료 안내"
   | "교재비 안내"
   | "키오스크 알림톡"
@@ -415,7 +416,8 @@ export function withConfigFallback(row: AlimtalkConfig, fallback: { pfId: string
 // "발송 구분"(제목)은 자유롭게 바꿔도 되지만, "코드" 값은 여기 나열된 문자열과 정확히 같아야 한다.
 // "일일 활동 보고서": 클래스 `알림톡 구분`이 예체능인 반의 일일 보고서(v2.8.0 구역). 전송 로그 구분은 "일일 보고서" 그대로.
 // "주간 활동 보고서"·"월간 활동 보고서": 예체능 반의 주간·월간 보고서(v2.8.0 구역).
-export type AlimtalkConfigCategory = SendLogCategory | "보고서" | "일일 활동 보고서" | "주간 활동 보고서" | "월간 활동 보고서"
+// "교재 수료 보고서"·"프로그램 수료 보고서": 진도교재 [수료]가 만든 수료 보고서(교과·예체능). 옛 템플릿이 없어 넘어갈 행이 없다.
+export type AlimtalkConfigCategory = SendLogCategory | "보고서" | "일일 활동 보고서" | "주간 활동 보고서" | "월간 활동 보고서" | "교재 수료 보고서" | "프로그램 수료 보고서"
 
 // [NEW, 복원 2026-09-18] "알림톡 설정(학원) DB"에서 발송 구분별 행 ID와 안내멘트만 가져온다.
 // generate-tuition/textbookDistributionTarget이 표시용 "알림톡 설정" 관계를 채울 rowId로,

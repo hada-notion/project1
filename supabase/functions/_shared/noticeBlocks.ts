@@ -120,11 +120,22 @@ export function fitDailyLength(vars: Record<string, string>): Record<string, str
 export const REPORT_SECTION_DEFAULTS = {
 	record: "이 기간 학습 기록이 없습니다.",
 	summary: "이 기간 출석 기록이 없습니다.",
+	completion: "이 과정을 모두 마쳤습니다.",
+}
+// 수료 보고서 제목 "학생 수료 보고서 교재"에서 교재 부분(수식이 비었을 때만 씀).
+const bookFromTitle = (page: any) => {
+	const t = (page?.properties?.["보고서"]?.title ?? []).map((x: any) => x?.plain_text ?? x?.text?.content ?? "").join("")
+	const i = t.indexOf("수료 보고서")
+	return i >= 0 ? t.slice(i + "수료 보고서".length).trim() : ""
 }
 export function reportSectionVars(page: any): Record<string, string> {
 	return {
 		"#{학습기록}": alimtalkVar(page, "학습기록", REPORT_SECTION_DEFAULTS.record),
 		"#{학습요약}": alimtalkVar(page, "학습요약", REPORT_SECTION_DEFAULTS.summary),
+		// (v2.8.0 수료) 교재·프로그램 수료 보고서. [수료 과정]의 교재명·출석, 셋째 구역의 과제·평가·한마디.
+		"#{교재명}": alimtalkVar(page, "교재명", bookFromTitle(page) || "-"),
+		"#{수료출석}": alimtalkVar(page, "수료출석", "-"),
+		"#{수료요약}": alimtalkVar(page, "수료요약", REPORT_SECTION_DEFAULTS.completion),
 	}
 }
 
@@ -136,10 +147,13 @@ export async function isArtsClass(classId: string | null | undefined, getPage: (
 }
 
 // 주간·월간 보고서의 설정 행과 넘어갈 순서. 예체능 반이면 "주간 활동 보고서" → "주간 보고서" → "보고서".
-export async function reportConfigChain(reportType: "주간 보고서" | "월간 보고서", registrationId: string, getPage: (id: string) => Promise<any>): Promise<{ category: AlimtalkConfigCategory; fallback: AlimtalkConfigCategory[] }> {
+// 수료 보고서는 "교재 수료 보고서"/"프로그램 수료 보고서" 행만 쓴다(넘어갈 옛 행이 없고, Secrets 기본 템플릿으로 보내면 안 됨: noEnvTemplate).
+export async function reportConfigChain(reportType: "주간 보고서" | "월간 보고서" | "수료 보고서", registrationId: string, getPage: (id: string) => Promise<any>): Promise<{ category: AlimtalkConfigCategory; fallback: AlimtalkConfigCategory[]; noEnvTemplate?: boolean }> {
 	const reg = await getPage(registrationId).catch(() => null)
 	const classId = (reg?.properties?.["클래스"]?.relation ?? [])[0]?.id
-	if (await isArtsClass(classId, getPage)) {
+	const arts = await isArtsClass(classId, getPage)
+	if (reportType === "수료 보고서") return { category: arts ? "프로그램 수료 보고서" : "교재 수료 보고서", fallback: [], noEnvTemplate: true }
+	if (arts) {
 		return { category: reportType === "주간 보고서" ? "주간 활동 보고서" : "월간 활동 보고서", fallback: [reportType, "보고서"] }
 	}
 	return { category: reportType, fallback: ["보고서"] }

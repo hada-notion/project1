@@ -203,8 +203,8 @@ Deno.serve(async (req) => {
     }
 
     const reportType = getSelectName(reportPage, "보고서 구분")
-    if (reportType !== "주간 보고서" && reportType !== "월간 보고서") {
-      throw new Error(`이 보고서의 '보고서 구분'이 "주간 보고서" / "월간 보고서" 중 하나가 아닙니다 (현재 값: "${reportType || "없음"}").`)
+    if (reportType !== "주간 보고서" && reportType !== "월간 보고서" && reportType !== "수료 보고서") {
+      throw new Error(`이 보고서의 '보고서 구분'이 "주간 보고서" / "월간 보고서" / "수료 보고서" 중 하나가 아닙니다 (현재 값: "${reportType || "없음"}").`)
     }
 
     const studentName = getFormulaText(reportPage, "학생이름(보고서)")
@@ -258,12 +258,13 @@ Deno.serve(async (req) => {
           }
 
           // (v2.8.0) 주간·월간 템플릿을 나눴다. 예체능 반은 "주간/월간 활동 보고서" 행부터, 없으면 "주간/월간 보고서" → 옛 "보고서" 행(큐 경로와 같음).
-          const chain = await reportConfigChain(reportType as "주간 보고서" | "월간 보고서", registrationId, (id) => notionGetPage(id))
+          // 수료 보고서는 교재·프로그램 수료 보고서 행만 쓴다(Secrets 기본 템플릿 없음 → 행이 없으면 템플릿 ID 없음 오류).
+          const chain = await reportConfigChain(reportType as "주간 보고서" | "월간 보고서" | "수료 보고서", registrationId, (id) => notionGetPage(id))
           const config = await getAlimtalkConfig(chain.category, {
             pfId: SOLAPI_PF_ID_FALLBACK,
-            templateId: templateFallbackFor(reportType),
+            templateId: chain.noEnvTemplate ? "" : templateFallbackFor(reportType),
             senderNumber: SOLAPI_SENDER_NUMBER_FALLBACK,
-          }, chain.fallback)
+          }, chain.fallback.length ? chain.fallback : undefined)
 
           const variables: Record<string, string> = {
             "#{보고서기간}": reportPeriodLabel,
