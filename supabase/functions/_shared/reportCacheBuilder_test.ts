@@ -160,3 +160,46 @@ Deno.test("v2.8.0 리포트 캐시: 기록마다 진도교재 ID(book_id)를 싣
 		globalThis.fetch = realFetch
 	}
 })
+
+Deno.test("v2.8.0 작품 모아보기: 프로그램 학습기록의 사진만 수업 순서로 모은다(학생 학습활동 사진 먼저, blockId 포함)", async () => {
+	const REG = "reg-g", PB = "pb1", LIB_P = "lib-p", LIB_T = "lib-t", TB = "tb1"
+	const sel = (name: string) => ({ type: "select", select: { name } })
+	const rel = (...ids: string[]) => ({ type: "relation", relation: ids.map((id) => ({ id })) })
+	const pages: Record<string, any> = {
+		[PB]: { id: PB, properties: {} },
+		[TB]: { id: TB, properties: {} },
+		[LIB_P]: { id: LIB_P, properties: { "교재명": { type: "title", title: [{ plain_text: "수채화" }] }, "구분": sel("프로그램") } },
+		[LIB_T]: { id: LIB_T, properties: { "교재명": { type: "title", title: [{ plain_text: "수학" }] }, "구분": sel("교재") } },
+		"log-1": { id: "log-1", properties: { "구분": sel("학습"), "범위": { type: "rich_text", rich_text: [{ plain_text: "1" }] }, "교재": rel(LIB_P), "진도교재": rel(PB) } },
+		"log-2": { id: "log-2", properties: { "구분": sel("학습"), "범위": { type: "rich_text", rich_text: [{ plain_text: "2" }] }, "교재": rel(LIB_P), "진도교재": rel(PB) } },
+		"log-t": { id: "log-t", properties: { "구분": sel("학습"), "교재": rel(LIB_T), "진도교재": rel(TB) } },
+	}
+	const rows = [
+		{ notion_page_id: "att-1", registration_id: REG, class_iso: `${daysAgo(9)}T16:00:00+09:00`, status: "출석", check_in: "", check_out: "", teacher_comment: "", study_log_ids: ["log-1"] },
+		{ notion_page_id: "att-2", registration_id: REG, class_iso: `${daysAgo(2)}T16:00:00+09:00`, status: "출석", check_in: "", check_out: "", teacher_comment: "", study_log_ids: ["log-2", "log-t"] },
+	]
+	const image = (id: string) => ({ id, type: "image", image: { type: "external", external: { url: `https://img.test/${id}.png` }, caption: [] } })
+	const blocks: Record<string, any[]> = { "log-1": [image("i-rec-1")], "log-2": [{ id: "p", type: "paragraph", paragraph: { rich_text: [] } }, image("i-rec-2")], "log-t": [image("i-math")], "act-1": [image("i-act-1")] }
+	const realFetch = globalThis.fetch
+	globalThis.fetch = (async (input: Request | URL | string) => {
+		const url = String(input instanceof Request ? input.url : input)
+		const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { "Content-Type": "application/json" } })
+		if (url.includes("/rest/v1/attendance_records")) return json(rows)
+		if (url.startsWith("https://mock.supabase")) return json([])
+		if (url.includes("/data_sources/activities/query")) return json({ results: [{ id: "act-1", properties: { "구분": sel("학습"), "학습기록": rel("log-1"), "출석": rel("att-1") } }], has_more: false })
+		if (url.includes("/query")) return json({ results: [], has_more: false })
+		const m = url.match(/\/blocks\/([^/]+)\/children/)
+		if (m) return json({ results: blocks[m[1]] ?? [], has_more: false })
+		throw new Error(`unexpected fetch ${url}`)
+	}) as typeof fetch
+	try {
+		const detail: any = await buildRegistrationDetail({ id: REG, properties: { "진도교재": rel(PB, TB) } }, async (id: string) => pages[id] ?? { id, properties: {} })
+		eq(detail.gallery.map((g: any) => [g.book_id, g.range, g.url, g.block_id, g.mine]), [
+			[PB, "1", "https://img.test/i-act-1.png", "i-act-1", true],
+			[PB, "1", "https://img.test/i-rec-1.png", "i-rec-1", false],
+			[PB, "2", "https://img.test/i-rec-2.png", "i-rec-2", false],
+		])
+	} finally {
+		globalThis.fetch = realFetch
+	}
+})

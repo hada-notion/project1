@@ -84,7 +84,8 @@ export async function blocksToFeedBody(blocks: any[]): Promise<unknown[]> {
           caption,
         })
       } else {
-        items.push({ type, url: String(url), caption })
+        // (v2.8.0 작품 모아보기) 사진은 blockId도 싣는다: 주소가 만료되면 get-report-file이 이 블록을 다시 읽어 새 주소를 준다.
+        items.push({ type, url: String(url), caption, ...(type === "image" && b.id ? { blockId: String(b.id) } : {}) })
       }
       continue
     }

@@ -189,6 +189,81 @@ function buildCompletionLineChartHtml(points, unit) {
   const xLabels = points.map((p, i) => (p.label ? `<text x="${xFor(i)}" y="${height - 10}" font-size="10" fill="#999" text-anchor="middle">${esc(p.label)}</text>` : "")).join("")
   return `<div class="chart-wrap"><svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">${grid}<polyline points="${path}" fill="none" stroke="#6b5d4d" stroke-width="2" />${dots}${lastLabel}${xLabels}</svg></div>`
 }
+// (v2.8.0 작품 모아보기) 프로그램(예체능) 상세의 "작품" 구역: 이 프로그램 학습기록·학습활동 본문의 사진을 수업 순서대로
+// 3칸 바둑판으로 모은다(처음엔 9장, 더 보기로 전부). 누르면 크게 보고 좌우로 넘긴다. 사진 주소가 만료되면 한 번 새로 받는다.
+let galleryPhotos = []
+const GALLERY_FIRST = 9
+function buildGalleryHtml(r, book) {
+  const photos = (r.gallery || []).filter((g) => g.bookId && book.id && g.bookId === book.id)
+  galleryPhotos = photos
+  if (!photos.length) return ""
+  const thumbs = photos.map((g, i) => `<button type="button" class="gallery-thumb" onclick="openGalleryPhoto(${i})" aria-label="${esc(galleryCaption(g))} 사진 크게 보기"><img src="${esc(safeUrl(g.url))}" loading="lazy" alt="" onerror="refreshGalleryImage(this, ${jsArg(g.blockId)})" /></button>`).join("")
+  const more = photos.length > GALLERY_FIRST
+    ? `<div class="cal-foot"><span></span><button type="button" class="cal-collapse-btn" onclick="toggleGalleryAll(this)">${CHEVRON_DOWN_SVG}<span>${photos.length}장 모두 보기</span></button><span></span></div>`
+    : ""
+  return `
+        <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg></span>작품</h3>
+        <div class="section-hint">수업에서 남긴 사진을 모아 보여줘요</div>
+        <div class="card rep-card">
+          <div class="gallery-grid${photos.length > GALLERY_FIRST ? " collapsed" : ""}">${thumbs}</div>
+          ${more}
+        </div>`
+}
+function galleryCaption(g) {
+  return [g.range ? `${g.range}차시` : "", g.date ? withDow(g.date) : "", g.caption || ""].filter(Boolean).join(" · ")
+}
+function toggleGalleryAll(btn) {
+  const grid = btn.closest(".rep-card").querySelector(".gallery-grid")
+  if (!grid) return
+  const collapsed = grid.classList.toggle("collapsed")
+  btn.querySelector("span").textContent = collapsed ? `${galleryPhotos.length}장 모두 보기` : "접기"
+  btn.querySelector("svg").style.transform = collapsed ? "" : "rotate(180deg)"
+}
+// 크게 보기: 피드 사진 뷰어(.feed-lightbox, 뒤로 가기로 닫힘)를 열고 설명·좌우 버튼을 붙인다. 버튼은 닫히지 않게 클릭을 막는다.
+function openGalleryPhoto(index) {
+  const g = galleryPhotos[index]
+  if (!g) return
+  openFeedImage(g.url)
+  const layer = document.querySelector(".feed-lightbox")
+  if (!layer) return
+  let current = index
+  layer.classList.add("gallery-viewer")
+  layer.insertAdjacentHTML("beforeend", `<div class="gallery-caption"></div>${galleryPhotos.length > 1 ? `<button type="button" class="gallery-nav prev" aria-label="이전 사진">‹</button><button type="button" class="gallery-nav next" aria-label="다음 사진">›</button>` : ""}`)
+  const img = layer.querySelector("img")
+  const show = (i) => {
+    current = (i + galleryPhotos.length) % galleryPhotos.length
+    const p = galleryPhotos[current]
+    img.onerror = () => refreshGalleryImage(img, p.blockId)
+    img.dataset.retried = ""
+    img.src = safeUrl(p.url)
+    layer.querySelector(".gallery-caption").textContent = `${galleryCaption(p)}  (${current + 1}/${galleryPhotos.length})`
+  }
+  layer.querySelectorAll(".gallery-nav").forEach((b) => {
+    b.onclick = (e) => { e.stopPropagation(); show(current + (b.classList.contains("next") ? 1 : -1)) }
+  })
+  show(index)
+}
+// Notion 사진 주소는 시간이 지나면 만료된다. 실패하면 한 번만 서버에서 새 주소를 받아 다시 보인다.
+async function refreshGalleryImage(img, blockId) {
+  const safeBlockId = String(blockId || "").replace(/[^a-zA-Z0-9-]/g, "")
+  if (!img || img.dataset.retried || !safeBlockId || !REPORT_ACCESS_TOKEN || !SUPABASE_URL) return
+  img.dataset.retried = "1"
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/get-report-file`, {
+      method: "POST",
+      headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${SUPABASE_ANON_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ token: REPORT_ACCESS_TOKEN, blockId: safeBlockId }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (res.ok && safeUrl(data.url)) {
+      img.src = data.url
+      const p = galleryPhotos.find((x) => x.blockId === blockId)
+      if (p) p.url = data.url
+    }
+  } catch (err) {
+    console.warn("refreshGalleryImage failed", err)
+  }
+}
 function testScoreRows(t) {
   if (!t || !t.total) return []
   const avg = t.classAvg
@@ -617,6 +692,8 @@ function mapRegistration(reg) {
     // 주간/월간 보고서: 보고서(학원) DB 자체의 "선생님 한마디"를 보고서 구분·학습 기간과 함께 보관한다.
     report_comments: (reg.report_comments || []).map((c) => ({ kind: c.kind || "", start: c.start || null, end: c.end || c.start || null, comment: c.comment || "", bookId: c.book_id || "" })),
     report_mode: reg.report_mode === "tests_only" ? "tests_only" : "all",
+    // (v2.8.0 작품 모아보기) 프로그램 사진(수업 순서). blockId는 만료된 주소를 새로 받을 때 쓴다.
+    gallery: (reg.gallery || []).map((g) => ({ bookId: g.book_id || "", date: isoToKstDate(g.iso) || (g.iso ? String(g.iso).slice(0, 10) : ""), range: g.range || "", url: g.url || "", caption: g.caption || "", blockId: g.block_id || "", mine: !!g.mine })).filter((g) => g.url),
     // (v2.8.0 루틴, 항목 18) 루틴 체크: 루틴 이름·날짜(서울)·했음. 루틴을 안 쓰는 반은 빈 목록이고 화면에 루틴 칸이 없다.
     routines: (reg.routines || []).map((x) => ({ name: x.name || "", date: x.date || "", done: !!x.done })).filter((x) => x.name && x.date),
   })
@@ -689,6 +766,7 @@ async function loadReportFromServer() {
               tests: detail.tests,
               teacher_comments: detail.teacher_comments,
               report_comments: detail.report_comments,
+              gallery: detail.gallery,
               report_mode: detail.report_mode,
             }
           : r
@@ -943,6 +1021,7 @@ function renderBookDetail() {
           </div>` : ""}
         </div>
         ${completionHtml}
+        ${isProgram(book) ? buildGalleryHtml(r, book) : ""}
         ${trendHtml}
         <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg></span>학습기록</h3>
         <div class="section-hint">이 ${bookNoun(book)}의 학습 · 과제 · 평가 기록을 최근 순서로 보여줘요</div>
