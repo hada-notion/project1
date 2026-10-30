@@ -41,7 +41,7 @@ import {
 import { refreshStudentReport } from "./dailyReportRefresh.ts"
 import { buildLetterNotice, LetterBlocked } from "./monthlyNotice.ts"
 import { BOOK_EVAL_LOG_CATEGORY, BOOK_EVAL_NOTICE_SENT_PROP, BOOK_EVAL_NOTICE_STATUS_PROP, bookEvalContent } from "./bookEvalNotice.ts"
-import { alimtalkVar, BULLET, reportStatusBlock, textbookBlock, tuitionInfoBlock, reportConfigChain, reportSectionVars } from "./noticeBlocks.ts"
+import { alimtalkVar, BULLET, reportStatusBlock, textbookBlock, tuitionInfoBlock, reportConfigChain, reportSectionVars, textbookListBlock } from "./noticeBlocks.ts"
 import { fitVariablesToTemplate } from "./templateFit.ts"
 
 export type NoticeKind = "report" | "tuition" | "textbook" | "letter" | "bookEval"
@@ -239,6 +239,8 @@ function prepareTextbook(page: any): Prepared {
 		"#{클래스}": alimtalkVar(page, "클래스", getRollupText(page, "클래스명(표시)")),
 		"#{교재내역}": alimtalkVar(page, "교재내역", textbookBlock(unpaid)),
 		"#{교재비안내}": unpaid,
+		// (v2.8.0 구역) 교재비 청구 안내 [교재 내역].
+		"#{교재목록}": alimtalkVar(page, "교재목록", textbookListBlock(unpaid)),
 	}
 	return {
 		registrationId,

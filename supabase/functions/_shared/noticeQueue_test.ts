@@ -100,7 +100,7 @@ Deno.test("v2.6.24 교재비 안내문: 안내문 전송 상태, 일괄전송 �
 	const { calls, restore } = fake(cart)
 	try {
 		await processNoticeQueueItem({ kind: "textbook", pageId: "cart-1" })
-		eq(calls.sent[0].vars, { "#{학생이름}": "조하은", "#{클래스}": "중1 B", "#{교재내역}": "📚 교재 내역\n쎈 1권", "#{교재비안내}": "쎈 1권", "#{안내멘트}": "안내" })
+		eq(calls.sent[0].vars, { "#{학생이름}": "조하은", "#{클래스}": "중1 B", "#{교재내역}": "📚 교재 내역\n쎈 1권", "#{교재비안내}": "쎈 1권", "#{교재목록}": "쎈 1권", "#{안내멘트}": "안내" })
 		eq(calls.logs[0].textbookCartId, "cart-1")
 		eq(calls.patches[0]["안내문 전송 상태"].select.name, "✅ 완료")
 		eq("일괄전송 선택" in calls.patches[0], false)

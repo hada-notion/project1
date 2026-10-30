@@ -121,3 +121,8 @@ Deno.test("v2.8.0 수료: 교재·프로그램 수료 보고서 행만 쓰고(�
 	const course = "🎨 프로그램  정물화 그리기\n📅 기간  10.06(월)~27(월)\n✅ 출석  8/8회"
 	eq(b.reportSectionVars({ properties: { ...page.properties, "수료과정(알림톡)": formula(course) } })["#{수료과정}"], course)
 })
+
+Deno.test("v2.8.0 구역: 교재비 [교재 내역]은 교재마다 한 줄 + 합계, 점·공백으로 시작하지 않음", () => {
+	eq(b.textbookListBlock("📘 개념원리 공통수학1 : 15,000원\n📘 쎈 공통수학1 : 16,000원\n📚 청구 금액 : 31,000원"), "📚 개념원리 공통수학1  15,000원\n📚 쎈 공통수학1  16,000원\n🧾 합계  31,000원")
+	eq(b.textbookListBlock(""), "📚 교재  없음")
+})

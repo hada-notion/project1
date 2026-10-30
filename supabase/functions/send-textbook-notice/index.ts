@@ -50,7 +50,7 @@ import {
   withSendingLock,
 } from "../_shared/alimtalkShared.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
-import { alimtalkVar, textbookBlock } from "../_shared/noticeBlocks.ts"
+import { alimtalkVar, textbookBlock, textbookListBlock } from "../_shared/noticeBlocks.ts"
 import { fitVariablesToTemplate } from "../_shared/templateFit.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 
@@ -193,6 +193,8 @@ Deno.serve(async (req) => {
           "#{안내멘트}": config.notice,
           // (v2.8.0 통일안) 큐 경로(_shared/noticeQueue.ts)와 같은 새 템플릿 변수. 보낼 때 템플릿에 있는 것만 남는다.
           "#{교재내역}": alimtalkVar(cartPage, "교재내역", textbookBlock(textbookNotice)),
+          // (v2.8.0 구역) 교재비 청구 안내 [교재 내역]. 큐 경로와 같은 모양.
+          "#{교재목록}": alimtalkVar(cartPage, "교재목록", textbookListBlock(textbookNotice)),
         }
 
         const sendResult = await withSendingLock(cartId, "안내문 발송중", async () => {
