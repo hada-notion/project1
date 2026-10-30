@@ -545,7 +545,7 @@ function mapRegistration(reg) {
     tests: (reg.tests || []).map((t) => ({ type: "평가", title: t.title || "", book: t.book || "", bookId: t.book_id || "", range: t.range || "", unit: t.unit || "", note: t.note || "", date: isoToKstDate(t.iso) || (t.iso ? String(t.iso).slice(0, 10) : null), correct: t.correct ?? 0, total: t.total ?? 0, classAvg: typeof t.class_avg === "number" ? t.class_avg : null, classCount: t.class_count ?? 0, evalType: t.eval_type || "", evalStart: t.eval_start || null, evalEnd: t.eval_end || null, standalone: !!t.standalone, comment: t.comment || "", sourceBody: normalizeFeedBody(t.source_body), activityBody: normalizeFeedBody(t.activity_body) })),
     teacher_comments: (reg.teacher_comments || []).map((c) => ({ text: c.text || "", date: c.iso || null, by: c.by || "" })),
     // 주간/월간 보고서: 보고서(학원) DB 자체의 "선생님 한마디"를 보고서 구분·학습 기간과 함께 보관한다.
-    report_comments: (reg.report_comments || []).map((c) => ({ kind: c.kind || "", start: c.start || null, end: c.end || c.start || null, comment: c.comment || "", bookId: c.book_id || "" })),
+    report_comments: (reg.report_comments || []).map((c) => ({ kind: c.kind || "", start: c.start || null, end: c.end || c.start || null, comment: c.comment || "", bookId: c.book_id || "", course: c.course || "", summary: c.summary || "" })),
     report_mode: reg.report_mode === "tests_only" ? "tests_only" : "all",
     // (v2.8.0 루틴, 항목 18) 루틴 체크: 루틴 이름·날짜(서울)·했음. 루틴을 안 쓰는 반은 빈 목록이고 화면에 루틴 칸이 없다.
     routines: (reg.routines || []).map((x) => ({ name: x.name || "", date: x.date || "", done: !!x.done })).filter((x) => x.name && x.date),
@@ -795,10 +795,14 @@ function renderBookDetail() {
   const bookTests = ((r.tests) || []).filter(ofBook)
   const finalTests = bookTests.filter(isBookEval).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
   const trendPoints = computeRecentTestPoints(bookTests, MOCK_TODAY, 8)
-  // (v2.8.0 수료) [수료]로 마친 교재: 수료일과 수료 보고서의 선생님 한마디(있으면)를 맨 위에 보인다.
+  // (v2.8.0 수료) [수료]로 마친 교재: 수료일과 수료 보고서 알림톡의 [수료 과정]·[학습(활동) 현황] 요약을 맨 위에 보인다.
+  // 요약 수식이 비어 있는 옛 보고서는 선생님 한마디만 보인다.
   const completionNote = book.completedOn
-    ? ((r.report_comments || []).filter((c) => c.kind === "수료 보고서" && c.bookId && book.id && c.bookId === book.id && c.comment).pop() || null)
+    ? ((r.report_comments || []).filter((c) => c.kind === "수료 보고서" && c.bookId && book.id && c.bookId === book.id && (c.comment || c.course || c.summary)).pop() || null)
     : null
+  const completionSummary = completionNote
+    ? [completionNote.course, completionNote.summary || (completionNote.comment ? `💬 선생님 한마디\n${completionNote.comment}` : "")].filter(Boolean).join("\n\n")
+    : ""
   const completionHtml = book.completedOn ? `
         <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg></span>수료</h3>
         <div class="log-card 학습">
@@ -807,7 +811,7 @@ function renderBookDetail() {
               <div class="log-title-row"><div class="log-title">${esc(josa(bookNoun(book), "을", "를"))} 모두 마쳤어요</div><span class="log-pill tone-green">${esc(withDow(book.completedOn))}</span></div>
             </div>
           </div>
-          ${completionNote ? `<div class="log-meta">${renderLogMetaRows("", `선생님 한마디: ${completionNote.comment}`)}</div>` : ""}
+          ${completionSummary ? `<div class="log-meta"><div class="log-note">${esc(completionSummary.split("\n").map((l) => l.trim()).join("\n"))}</div></div>` : ""}
         </div>` : ""
   const finalHtml = finalTests.length ? `
         <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg></span>진도 평가</h3>

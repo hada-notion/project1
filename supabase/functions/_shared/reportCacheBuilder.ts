@@ -382,9 +382,11 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
         comment: text(rpr["선생님 한마디"]),
         // (v2.8.0 수료) 수료 보고서는 그 진도교재에 연결된다. 교재 상세가 이 한마디를 보여 준다.
         book_id: (relationIds(rpr["진도교재"])[0] ?? "").replace(/-/g, ""),
+        // 수료 보고서는 알림톡과 같은 요약(수료과정·수료요약 수식)을 교재 상세에 그대로 보인다.
+        ...(text(rpr["보고서 구분"]) === "수료 보고서" ? { course: text(rpr["수료과정(알림톡)"]).trim(), summary: text(rpr["수료요약(알림톡)"]).trim() } : {}),
       }
     })
-    .filter((rc) => rc.comment && rc.start && rc.start >= sinceIso)
+    .filter((rc) => (rc.comment || rc.course || rc.summary) && rc.start && rc.start >= sinceIso)
 
   const logIdSet = new Set<string>()
   // (v2.6.19) 학습기록 날짜는 학습기록의 날짜 수식(수업일)이 아니라 이 학생이 그 기록에 연결된 출석의 실제 날짜(수업일시)를 쓴다.
