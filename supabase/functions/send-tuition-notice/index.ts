@@ -54,6 +54,7 @@ import {
   withSendingLock,
   SYNC_WAIT_FLAG,
 } from "../_shared/alimtalkShared.ts"
+import { alimtalkVar } from "../_shared/noticeBlocks.ts"
 import { runInBackground, respondAccepted } from "../_shared/backgroundTask.ts"
 import { enqueueSync, wakeSyncQueueWorker } from "../_shared/syncQueue.ts"
 
@@ -204,6 +205,8 @@ Deno.serve(async (req) => {
         "#{수강내역}": `• ${className}: ${amountDisplay}`,
         "#{청구금액}": amountDisplay,
         "#{안내멘트}": notice,
+        // (v2.8.0 구역) 수강료 청구 안내 [수강 내역]. 큐 경로(prepareTuition)와 같은 모양.
+        "#{수강목록}": alimtalkVar(tuitionPage, "수강목록", `🏛 ${className || "-"}  ${amountDisplay}\n🧾 합계  ${amountDisplay}`),
       }
 
       // [DEBUG, 2026-09-17] 안내멘트 누락 원인 추적용 임시 로그. 원인 파악 후 제거 예정.

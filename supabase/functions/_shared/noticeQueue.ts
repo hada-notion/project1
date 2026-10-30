@@ -202,6 +202,9 @@ function prepareTuition(page: any): Prepared {
 	}
 	// (10/29 다시 신청한 본문) 머리줄 "📚 수강 내역"까지 담는 블록(솔라피가 값 맨 앞 공백을 지우므로).
 	fixed["#{수강정보}"] = alimtalkVar(page, "수강정보", tuitionInfoBlock(fixed["#{수강내역}"]))
+	// (v2.8.0 구역, 10/30 사용자) 수강료 청구 안내 [수강 내역] 구역: 반마다 "🏛 반  금액" 한 줄 + "🧾 합계  금액".
+	// 수강료 `수강목록(알림톡)` 수식(같은 달 다른 반 포함)을 따르고, 비었을 때만 이 장 하나로 만든다.
+	fixed["#{수강목록}"] = alimtalkVar(page, "수강목록", `🏛 ${getRollupText(page, "클래스(수강료)") || "-"}  ${amount}\n🧾 합계  ${fixed["#{청구금액}"]}`)
 	return {
 		registrationId,
 		title: studentName || "수강료 안내",
