@@ -416,7 +416,7 @@ function logCardHtml(l) {
                 ${l.compare || ""}
                 ${(() => {
                   // (v2.5.98) 날짜로 묶인 목록이라 출제일은 묶음 날짜와 같아 빼고 마감만 보인다.
-                  const meta = renderLogMetaRows(l.unit, l.note, [...(l.type === "과제" && l.due ? [`마감: ${withDow(l.due)}`] : []), ...(l.extraRows || [])])
+                  const meta = renderLogMetaRows(l.unit, l.note, [...(l.type === "과제" && l.due ? [`마감: ${withDow(l.due)}`] : []), ...(l.extraRows || [])], l.leadRows || [])
                   const bodyHtml = buildLogBodyHtml(l)
                   const hasExtra = l.photo || !!bodyHtml
                   const chevronBtn = hasExtra ? `<button type="button" class="log-extra-chevron" onclick="toggleLogExtra(this)" aria-label="펼치기"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>` : ""
@@ -434,7 +434,7 @@ const logItemOfStudy = (l) => ({ type: "학습", icon: KIND_ICONS["학습"], dat
 const logItemOfHomework = (h) => ({ type: "과제", icon: KIND_ICONS["과제"], date: h.classDate || h.due, due: h.due, classDate: h.classDate, title: [h.book, h.range].filter(Boolean).join(" · "), unit: h.unit, note: h.note, pill: h.status, pillTone: homeworkPillTone(h.status), book: h.book, sourceBody: h.sourceBody, activityBody: h.activityBody })
 // 평가 아이콘은 학습기록 탭이 써 온 Feather file-text 그대로(KIND_ICONS 평가와 줄 하나 다름)
 const LOG_TEST_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`
-const logItemOfTest = (t) => ({ type: "평가", icon: LOG_TEST_ICON, date: t.date, title: testTitle(t), extraRows: testEvalRow(t) ? [testEvalRow(t)] : [], unit: t.unit, note: t.note, pill: testPillText(t), pillTone: testPillTone(t), book: t.book, sourceBody: t.sourceBody, activityBody: t.activityBody , compare: testCompareBarsHtml(t) })
+const logItemOfTest = (t) => ({ type: "평가", icon: LOG_TEST_ICON, date: t.date, title: testTitle(t), leadRows: testEvalRow(t) ? [testEvalRow(t)] : [], extraRows: testScoreRows(t), unit: t.unit, note: t.note, pill: testPillText(t), pillTone: testPillTone(t), book: t.book, sourceBody: t.sourceBody, activityBody: t.activityBody })
 // 고른 날짜의 기록: 출석 상태 + 그날 학습·그날 낸 과제·그날 평가. v2.5.101부터 한 카드에 구분선으로 잇지 않고 학습기록 탭과 같은 독립 카드.
 function buildCalDayPanelHtml(r, date) {
   const att = (r.attendance_rows || []).find((a) => a.date === date)
@@ -792,6 +792,42 @@ function computeRecentTestPoints(tests, asOfDate, count) {
     }
   })
 }
+// (10/30 사용자) 평가 추이 = 기간 칸마다 그 기간에 본 모든 평가의 평균(점수 있는 평가만). 빈 칸은 점 없이 비우고 점끼리 선으로 잇는다.
+// 일간: endDate까지 7일(하루씩), 주간: endDate가 든 주까지 4주(월~일), 월간: endDate가 든 달까지 6달.
+const TREND_SLOTS = { day: 7, week: 4, month: 6 }
+function computePeriodTrendPoints(tests, periodType, endDate) {
+  const end = String(endDate).slice(0, 10)
+  const md = (d) => d.slice(5).replace("-", ".")
+  const slots = []
+  const n = TREND_SLOTS[periodType] || 7
+  for (let i = n - 1; i >= 0; i--) {
+    if (periodType === "week") {
+      const start = addDaysStr(mondayOfWeek(end), -7 * i)
+      slots.push({ start, end: addDaysStr(start, 6), label: `${md(start)}~` })
+    } else if (periodType === "month") {
+      const [y, m] = end.split("-").map(Number)
+      const base = new Date(y, m - 1 - i, 1)
+      const yy = base.getFullYear(), mm = base.getMonth() + 1
+      const start = `${yy}-${String(mm).padStart(2, "0")}-01`
+      slots.push({ start, end: `${yy}-${String(mm).padStart(2, "0")}-${String(new Date(yy, mm, 0).getDate()).padStart(2, "0")}`, label: `${mm}월` })
+    } else {
+      const day = addDaysStr(end, -i)
+      slots.push({ start: day, end: day, label: md(day) })
+    }
+  }
+  return slots.map((s) => {
+    const items = tests.filter((t) => { const d = String(t.date || "").slice(0, 10); return d && d >= s.start && d <= s.end })
+    const scored = items.filter((t) => t.total)
+    return {
+      label: s.label,
+      avg: scored.length ? Math.round(scored.reduce((sum, t) => sum + (t.correct / t.total) * 100, 0) / scored.length * 10) / 10 : null,
+      classAvg: classAvgOf(items),
+      count: items.length,
+      items,
+    }
+  })
+}
+const TREND_TITLE = { day: "최근 일주일 평가 추이", week: "최근 한 달 평가 추이", month: "최근 6개월 평가 추이" }
 function buildTestTrendChartHtml(points) {
   testChartPoints = points
   const width = 400, height = 200, paddingX = 30, paddingTop = 20, paddingBottom = 34
@@ -933,9 +969,9 @@ function buildReportTabHtml(r) {
         <div class="donut-count-below">${scoredTests.length ? `(평가 ${scoredTests.length}개)` : "(평가 없음)"}</div>
       </div>
     </div>
-    ${testItems.length ? `<h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span>평가 추이</h3>
+    ${computePeriodTrendPoints(tests, reportPeriod, rangeEnd).some((p) => p.count) ? `<h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span>${TREND_TITLE[reportPeriod]}</h3>
     <div class="card">
-      ${buildTestTrendChartHtml(computeRecentTestPoints(testItems, rangeEnd, reportPeriod === "week" ? 7 : 12))}
+      ${buildTestTrendChartHtml(computePeriodTrendPoints(tests, reportPeriod, rangeEnd))}
     </div>` : ""}
     ${routinePeriodHtml(r, rangeStart, rangeEnd)}
     <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></span>선생님 한마디</h3>
@@ -998,9 +1034,9 @@ function findLatestComment(r, date) {
 
 // 보고서 항목 한 건: "교재 · 범위" + 상태 알약 + 메타 줄, 본문은 접지 않고 전부 보여준다.
 function reportItemHtml(r, item, opts) {
-  const { pill, pillTone, extraRows, compare } = opts || {}
+  const { pill, pillTone, extraRows, compare, leadRows } = opts || {}
   const title = [item.book, item.range].filter(Boolean).join(" · ") || "기록"
-  const meta = renderLogMetaRows(item.unit, item.note, extraRows || [])
+  const meta = renderLogMetaRows(item.unit, item.note, extraRows || [], leadRows || [])
   const body = buildLogBodyHtml(item)
   return `
     <div class="rep-item">
@@ -1045,9 +1081,9 @@ function buildDailyBodyHtml(r, date) {
   const nextHomeworkHtml =
     groupBand(nextHomeworkItems, (h) => reportItemHtml(r, h, { pill: h.status, pillTone: homeworkPillTone(h.status), extraRows: [h.classDate ? `출제: ${withDow(h.classDate)}` : null, h.due ? `마감: ${withDow(h.due)}` : "마감: 출제 전"].filter(Boolean) }), "출제된 과제가 없어요.")
   const testHtml =
-    groupBand(todaysTests, (t) => reportItemHtml(r, t, { pill: testPillText(t), pillTone: testPillTone(t), compare: testCompareBarsHtml(t) }), "이날 평가가 없어요.") +
-    sub("최근 평가 추이") +
-    band(buildTestTrendChartHtml(computeRecentTestPoints(dailyTests, date, 3)))
+    groupBand(todaysTests, (t) => reportItemHtml(r, t, { pill: testPillText(t), pillTone: testPillTone(t), leadRows: testEvalRow(t) ? [testEvalRow(t)] : [], extraRows: testScoreRows(t) }), "이날 평가가 없어요.") +
+    sub(TREND_TITLE.day) +
+    band(buildTestTrendChartHtml(computePeriodTrendPoints(dailyTests, "day", date)))
   // (v2.8.0 루틴) 그날 루틴: 했으면 "했어요", 아니면 "안 했어요". 루틴을 안 쓰는 반은 칸이 없다.
   const todaysRoutines = (r.routines || []).filter((x) => x.date === date)
   const routineHtml = todaysRoutines.length
