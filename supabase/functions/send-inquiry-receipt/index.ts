@@ -54,6 +54,8 @@ type StudentSnapshot = {
   inquiryBlock?: string
   // (10/29) "접수정보(알림톡)" 수식 값(없으면 서버가 만든다).
   inquiryInfo?: string
+  // (v2.8.0 구역, 10/30) "신청정보(알림톡)" 수식 값: [접수 정보] 구역의 👤 학생 + 적은 경우 🏫 학교·🎓 학년.
+  applyInfo?: string
 }
 
 type DeliveryState = {
@@ -141,6 +143,7 @@ function snapshotFromPage(page: any): StudentSnapshot {
     status: selectText(page, STATUS_PROP),
     inquiryBlock: formulaText(page, "접수내용(알림톡)"),
     inquiryInfo: alimtalkVar(page, "접수정보", ""),
+    applyInfo: alimtalkVar(page, "신청정보", ""),
   }
 }
 
@@ -326,6 +329,8 @@ async function processStudent(studentId: string, webhookPage: any | null, resend
       "#{접수내용}": snapshot.inquiryBlock || inquiryBlock({ studentName: snapshot.studentName, school: snapshot.school, grade: snapshot.grade }),
       // (10/29 다시 신청한 본문) 머리줄 "📋 접수 내용"부터 담는 블록(솔라피가 값 맨 앞 공백을 지우므로).
       "#{접수정보}": snapshot.inquiryInfo || inquiryInfoBlock({ studentName: snapshot.studentName, school: snapshot.school, grade: snapshot.grade }),
+      // (v2.8.0 구역) 상담 신청 접수 안내 [접수 정보]: 한 줄 항목만(구역 머리는 템플릿 고정 글자). 수식이 비면 같은 모양으로.
+      "#{신청정보}": snapshot.applyInfo || inquiryBlock({ studentName: snapshot.studentName, school: snapshot.school, grade: snapshot.grade }),
     }
 
     const { SolapiMessageService } = await import("npm:solapi")
