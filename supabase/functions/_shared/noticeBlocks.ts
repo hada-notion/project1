@@ -1,5 +1,5 @@
 // (v2.8.0 알림톡 통일안) 템플릿의 "상황 블록 변수"를 만든다. 늘 들어가는 줄을 바탕에 두고, 있을 때만 붙는 줄·구역
-// (🔁 기존, 📝 전달사항, 일정 구역 등)은 여기서 붙인다. 한 줄 항목은 "이모지 라벨  값"(두 칸).
+// (📅 기존 결석·🔁 보강 일시, 📝 전달사항, 일정 구역 등)은 여기서 붙인다. 🔁는 "다시 하는 수업"(보강) 날짜에만 쓴다(10/31 사용자). 한 줄 항목은 "이모지 라벨  값"(두 칸).
 // 변수 값은 그 알림톡을 보내는 페이지의 "변수이름(알림톡)" 수식 속성을 먼저 쓰고(alimtalkVar), 없거나 비면 옛 이름,
 // 그것도 없으면 서버 계산값. 날짜·시각이 든 블록은 수식을 읽지 않는다(Notion API가 수식의 날짜를 UTC로 계산한다).
 import { getFormulaText } from "./alimtalkShared.ts"
@@ -28,11 +28,11 @@ export function noteSection(note: string | null | undefined): string {
 	return t && t !== NO_NOTE ? `\n\n📝 전달사항\n${t}` : ""
 }
 
-// 수업 안내 #{수업정보}: [🔁 기존 결석한 날] + 📅 일시 + [📝 전달사항]. makeupOf는 보강 출석의 기존 결석 날짜("26.10.12(월)").
+// 수업 안내 #{수업정보}: [📅 기존 결석한 날] + 일시(보강이면 🔁, 아니면 📅) + [📝 전달사항]. makeupOf는 보강 출석의 기존 결석 날짜("26.10.12(월)").
 export function lessonInfoBlock(o: { classTime: string; makeupOf?: string; note?: string }): string {
 	const lines = [
-		...(o.makeupOf ? [line("🔁", "기존", `${o.makeupOf} 결석`)] : []),
-		line("📅", "일시", o.classTime),
+		...(o.makeupOf ? [line("📅", "기존", `${o.makeupOf} 결석`)] : []),
+		line(o.makeupOf ? "🔁" : "📅", "일시", o.classTime),
 	]
 	return lines.join("\n") + noteSection(o.note)
 }
@@ -60,12 +60,12 @@ export function letterScheduleBlock(o: { 휴원: string; 학원: string; 학사:
 	return body + (body ? noteSection(o.note) : noteSection(o.note).trimStart())
 }
 
-// 일일 보고서 #{등원정보}: [🔁 기존 결석한 날] + 📅 수업일 + ✅ 출결상태.
+// 일일 보고서 #{등원정보}: [📅 기존 결석한 날] + 수업일(보강이면 🔁, 아니면 📅) + ✅ 출결상태.
 // (10/29 사용자) 출석 상태 "보강"은 "출석(보강)"으로 쓴다("출결 보강"은 뜻이 바로 안 읽힌다).
 export function arrivalBlock(o: { classDate: string; status: string; makeupOf?: string }): string {
 	return [
-		...(o.makeupOf ? [line("🔁", "기존", `${o.makeupOf} 결석`)] : []),
-		line("📅", "수업일", o.classDate),
+		...(o.makeupOf ? [line("📅", "기존", `${o.makeupOf} 결석`)] : []),
+		line(o.makeupOf ? "🔁" : "📅", "수업일", o.classDate),
 		// 출석 상태 앞의 색 이모지("🟢 출석")는 뺀다. 줄 머리가 이미 ✅다.
 		line("✅", "출결", attendanceLabel(o.status)),
 	].join("\n")
