@@ -60,10 +60,6 @@ const REPORT_PATH = Deno.env.get("REPORT_PATH") ?? "/project1/student_report.htm
 const FALLBACK = {
 	pfId: Deno.env.get("SOLAPI_PF_ID") ?? "",
 	senderNumber: Deno.env.get("SOLAPI_SENDER_NUMBER") ?? "",
-	report: Deno.env.get("SOLAPI_TEMPLATE_ID_WEEKLY") || Deno.env.get("SOLAPI_TEMPLATE_ID_MONTHLY") || "",
-	tuition: Deno.env.get("SOLAPI_TEMPLATE_ID_TUITION") ?? "",
-	textbook: Deno.env.get("SOLAPI_TEMPLATE_ID_TEXTBOOK") ?? "",
-	letter: "",
 }
 
 type Prepared = {
@@ -303,7 +299,7 @@ export async function processNoticeQueueItem(payload: NoticePayload): Promise<vo
 	let recipients: { phone: string }[]
 	try {
 		prep = kind === "report" ? await prepareReport(page) : kind === "tuition" ? prepareTuition(page) : kind === "letter" ? await prepareLetter(page) : prepareTextbook(page)
-		config = await noticeDeps.config(prep.configCategory, { pfId: FALLBACK.pfId, templateId: prep.noEnvTemplate ? "" : FALLBACK[kind], senderNumber: FALLBACK.senderNumber }, prep.configFallback)
+		config = await noticeDeps.config(prep.configCategory, { pfId: FALLBACK.pfId, templateId: "", senderNumber: FALLBACK.senderNumber }, prep.configFallback)
 		recipients = await noticeDeps.recipients({ registrationId: prep.registrationId, primaryPhone: prep.primaryPhone, recipientTarget: config.recipientTarget })
 	} catch (err) {
 		// 일정도 전달사항도 없음처럼 다시 해도 같은 막힘은 재시도 없이 ⚠️로 끝낸다.

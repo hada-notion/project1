@@ -70,8 +70,7 @@ const SOLAPI_API_KEY = Deno.env.get("SOLAPI_API_KEY")!
 const SOLAPI_API_SECRET = Deno.env.get("SOLAPI_API_SECRET")!
 const SOLAPI_SENDER_NUMBER_FALLBACK = Deno.env.get("SOLAPI_SENDER_NUMBER") ?? ""
 const SOLAPI_PF_ID_FALLBACK = Deno.env.get("SOLAPI_PF_ID") ?? ""
-const SOLAPI_TEMPLATE_ID_WEEKLY_FALLBACK = Deno.env.get("SOLAPI_TEMPLATE_ID_WEEKLY") ?? ""
-const SOLAPI_TEMPLATE_ID_MONTHLY_FALLBACK = Deno.env.get("SOLAPI_TEMPLATE_ID_MONTHLY") ?? ""
+// (10/31) 템플릿 ID 기본값(Secrets SOLAPI_TEMPLATE_ID_*)은 없앴다. 알림톡 설정 행이 없거나 꺼져 있으면 보내지 않고 사유를 남긴다.
 const REPORT_PATH = Deno.env.get("REPORT_PATH") ?? "/project1/student_report.html"
 
 // 보고서(학원) DB / 수강료(학원) DB에 공통으로 있는 체크박스. send-selected-notifications가
@@ -85,10 +84,6 @@ const corsHeaders = {
 }
 
 const getSelectName = (page: any, name: string) => page.properties?.[name]?.select?.name ?? ""
-
-function templateFallbackFor(_reportType: string): string {
-  return SOLAPI_TEMPLATE_ID_WEEKLY_FALLBACK || SOLAPI_TEMPLATE_ID_MONTHLY_FALLBACK
-}
 
 // 발송 성공 후에는 개별/일괄 경로 모두 "일괄전송 선택"을 끈다. 일괄 경로는 실패해도 1회
 // 시도로 끝내야 다음 청크가 같은 보고서를 다시 집어 무한 반복하지 않으므로 실패 catch에서도 끈다.
@@ -249,7 +244,7 @@ Deno.serve(async (req) => {
           const chain = await reportConfigChain(reportType as "주간 보고서" | "월간 보고서" | "수료 보고서", registrationId, (id) => notionGetPage(id))
           const config = await getAlimtalkConfig(chain.category, {
             pfId: SOLAPI_PF_ID_FALLBACK,
-            templateId: chain.noEnvTemplate ? "" : templateFallbackFor(reportType),
+            templateId: "",
             senderNumber: SOLAPI_SENDER_NUMBER_FALLBACK,
           }, chain.fallback.length ? chain.fallback : undefined)
 
