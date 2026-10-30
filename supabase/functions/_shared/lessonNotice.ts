@@ -31,6 +31,7 @@ import { getFormulaText, normalizePhone, resolveAlimtalkRecipients } from "./ali
 import { relIds } from "./notionClient.ts"
 import { alimtalkVar, dateOnly, lessonInfoBlock } from "./noticeBlocks.ts"
 import { fitVariablesToTemplate } from "./templateFit.ts"
+import { sessionKind } from "./sessionKind.ts"
 
 export const LESSON_NOTICE_STATUS_PROP = "수업 안내 상태"
 export const LESSON_NOTICE_SENT_PROP = "수업 안내 일시"
@@ -88,8 +89,10 @@ export function planLessonNotice(attendance: any, session: any | null, makeupOfI
   // (10/29 사용자) 일괄은 같은 일시로 이미 안내한 학생을 건너뛰고, 개별 [수업 안내 전송]('개별 전송' 체크)은 다시 보낸다.
   const sentIso = String(p[LESSON_NOTICE_SENT_PROP]?.date?.start ?? "")
   if (sentIso && sameInstant(sentIso, classIso) && p[LESSON_NOTICE_FORCE_PROP]?.checkbox !== true) return { skip: "" }
-  const makeup = session?.properties?.["보강"]?.checkbox === true
-  const label = makeup ? "보강 수업" : "정규 수업"
+  // (v2.8.0 구역) 수업 `수업 구분`(보강·휴강), 옮기는 동안 예전 보강 체크도.
+  const sk = sessionKind(session)
+  const makeup = sk === "보강"
+  const label = makeup ? "보강 수업" : sk === "휴강" ? "휴강" : "정규 수업"
   const memo = (session?.properties?.[LESSON_MEMO_PROP]?.rich_text ?? []).map((t: any) => t.plain_text ?? "").join("").trim()
   const note = getFormulaText(attendance, "전달사항(수업안내)").trim() || noteText(memo)
   // 일시는 수식을 읽지 않는다: Notion API가 수식의 formatDate를 UTC로 계산해 18:00이 "09:00"으로 온다(10/27 원본). 서버가 서울 시각으로.
@@ -99,7 +102,7 @@ export function planLessonNotice(attendance: any, session: any | null, makeupOfI
     kind: "수업 안내",
     classIso,
     // (v2.8.0 구역, 10/30 사용자) 보강 수업과 그 밖의 수업(시간 변경·공휴일 정상 수업 등)을 템플릿으로 나눈다.
-    configCategory: makeup ? "보강 수업 안내" : "수업 일정 안내",
+    configCategory: makeup ? "보강 수업 안내" : sk === "휴강" ? "휴강 안내" : "수업 일정 안내",
     variables: {
       "#{수업구분}": alimtalkVar(attendance, "수업구분", label, "수업구분(수업안내)"),
       "#{학생이름}": alimtalkVar(attendance, "학생이름", getFormulaText(attendance, "학생이름(보고서)")),
@@ -107,7 +110,7 @@ export function planLessonNotice(attendance: any, session: any | null, makeupOfI
       "#{수업정보}": lessonInfoBlock({ classTime, makeupOf: makeupOfIso ? dateOnly(formatClassTime(makeupOfIso)) : undefined, note }),
       "#{수업일시}": classTime,
       "#{전달사항}": note,
-      // (v2.8.0 구역) [보강 정보]/[수업 정보] 구역: 보강이면 🔁 기존 + 📅 일시, 아니면 📅 일시. 날짜는 서버가 서울 시각으로 만든다.
+      // (v2.8.0 구역) [보강 정보]/[휴강 정보]/[수업 정보] 구역: 보강이면 🔁 기존 + 📅 일시, 아니면 📅 일시. 날짜는 서버가 서울 시각으로 만든다.
       "#{수업일정}": [...(makeupOf ? [`🔁 기존  ${makeupOf} 결석`] : []), `📅 일시  ${classTime}`].join("\n"),
     },
   }
