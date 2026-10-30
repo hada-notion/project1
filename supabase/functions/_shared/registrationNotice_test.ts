@@ -6,75 +6,68 @@ const { registrationNoticeDeps: deps } = m
 
 const rt = (s: string) => ({ type: "rich_text", rich_text: s ? [{ plain_text: s }] : [] })
 const rel = (ids: string[]) => ({ type: "relation", relation: ids.map((id) => ({ id })) })
-const date = (d: string | null) => ({ type: "date", date: d ? { start: d } : null })
-const reg = (o: { id?: string; cls?: string; start?: string | null; end?: string | null; memo?: string; tts?: string[] } = {}) => ({
-	id: o.id ?? "reg-new",
+const date = (d: string | null, end: string | null = null) => ({ type: "date", date: d ? { start: d, end } : null })
+const reg = (o: { start?: string | null; memo?: string; tts?: string[] } = {}) => ({
+	id: "reg-new",
 	properties: {
 		"학생이름(등록)": { type: "rollup", rollup: { array: [{ title: [{ plain_text: "김하윤" }] }] } },
-		"클래스": rel([o.cls ?? "cls-b"]),
+		"클래스": rel(["cls-b"]),
 		"학생정보": rel(["stu-1"]),
 		"등록일": date(o.start === undefined ? "2026-11-03" : o.start),
-		"종료일": date(o.end ?? null),
 		"시간표": rel(o.tts ?? ["t1"]),
 		"안내 메모": rt(o.memo ?? ""),
 	},
 })
 const cls = (id: string, name: string) => ({ id, properties: { "클래스명": { type: "title", title: [{ plain_text: name }] } } })
-const tt = (id: string, day: string, start: string, end: string, c = "cls-b") => ({ id, properties: { "요일": { select: { name: day } }, "등원시간(HH:mm)": rt(start), "하원시간(HH:mm)": rt(end), "클래스": rel([c]) } })
+const tt = (id: string, day: string, start: string, end: string, period: [string | null, string | null] = [null, null]) => ({
+	id,
+	properties: { "요일": { select: { name: day } }, "등원시간(HH:mm)": rt(start), "하원시간(HH:mm)": rt(end), "클래스": rel(["cls-b"]), "적용 기간": date(period[0], period[1]) },
+})
 
 Deno.test("v2.8.0 등록 안내: 블록 — 시작은 늘, 시간은 있을 때", () => {
 	eq(m.enrollInfoBlock({ startOn: "11.03(화)", time: "화·목 17:00~19:00" }), "📅 시작  11.03(화)부터\n🕒 시간  화·목 17:00~19:00")
 	eq(m.enrollInfoBlock({ startOn: "11.03(화)" }), "📅 시작  11.03(화)부터")
-	eq(m.classChangeBlock({ before: "중1 A 수학", after: "중1 B 수학", time: "화 17:00~19:00", applyOn: "11.03(화)" }), "🔁 기존  중1 A 수학\n🏛 변경  중1 B 수학\n🕒 시간  화 17:00~19:00\n📅 적용  11.03(화)부터")
+	eq(m.titleOf({ properties: { "학교명": { type: "title", title: [{ plain_text: "하다중" }] } } }), "하다중")
 })
 
-Deno.test("v2.8.0 클래스 변경 안내: 직전 반 = 다른 반 등록 중 종료일이 등록일 이전·가장 늦은 것", () => {
-	const me = reg()
-	const others = [
-		me,
-		reg({ id: "old-1", cls: "cls-a", start: "2026-03-02", end: "2026-10-31" }),
-		reg({ id: "old-0", cls: "cls-z", start: "2025-03-02", end: "2026-02-28" }),
-		reg({ id: "same-class", cls: "cls-b", start: "2026-01-01", end: "2026-11-01" }),
-		reg({ id: "running", cls: "cls-e", start: "2026-03-02", end: null }),
-		reg({ id: "later", cls: "cls-c", start: "2026-03-02", end: "2026-12-31" }),
-	]
-	eq(m.previousRegistration(me, others)?.id, "old-1")
-	eq(m.previousRegistration(me, [me, others[4]]), null)
-	eq(m.previousRegistration(reg({ start: null }), others), null)
-})
-
-Deno.test("v2.8.0 등록 안내·클래스 변경 안내: 계획 변수와 오류", () => {
-	const p: any = m.planRegistrationNotice("등록 안내", reg({ memo: "첫 수업에 교재를 챙겨 주세요." }), cls("cls-b", "중1 B 수학"), [tt("t1", "화", "17:00", "19:00"), tt("t2", "목", "17:00", "19:00")], null, "/r?token=x", { school: "하다중", grade: "중1" })
+Deno.test("v2.8.0 등록 안내·클래스 변경 안내: 같은 변수, 시간은 등록일에 적용되는 시간표", () => {
+	// 예전 시간표(~11/2)와 새 시간표(11/3~)가 함께 연결돼 있으면 등록일(11/3) 기준으로 새 시간표만
+	const tts = [tt("old", "월", "16:00", "18:00", ["2026-09-01", "2026-11-02"]), tt("t1", "화", "17:00", "19:00", ["2026-11-03", null]), tt("t2", "목", "17:00", "19:00", ["2026-11-03", null])]
+	const p: any = m.planRegistrationNotice(reg({ memo: "중1 A에서 옮깁니다." }), cls("cls-b", "중1 B 수학"), tts, "/r?token=x", "2026-10-31", { school: "하다중", grade: "중1" })
 	eq(p.variables, {
 		"#{학생이름}": "김하윤",
-		"#{전달사항}": "첫 수업에 교재를 챙겨 주세요.",
-		"#{페이지ID}": "/r?token=x",
 		"#{학교}": "하다중",
 		"#{학년}": "중1",
 		"#{클래스}": "중1 B 수학",
 		"#{등록정보}": "📅 시작  11.03(화)부터\n🕒 시간  화·목 17:00~19:00",
+		"#{전달사항}": "중1 A에서 옮깁니다.",
+		"#{페이지ID}": "/r?token=x",
 	})
 	eq(p.timetable, "화·목 17:00~19:00")
-	// 학교·학년이 없으면 "-"(빈 변수로 보내지 않음)
-	const blank: any = m.planRegistrationNotice("등록 안내", reg(), cls("cls-b", "중1 B 수학"), [], null, "/r")
-	eq([blank.variables["#{학교}"], blank.variables["#{학년}"], blank.variables["#{등록정보}"]], ["-", "-", "📅 시작  11.03(화)부터"])
-	eq(m.titleOf({ properties: { "학교명": { type: "title", title: [{ plain_text: "하다중" }] } } }), "하다중")
-	const c: any = m.planRegistrationNotice("클래스 변경 안내", reg(), cls("cls-b", "중1 B 수학"), [], cls("cls-a", "중1 A 수학"), "/r")
-	eq([c.variables["#{변경정보}"], c.variables["#{전달사항}"], c.timetable], ["🔁 기존  중1 A 수학\n🏛 변경  중1 B 수학\n📅 적용  11.03(화)부터", "없음", ""])
-	eq(m.planRegistrationNotice("클래스 변경 안내", reg(), cls("cls-b", "중1 B 수학"), [], null, "/r"), { error: "직전 반 등록을 찾지 못했습니다. 같은 학생의 예전 반 등록에 종료일(이 등록일 이전)이 있어야 합니다." })
-	eq(m.planRegistrationNotice("등록 안내", reg({ start: null }), cls("cls-b", "x"), [], null, "/r"), { error: "등록일이 비어 있습니다." })
-	eq(m.planRegistrationNotice("등록 안내", reg(), null, [], null, "/r"), { error: "등록의 클래스가 비어 있습니다." })
+	// 등록일이 지났으면 오늘 적용 중인 시간표
+	const past: any = m.planRegistrationNotice(reg({ start: "2026-10-01" }), cls("cls-b", "중1 B 수학"), tts, "/r", "2026-10-31")
+	eq([past.timetable, past.variables["#{학교}"], past.variables["#{전달사항}"]], ["월 16:00~18:00", "-", "없음"])
+	eq(m.planRegistrationNotice(reg({ start: null }), cls("cls-b", "x"), [], "/r", "2026-10-31"), { error: "등록일이 비어 있습니다." })
+	eq(m.planRegistrationNotice(reg(), null, [], "/r", "2026-10-31"), { error: "등록의 클래스가 비어 있습니다." })
 })
 
-Deno.test("v2.8.0 클래스 변경 안내: 한 건 — 직전 반을 찾아 보내고 안내한 시간표를 적은 뒤 ✅", async () => {
+Deno.test("v2.8.0 등록 안내: 등록의 (알림톡) 수식 값을 먼저 쓴다", () => {
+	const f = (s: string) => ({ type: "formula", formula: { type: "string", string: s } })
+	const r: any = reg()
+	Object.assign(r.properties, { "학교(알림톡)": f("하다고"), "등록정보(알림톡)": f("📅 시작  11.04(수)부터"), "전달사항(알림톡)": f("수식 메모") })
+	const p: any = m.planRegistrationNotice(r, cls("cls-b", "중1 B 수학"), [], "/r", "2026-10-31", { school: "서버값" })
+	eq([p.variables["#{학교}"], p.variables["#{등록정보}"], p.variables["#{전달사항}"]], ["하다고", "📅 시작  11.04(수)부터", "수식 메모"])
+})
+
+Deno.test("v2.8.0 클래스 변경 안내: 한 건 — 클래스 변경 안내 행으로 보내고 안내한 시간표·메모 정리 뒤 ✅", async () => {
 	const saved = { ...deps }
-	const pages: Record<string, any> = { "reg-new": reg(), "cls-b": cls("cls-b", "중1 B 수학"), "cls-a": cls("cls-a", "중1 A 수학"), t1: tt("t1", "화", "17:00", "19:00") }
+	const pages: Record<string, any> = { "reg-new": reg({ memo: "진도에 맞춰 옮깁니다." }), "cls-b": cls("cls-b", "중1 B 수학"), t1: tt("t1", "화", "17:00", "19:00"), "stu-1": { properties: {} } }
 	const sent: any[] = [], updates: any[] = [], marks: string[] = [], logs: any[] = []
 	Object.assign(deps, {
 		markRunning: async () => {},
 		getPage: async (id: string) => pages[id],
-		queryAllPages: async () => [pages["reg-new"], reg({ id: "old-1", cls: "cls-a", start: "2026-03-02", end: "2026-10-31" })],
 		reportToken: async () => "tok",
+		today: () => "2026-10-31",
 		send: async (...a: any[]) => { sent.push(a) },
 		log: async (a: any) => { logs.push([a.category, a.status]) },
 		update: async (id: string, props: any) => { updates.push([id, Object.keys(props)]) },
@@ -85,28 +78,12 @@ Deno.test("v2.8.0 클래스 변경 안내: 한 건 — 직전 반을 찾아 보�
 	try {
 		await m.processRegistrationNoticeQueueItem({ regId: "reg-new", kind: "클래스 변경 안내" })
 		eq(sent[0][0], "클래스 변경 안내")
-		eq(sent[0][3]["#{변경정보}"], "🔁 기존  중1 A 수학\n🏛 변경  중1 B 수학\n🕒 시간  화 17:00~19:00\n📅 적용  11.03(화)부터")
+		eq(sent[0][3]["#{등록정보}"], "📅 시작  11.03(화)부터\n🕒 시간  화 17:00~19:00")
 		eq(sent[0][3]["#{페이지ID}"].endsWith("?token=tok"), true)
 		eq(logs, [["클래스 변경 안내", "성공"]])
 		eq(updates, [["reg-new", ["안내한 시간표", "안내 메모"]]])
 		eq(marks, ["done:reg-new"])
-		// 직전 반이 없으면 보내지 않고 ⚠️
-		sent.length = 0; marks.length = 0
-		deps.queryAllPages = async () => [pages["reg-new"]]
-		await m.processRegistrationNoticeQueueItem({ regId: "reg-new", kind: "클래스 변경 안내" })
-		eq([sent.length, marks[0].startsWith("error:직전 반")], [0, true])
 	} finally {
 		Object.assign(deps, saved)
 	}
-})
-
-Deno.test("v2.8.0 등록 안내·클래스 변경 안내: 등록의 (알림톡) 수식 값을 먼저 쓴다", () => {
-	const f = (s: string) => ({ type: "formula", formula: { type: "string", string: s } })
-	const r: any = reg()
-	Object.assign(r.properties, { "학교(알림톡)": f("하다고"), "등록정보(알림톡)": f("📅 시작  11.04(수)부터"), "변경정보(알림톡)": f("🔁 기존  A반\n🏛 변경  B반\n📅 적용  11.03(화)부터"), "전달사항(알림톡)": f("수식 메모") })
-	const p: any = m.planRegistrationNotice("등록 안내", r, cls("cls-b", "중1 B 수학"), [], null, "/r", { school: "서버값" })
-	eq([p.variables["#{학교}"], p.variables["#{등록정보}"], p.variables["#{전달사항}"]], ["하다고", "📅 시작  11.04(수)부터", "수식 메모"])
-	// 직전 반을 서버가 못 찾아도 변경정보 수식이 있으면 그 값으로 보낸다
-	const c: any = m.planRegistrationNotice("클래스 변경 안내", r, cls("cls-b", "중1 B 수학"), [], null, "/r")
-	eq(c.variables["#{변경정보}"], "🔁 기존  A반\n🏛 변경  B반\n📅 적용  11.03(화)부터")
 })

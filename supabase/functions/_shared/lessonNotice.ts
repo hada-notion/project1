@@ -110,8 +110,9 @@ export function planLessonNotice(attendance: any, session: any | null, makeupOfI
       "#{수업정보}": lessonInfoBlock({ classTime, makeupOf: makeupOfIso ? dateOnly(formatClassTime(makeupOfIso)) : undefined, note }),
       "#{수업일시}": classTime,
       "#{전달사항}": note,
-      // (v2.8.0 구역) [보강 정보]/[휴강 정보]/[수업 정보] 구역: 보강이면 🔁 기존 + 📅 일시, 아니면 📅 일시. 날짜는 서버가 서울 시각으로 만든다.
-      "#{수업일정}": [...(makeupOf ? [`🔁 기존  ${makeupOf} 결석`] : []), `📅 일시  ${classTime}`].join("\n"),
+      // (v2.8.0 구역) [보강 정보]/[휴강 정보]/[수업 정보] 구역: 보강이면 📅 기존 + 🔁 일시, 아니면 📅 일시. 날짜는 서버가 서울 시각으로 만든다.
+      // (10/31) 🔁는 다시 하는 수업(보강 일시)에, 결석한 날은 📅 기존.
+      "#{수업일정}": (makeupOf ? [`📅 기존  ${makeupOf} 결석`, `🔁 일시  ${classTime}`] : [`📅 일시  ${classTime}`]).join("\n"),
     },
   }
 }
@@ -173,7 +174,7 @@ export async function processLessonNoticeQueueItem(payload: { attendanceId: stri
   if (!registrationId) return await finish(attendanceId, "⚠️ 오류", "등록 관계가 비어 있습니다.")
   const sessionId = relIds(page.properties?.["수업"])[0]
   const session = sessionId ? await deps.getPage(sessionId) : null
-  // 보강 출석이면 기존 결석의 수업일시(🔁 기존 줄). 못 읽으면 그 줄 없이 보낸다.
+  // 보강 출석이면 기존 결석의 수업일시(📅 기존 줄). 못 읽으면 그 줄 없이 보낸다.
   const makeupId = relIds(page.properties?.["기존 결석"])[0]
   const makeupPage = makeupId ? await deps.getPage(makeupId).catch(() => null) : null
   const plan = planLessonNotice(page, session, String(makeupPage?.properties?.["수업일시"]?.date?.start ?? ""))
