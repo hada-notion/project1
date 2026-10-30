@@ -24,7 +24,7 @@ import {
 import { getFormulaText, sendDailyReportAlimtalk, appendSendLog } from "./alimtalkShared.ts"
 import { refreshDailyReportForSend } from "./dailyReportRefresh.ts"
 import { formatClassTime } from "./lessonNotice.ts"
-import { alimtalkVar, arrivalBlock, dateOnly, studyWithRoutines } from "./noticeBlocks.ts"
+import { alimtalkVar, arrivalBlock, dateOnly, studyContentOrDefault, studyWithRoutines } from "./noticeBlocks.ts"
 import { routineItemsForAttendance } from "./routineCheck.ts"
 import { relIds } from "./notionClient.ts"
 import { cleanupExpiredReportPageCache } from "./persistentReportPageCache.ts"
@@ -107,8 +107,8 @@ export async function processDailyReportQueueItem(payload: { attendanceId: strin
     "#{등원정보}": arrival,
     "#{수업일}": v.classDate,
     "#{출석상태}": v.attendanceStatus,
-    // (v2.8.0 루틴) 학습내용 끝에 그날 루틴 구역(☑️ 루틴 + 했어요/안 했어요). 템플릿 글자는 그대로.
-    "#{학습내용}": studyWithRoutines(alimtalkVar(page, "학습내용", v.studyContent), v.attendanceStatus, await dailyReportDeps.routines(page)),
+    // (v2.8.0 루틴) 루틴 구역(☑️ 루틴)은 출석 '학습내용(알림톡)' 수식이 만든다. 수식이 없거나 비었을 때만 서버가 같은 모양으로.
+    "#{학습내용}": studyContentOrDefault(alimtalkVar(page, "학습내용", getFormulaText(page, "학습내용(알림톡)") ? "" : studyWithRoutines(v.studyContent, v.attendanceStatus, await dailyReportDeps.routines(page))), v.attendanceStatus),
     "#{페이지ID}": REPORT_PATH + "?token=" + access_token,
   }
   const senderUserId = (payload.clickerUserId ?? v.clickerUserId ?? (await getBotUserId().catch(() => null))) ?? undefined
