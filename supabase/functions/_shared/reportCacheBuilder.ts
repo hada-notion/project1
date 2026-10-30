@@ -288,8 +288,10 @@ export function reportModeOf(cls: any): "all" | "tests_only" {
   return cls?.properties?.["리포트 구성"]?.select?.name === "평가만" ? "tests_only" : "all"
 }
 
+// (10/30 사용자, 일일 기록 기반) 리포트는 최근 6개월 평가를 모두 싣는다(평가 추이: 일간 7일·주간 4주·월간 6달, 기간마다 모든 평가 평균).
+// 본문(사진·글)과 반 평균은 무거워서 최근 TESTS_DETAILED개에만 붙인다(카드·목록에 주로 보이는 평가).
+export const TESTS_DETAILED = 20
 // (v2.8.0) 평가 구분 묶음: 주간·월간·종합은 그 이름, 나머지(빈 값·일일 평가·기타)는 일일 평가.
-export const TESTS_PER_KIND = 6
 // (v2.8.0 진도 평가, 항목 16) 단원 평가·마무리 평가는 진도 평가(교재 상세에만). 예전 이름 "종합 평가"는 마무리 평가로 읽는다.
 export function testKindOf(evalType: string | null | undefined): string {
   if (evalType === "종합 평가") return "마무리 평가"
@@ -547,18 +549,11 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
     const classDate = activityClassDate(a)
     return a.category === "평가" && classDate && classDate >= sinceIso && classDate <= todayIso
   })
-  // (v2.8.0) 리포트는 보고서 구분마다 같은 구분의 평가만 추이로 그린다(일간=일일, 주간=주간, 월간=월간).
-  // 구분 없이 최근 6개만 담으면 일일 평가가 잦은 반에서 주간·월간 평가가 밀려나므로, 구분마다 최근 6개씩 담는다.
-  // 일일 평가는 구분이 비었거나 '일일 평가'·'기타'인 평가다.
+  // (10/30 사용자) 최근 6개월(sinceIso) 평가를 모두 싣는다. 본문·반 평균은 최근 TESTS_DETAILED개만(detailedTests).
   const shownTests = testActivities
     .slice()
     .sort((x, y) => String(y.classIso ?? "").localeCompare(String(x.classIso ?? "")))
-    .filter(((count) => (a) => {
-      const kind = testKindOf(a.evalType)
-      const n = count.get(kind) ?? 0
-      count.set(kind, n + 1)
-      return n < TESTS_PER_KIND
-    })(new Map<string, number>()))
+  const detailedTests = shownTests.slice(0, TESTS_DETAILED)
 
   // 화면에 실제 표시되는 학습 12건·과제 6건·평가 6건의 학생별 학습활동 본문만 가져온다.
   // 학습기록 본문은 반 전체가 공유하는 원본 자료이고, 학습활동 본문은 학생별 풀이·필기·답안이다.
@@ -573,7 +568,7 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
   const displayedActivities = [
     ...displayedStudyActivities,
     ...homeworkActivities.slice(0, 6),
-    ...shownTests,
+    ...detailedTests,
   ]
   const displayedSourceIds = Array.from(
     new Set(displayedActivities.map((a) => a.learningRecordId).filter((id): id is string => Boolean(id))),
@@ -649,7 +644,7 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
     if (pcts.length < 3) return null
     return { avg: Math.round(pcts.reduce((n, v) => n + v, 0) / pcts.length * 10) / 10, count: pcts.length }
   }
-  const classAverages = await mapWithConcurrency(shownTests, 3, (a) => classAverageOf(a.learningRecordId))
+  const classAverages = await mapWithConcurrency(detailedTests, 3, (a) => classAverageOf(a.learningRecordId))
   const tests = shownTests
     .map((a, i) => ({
       title: "",

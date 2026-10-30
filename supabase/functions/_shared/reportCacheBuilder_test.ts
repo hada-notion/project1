@@ -57,7 +57,7 @@ Deno.test("v2.8.0 리포트 캐시: 출석 없는 평가가 평가 기간 끝 �
 	}
 })
 
-Deno.test("v2.8.0 리포트 캐시: 평가는 구분마다 최근 6개씩(일일 평가가 많아도 주간 평가가 밀리지 않음)", async () => {
+Deno.test("v2.8.0 리포트 캐시: 최근 6개월 평가를 구분과 상관없이 모두 싣는다(최근 순, 10/30 일일 기록 기반)", async () => {
 	const { testKindOf } = await import("./reportCacheBuilder.ts")
 	eq([testKindOf("주간 평가"), testKindOf("월간 평가"), testKindOf("종합 평가"), testKindOf("단원 평가"), testKindOf("마무리 평가"), testKindOf("일일 평가"), testKindOf("기타"), testKindOf("")], ["주간 평가", "월간 평가", "마무리 평가", "단원 평가", "마무리 평가", "일일 평가", "일일 평가", "일일 평가"])
 	const sel = (name: string) => ({ type: "select", select: { name } })
@@ -86,7 +86,7 @@ Deno.test("v2.8.0 리포트 캐시: 평가는 구분마다 최근 6개씩(일일
 	try {
 		const detail: any = await buildRegistrationDetail({ id: "reg-1", properties: { "클래스": { type: "relation", relation: [{ id: "cls-1" }] } } }, async (id: string) => pages[id] ?? { id, properties: {} })
 		const kinds = detail.tests.map((t: any) => t.eval_type)
-		eq(kinds.filter((k: string) => k === "일일 평가").length, 6)
+		eq(kinds.filter((k: string) => k === "일일 평가").length, 8)
 		eq(kinds.filter((k: string) => k === "주간 평가").length, 2)
 		eq(detail.tests[0].iso >= detail.tests[detail.tests.length - 1].iso, true)
 	} finally {

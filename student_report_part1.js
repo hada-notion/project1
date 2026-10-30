@@ -83,8 +83,10 @@ function isBookEval(t) {
   return !!t && ["단원 평가", "마무리 평가", "종합 평가"].includes(t.evalType)
 }
 // 평가 알약: 점수가 없는 진도 평가(예체능 등)는 "수료".
+// (10/30 사용자) 알약에는 점수만("90점"). 정답/전체 문항은 아래 "OOO 학생" 줄에.
 function testPillText(t) {
-  return isBookEval(t) && !t.total ? "수료" : scorePillText(t.correct ?? 0, t.total ?? 0)
+  if (isBookEval(t) && !t.total) return "수료"
+  return t.total ? `${Math.round(((t.correct ?? 0) / t.total) * 100)}점` : scorePillText(t.correct ?? 0, t.total ?? 0)
 }
 function testPillTone(t) {
   return isBookEval(t) && !t.total ? "tone-green" : scorePillTone(t.correct ?? 0, t.total ?? 0)
@@ -111,17 +113,19 @@ function testKind(t) {
 function isTestsOnly(r) {
   return !!r && r.report_mode === "tests_only"
 }
-// (v2.8.0) 평가 점수를 가로 막대로 보여 준다. 위 줄은 "OOO 학생" 점수, 반 평균이 있으면 아래 줄에 반 평균을 더한다.
+// (10/30 사용자) 평가 점수는 막대 대신 글 두 줄: "• 점수  85점 (17/20)", 반 평균이 있으면 "• 반 평균  80점 (6명 응시)".
+// 막대 비교는 평가 추이 그래프에서만 한다(그래프 범례도 "점수 / 반 평균"). 일일 보고서 알림톡 평가 줄과 같은 이름.
 function studentLabel() {
-  const name = (STUDENT && STUDENT.student_name) || ""
-  return name ? `${name} 학생` : "학생"
+  return "점수"
 }
-function testCompareBarsHtml(t) {
-  if (!t || !t.total) return ""
+// 단원·내용 아래 줄(알림톡과 같은 순서). renderLogMetaRows의 extraRows로 넣는다.
+function testScoreRows(t) {
+  if (!t || !t.total) return []
   const avg = t.classAvg
   const mine = Math.round(((t.correct ?? 0) / t.total) * 100)
-  const row = (label, value, cls) => `<div class="score-compare-row ${cls}"><span class="score-compare-label">${esc(label)}</span><span class="score-compare-track"><span class="score-compare-fill" style="width:${Math.max(0, Math.min(100, value))}%"></span></span><span class="score-compare-value">${value}점</span></div>`
-  return `<div class="score-compare">${row(studentLabel(), mine, "mine")}${typeof avg === "number" ? row("반 평균", Math.round(avg * 10) / 10, "class") : ""}</div>`
+  const rows = [`${studentLabel()}  ${mine}점 (${t.correct ?? 0}/${t.total})`]
+  if (typeof avg === "number") rows.push(`반 평균  ${Math.round(avg * 10) / 10}점${t.classCount ? ` (${t.classCount}명 응시)` : ""}`)
+  return rows
 }
 // 학습기록 카드의 단원·내용은 각각 독립된 줄로 표시한다.
 // 단원은 "1-1." 같은 번호 패턴 앞에서 잘라 하나씩 별도 줄(불릿)로 보여준다 (단원이 하나뿐이어도 동일하게 처리).
@@ -130,7 +134,8 @@ function testCompareBarsHtml(t) {
 function splitUnits(unit) {
   return String(unit || "").split(/(?=\d+-\d+\.)|\s+(?=\d+차시)/).map((s) => s.trim()).filter(Boolean)
 }
-function renderLogMetaRows(unit, note, extraRows = []) {
+// leadRows: 단원 위 첫 줄(평가 구분 — 일일 평가는 없음). extraRows: 내용 아래 줄(점수·반 평균·마감 등).
+function renderLogMetaRows(unit, note, extraRows = [], leadRows = []) {
   const unitRow = unit
     ? splitUnits(unit)
         .map((part) => `<div class="log-context">${esc(`• ${part}`)}</div>`)
@@ -149,7 +154,11 @@ function renderLogMetaRows(unit, note, extraRows = []) {
     .filter(Boolean)
     .map((row) => `<div class="log-context">${esc(`• ${row}`)}</div>`)
     .join("")
-  return unitRow + noteRow + extras
+  const leads = leadRows
+    .filter(Boolean)
+    .map((row) => `<div class="log-context">${esc(`• ${row}`)}</div>`)
+    .join("")
+  return leads + unitRow + noteRow + extras
 }
 // 학습기록 카드의 본문(사진/노션 기록)은 기본으로 접어두고, 메타정보 영역(.log-meta) 안에
 // 겹쳐 떠 있는 화살표 아이콘을 눌러야 펼쳐진다. 화살표는 메타정보 우측 끝에 고정되어 있어
@@ -533,7 +542,7 @@ function mapRegistration(reg) {
     // 마감일이 아니라 수업일(그 과제를 실제로 내준 날) 기준으로 판단하려면 이 값이 있어야 한다.
     homework: (reg.homework || []).map((h) => ({ type: "과제", title: h.title || "", book: h.book || "", bookId: h.book_id || "", range: h.range || "", unit: h.unit || "", note: h.note || "", due: h.due_iso || null, classDate: isoToKstDate(h.iso) || null, status: h.status || "미제출", sourceBody: normalizeFeedBody(h.source_body), activityBody: normalizeFeedBody(h.activity_body) })),
     homework_days: (reg.homework_days || []).map((h) => ({ date: h.date || null, status: h.status || "미완료", submitted: h.submitted ?? 0, total: h.total ?? 0 })),
-    tests: (reg.tests || []).map((t) => ({ type: "평가", title: t.title || "", book: t.book || "", bookId: t.book_id || "", range: t.range || "", unit: t.unit || "", note: t.note || "", date: isoToKstDate(t.iso) || (t.iso ? String(t.iso).slice(0, 10) : null), correct: t.correct ?? 0, total: t.total ?? 0, classAvg: typeof t.class_avg === "number" ? t.class_avg : null, evalType: t.eval_type || "", evalStart: t.eval_start || null, evalEnd: t.eval_end || null, standalone: !!t.standalone, comment: t.comment || "", sourceBody: normalizeFeedBody(t.source_body), activityBody: normalizeFeedBody(t.activity_body) })),
+    tests: (reg.tests || []).map((t) => ({ type: "평가", title: t.title || "", book: t.book || "", bookId: t.book_id || "", range: t.range || "", unit: t.unit || "", note: t.note || "", date: isoToKstDate(t.iso) || (t.iso ? String(t.iso).slice(0, 10) : null), correct: t.correct ?? 0, total: t.total ?? 0, classAvg: typeof t.class_avg === "number" ? t.class_avg : null, classCount: t.class_count ?? 0, evalType: t.eval_type || "", evalStart: t.eval_start || null, evalEnd: t.eval_end || null, standalone: !!t.standalone, comment: t.comment || "", sourceBody: normalizeFeedBody(t.source_body), activityBody: normalizeFeedBody(t.activity_body) })),
     teacher_comments: (reg.teacher_comments || []).map((c) => ({ text: c.text || "", date: c.iso || null, by: c.by || "" })),
     // 주간/월간 보고서: 보고서(학원) DB 자체의 "선생님 한마디"를 보고서 구분·학습 기간과 함께 보관한다.
     report_comments: (reg.report_comments || []).map((c) => ({ kind: c.kind || "", start: c.start || null, end: c.end || c.start || null, comment: c.comment || "" })),
@@ -1183,8 +1192,7 @@ function showTestDetailModal(i) {
     ? items.map((t) => `
       <div class="log-row 평가">
         <div class="log-title-row"><div class="log-title">${esc([t.book, t.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${testPillTone(t)}">${testPillText(t)}</span></div>
-        ${testCompareBarsHtml(t)}
-        ${renderLogMetaRows(t.unit, t.note, [`날짜: ${t.date ? String(t.date).slice(0, 10) : "-"}`])}
+        ${renderLogMetaRows(t.unit, t.note, [...testScoreRows(t), `날짜: ${t.date ? String(t.date).slice(0, 10) : "-"}`])}
       </div>
     `).join("")
     : `<div class="log-row 평가"><div class="log-note">해당 기간 평가 기록이 없습니다.</div></div>`
@@ -1194,16 +1202,15 @@ function showTestDetailModal(i) {
 function showTestPeriodModal(rangeStart, rangeEnd, label, kind) {
   const r = STUDENT.registrations.find((x) => x.token === selectedToken)
   if (!r) return
-  // (v2.8.0) kind가 있으면 그 평가 구분만(주간·월간 보고서의 평가 평균이 그 구분으로 계산될 때와 같게).
-  const items = (r.tests || []).filter((t) => { const d = String(t.date || "").slice(0, 10); return d && d >= rangeStart && d <= rangeEnd && (kind ? testKind(t) === kind : !isBookEval(t)) })
+  // (10/30 사용자) 평가 평균·평가 현황과 같게 그 기간 모든 평가(kind가 있을 때만 그 구분).
+  const items = (r.tests || []).filter((t) => { const d = String(t.date || "").slice(0, 10); return d && d >= rangeStart && d <= rangeEnd && (!kind || testKind(t) === kind) })
     .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
   document.getElementById("test-detail-modal-title").textContent = label
   document.getElementById("test-detail-modal-body").innerHTML = items.length
     ? items.map((t) => `
       <div class="log-row 평가">
         <div class="log-title-row"><div class="log-title">${esc([t.book, t.range].filter(Boolean).join(" · "))}</div><span class="log-pill ${testPillTone(t)}">${testPillText(t)}</span></div>
-        ${testCompareBarsHtml(t)}
-        ${renderLogMetaRows(t.unit, t.note, rangeStart === rangeEnd ? [] : [`날짜: ${withDow(String(t.date).slice(0, 10))}`])}
+        ${renderLogMetaRows(t.unit, t.note, [...testScoreRows(t), ...(rangeStart === rangeEnd ? [] : [`날짜: ${withDow(String(t.date).slice(0, 10))}`])])}
       </div>
     `).join("")
     : `<div class="log-row 평가"><div class="log-note">해당 기간 평가 기록이 없습니다.</div></div>`

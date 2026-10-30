@@ -416,7 +416,7 @@ function logCardHtml(l) {
                 ${l.compare || ""}
                 ${(() => {
                   // (v2.5.98) 날짜로 묶인 목록이라 출제일은 묶음 날짜와 같아 빼고 마감만 보인다.
-                  const meta = renderLogMetaRows(l.unit, l.note, [...(l.type === "과제" && l.due ? [`마감: ${withDow(l.due)}`] : []), ...(l.extraRows || [])])
+                  const meta = renderLogMetaRows(l.unit, l.note, [...(l.type === "과제" && l.due ? [`마감: ${withDow(l.due)}`] : []), ...(l.extraRows || [])], l.leadRows || [])
                   const bodyHtml = buildLogBodyHtml(l)
                   const hasExtra = l.photo || !!bodyHtml
                   const chevronBtn = hasExtra ? `<button type="button" class="log-extra-chevron" onclick="toggleLogExtra(this)" aria-label="펼치기"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>` : ""
@@ -434,7 +434,7 @@ const logItemOfStudy = (l) => ({ type: "학습", icon: KIND_ICONS["학습"], dat
 const logItemOfHomework = (h) => ({ type: "과제", icon: KIND_ICONS["과제"], date: h.classDate || h.due, due: h.due, classDate: h.classDate, title: [h.book, h.range].filter(Boolean).join(" · "), unit: h.unit, note: h.note, pill: h.status, pillTone: homeworkPillTone(h.status), book: h.book, sourceBody: h.sourceBody, activityBody: h.activityBody })
 // 평가 아이콘은 학습기록 탭이 써 온 Feather file-text 그대로(KIND_ICONS 평가와 줄 하나 다름)
 const LOG_TEST_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`
-const logItemOfTest = (t) => ({ type: "평가", icon: LOG_TEST_ICON, date: t.date, title: testTitle(t), extraRows: testEvalRow(t) ? [testEvalRow(t)] : [], unit: t.unit, note: t.note, pill: testPillText(t), pillTone: testPillTone(t), book: t.book, sourceBody: t.sourceBody, activityBody: t.activityBody , compare: testCompareBarsHtml(t) })
+const logItemOfTest = (t) => ({ type: "평가", icon: LOG_TEST_ICON, date: t.date, title: testTitle(t), leadRows: testEvalRow(t) ? [testEvalRow(t)] : [], extraRows: testScoreRows(t), unit: t.unit, note: t.note, pill: testPillText(t), pillTone: testPillTone(t), book: t.book, sourceBody: t.sourceBody, activityBody: t.activityBody })
 // 고른 날짜의 기록: 출석 상태 + 그날 학습·그날 낸 과제·그날 평가. v2.5.101부터 한 카드에 구분선으로 잇지 않고 학습기록 탭과 같은 독립 카드.
 function buildCalDayPanelHtml(r, date) {
   const att = (r.attendance_rows || []).find((a) => a.date === date)
@@ -792,15 +792,42 @@ function computeRecentTestPoints(tests, asOfDate, count) {
     }
   })
 }
-// (v2.8.0) 주간·월간 보고서: 그 구분 평가의 최근 count개(보고서 기간 끝까지). 같은 날 평가는 한 점(평균).
-// 주간은 날짜(MM.DD), 월간은 "n월"로 적는다.
-function computeKindTestPoints(tests, asOfDate, count, periodType) {
-  return computeRecentTestPoints(tests, asOfDate, count).map((p) => {
-    if (periodType !== "month") return p
-    const day = String(p.items[0]?.date || "").slice(0, 10)
-    return { ...p, label: day ? `${Number(day.slice(5, 7))}월` : p.label }
+// (10/30 사용자) 평가 추이 = 기간 칸마다 그 기간에 본 모든 평가의 평균(점수 있는 평가만). 빈 칸은 점 없이 비우고 점끼리 선으로 잇는다.
+// 일간: endDate까지 7일(하루씩), 주간: endDate가 든 주까지 4주(월~일), 월간: endDate가 든 달까지 6달.
+const TREND_SLOTS = { day: 7, week: 4, month: 6 }
+function computePeriodTrendPoints(tests, periodType, endDate) {
+  const end = String(endDate).slice(0, 10)
+  const md = (d) => d.slice(5).replace("-", ".")
+  const slots = []
+  const n = TREND_SLOTS[periodType] || 7
+  for (let i = n - 1; i >= 0; i--) {
+    if (periodType === "week") {
+      const start = addDaysStr(mondayOfWeek(end), -7 * i)
+      slots.push({ start, end: addDaysStr(start, 6), label: `${md(start)}~` })
+    } else if (periodType === "month") {
+      const [y, m] = end.split("-").map(Number)
+      const base = new Date(y, m - 1 - i, 1)
+      const yy = base.getFullYear(), mm = base.getMonth() + 1
+      const start = `${yy}-${String(mm).padStart(2, "0")}-01`
+      slots.push({ start, end: `${yy}-${String(mm).padStart(2, "0")}-${String(new Date(yy, mm, 0).getDate()).padStart(2, "0")}`, label: `${mm}월` })
+    } else {
+      const day = addDaysStr(end, -i)
+      slots.push({ start: day, end: day, label: md(day) })
+    }
+  }
+  return slots.map((s) => {
+    const items = tests.filter((t) => { const d = String(t.date || "").slice(0, 10); return d && d >= s.start && d <= s.end })
+    const scored = items.filter((t) => t.total)
+    return {
+      label: s.label,
+      avg: scored.length ? Math.round(scored.reduce((sum, t) => sum + (t.correct / t.total) * 100, 0) / scored.length * 10) / 10 : null,
+      classAvg: classAvgOf(items),
+      count: items.length,
+      items,
+    }
   })
 }
+const TREND_TITLE = { day: "최근 일주일 평가 추이", week: "최근 한 달 평가 추이", month: "최근 6개월 평가 추이" }
 function buildTestTrendChartHtml(points) {
   testChartPoints = points
   const width = 400, height = 200, paddingX = 30, paddingTop = 20, paddingBottom = 34
@@ -873,13 +900,8 @@ function buildReportTabHtml(r) {
   const { rangeStart, rangeEnd } = reportRange()
   const attendanceRows = (r.attendance_rows || []).filter((a) => a.date >= rangeStart && a.date <= rangeEnd)
   const homeworkItems = (r.homework_days || []).filter((h) => h.date && h.date >= rangeStart && h.date <= rangeEnd)
-  // (v2.8.0) 주간 보고서는 주간 평가, 월간 보고서는 월간 평가로 추이·평가 평균을 계산한다. 그 구분 평가가 한 번도
-  // 없으면(주간·월간 평가를 안 보는 반) 추이는 숨기고, 평가 평균은 지금처럼 기간 안 모든 평가로 계산한다.
-  const kindName = reportPeriod === "week" ? "주간 평가" : reportPeriod === "month" ? "월간 평가" : "일일 평가"
-  const kindTests = tests.filter((t) => testKind(t) === kindName)
-  const hasKind = reportPeriod !== "day" && kindTests.length > 0
-  // (v2.8.0 진도 평가, 항목 16) 그 구분 평가가 없어 기간 안 모든 평가로 계산할 때도 진도 평가(단원·마무리)는 뺀다(교재 상세에서만 보인다).
-  const testItems = (hasKind ? kindTests : tests.filter((t) => !isBookEval(t))).filter((t) => t.date >= rangeStart && t.date <= rangeEnd)
+  // (10/30 사용자) 일일 수업 기록 기반으로 되돌림: 주간·월간 보고서는 그 기간 모든 평가(평가 구분과 상관없이)로 추이·평균을 낸다.
+  const testItems = tests.filter((t) => t.date >= rangeStart && t.date <= rangeEnd)
   // 출석률은 상태가 확정된 출석만 계산한다. 빈 상태(미입력/미래 수업)는 분모에서 제외하고,
   // 보강은 실제 수업 참여로 보아 출석과 함께 분자에 포함한다.
   const countedAttendanceRows = attendanceRows.filter((a) => ["출석", "보강", "결석"].includes(a.status))
@@ -941,15 +963,15 @@ function buildReportTabHtml(r) {
         <div class="donut" style="background: conic-gradient(${bandChartColor(hwRate)} 0% ${hwRate}%, var(--brand-soft) ${hwRate}% 100%)"><div class="donut-hole">${hwRate}%</div></div>
         <div class="donut-count-below">(${doneHomework}/${homeworkItems.length})</div>
       </div>`}
-      <div class="donut-card${testItems.length ? " clickable" : ""}"${testItems.length ? ` onclick="showTestPeriodModal('${rangeStart}','${rangeEnd}','${esc(periodLabel)} 평가','${hasKind ? kindName : ""}')"` : ""}>
+      <div class="donut-card${testItems.length ? " clickable" : ""}"${testItems.length ? ` onclick="showTestPeriodModal('${rangeStart}','${rangeEnd}','${esc(periodLabel)} 평가','')"` : ""}>
         <div class="donut-title"><span class="inline-icon">${KIND_ICONS["평가"]}</span>평가 평균</div>
         <div class="donut" style="background: conic-gradient(${bandChartColor(testAvg ?? 0)} 0% ${testAvg ?? 0}%, var(--brand-soft) ${testAvg ?? 0}% 100%)"><div class="donut-hole">${testAvg !== null ? testAvg.toFixed(1) + "점" : "–"}</div></div>
         <div class="donut-count-below">${scoredTests.length ? `(평가 ${scoredTests.length}개)` : "(평가 없음)"}</div>
       </div>
     </div>
-    ${hasKind ? `<h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span>${kindName} 추이</h3>
+    ${computePeriodTrendPoints(tests, reportPeriod, rangeEnd).some((p) => p.count) ? `<h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span>${TREND_TITLE[reportPeriod]}</h3>
     <div class="card">
-      ${buildTestTrendChartHtml(computeKindTestPoints(kindTests, rangeEnd, reportPeriod === "week" ? 4 : 6, reportPeriod))}
+      ${buildTestTrendChartHtml(computePeriodTrendPoints(tests, reportPeriod, rangeEnd))}
     </div>` : ""}
     ${routinePeriodHtml(r, rangeStart, rangeEnd)}
     <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></span>선생님 한마디</h3>
@@ -998,10 +1020,12 @@ function findNextHomeworkItems(r, date) {
   // 마감·출제일은 시각이 붙은 값("2026-10-21T19:00…")일 수 있어 날짜만 비교한다. 그대로 비교하면 이날 마감인
   // 과제가 "날짜 뒤"로 판정되어 지난 과제와 이번 과제에 함께 나왔다(v2.7.16).
   const day = (v) => String(v || "").slice(0, 10)
+  // (v2.8.0) 마감이 아직 없는 과제(다음 수업이 아직 없어 "출제 전")도 그날 낸 것이면 이번 과제로 보인다.
+  const givenToday = (r.homework || []).filter((h) => !day(h.due) && day(h.classDate) === date)
   const upcoming = (r.homework || []).filter((h) => day(h.due) > date && (!h.classDate || day(h.classDate) <= date))
-  if (!upcoming.length) return []
+  if (!upcoming.length) return givenToday
   const minDue = upcoming.reduce((min, h) => (day(h.due) < min ? day(h.due) : min), day(upcoming[0].due))
-  return upcoming.filter((h) => day(h.due) === minDue)
+  return [...upcoming.filter((h) => day(h.due) === minDue), ...givenToday]
 }
 
 function findLatestComment(r, date) {
@@ -1010,9 +1034,9 @@ function findLatestComment(r, date) {
 
 // 보고서 항목 한 건: "교재 · 범위" + 상태 알약 + 메타 줄, 본문은 접지 않고 전부 보여준다.
 function reportItemHtml(r, item, opts) {
-  const { pill, pillTone, extraRows, compare } = opts || {}
+  const { pill, pillTone, extraRows, compare, leadRows } = opts || {}
   const title = [item.book, item.range].filter(Boolean).join(" · ") || "기록"
-  const meta = renderLogMetaRows(item.unit, item.note, extraRows || [])
+  const meta = renderLogMetaRows(item.unit, item.note, extraRows || [], leadRows || [])
   const body = buildLogBodyHtml(item)
   return `
     <div class="rep-item">
@@ -1029,14 +1053,15 @@ function buildDailyBodyHtml(r, date) {
   const dueTodayHomework = (r.homework || []).filter((h) => String(h.due || "").slice(0, 10) === date)
   const homeworkStatusToday = dueTodayHomework.length
     ? dueTodayHomework.every((h) => h.status === "제출") ? { text: "제출", cls: "제출" }
-      : dueTodayHomework.some((h) => h.status === "제출") ? { text: "일부 제출", cls: "부분완료" }
+      // (v2.8.0) 과제 하나가 "일부 제출"이어도 일부 제출이다(예전에는 미제출로 보였다).
+      : dueTodayHomework.some((h) => h.status === "제출" || h.status === "일부 제출") ? { text: "일부 제출", cls: "부분완료" }
       : { text: "미제출", cls: "미제출" }
     : null
   const todaysLogs = (r.study_logs || []).filter((l) => l.date === date)
   // 이번 과제: 출제일 기준(findNextHomeworkItems). 지난 과제: 이날 마감인 과제(위 이날 마감 과제와 같은 기준).
   const nextHomeworkItems = findNextHomeworkItems(r, date)
-  // (v2.8.0) 일간 보고서는 일일 평가만(주간·월간 평가는 각 보고서, 단원·마무리 평가는 교재 상세에서).
-  const dailyTests = (r.tests || []).filter((t) => testKind(t) === "일일 평가")
+  // (10/30 사용자) 일일 수업 기록 기반: 그날 본 평가는 평가 구분(일일·주간·월간·단원·마무리)과 상관없이 모두 일간 보고서에 나온다.
+  const dailyTests = r.tests || []
   const todaysTests = dailyTests.filter((t) => String(t.date || "").slice(0, 10) === date)
   const comment = findLatestComment(r, date)
   const attStatus = attendanceRow ? (attendanceRow.status || "상태 미입력") : "해당 없음"
@@ -1050,16 +1075,15 @@ function buildDailyBodyHtml(r, date) {
   const sub = (text) => `<div class="rep-sub">${text}</div>`
 
   const studyHtml = todaysLogs.length ? todaysLogs.map((l) => band(reportItemHtml(r, l, { extraRows: makeupMetaRows(l) }))).join("") : empty("이날 기록된 학습 내용이 없어요.")
-  const homeworkHtml =
-    sub("지난 과제") +
-    groupBand(dueTodayHomework, (h) => reportItemHtml(r, h, { pill: h.status, pillTone: homeworkPillTone(h.status), extraRows: h.classDate ? [`출제: ${withDow(h.classDate)}`] : [] }), "이날 마감인 과제가 없어요.") +
-    sub("이번 과제") +
-    groupBand(nextHomeworkItems, (h) => reportItemHtml(r, h, { pill: h.status, pillTone: homeworkPillTone(h.status), extraRows: [h.classDate ? `출제: ${withDow(h.classDate)}` : null, `마감: ${withDow(h.due)}`].filter(Boolean) }), "출제된 과제가 없어요.")
+  // (10/30 사용자) 일간 보고서 순서는 일일 보고서 알림톡과 같다: 과제 체크 → 루틴 → 학습 → 다음 과제 → 오늘 평가 → 선생님 한마디.
+  const pastHomeworkHtml =
+    groupBand(dueTodayHomework, (h) => reportItemHtml(r, h, { pill: h.status, pillTone: homeworkPillTone(h.status), extraRows: [h.classDate ? `출제: ${withDow(h.classDate)}` : null, h.due ? `마감: ${withDow(h.due)}` : null].filter(Boolean) }), "이날 마감인 과제가 없어요.")
+  const nextHomeworkHtml =
+    groupBand(nextHomeworkItems, (h) => reportItemHtml(r, h, { pill: h.status, pillTone: homeworkPillTone(h.status), extraRows: [h.classDate ? `출제: ${withDow(h.classDate)}` : null, h.due ? `마감: ${withDow(h.due)}` : "마감: 출제 전"].filter(Boolean) }), "출제된 과제가 없어요.")
   const testHtml =
-    sub("이번 평가") +
-    groupBand(todaysTests, (t) => reportItemHtml(r, t, { pill: testPillText(t), pillTone: testPillTone(t), compare: testCompareBarsHtml(t) }), "이날 평가가 없어요.") +
-    sub("최근 평가 추이") +
-    band(buildTestTrendChartHtml(computeRecentTestPoints(dailyTests, date, 3)))
+    groupBand(todaysTests, (t) => reportItemHtml(r, t, { pill: testPillText(t), pillTone: testPillTone(t), leadRows: testEvalRow(t) ? [testEvalRow(t)] : [], extraRows: testScoreRows(t) }), "이날 평가가 없어요.") +
+    sub(TREND_TITLE.day) +
+    band(buildTestTrendChartHtml(computePeriodTrendPoints(dailyTests, "day", date)))
   // (v2.8.0 루틴) 그날 루틴: 했으면 "했어요", 아니면 "안 했어요". 루틴을 안 쓰는 반은 칸이 없다.
   const todaysRoutines = (r.routines || []).filter((x) => x.date === date)
   const routineHtml = todaysRoutines.length
@@ -1090,10 +1114,11 @@ function buildDailyBodyHtml(r, date) {
         <div class="donut-count-below">${scoredToday.length ? `${scoredToday.length}건` : ""}</div>
       </div>
     </div>
-    ${session(KIND_ICONS["학습"], "학습", studyHtml)}
-    ${session(KIND_ICONS["과제"], "과제", homeworkHtml)}
+    ${session(KIND_ICONS["과제"], "과제 체크", pastHomeworkHtml)}
     ${(r.routines || []).length ? session(ROUTINE_ICON, "루틴", routineHtml) : ""}
-    ${session(KIND_ICONS["평가"], "평가", testHtml)}
+    ${session(KIND_ICONS["학습"], "학습", studyHtml)}
+    ${session(KIND_ICONS["과제"], "다음 과제", nextHomeworkHtml)}
+    ${session(KIND_ICONS["평가"], "오늘 평가", testHtml)}
     ${session(msgIcon, "선생님 한마디", commentHtml)}
   `
 }
