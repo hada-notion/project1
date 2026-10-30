@@ -419,7 +419,9 @@ export function withConfigFallback(row: AlimtalkConfig, fallback: { pfId: string
 // "교재 수료 보고서"·"프로그램 수료 보고서": 진도교재 [수료]가 만든 수료 보고서(교과·예체능). 옛 템플릿이 없어 넘어갈 행이 없다.
 export type AlimtalkConfigCategory = SendLogCategory | "보고서" | "일일 활동 보고서" | "주간 활동 보고서" | "월간 활동 보고서" | "교재 수료 보고서" | "프로그램 수료 보고서"
   // 수업 안내(v2.8.0 구역): 보강 수업이면 "보강 수업 안내", 아니면 "수업 일정 안내". 없거나 꺼져 있으면 옛 "수업 안내" 행.
-  | "보강 수업 안내" | "수업 일정 안내"
+  | "보강 수업 안내" | "수업 일정 안내" | "휴강 안내"
+  // 일정 안내(v2.8.0 구역): 개별 일정은 상담만 "상담 일정 안내"로. 없거나 꺼져 있으면 옛 "일정 안내" 행.
+  | "상담 일정 안내"
 
 // [NEW, 복원 2026-09-18] "알림톡 설정(학원) DB"에서 발송 구분별 행 ID와 안내멘트만 가져온다.
 // generate-tuition/textbookDistributionTarget이 표시용 "알림톡 설정" 관계를 채울 rowId로,

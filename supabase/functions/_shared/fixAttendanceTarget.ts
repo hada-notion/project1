@@ -22,6 +22,7 @@ import { markRunning, markDone, markError, type StatusSpec } from "./statusTrack
 import { type DeadlineIO, pendingDeadlinesForRegistrations } from "./assignmentDeadline.ts"
 import { getCurrentAdminKey } from "./adminShared.ts"
 import { enqueueSync } from "./syncQueue.ts"
+import { isMakeupSession } from "./sessionKind.ts"
 
 // 수업(학원) DB의 "출석조정 상태"(select) + "마지막 오류" 텍스트 필드로 진행 상황을 표시한다
 // (2026-09-11: 공유 select "동기화 상태"에서 체크박스로 마이그레이션 -> 2026-09-22, Phase 3에서
@@ -117,7 +118,7 @@ export async function fixAttendanceForClassSession(
   const dateProp = props["수업일시"]?.date
   // 보강 수업("보강" 체크)은 모인 학생으로 진행하는 임시 수업이라 등록 현황과 맞추지 않는다. 보강 수업은
   // 시간표·클래스 없이 만들어 아래 조건에도 걸리지만, 실수로 연결돼 있어도 보강 출석을 건드리지 않게 먼저 막는다(v2.5.64).
-  if (props["보강"]?.checkbox === true) {
+  if (isMakeupSession({ properties: props })) {
     log.push(`[skip] ${sessionName}: 보강 수업`)
     return
   }
@@ -363,7 +364,7 @@ export function planFromWebhookBody(body: any, sessionId: string): { plan: FixPl
 			teacherIds: relIds(p["담당강사"]),
 			start: p["수업일시"]?.date?.start ?? null,
 			end: p["수업일시"]?.date?.end ?? null,
-			makeup: p["보강"]?.checkbox === true,
+			makeup: isMakeupSession({ properties: p }),
 		},
 	}
 }

@@ -117,3 +117,10 @@ Deno.test("v2.8.0 수업 안내 큐: 설정 꺼짐·연락처 없음은 로그 �
 	eq(c.patches[0].props["수업 안내 상태"].select.name, "⚠️ 오류")
 	eq(c.patches[0].props["수업 안내 일시"], undefined)
 })
+
+Deno.test("v2.8.0 구역: 수업 구분 휴강이면 휴강 안내 행, 선택 속성 보강이나 예전 보강 체크면 보강", async () => {
+	const k = await import("./sessionKind.ts")
+	eq([k.sessionKind({ properties: { "수업 구분": { select: { name: "휴강" } } } }), k.sessionKind({ properties: { "수업 구분": { select: { name: "보강" } } } }), k.sessionKind({ properties: { "보강": { checkbox: true } } }), k.sessionKind({ properties: {} })], ["휴강", "보강", "보강", ""])
+	const off: any = m.planLessonNotice(att(), { properties: { "수업 구분": { select: { name: "휴강" } } } })
+	eq([off.configCategory, off.variables["#{수업구분}"]], ["휴강 안내", "휴강"])
+})

@@ -30,6 +30,7 @@ import {
 import { isRunning, markQueued, markRunning, markDone, markError, STATUS_DONE, type StatusSpec } from "./statusTracking.ts"
 import { removeLater } from "./classRoomCopy.ts"
 import { decideRecordRemoval } from "./learningRecordShare.ts"
+import { isMakeupSession } from "./sessionKind.ts"
 // (2026-09-21, 이식성 리팩토링) 위 7개 데이터소스 ID는 이 파일에 직접 하드코딩돼 있었는데, 이제
 // constants.ts 한 곳에서 환경변수로 읽어와 공유한다 (constants.ts 상단 주석 참고). export하지 않아도
 // 되도록 이 파일 밖에서 이 이름들을 가져다 쓰는 곳이 없는지 확인했다.
@@ -168,7 +169,7 @@ async function dropFromMakeupRoster(att: any, visited: Set<string>, log: string[
   const deleting = new Set([...visited].map((v) => v.replace(/-/g, "")))
   if (deleting.has(sessionId.replace(/-/g, ""))) return
   const session = await getPage(sessionId)
-  if (session?.archived || session?.in_trash || session?.properties?.["보강"]?.checkbox !== true) return
+  if (session?.archived || session?.in_trash || !isMakeupSession(session)) return
   const others = await queryAllPages(DS_ATTENDANCE, { and: [{ property: "수업", relation: { contains: sessionId } }, { property: "등록", relation: { contains: regId } }] })
   const self = String(att.id).replace(/-/g, "")
   if (others.some((o: any) => String(o.id).replace(/-/g, "") !== self && !o.archived && !o.in_trash)) return

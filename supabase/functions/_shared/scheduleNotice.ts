@@ -7,7 +7,7 @@
 // 월간 일정 안내는 학생 단위다(학생 월간 안내, _shared/monthlyNotice.ts). 이 파일의 한 줄·구역 함수를 같이 쓴다.
 // 큐 모양은 반별 보고서와 같다: 일정 1건이 학생 1건씩을 다시 넣고, 마지막 학생이 상태를 마친다(✅, 중간 실패가 있으면 ⚠️).
 // 발송 규칙은 수업 안내와 같다(설정 행이 꺼졌거나 비면 ⚠️, 연락처 없음 ⚠️, 발송 단계 실패는 다시 보내지 않음). 전송로그는 등록에.
-import { createSendLogEntry, extractErrorMessage, getBotUserId } from "./adminShared.ts"
+import { createSendLogEntry, extractErrorMessage, getBotUserId, type AlimtalkConfigCategory } from "./adminShared.ts"
 import { getFormulaText } from "./alimtalkShared.ts"
 import { fullRelationIds, getPage, queryAllPages, relIds, updatePageProperties } from "./notionClient.ts"
 import { DS_REGISTRATION, PROP_LAST_ERROR } from "./constants.ts"
@@ -182,11 +182,11 @@ async function finishParent(pageId: string, extra: Record<string, unknown>): Pro
 }
 
 // 한 학생에게 보내기. 설정·연락처로 막히면 그 학생만 기록하고 넘어간다(다시 해도 같음). 발송 실패도 다시 보내지 않는다.
-async function sendOne(code: "일정 안내", parentId: string, regId: string, studentName: string, variables: Record<string, string>): Promise<boolean> {
+async function sendOne(code: "일정 안내", parentId: string, regId: string, studentName: string, variables: Record<string, string>, configCategory?: AlimtalkConfigCategory): Promise<boolean> {
 	const deps = scheduleDeps
 	const senderUserId = (await deps.botUser().catch(() => null)) ?? undefined
 	try {
-		await deps.send(code, regId, "", variables)
+		await deps.send(code, regId, "", variables, configCategory)
 	} catch (err) {
 		const reason = extractErrorMessage(err)
 		if (!(err instanceof LessonConfigError) && !/연락처 오류/.test(reason)) {
@@ -246,6 +246,8 @@ export async function processScheduleEventItem(p: EventPayload): Promise<void> {
 			targets.push(r)
 		}
 		if (!targets.length) return await deps.markError(p.eventId, noTargetMessage(ev, linkedStudents.length + linkedClasses.length > 0))
+		// (v2.8.0 구역, 10/30 사용자) 개별 일정 알림은 상담만. 휴강은 수업 [휴강 안내], 휴원·학원·학사 일정은 월간 일정 안내로 알린다.
+		if (eventLabel(ev) !== "상담") return await deps.markError(p.eventId, "일정 안내는 '안내 구분'이 상담인 일정만 보냅니다. 휴강은 수업의 [수업 안내 전송](수업 구분 휴강)으로, 휴원·학원·학사 일정은 월간 일정 안내로 알려 주세요.")
 		// 다른 알림톡처럼 일정 페이지의 "변수(알림톡)" 수식 값을 보낸다(없으면 옛 (일정안내) 수식, 그것도 비면 같은 규칙으로 계산).
 		// (v2.8.0 통일안) 새 템플릿의 #{일정정보}와 옛 템플릿의 #{일정일시}·#{전달사항}을 함께 만든다. 보낼 때 템플릿에 있는 것만 남는다.
 		const note = getFormulaText(ev, "전달사항(일정안내)").trim() || noteText(textOf(ev.properties?.["메모"]?.rich_text))
@@ -257,6 +259,8 @@ export async function processScheduleEventItem(p: EventPayload): Promise<void> {
 			"#{일정정보}": eventInfoBlock({ time, note }),
 			"#{일정일시}": time,
 			"#{전달사항}": note,
+			// (v2.8.0 구역) 상담 일정 안내 [상담 정보]: 📌 일정 + 📅 일시. 일시는 서버가 서울 시각으로.
+			"#{일정내역}": `📌 일정  ${textOf(ev.properties?.["이름"]?.title).trim() || "상담"}\n📅 일시  ${time}`,
 		}
 		console.log(`[schedule-event] event=${p.eventId} 대상 ${targets.length}`)
 		for (let i = 0; i < targets.length; i++) {
@@ -273,6 +277,6 @@ export async function processScheduleEventStudentItem(p: EventStudentPayload): P
 	const deps = scheduleDeps
 	const reg: any = await deps.getPage(p.regId)
 	const studentName = studentNameOf(reg)
-	await sendOne("일정 안내", p.eventId, p.regId, studentName, { ...p.vars, "#{학생이름}": studentName })
+	await sendOne("일정 안내", p.eventId, p.regId, studentName, { ...p.vars, "#{학생이름}": studentName }, "상담 일정 안내")
 	if (p.last) await finishParent(p.eventId, { [PROP_EVENT_SENT]: { date: { start: p.dateStart } } })
 }

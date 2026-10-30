@@ -79,21 +79,25 @@ function mock(pages: Record<string, any>, o: { academy?: any[]; regs?: any[]; al
 
 Deno.test("v2.8.0 일정 안내(한 건): 연결된 학생·반의 수강 중 학생(겹치면 한 번), 날짜가 같으면 다시 안 보냄", async () => {
 	const pages: Record<string, any> = {
-		e1: ev("e1", { name: "휴강", cat: "💤 휴원", start: "2026-11-03", stu: ["s1"], cls: ["cls"], memo: "선생님 사정", label: "휴강" }),
+		e1: ev("e1", { name: "2학기 상담", start: "2026-11-03", stu: ["s1"], cls: ["cls"], memo: "선생님 사정", label: "상담" }),
 		s1: { id: "s1", properties: { "등록": rel("r1", "r0") } },
 		r1: reg("r1", "s1", "김하윤"), r0: reg("r0", "s1", "김하윤", false),
 	}
 	const c = mock(pages, { regs: [reg("r1", "s1", "김하윤"), reg("r2", "s2", "박지민")] })
 	await m.processScheduleEventItem({ eventId: "e1" })
 	eq(c.enq.map((e) => e.payload.regId), ["r1", "r2"])
-	eq(c.enq[0].payload.vars, { "#{일정구분}": "휴강", "#{일정명}": "휴강", "#{일정정보}": "📅 일시  26.11.03(화)\n\n📝 전달사항\n선생님 사정", "#{일정일시}": "26.11.03(화)", "#{전달사항}": "선생님 사정" })
+	eq(c.enq[0].payload.vars, { "#{일정구분}": "상담", "#{일정명}": "2학기 상담", "#{일정정보}": "📅 일시  26.11.03(화)\n\n📝 전달사항\n선생님 사정", "#{일정일시}": "26.11.03(화)", "#{전달사항}": "선생님 사정", "#{일정내역}": "📌 일정  2학기 상담\n📅 일시  26.11.03(화)" })
+	// (v2.8.0 구역) 상담이 아닌 일정(휴강·휴원·학원 일정)은 보내지 않고 수업 안내·월간 일정 안내로 안내한다.
+	const cx = mock({ ...pages, e1: ev("e1", { name: "휴강", start: "2026-11-03", stu: ["s1"], label: "휴강" }) })
+	await m.processScheduleEventItem({ eventId: "e1" })
+	eq([cx.enq.length, cx.marks[1].includes("상담인 일정만")], [0, true])
 	eq(c.enq[1].payload.last, true)
 	const c2 = mock({ e1: ev("e1", { start: "2026-11-03", cls: ["cls"], sent: "2026-11-03" }) })
 	await m.processScheduleEventItem({ eventId: "e1" })
 	eq(c2.enq.length, 0)
 	eq(c2.marks[1].includes("이미 이 날짜로"), true)
 	// 일정 페이지의 (일정안내) 수식이 있으면 그 값을 보낸다. 일시만은 수식(API에서 UTC)을 쓰지 않고 서버가 서울 시각으로 만든다.
-	const withF: any = ev("e1", { name: "휴강", start: "2026-11-03", cls: ["cls"] })
+	const withF: any = ev("e1", { name: "휴강", start: "2026-11-03", cls: ["cls"], label: "상담" })
 	withF.properties["일정일시(일정안내)"] = { type: "formula", formula: { type: "string", string: "수식 일시" } }
 	withF.properties["전달사항(일정안내)"] = { type: "formula", formula: { type: "string", string: "수식 메모" } }
 	const cf = mock({ e1: withF }, { regs: [reg("r1", "s1", "김하윤")] })
