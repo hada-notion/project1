@@ -116,11 +116,16 @@ export async function processCompletionQueueItem(payload: CompletionPayload): Pr
 async function findOrCreateBatch(o: { bookId: string; classId: string | null; start: string; end: string; bookName: string }): Promise<{ id: string; created: boolean }> {
 	const deps = completionDeps
 	const ds = await deps.batchDataSourceId()
+	// 발송함 `구분`에 "수료 보고서" 선택지가 아직 없으면 Notion이 조회를 400으로 거절한다(처음 [수료]를 누른 학원).
+	// 그때는 수료 발송함이 하나도 없는 것이므로 새로 만든다. 만들 때 쓰는 값으로 선택지가 저절로 생긴다.
 	const found = (await deps.queryAllPages(ds, {
 		and: [
 			{ property: "진도교재", relation: { contains: o.bookId } },
 			{ property: "구분", select: { equals: COMPLETION_KIND } },
 		],
+	}).catch((err: Error) => {
+		if (/select option .* not found/i.test(err?.message ?? "")) return []
+		throw err
 	})).filter((b: any) => !gone(b))
 	if (found.length) return { id: String(found[0].id), created: false }
 	let className = ""
