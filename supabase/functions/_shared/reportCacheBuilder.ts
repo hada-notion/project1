@@ -231,6 +231,8 @@ async function buildRegistrationOverview(reg: any, accessToken: string, cachedGe
         const range = text(bp["최근 학습 범위"])
         // (v2.8.0 예체능) 진도교재 `주제`(예: "기억에 남는 풍경 그리기"). 있으면 리포트가 교재명 대신 이 이름을 크게 보여 준다.
         const topic = text(bp["주제"])
+        // (v2.8.0 수료) 진도교재 [수료]가 적는 날짜. 있으면 리포트 교재 상세가 "수료"로 보인다.
+        const completedOn = dateStartOf(bp["수료일"])
         const regularId = libraryIds(bp)[0]
         let title = "",
           series = "",
@@ -257,7 +259,7 @@ async function buildRegistrationOverview(reg: any, accessToken: string, cachedGe
           }
         }
         // (v2.8.0) 진도교재 ID: 화면이 교재 상세를 이름이 아니라 이 ID로 묶는다(같은 교재·프로그램 2회독).
-        return { id: String(mp.id).replace(/-/g, ""), title, series, pages, status: statusText, progress, range, cover, units, ...(kind ? { kind } : {}), ...(topic ? { topic } : {}) }
+        return { id: String(mp.id).replace(/-/g, ""), title, series, pages, status: statusText, progress, range, cover, units, ...(kind ? { kind } : {}), ...(topic ? { topic } : {}), ...(completedOn ? { completed_on: completedOn } : {}) }
       }),
   )
 
@@ -291,11 +293,10 @@ export function reportModeOf(cls: any): "all" | "tests_only" {
 // (10/30 사용자, 일일 기록 기반) 리포트는 최근 6개월 평가를 모두 싣는다(평가 추이: 일간 7일·주간 4주·월간 6달, 기간마다 모든 평가 평균).
 // 본문(사진·글)과 반 평균은 무거워서 최근 TESTS_DETAILED개에만 붙인다(카드·목록에 주로 보이는 평가).
 export const TESTS_DETAILED = 20
-// (v2.8.0) 평가 구분 묶음: 주간·월간·종합은 그 이름, 나머지(빈 값·일일 평가·기타)는 일일 평가.
-// (v2.8.0 진도 평가, 항목 16) 단원 평가·마무리 평가는 진도 평가(교재 상세에만). 예전 이름 "종합 평가"는 마무리 평가로 읽는다.
+// (v2.8.0) 평가 구분 묶음: 주간·월간은 그 이름, 나머지(빈 값·일일·단원·마무리·종합 평가·기타)는 일일 평가.
+// (10/30 사용자) 진도 평가 구역은 없앴다. 단원·마무리 평가도 그날 수업의 평가로 보인다.
 export function testKindOf(evalType: string | null | undefined): string {
-  if (evalType === "종합 평가") return "마무리 평가"
-  return evalType === "주간 평가" || evalType === "월간 평가" || evalType === "단원 평가" || evalType === "마무리 평가" ? evalType : "일일 평가"
+  return evalType === "주간 평가" || evalType === "월간 평가" ? evalType : "일일 평가"
 }
 
 export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: string) => Promise<any>) {
@@ -378,9 +379,12 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
         start: dateStartOf(rpr["보고서 기간"]),
         end: dateEndOf(rpr["보고서 기간"]),
         comment: text(rpr["선생님 한마디"]),
+        // (v2.8.0 수료) 수료 보고서는 그 진도교재에 연결된다. 교재 상세가 이 한마디를 보여 준다.
+        book_id: (relationIds(rpr["진도교재"])[0] ?? "").replace(/-/g, ""),
       }
     })
-    .filter((rc) => rc.comment && rc.start && rc.start >= sinceIso)
+    // 수료 보고서는 한마디가 없어도 싣는다(교재 상세 수료 구역이 보고서 기간을 쓴다).
+    .filter((rc) => (rc.comment || rc.kind === "수료 보고서") && rc.start && rc.start >= sinceIso)
 
   const logIdSet = new Set<string>()
   // (v2.6.19) 학습기록 날짜는 학습기록의 날짜 수식(수업일)이 아니라 이 학생이 그 기록에 연결된 출석의 실제 날짜(수업일시)를 쓴다.
@@ -522,7 +526,7 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
         status: normalizeStatus(text(props["과제상태"])),
         correct: numberOf(props["정답 문항"]) ?? 0,
         total: numberOf(props["전체 문항"]) ?? 0,
-        // (v2.8.0 진도 평가, 항목 16) 학생별 선생님 한마디. 리포트 교재 상세의 진도 평가 카드에 보인다(칸이 없으면 빈 값).
+        // (v2.8.0) 학생별 선생님 한마디. 리포트 교재 상세의 평가 카드에 보인다(칸이 없으면 빈 값).
         comment: text(props["선생님 한마디"]),
         bookTitle: source?.bookTitle ?? "",
         bookKey: source?.bookKey ?? "",
