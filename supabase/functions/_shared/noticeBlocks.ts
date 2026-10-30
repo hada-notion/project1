@@ -249,20 +249,3 @@ export function inquiryInfoBlock(o: { studentName: string; school?: string; grad
 		...(keep(o.grade) ? [`${BULLET}학년  ${keep(o.grade)}`] : []),
 	].join("\n")
 }
-
-// (v2.8.0 진도 평가, 항목 16) 진도 평가 결과 안내 #{평가정보}: "📝 단원 평가  p.10~20" + 단원마다 "  • 1-2. 정수와 유리수",
-// 마무리 평가는 "📝 마무리 평가" 한 줄. 머리줄로 시작한다(솔라피가 값 맨 앞 공백을 지우므로).
-export function bookEvalInfoBlock(o: { evalType: string; range?: string; units?: string[] }): string {
-	const head = `📝 ${o.evalType}${o.range ? `  ${o.range}` : ""}`
-	return [head, ...(o.units ?? []).filter(Boolean).map((u) => `${BULLET}${u}`)].join("\n")
-}
-
-// #{평가결과}: "📊 결과  88점 (22/25)"(점수가 없으면 "🎓 결과  수료") + [👥 반 평균] + [빈 줄 · 🗨️ 선생님 한마디 · 내용].
-export function bookEvalResultBlock(o: { correct: number | null; total: number | null; classAvg: number | null; comment?: string }): string {
-	const total = o.total ?? 0
-	const lines = [total > 0 ? `📊 결과  ${Math.round(((o.correct ?? 0) / total) * 100)}점 (${o.correct ?? 0}/${total})` : "🎓 결과  수료"]
-	if (typeof o.classAvg === "number") lines.push(`👥 반 평균  ${o.classAvg}점`)
-	const comment = String(o.comment ?? "").trim()
-	if (comment) lines.push("", "🗨️ 선생님 한마디", comment)
-	return lines.join("\n")
-}
