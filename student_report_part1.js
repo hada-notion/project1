@@ -114,7 +114,8 @@ function studentLabel() {
   return "점수"
 }
 // 단원·내용 아래 줄(알림톡과 같은 순서). renderLogMetaRows의 extraRows로 넣는다.
-// (v2.8.0 수료) 교재 상세 "수료" 구역(10/30 사용자 시안): 머리(수료일·기간) → 출석 칸(캘린더 위 수업 칸과 같은 모양)
+// (v2.8.0 수료) 교재 상세 "수료" 구역(10/30 사용자 시안). 내용은 학습기록 카드처럼 처음엔 접혀 있고, 화살표로 펼치면
+// 카드 아래 베이지 칸 안에 흰 상자로 보인다: 머리(수료일·기간) → 출석 칸(캘린더 위 수업 칸과 같은 모양)
 // → 진도 그래프 → 평가 그래프(둘 다 시작일~수료일) → 선생님 한마디. 보고서 탭과 겹치는 출석률·과제·평가 평균 도넛은 넣지 않는다.
 // 기간은 수료 보고서의 보고서 기간, 없으면 이 교재 첫 기록부터 수료일까지.
 function buildCompletionHtml(r, book, items, bookTests) {
@@ -168,18 +169,9 @@ function buildCompletionHtml(r, book, items, bookTests) {
               <div class="log-title-row"><div class="log-title">${esc(josa(bookNoun(book), "을", "를"))} 모두 마쳤어요</div><span class="log-pill tone-green">${esc(withDow(book.completedOn))}</span></div>
             </div>
           </div>
-          <div class="log-meta">${start ? renderLogMetaRows("", "", [`기간: ${md(start)} ~ ${md(end)}`]) : ""}${detail ? `<button type="button" class="log-extra-chevron" onclick="toggleCompletion(this)" aria-label="수료 내용 펼치기" aria-expanded="false">${CHEVRON_DOWN_SVG}</button>` : ""}</div>
-        </div>
-        ${detail ? `<div class="completion-detail" hidden>${detail}</div>` : ""}`
-}
-// (10/30 사용자) 수료 내용(출석·진도·평가·한마디)은 처음에 접어 두고 머리 카드의 화살표로 펼친다.
-function toggleCompletion(btn) {
-  const detail = btn.closest(".log-card").nextElementSibling
-  if (!detail || !detail.classList.contains("completion-detail")) return
-  const show = detail.hidden
-  detail.hidden = !show
-  btn.classList.toggle("open", show)
-  btn.setAttribute("aria-expanded", String(show))
+          <div class="log-meta">${start ? renderLogMetaRows("", "", [`기간: ${md(start)} ~ ${md(end)}`]) : ""}${detail ? `<button type="button" class="log-extra-chevron" onclick="toggleLogExtra(this)" aria-label="수료 내용 펼치기">${CHEVRON_DOWN_SVG}</button>` : ""}</div>
+          ${detail ? `<div class="log-extra completion-detail">${detail}</div>` : ""}
+        </div>`
 }
 // 점이 많으면 날짜 글씨가 겹치므로 처음·끝과 몇 칸마다 하나만 남긴다(점·값은 그대로).
 function thinChartLabels(points, max = 6) {
