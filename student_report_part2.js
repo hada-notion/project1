@@ -1078,8 +1078,9 @@ function buildDailyBodyHtml(r, date) {
   // (10/30 사용자) 일간 보고서 순서는 일일 보고서 알림톡과 같다: 과제 체크 → 루틴 → 학습 → 다음 과제 → 오늘 평가 → 선생님 한마디.
   const pastHomeworkHtml =
     groupBand(dueTodayHomework, (h) => reportItemHtml(r, h, { pill: h.status, pillTone: homeworkPillTone(h.status), extraRows: [h.classDate ? `출제: ${withDow(h.classDate)}` : null, h.due ? `마감: ${withDow(h.due)}` : null].filter(Boolean) }), "이날 마감인 과제가 없어요.")
+  // 다음 과제는 아직 마감 전이라 "미제출" 배지를 달지 않는다(제출·일부 제출이 이미 있으면 그대로 보인다).
   const nextHomeworkHtml =
-    groupBand(nextHomeworkItems, (h) => reportItemHtml(r, h, { pill: h.status, pillTone: homeworkPillTone(h.status), extraRows: [h.classDate ? `출제: ${withDow(h.classDate)}` : null, h.due ? `마감: ${withDow(h.due)}` : "마감: 출제 전"].filter(Boolean) }), "출제된 과제가 없어요.")
+    groupBand(nextHomeworkItems, (h) => reportItemHtml(r, h, { pill: h.status === "미제출" ? "" : h.status, pillTone: homeworkPillTone(h.status), extraRows: [h.classDate ? `출제: ${withDow(h.classDate)}` : null, h.due ? `마감: ${withDow(h.due)}` : "마감: 출제 전"].filter(Boolean) }), "출제된 과제가 없어요.")
   const testHtml =
     groupBand(todaysTests, (t) => reportItemHtml(r, t, { pill: testPillText(t), pillTone: testPillTone(t), leadRows: testEvalRow(t) ? [testEvalRow(t)] : [], extraRows: testScoreRows(t) }), "이날 평가가 없어요.") +
     sub(TREND_TITLE.day) +
