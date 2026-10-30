@@ -133,7 +133,7 @@ function buildCompletionHtml(r, book, items, bookTests) {
   const present = att.filter((a) => a.status === "출석" || a.status === "보강").length
   const attCells = att.map((a) => `<i class="${["출석", "결석", "보강"].find((k) => String(a.status).includes(k)) || "지남"}"></i>`).join("")
   const attHtml = att.length
-    ? `<div class="session-bar-card"><div class="session-bar"><span class="lbl">출석</span><div class="cells">${attCells}</div><b>${present} / ${att.length}회</b></div></div>`
+    ? sub("출석") + card(`<div class="session-bar"><div class="cells">${attCells}</div></div><div class="completion-count">${present} / ${att.length}회</div>`)
     : ""
 
   // 진도 그래프: 학습기록마다 그날까지 간 곳(쪽수 범위의 끝 ÷ 교재 쪽수, 아니면 단원 순서 ÷ 단원 수)을 누적 최댓값으로. 수료일은 100%.
