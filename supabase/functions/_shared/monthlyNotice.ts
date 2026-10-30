@@ -16,7 +16,7 @@ import { enqueueSync } from "./syncQueue.ts"
 import { markDone, markError, markRunning, type StatusSpec } from "./statusTracking.ts"
 import { isParentPublicEvent } from "./scheduleVisibility.ts"
 import { inPeriodRegistration, resolveBatchDataSourceId, seoulDay, studentNameOf } from "./classReportPlan.ts"
-import { eventLine, inMonth, isAcademyWide, monthFilter, monthLabel, nextMonthKey, type Section, sectionOf, sectionText } from "./scheduleNotice.ts"
+import { eventLine, inMonth, isAcademyWide, monthFilter, monthLabel, nextMonthKey, type Section, sectionListText, sectionOf, sectionText } from "./scheduleNotice.ts"
 import { noteText } from "./lessonNotice.ts"
 import { alimtalkVar, BULLET, classInfoBlock, classListBlock, letterScheduleBlock, NO_NOTE } from "./noticeBlocks.ts"
 
@@ -494,6 +494,10 @@ export async function buildLetterNotice(letter: any): Promise<{ registrationId: 
 			"#{휴원일정}": rest,
 			"#{학원일정}": academy,
 			"#{학사일정}": school,
+			// (v2.8.0 구역) 월간 일정 안내 [일정 안내]의 세 작은 구역 목록. 날짜가 들어가 서버가 서울 날짜로 만든다.
+			"#{휴원목록}": sectionListText(lines, "휴원"),
+			"#{학원목록}": sectionListText(lines, "학원"),
+			"#{학사목록}": sectionListText(lines, "학교"),
 			"#{전달사항}": note,
 			"#{페이지ID}": `${Deno.env.get("REPORT_PATH") ?? "/project1/student_report.html"}?token=${await deps.token(registrationId)}`,
 		},

@@ -126,6 +126,22 @@ export function sectionText(lines: { day: string; line: string; sec: Section }[]
 	return out.join("\n")
 }
 
+// (v2.8.0 구역, 10/30 사용자) 월간 일정 안내의 구역 목록 #{휴원목록}·#{학원목록}·#{학사목록}.
+// 템플릿이 "💤 휴원 일정" 다음 줄에 "  • #{휴원목록}"을 고정으로 두므로, 첫 줄은 점 없이 "11.17(화)  수학능력시험",
+// 둘째 줄부터 "  • 11.20(금)  …"(솔라피가 변수 맨 앞 공백을 지우므로 첫 줄 들여쓰기는 템플릿이 맡는다). 비면 "없음".
+export function sectionListText(lines: { day: string; line: string; sec: Section }[], sec: Section): string {
+	const own = lines.filter((l) => l.sec === sec).sort((a, b) => a.day.localeCompare(b.day))
+	if (!own.length) return "없음"
+	const items = own.slice(0, SECTION_EVENTS).map((l) => {
+		const cut = l.line.indexOf(" ")
+		const date = cut < 0 ? l.line : l.line.slice(0, cut)
+		const what = cut < 0 ? "" : l.line.slice(cut + 1).trim()
+		return `${dotDate(date)}${what ? `  ${what}` : ""}`
+	})
+	if (own.length > SECTION_EVENTS) items.push(`외 ${own.length - SECTION_EVENTS}건`)
+	return items.join(`\n${BULLET}`)
+}
+
 // 일정일시(수업 안내와 같은 표기): 하루면 "26.11.03(화)", 시각이 있으면 "26.11.03(화) 14:00~16:00",
 // 기간이면 "26.11.09(월)~26.11.11(수)"(시각이 있으면 각 끝에 시각). (10/28) 시각 없는 같은 달 기간은 "26.11.09(월)~11(수)".
 export function eventTimeText(event: any): string {

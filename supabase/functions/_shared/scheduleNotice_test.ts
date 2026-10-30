@@ -124,3 +124,11 @@ Deno.test("v2.8.0 일정 안내(학생): 학생 이름을 넣어 보내고, 마�
 	eq(c.updates.at(-1), { id: "e1", props: { "일정 안내 일시": { date: { start: "2026-11-03" } } } })
 	eq(c.marks, ["done:e1"])
 })
+
+Deno.test("v2.8.0 구역: 월간 일정 안내 목록은 첫 줄 점 없이(템플릿이 맡음), 둘째 줄부터 '  • ', 날짜와 이름 사이 두 칸", () => {
+	const l = (day: string, line: string, sec: any) => ({ day, line, sec })
+	const lines = [l("2026-11-21", "11/21(토) 수업 시간 변경", "학원"), l("2026-11-13", "11/13(금) 중간고사 대비 보충", "학원"), l("2026-11-17", "11/17(화) 수학능력시험", "휴원")]
+	eq(m.sectionListText(lines, "학원"), "11.13(금)  중간고사 대비 보충\n  • 11.21(토)  수업 시간 변경")
+	eq(m.sectionListText(lines, "휴원"), "11.17(화)  수학능력시험")
+	eq(m.sectionListText(lines, "학교"), "없음")
+})
