@@ -293,6 +293,9 @@ export function reportModeOf(cls: any): "all" | "tests_only" {
 // (10/30 사용자, 일일 기록 기반) 리포트는 최근 6개월 평가를 모두 싣는다(평가 추이: 일간 7일·주간 4주·월간 6달, 기간마다 모든 평가 평균).
 // 본문(사진·글)과 반 평균은 무거워서 최근 TESTS_DETAILED개에만 붙인다(카드·목록에 주로 보이는 평가).
 export const TESTS_DETAILED = 20
+// (v2.8.0 작품 모아보기) 프로그램 사진: 최근 수업 몇 번까지 본문을 읽을지, 사진을 몇 장까지 실을지(Notion 읽기 양 제한).
+export const GALLERY_MAX_LOGS = 40
+export const GALLERY_MAX_PHOTOS = 120
 // (v2.8.0) 평가 구분 묶음: 주간·월간은 그 이름, 나머지(빈 값·일일·단원·마무리·종합 평가·기타)는 일일 평가.
 // (10/30 사용자) 진도 평가 구역은 없앴다. 단원·마무리 평가도 그날 수업의 평가로 보인다.
 export function testKindOf(evalType: string | null | undefined): string {
@@ -439,9 +442,11 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
     const unit = unitTextOf(lp, logUnitNames)
     const bookId = firstRelationId(lprops["교재"])
     let bookTitle = ""
+    let isProgram = false
     if (bookId) {
       const bp = await cachedGetPage(bookId)
       bookTitle = text(bp.properties["교재명"])
+      isProgram = text(bp.properties["구분"]) === "프로그램"
     }
     // [FIX, 2026-09-27] 진도교재/교재를 연결하지 않은 학습기록(그룹 진도 보강 이행 확인 등 단순 기록)은
     // bookTitle이 비어서 화면에 "학습 기록"이라는 일반 문구로만 표시됐다. 이 경우 학습기록 페이지
@@ -464,7 +469,7 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
     const evalStart = dateStartOf(lprops["평가 기간"])
     const evalEnd = dateEndOf(lprops["평가 기간"])
     const bookKey = bookKeyById.get(cid(firstRelationId(lprops["진도교재"]))) ?? ""
-    return { id: lp.id, category, iso, content, range, unit, bookTitle, bookKey, evalType, evalStart, evalEnd }
+    return { id: lp.id, category, iso, content, range, unit, bookTitle, bookKey, evalType, evalStart, evalEnd, isProgram }
   }
   const logDetails = await Promise.all(logPages.map(readLogDetail))
   const logDetailById = new Map(logDetails.map((detail) => [detail.id, detail]))
@@ -583,6 +588,31 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
   const sourcePageBodies = new Map(
     await mapWithConcurrency(displayedSourceIds, 6, async (id) => [id, await readPageBodyBlocks(id)] as const),
   )
+  // (v2.8.0 작품 모아보기) 프로그램(예체능) 학습기록의 사진을 모두 모은다: 학생 학습활동 본문(이 학생 작품)과
+  // 학습기록 본문(반 공유 자료). 위에서 이미 읽은 본문은 다시 읽지 않고, 최근 GALLERY_MAX_LOGS 수업까지만 읽는다.
+  const galleryLogs = pastLogDetails
+    .filter((l) => l.category === "학습" && l.isProgram && l.bookKey)
+    .sort((a, b) => ((a.iso ?? "") < (b.iso ?? "") ? 1 : -1))
+    .slice(0, GALLERY_MAX_LOGS)
+  const knownBodies = new Map<string, unknown[]>([...studyLogBodies, ...activityPageBodies, ...sourcePageBodies])
+  const galleryPageIds = Array.from(new Set(galleryLogs.flatMap((l) => {
+    const activity = studyActivityByRecordId.get(l.id)
+    return [activity?.id, l.id].filter((id): id is string => !!id && !knownBodies.has(id))
+  })))
+  const galleryBodies = new Map(
+    await mapWithConcurrency(galleryPageIds, 4, async (id) => [id, await readPageBodyBlocks(id)] as const),
+  )
+  const bodyOf = (id: string | undefined) => (id ? (knownBodies.get(id) ?? galleryBodies.get(id) ?? []) : [])
+  const imagesOf = (body: unknown[]) => (body as any[]).filter((b) => b?.type === "image" && b.url)
+  const gallery = galleryLogs
+    .slice()
+    .reverse()
+    .flatMap((l) => [
+      ...imagesOf(bodyOf(studyActivityByRecordId.get(l.id)?.id)).map((b) => ({ b, mine: true })),
+      ...imagesOf(bodyOf(l.id)).map((b) => ({ b, mine: false })),
+    ].map(({ b, mine }) => ({ book_id: l.bookKey, iso: l.iso, range: l.range, url: b.url, caption: b.caption ?? "", ...(b.blockId ? { block_id: b.blockId } : {}), mine })))
+    .slice(-GALLERY_MAX_PHOTOS)
+
   const studyLogsWithActivity = study_logs.map((log, index) => {
     const source = studyLogCandidates[index]
     const activity = source ? studyActivityByRecordId.get(source.id) : undefined
@@ -686,6 +716,7 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
     attendance_rows,
     routines,
     study_logs: studyLogsWithActivity,
+    gallery,
     homework,
     homework_days,
     tests,

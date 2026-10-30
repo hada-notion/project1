@@ -39,13 +39,14 @@ Deno.serve(async (req: Request) => {
 
     const block = await getBlock(safeBlockId)
     const type = block?.type
-    if (type !== "pdf" && type !== "file") return json({ error: "지원하지 않는 파일 블록입니다." }, 400)
+    // (v2.8.0 작품 모아보기) 사진도 받는다: 만료된 사진 주소를 화면이 새로 받아 다시 보인다.
+    if (type !== "pdf" && type !== "file" && type !== "image") return json({ error: "지원하지 않는 파일 블록입니다." }, 400)
 
     const media = block[type]
     const url = media?.type === "external" ? media.external?.url : media?.file?.url
     if (!url) return json({ error: "파일 URL을 찾을 수 없습니다." }, 404)
 
-    const fallbackName = type === "pdf" ? "PDF 문서" : "첨부 파일"
+    const fallbackName = type === "pdf" ? "PDF 문서" : type === "image" ? "사진" : "첨부 파일"
     return json({ url: String(url), name: String(media?.name || fallbackName), type })
   } catch (err) {
     console.error("get-report-file failed", err)

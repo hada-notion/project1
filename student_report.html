@@ -726,6 +726,17 @@ body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
 .feed-divider { border-top: 1px solid #f1f0f6; margin: 12px 0; }
 .feed-lightbox { position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; padding: 16px; cursor: zoom-out; }
 .feed-lightbox img { max-width: 100%; max-height: 100%; border-radius: 8px; }
+/* 작품 모아보기: 3칸 바둑판(처음 9장), 크게 보기의 설명·좌우 버튼 */
+.gallery-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.gallery-grid.collapsed .gallery-thumb:nth-child(n+10) { display: none; }
+.gallery-thumb { aspect-ratio: 1; padding: 0; border: 0; border-radius: 10px; overflow: hidden; background: var(--brand-soft); cursor: zoom-in; }
+.gallery-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gallery-viewer { flex-direction: column; gap: 12px; }
+.gallery-viewer img { max-height: calc(100% - 60px); }
+.gallery-caption { color: #fff; font-size: 14px; text-align: center; }
+.gallery-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; border-radius: 50%; border: 0; background: rgba(255,255,255,0.18); color: #fff; font-size: 28px; line-height: 1; cursor: pointer; }
+.gallery-nav.prev { left: 8px; }
+.gallery-nav.next { right: 8px; }
 
 /* ===== 홈 탭 (등록 상세 첫 탭) ===== */
 .home-hero { background: var(--brand-primary); color: var(--brand-on-primary); padding: 6px var(--feed-pad) 20px; }
@@ -1023,7 +1034,7 @@ body:not(.reg-expanded) .cal-hint { animation: calExtraFadeIn 0.26s ease both; }
 </div>
 
 <script src="hada_config.js"></script>
-<script src="student_report_part1.js?v=2aef2ce9"></script>
+<script src="student_report_part1.js?v=9e435010"></script>
 <script src="student_report_part2.js?v=6a5b78fa"></script>
 </body>
 </html>
