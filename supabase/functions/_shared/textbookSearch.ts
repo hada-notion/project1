@@ -11,7 +11,7 @@
 //   - 같은 ISBN13이 라이브러리에 있으면 "등록됨"으로 보여 주고 다시 만들지 않는다.
 
 import { NOTION_API, DS_PROGRESS_BOOK } from "./constants.ts"
-import { archivePage, fetchWithRetry, notionHeaders, queryAllPages, updatePageProperties } from "./notionClient.ts"
+import { archivePage, fetchWithRetry, notionHeaders, queryAllPages, sendWithPropAliases, updatePageProperties } from "./notionClient.ts"
 import { cleanUnits, parseToc } from "./textbookToc.ts"
 import { libraryKey, libraryProp } from "./libraryProp.ts"
 import { type Book, BookSourceError, isIsbn13, lookupIsbn, searchTitle } from "./bookSources.ts"
@@ -142,11 +142,12 @@ export async function kyoboBook(body: any) {
 }
 
 // 생성 POST는 응답이 끊겨도 중복 페이지가 생기지 않도록 자동 재시도하지 않는다(schoolNotion.ts와 같은 원칙).
+// 없는 속성 이름(400, 페이지가 안 생김)이면 예전 이름으로만 다시 보낸다(`전체 분량`→`전체 페이지` 등, 이름을 아직 안 바꾼 운영).
 async function createOnce(dataSourceId: string, properties: Record<string, unknown>): Promise<string> {
-	const res = await fetch(`${NOTION_API}/pages`, {
+	const res = await sendWithPropAliases(properties, (props) => fetch(`${NOTION_API}/pages`, {
 		method: "POST", headers: notionHeaders(), signal: AbortSignal.timeout(15000),
-		body: JSON.stringify({ parent: { data_source_id: dataSourceId }, properties }),
-	})
+		body: JSON.stringify({ parent: { data_source_id: dataSourceId }, properties: props }),
+	}))
 	if (!res.ok) throw new Error(`Notion 페이지를 만들지 못했습니다(${res.status})`)
 	return (await res.json()).id as string
 }
@@ -176,7 +177,7 @@ async function createLibraryBook(b: NewBook) {
 		"사용중": { checkbox: true },
 		...(b.isbn13 ? { "ISBN13": { rich_text: [{ text: { content: b.isbn13 } }] } } : {}),
 		...(b.price ? { "가격": { number: b.price } } : {}),
-		...(b.pages ? { "전체 페이지": { number: b.pages } } : {}),
+		...(b.pages ? { "전체 분량": { number: b.pages } } : {}),
 		...(b.cover ? { "북커버": { files: [{ type: "external", name: fileName, external: { url: b.cover } }] } } : {}),
 		...(publisher ? { "출판사": { select: { name: publisher } } } : {}),
 		...(series ? { "시리즈": { select: { name: series } } } : {}),
@@ -186,7 +187,7 @@ async function createLibraryBook(b: NewBook) {
 	let created = 0
 	try {
 		for (const u of units) {
-			await createOnce(src.units, { "단원명": title(u.name), [src.unitsLink]: { relation: [{ id: pageId }] }, ...(u.page ? { "시작페이지": { number: u.page } } : {}) })
+			await createOnce(src.units, { "단원명": title(u.name), [src.unitsLink]: { relation: [{ id: pageId }] }, ...(u.page ? { "범위 시작": { number: u.page } } : {}) })
 			created++
 		}
 	} catch (err) {
@@ -277,7 +278,7 @@ export async function bookUnits(bookId: unknown) {
 	const { id, src } = await bookPageOf(bookId)
 	const pages = await queryAllPages(src.units, { property: src.unitsLink, relation: { contains: id } })
 	const units = pages.map((p: any) => {
-		const n = p.properties?.["시작페이지"]?.number
+		const n = p.properties?.["범위 시작"]?.number
 		return { id: p.id as string, name: plainOf(p, "단원명"), page: typeof n === "number" ? n : null, uses: unitUses(p, src.unitsLink) }
 	}).sort((a: any, b: any) => (a.page ?? Infinity) - (b.page ?? Infinity) || a.name.localeCompare(b.name, "ko", { numeric: true }))
 	return { bookId: id, units }
@@ -293,7 +294,7 @@ export async function addUnits(body: any) {
 	let created = 0
 	try {
 		for (const u of fresh) {
-			await createOnce(src.units, { "단원명": title(u.name), [src.unitsLink]: { relation: [{ id }] }, ...(u.page ? { "시작페이지": { number: u.page } } : {}) })
+			await createOnce(src.units, { "단원명": title(u.name), [src.unitsLink]: { relation: [{ id }] }, ...(u.page ? { "범위 시작": { number: u.page } } : {}) })
 			created++
 		}
 	} catch (err) {
@@ -339,13 +340,13 @@ export async function editUnits(body: any) {
 	try {
 		for (const f of fixes) {
 			if (dropIds.has(compact(f.p.id))) continue
-			if (f.name === plainOf(f.p, "단원명") && f.page === (f.p.properties?.["시작페이지"]?.number ?? null)) continue
-			await updatePageProperties(f.p.id, { "단원명": title(f.name), "시작페이지": { number: f.page } })
+			if (f.name === plainOf(f.p, "단원명") && f.page === (f.p.properties?.["범위 시작"]?.number ?? null)) continue
+			await updatePageProperties(f.p.id, { "단원명": title(f.name), "범위 시작": { number: f.page } })
 			done.updated++
 		}
 		for (const p of drops) if (dropIds.has(compact(p.id))) { await archivePage(p.id); done.removed++ }
 		for (const u of fresh) {
-			await createOnce(src.units, { "단원명": title(u.name), [src.unitsLink]: { relation: [{ id }] }, ...(u.page ? { "시작페이지": { number: u.page } } : {}) })
+			await createOnce(src.units, { "단원명": title(u.name), [src.unitsLink]: { relation: [{ id }] }, ...(u.page ? { "범위 시작": { number: u.page } } : {}) })
 			done.added++
 		}
 	} catch (err) {

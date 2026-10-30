@@ -552,7 +552,7 @@ function buildBooksTabHtml(r) {
           <div class="book-row-cover">${b.cover ? `<img src="${esc(b.cover)}" alt="${esc(b.title)}">` : `<span>${esc(b.title)}</span>`}</div>
           <div class="book-row-body">
             <div class="book-row-title">${esc(b.title)}</div>
-            ${b.pages || (b.topic && b.libTitle) ? `<div class="book-row-sub">${[b.topic ? esc(b.libTitle) : "", b.pages ? (isProgram(b) ? `총 ${esc(b.pages)}차시` : `${esc(b.pages)}쪽`) : ""].filter(Boolean).join(" · ")}</div>` : ""}
+            ${b.pages || (b.topic && b.libTitle) ? `<div class="book-row-sub">${[b.topic ? esc(b.libTitle) : "", b.pages ? esc(totalWithUnit(b)) : ""].filter(Boolean).join(" · ")}</div>` : ""}
             ${b.progress != null ? `<div class="progress-line"><div class="track"><div class="fill" style="width:${b.progress}%"></div></div><b>${b.progress}%</b></div>` : ""}
             ${recent ? `<div class="book-row-recent"><span class="inline-icon">${KIND_ICONS["학습"]}</span><span>최근 ${esc(recent)}</span></div>` : ""}
           </div>

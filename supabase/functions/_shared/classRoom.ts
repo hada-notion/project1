@@ -609,6 +609,9 @@ export async function loadBooks(sessionId: string) {
 						units: (libId && unitsBy.get(libId)) || [],
 						cover: rp?.cover ?? "",
 						pages: rp?.pages ?? null,
+						kind: rp?.kind ?? "",
+						unit: rp?.unit ?? "",
+						completedOn: dateStartOf(b.properties?.["수료일"]) ?? "",
 						progress: progress === null ? null : Math.round(progress * 100),
 						recent: propText(b.properties?.["최근 학습 범위"]),
 					}
@@ -620,21 +623,26 @@ export async function loadBooks(sessionId: string) {
 
 // 라이브러리 교재들의 표지·쪽수와 단원(v2.5.125). 복사본이 없으면 Notion에서 읽는다(단원은 실패해도 빈 목록).
 type LibUnit = { id: string; name: string; page: number | null }
-async function libraryInfo(ids: string[]): Promise<{ regulars: Map<string, { cover: string; pages: number | null }>; unitsBy: Map<string, LibUnit[]> }> {
-	const regulars = new Map<string, { cover: string; pages: number | null }>(), unitsBy = new Map<string, LibUnit[]>()
+// (10/31) 교재 종류(`구분` 프로그램)·`진도 단위`도 함께 준다. 복사본에는 이 두 칸이 없어 라이브러리 페이지를 읽는다(반의 교재 몇 권).
+type LibInfo = { cover: string; pages: number | null; kind: string; unit: string }
+const libKindUnit = (r: Page) => ({ kind: propText(r.properties?.["구분"]) === "프로그램" ? "프로그램" : "", unit: propText(r.properties?.["진도 단위"]).trim() })
+async function libraryInfo(ids: string[]): Promise<{ regulars: Map<string, LibInfo>; unitsBy: Map<string, LibUnit[]> }> {
+	const regulars = new Map<string, LibInfo>(), unitsBy = new Map<string, LibUnit[]>()
 	if (!ids.length) return { regulars, unitsBy }
 	const push = (bookId: string | null, u: LibUnit) => { if (bookId) unitsBy.set(bookId, [...(unitsBy.get(bookId) ?? []), u]) }
 	if (await libraryCopyReady()) {
-		const [rows, units] = await Promise.all([readBooks(ids), readUnits(ids)])
-		for (const r of rows) regulars.set(r.id, { cover: r.cover, pages: r.pages })
+		const [rows, units, libs] = await Promise.all([readBooks(ids), readUnits(ids), getPages(ids).catch(() => [] as Page[])])
+		const bare = (id: unknown) => String(id ?? "").replace(/-/g, "")
+		const extra = new Map(libs.map((l) => [bare(l.id), libKindUnit(l)]))
+		for (const r of rows) regulars.set(r.id, { cover: r.cover, pages: r.pages, kind: "", unit: "", ...extra.get(bare(r.id)) })
 		for (const u of units) push(u.book_id, { id: u.id, name: u.name, page: u.start_page })
 		return { regulars, unitsBy }
 	}
-	for (const r of await getPages(ids)) regulars.set(r.id as string, { cover: fileUrlOf(r.properties?.["북커버"]) ?? "", pages: propNumber(r.properties?.["전체 페이지"]) })
+	for (const r of await getPages(ids)) regulars.set(r.id as string, { cover: fileUrlOf(r.properties?.["북커버"]) ?? "", pages: propNumber(r.properties?.["전체 분량"]), ...libKindUnit(r) })
 	try {
 		const src = await textbookSources()
 		const pages = await queryAllPages(src.units, { or: ids.map((id) => ({ property: src.unitsLink, relation: { contains: id } })) })
-		const rows = sortUnits(pages.map((p: Page) => ({ id: p.id as string, name: propText(p.properties?.["단원명"]).trim(), start_page: propNumber(p.properties?.["시작페이지"]), book: rel(p, src.unitsLink) })))
+		const rows = sortUnits(pages.map((p: Page) => ({ id: p.id as string, name: propText(p.properties?.["단원명"]).trim(), start_page: propNumber(p.properties?.["범위 시작"]), book: rel(p, src.unitsLink) })))
 		for (const u of rows) for (const b of u.book.filter((x: string) => ids.includes(x))) push(b, { id: u.id, name: u.name, page: u.start_page })
 	} catch (err) {
 		console.error("[class-room] 단원목록 읽기 실패(단원 미리 보기 없음):", (err as Error).message)

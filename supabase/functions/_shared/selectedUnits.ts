@@ -79,7 +79,7 @@ export class FillUnitsError extends Error { constructor(public status: number, m
 async function bookUnitsFor(src: LibrarySources, bookId: string): Promise<{ id: string; name: string; page: number | null }[]> {
 	if (await libraryCopyReady()) return (await readUnits([bookId])).map((u) => ({ id: u.id, name: u.name, page: u.start_page }))
 	const pages = await queryAllPages(src.units, { property: src.unitsLink, relation: { contains: bookId } })
-	return sortUnits(pages.map((p: Page) => ({ id: p.id as string, name: anyTitleText(p), start_page: typeof p.properties?.["시작페이지"]?.number === "number" ? p.properties["시작페이지"].number : null })))
+	return sortUnits(pages.map((p: Page) => ({ id: p.id as string, name: anyTitleText(p), start_page: typeof p.properties?.["범위 시작"]?.number === "number" ? p.properties["범위 시작"].number : null })))
 		.map((u) => ({ id: u.id, name: u.name, page: u.start_page }))
 }
 

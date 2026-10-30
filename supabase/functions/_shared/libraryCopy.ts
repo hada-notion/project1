@@ -45,7 +45,7 @@ export function bookRow(p: Page): Row {
 		cover_file: !!f?.file,
 		isbn13: plainOf(p, "ISBN13"),
 		used: p.properties?.["사용중"]?.checkbox === true,
-		pages: num(p.properties?.["전체 페이지"]?.number),
+		pages: num(p.properties?.["전체 분량"]?.number),
 		notion_edited_at: iso(p.last_edited_time),
 	}
 }
@@ -54,7 +54,7 @@ export function unitRow(p: Page, unitsLink: string): Row {
 		id: p.id,
 		book_id: relationIds(p.properties?.[unitsLink])[0] ?? null,
 		name: plainOf(p, "단원명"),
-		start_page: num(p.properties?.["시작페이지"]?.number),
+		start_page: num(p.properties?.["범위 시작"]?.number),
 		link_count: unitUses(p, unitsLink),
 		notion_edited_at: iso(p.last_edited_time),
 	}
