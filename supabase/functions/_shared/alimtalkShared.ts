@@ -205,7 +205,7 @@ const SOLAPI_API_KEY = Deno.env.get("SOLAPI_API_KEY")!
 const SOLAPI_API_SECRET = Deno.env.get("SOLAPI_API_SECRET")!
 const SOLAPI_SENDER_NUMBER_FALLBACK = Deno.env.get("SOLAPI_SENDER_NUMBER") ?? ""
 const SOLAPI_PF_ID_FALLBACK = Deno.env.get("SOLAPI_PF_ID") ?? ""
-const SOLAPI_TEMPLATE_ID_DAILY_FALLBACK = Deno.env.get("SOLAPI_TEMPLATE_ID_DAILY") ?? ""
+// (10/31) 템플릿 ID 기본값(Secrets SOLAPI_TEMPLATE_ID_*)은 없앴다. 알림톡 설정 행이 없거나 꺼져 있으면 보내지 않고 사유를 남긴다.
 
 export async function sendDailyReportAlimtalk(payload: {
   registrationId: string
@@ -218,9 +218,10 @@ export async function sendDailyReportAlimtalk(payload: {
   const category = payload.configCategory ?? "일일 보고서"
   const config = await getAlimtalkConfig(category, {
     pfId: SOLAPI_PF_ID_FALLBACK,
-    templateId: SOLAPI_TEMPLATE_ID_DAILY_FALLBACK,
+    templateId: "",
     senderNumber: SOLAPI_SENDER_NUMBER_FALLBACK,
   }, category === "일일 보고서" ? undefined : "일일 보고서")
+  if (!config.templateId) throw new Error(`템플릿 ID가 설정되지 않았습니다. '알림톡 설정(학원) DB'의 '${category}' 행을 켜고 템플릿 ID를 넣어 주세요.`)
 
   const { SolapiMessageService } = await import("npm:solapi")
   const messageService = new SolapiMessageService(SOLAPI_API_KEY, SOLAPI_API_SECRET)

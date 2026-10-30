@@ -58,7 +58,7 @@ const SOLAPI_API_KEY = Deno.env.get("SOLAPI_API_KEY")!
 const SOLAPI_API_SECRET = Deno.env.get("SOLAPI_API_SECRET")!
 const SOLAPI_SENDER_NUMBER_FALLBACK = Deno.env.get("SOLAPI_SENDER_NUMBER") ?? ""
 const SOLAPI_PF_ID_FALLBACK = Deno.env.get("SOLAPI_PF_ID") ?? ""
-const SOLAPI_TEMPLATE_ID_TEXTBOOK_FALLBACK = Deno.env.get("SOLAPI_TEMPLATE_ID_TEXTBOOK") ?? ""
+// (10/31) 템플릿 ID 기본값(Secrets SOLAPI_TEMPLATE_ID_*)은 없앴다. 알림톡 설정 행이 없거나 꺼져 있으면 보내지 않고 사유를 남긴다.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -179,7 +179,7 @@ Deno.serve(async (req) => {
 
         const config = await getAlimtalkConfig("교재비 안내", {
           pfId: SOLAPI_PF_ID_FALLBACK,
-          templateId: SOLAPI_TEMPLATE_ID_TEXTBOOK_FALLBACK,
+          templateId: "",
           senderNumber: SOLAPI_SENDER_NUMBER_FALLBACK,
         })
 
