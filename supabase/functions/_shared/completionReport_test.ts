@@ -54,6 +54,15 @@ Deno.test("v2.8.0 수료: 다시 누르면 발송함·수료일은 그대로, �
 	eq([c.created.length, c.updates[0].props["수료일"].date.start, c.enqueued.map((e) => e.payload.regId), c.enqueued[0].payload.batchId], [0, "2026-10-29", [R2], "batch-old"])
 })
 
+Deno.test("v2.8.0 수료: 발송함 구분에 \"수료 보고서\" 선택지가 없어 조회가 거절돼도 새 발송함을 만든다", async () => {
+	const c = mock(base(), (ds) => {
+		if (ds === "batches") throw new Error(`query batches failed: 400 select option "수료 보고서" not found for property "구분"`)
+		return []
+	})
+	await m.processCompletionQueueItem({ bookId: B })
+	eq([c.created.length, c.created[0].props["구분"].select.name, c.enqueued.length, c.marks.some((x) => x.startsWith("error"))], [1, "수료 보고서", 2, false])
+})
+
 Deno.test("v2.8.0 수료: 학생이 없거나 개별 진도 반 교재면 만들지 않고 안내", async () => {
 	const a = base(); a[B].properties["등록"] = rel(); a[B].properties["개별교재"] = rel("ind1")
 	const ca = mock(a)
