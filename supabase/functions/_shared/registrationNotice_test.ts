@@ -44,15 +44,21 @@ Deno.test("v2.8.0 클래스 변경 안내: 직전 반 = 다른 반 등록 중 �
 })
 
 Deno.test("v2.8.0 등록 안내·클래스 변경 안내: 계획 변수와 오류", () => {
-	const p: any = m.planRegistrationNotice("등록 안내", reg({ memo: "첫 수업에 교재를 챙겨 주세요." }), cls("cls-b", "중1 B 수학"), [tt("t1", "화", "17:00", "19:00"), tt("t2", "목", "17:00", "19:00")], null, "/r?token=x")
+	const p: any = m.planRegistrationNotice("등록 안내", reg({ memo: "첫 수업에 교재를 챙겨 주세요." }), cls("cls-b", "중1 B 수학"), [tt("t1", "화", "17:00", "19:00"), tt("t2", "목", "17:00", "19:00")], null, "/r?token=x", { school: "하다중", grade: "중1" })
 	eq(p.variables, {
 		"#{학생이름}": "김하윤",
 		"#{전달사항}": "첫 수업에 교재를 챙겨 주세요.",
 		"#{페이지ID}": "/r?token=x",
+		"#{학교}": "하다중",
+		"#{학년}": "중1",
 		"#{클래스}": "중1 B 수학",
 		"#{등록정보}": "📅 시작  11.03(화)부터\n🕒 시간  화·목 17:00~19:00",
 	})
 	eq(p.timetable, "화·목 17:00~19:00")
+	// 학교·학년이 없으면 "-"(빈 변수로 보내지 않음)
+	const blank: any = m.planRegistrationNotice("등록 안내", reg(), cls("cls-b", "중1 B 수학"), [], null, "/r")
+	eq([blank.variables["#{학교}"], blank.variables["#{학년}"], blank.variables["#{등록정보}"]], ["-", "-", "📅 시작  11.03(화)부터"])
+	eq(m.titleOf({ properties: { "학교명": { type: "title", title: [{ plain_text: "하다중" }] } } }), "하다중")
 	const c: any = m.planRegistrationNotice("클래스 변경 안내", reg(), cls("cls-b", "중1 B 수학"), [], cls("cls-a", "중1 A 수학"), "/r")
 	eq([c.variables["#{변경정보}"], c.variables["#{전달사항}"], c.timetable], ["🔁 기존  중1 A 수학\n🏛 변경  중1 B 수학\n📅 적용  11.03(화)부터", "없음", ""])
 	eq(m.planRegistrationNotice("클래스 변경 안내", reg(), cls("cls-b", "중1 B 수학"), [], null, "/r"), { error: "직전 반 등록을 찾지 못했습니다. 같은 학생의 예전 반 등록에 종료일(이 등록일 이전)이 있어야 합니다." })
@@ -92,4 +98,15 @@ Deno.test("v2.8.0 클래스 변경 안내: 한 건 — 직전 반을 찾아 보�
 	} finally {
 		Object.assign(deps, saved)
 	}
+})
+
+Deno.test("v2.8.0 등록 안내·클래스 변경 안내: 등록의 (알림톡) 수식 값을 먼저 쓴다", () => {
+	const f = (s: string) => ({ type: "formula", formula: { type: "string", string: s } })
+	const r: any = reg()
+	Object.assign(r.properties, { "학교(알림톡)": f("하다고"), "등록정보(알림톡)": f("📅 시작  11.04(수)부터"), "변경정보(알림톡)": f("🔁 기존  A반\n🏛 변경  B반\n📅 적용  11.03(화)부터"), "전달사항(알림톡)": f("수식 메모") })
+	const p: any = m.planRegistrationNotice("등록 안내", r, cls("cls-b", "중1 B 수학"), [], null, "/r", { school: "서버값" })
+	eq([p.variables["#{학교}"], p.variables["#{등록정보}"], p.variables["#{전달사항}"]], ["하다고", "📅 시작  11.04(수)부터", "수식 메모"])
+	// 직전 반을 서버가 못 찾아도 변경정보 수식이 있으면 그 값으로 보낸다
+	const c: any = m.planRegistrationNotice("클래스 변경 안내", r, cls("cls-b", "중1 B 수학"), [], null, "/r")
+	eq(c.variables["#{변경정보}"], "🔁 기존  A반\n🏛 변경  B반\n📅 적용  11.03(화)부터")
 })

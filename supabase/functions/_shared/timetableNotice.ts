@@ -15,6 +15,7 @@
 //   - 적용일은 등록 `시간표 적용일` → 없으면 클래스 `시간표 적용일`(비면 줄 없음, 서버가 서울 날짜 `11.03(화)부터`).
 //     전달사항은 등록 `안내 메모` → 없으면 클래스 `시간표 안내 메모`(50자, 비면 "없음"). 등록 쪽 두 값은 보낸 뒤 비운다
 //     (학생 한 명에게 한 번 쓰는 값이라 다음 안내에 남지 않게. 클래스 쪽 값은 반 전체가 쓰므로 두고 간다).
+//   - 변수는 등록 수식 `학생이름(알림톡)`·`클래스(알림톡)`·`시간표정보(알림톡)`·`전달사항(시간표안내)`을 먼저 쓰고, 없거나 비면 서버가 만든다.
 //   - 알림톡 설정의 "시간표 변경 안내" 행이 꺼져 있거나 템플릿 ID가 비면 보내지 않는다(다른 템플릿으로 잘못 나가지 않게).
 //   - 상태는 등록 `시간표 안내 상태`(⏳→🔄→✅/⚠️), 실패 사유는 등록 `마지막 오류`.
 import { createSendLogEntry, extractErrorMessage, getBotUserId } from "./adminShared.ts"
@@ -115,8 +116,9 @@ export function planTimetableNotice(reg: any, timetables: any[], cls: any): Time
 		variables: {
 			"#{학생이름}": alimtalkVar(reg, "학생이름", studentNameOf(reg)),
 			"#{클래스}": alimtalkVar(reg, "클래스", textOf(cp["클래스명"]?.title).trim()),
-			"#{시간표정보}": timetableInfoBlock({ before, after: now, applyOn: shortDay(regApply || cp[TIMETABLE_APPLY_PROP]?.date?.start) }),
-			"#{전달사항}": noteText(regMemo || textOf(cp[TIMETABLE_CLASS_MEMO_PROP]?.rich_text)),
+			"#{시간표정보}": alimtalkVar(reg, "시간표정보", timetableInfoBlock({ before, after: now, applyOn: shortDay(regApply || cp[TIMETABLE_APPLY_PROP]?.date?.start) })),
+			// 등록 안내의 전달사항(알림톡)과 값이 달라(클래스 메모로 넘어감) 따로 둔 수식.
+			"#{전달사항}": getFormulaText(reg, "전달사항(시간표안내)").trim() || noteText(regMemo || textOf(cp[TIMETABLE_CLASS_MEMO_PROP]?.rich_text)),
 		},
 	}
 }
