@@ -76,6 +76,8 @@ type Prepared = {
 	logCategory: SendLogCategory
 	configCategory: AlimtalkConfigCategory
 	configFallback?: AlimtalkConfigCategory | AlimtalkConfigCategory[]
+	// 설정 행이 없을 때 Secrets 기본 템플릿을 쓰지 않는다(수료 보고서: 맞는 기본 템플릿이 없음 → 템플릿 ID 없음 오류).
+	noEnvTemplate?: boolean
 	primaryPhone: string
 	variables: (notice: string) => Record<string, string>
 	log: { reportId?: string; tuitionId?: string; textbookCartId?: string; letterId?: string; periodStart?: string; periodEnd?: string }
@@ -128,8 +130,8 @@ export const noticeDeps = {
 async function prepareReport(page: any): Promise<Prepared> {
 	const reportId = page.id as string
 	const reportType = page.properties?.["보고서 구분"]?.select?.name ?? ""
-	if (reportType !== "주간 보고서" && reportType !== "월간 보고서") {
-		throw new Error(`이 보고서의 '보고서 구분'이 "주간 보고서" / "월간 보고서" 중 하나가 아닙니다 (현재 값: "${reportType || "없음"}").`)
+	if (reportType !== "주간 보고서" && reportType !== "월간 보고서" && reportType !== "수료 보고서") {
+		throw new Error(`이 보고서의 '보고서 구분'이 "주간 보고서" / "월간 보고서" / "수료 보고서" 중 하나가 아닙니다 (현재 값: "${reportType || "없음"}").`)
 	}
 	const registrationId = getRelationFirstId(page, "등록")
 	if (!registrationId) throw new Error("이 보고서에 연결된 '등록'이 없습니다.")
@@ -171,7 +173,8 @@ async function prepareReport(page: any): Promise<Prepared> {
 		logCategory: reportType as SendLogCategory,
 		// (v2.8.0) 주간·월간 템플릿을 나눴다. "주간 보고서"/"월간 보고서" 행이 없으면 옛 "보고서" 행.
 		configCategory: chain.category,
-		configFallback: chain.fallback,
+		configFallback: chain.fallback.length ? chain.fallback : undefined,
+		noEnvTemplate: chain.noEnvTemplate,
 		primaryPhone: getFormulaText(page, "학부모 연락처(보고서)"),
 		variables: () => fixed,
 		log: { reportId, periodStart: period.start || undefined, periodEnd: period.end || undefined },
@@ -318,7 +321,7 @@ export async function processNoticeQueueItem(payload: NoticePayload): Promise<vo
 	let recipients: { phone: string }[]
 	try {
 		prep = kind === "report" ? await prepareReport(page) : kind === "tuition" ? prepareTuition(page) : kind === "letter" ? await prepareLetter(page) : kind === "bookEval" ? await prepareBookEval(page) : prepareTextbook(page)
-		config = await noticeDeps.config(prep.configCategory, { pfId: FALLBACK.pfId, templateId: FALLBACK[kind], senderNumber: FALLBACK.senderNumber }, prep.configFallback)
+		config = await noticeDeps.config(prep.configCategory, { pfId: FALLBACK.pfId, templateId: prep.noEnvTemplate ? "" : FALLBACK[kind], senderNumber: FALLBACK.senderNumber }, prep.configFallback)
 		recipients = await noticeDeps.recipients({ registrationId: prep.registrationId, primaryPhone: prep.primaryPhone, recipientTarget: config.recipientTarget })
 	} catch (err) {
 		// 일정도 전달사항도 없음처럼 다시 해도 같은 막힘은 재시도 없이 ⚠️로 끝낸다.
