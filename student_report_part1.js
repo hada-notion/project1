@@ -523,7 +523,7 @@ function mapRegistration(reg) {
     class_mode: reg.class_mode || "",
     schedule: (reg.schedule || []).map((s) => ({ day: s.day, start: s.start, end: s.end })),
     // (v2.8.0) 진도교재 `주제`가 있으면 제목은 주제, 라이브러리 교재명은 libTitle(카드 아랫줄·상세 배지).
-    books: (reg.books || []).map((b) => ({ id: b.id || "", kind: b.kind || "", topic: b.topic || "", libTitle: b.title || "", title: b.topic || b.title || "", progress: b.progress ?? 0, status: normalizeBookStatus(b.status), cover: b.cover || "", pages: b.pages ?? null, units: b.units || [] })),
+    books: (reg.books || []).map((b) => ({ id: b.id || "", kind: b.kind || "", topic: b.topic || "", libTitle: b.title || "", title: b.topic || b.title || "", progress: b.progress ?? 0, status: normalizeBookStatus(b.status), cover: b.cover || "", pages: b.pages ?? null, units: b.units || [], completedOn: b.completed_on || "" })),
     attendance_summary: reg.attendance_summary || { present: 0, absent: 0, makeup: 0 },
     attendance_rows: (reg.attendance_rows || []).map((a) => {
       const rawDate = a.iso || a.date_iso || (typeof a.date === "string" && /^\d{4}-\d{2}-\d{2}/.test(a.date) ? a.date : null)
@@ -545,7 +545,7 @@ function mapRegistration(reg) {
     tests: (reg.tests || []).map((t) => ({ type: "평가", title: t.title || "", book: t.book || "", bookId: t.book_id || "", range: t.range || "", unit: t.unit || "", note: t.note || "", date: isoToKstDate(t.iso) || (t.iso ? String(t.iso).slice(0, 10) : null), correct: t.correct ?? 0, total: t.total ?? 0, classAvg: typeof t.class_avg === "number" ? t.class_avg : null, classCount: t.class_count ?? 0, evalType: t.eval_type || "", evalStart: t.eval_start || null, evalEnd: t.eval_end || null, standalone: !!t.standalone, comment: t.comment || "", sourceBody: normalizeFeedBody(t.source_body), activityBody: normalizeFeedBody(t.activity_body) })),
     teacher_comments: (reg.teacher_comments || []).map((c) => ({ text: c.text || "", date: c.iso || null, by: c.by || "" })),
     // 주간/월간 보고서: 보고서(학원) DB 자체의 "선생님 한마디"를 보고서 구분·학습 기간과 함께 보관한다.
-    report_comments: (reg.report_comments || []).map((c) => ({ kind: c.kind || "", start: c.start || null, end: c.end || c.start || null, comment: c.comment || "" })),
+    report_comments: (reg.report_comments || []).map((c) => ({ kind: c.kind || "", start: c.start || null, end: c.end || c.start || null, comment: c.comment || "", bookId: c.book_id || "" })),
     report_mode: reg.report_mode === "tests_only" ? "tests_only" : "all",
     // (v2.8.0 루틴, 항목 18) 루틴 체크: 루틴 이름·날짜(서울)·했음. 루틴을 안 쓰는 반은 빈 목록이고 화면에 루틴 칸이 없다.
     routines: (reg.routines || []).map((x) => ({ name: x.name || "", date: x.date || "", done: !!x.done })).filter((x) => x.name && x.date),
@@ -795,6 +795,20 @@ function renderBookDetail() {
   const bookTests = ((r.tests) || []).filter(ofBook)
   const finalTests = bookTests.filter(isBookEval).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
   const trendPoints = computeRecentTestPoints(bookTests, MOCK_TODAY, 8)
+  // (v2.8.0 수료) [수료]로 마친 교재: 수료일과 수료 보고서의 선생님 한마디(있으면)를 맨 위에 보인다.
+  const completionNote = book.completedOn
+    ? ((r.report_comments || []).filter((c) => c.kind === "수료 보고서" && c.bookId && book.id && c.bookId === book.id && c.comment).pop() || null)
+    : null
+  const completionHtml = book.completedOn ? `
+        <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg></span>수료</h3>
+        <div class="log-card 학습">
+          <div class="log-top">
+            <div class="log-body">
+              <div class="log-title-row"><div class="log-title">${esc(josa(bookNoun(book), "을", "를"))} 모두 마쳤어요</div><span class="log-pill tone-green">${esc(withDow(book.completedOn))}</span></div>
+            </div>
+          </div>
+          ${completionNote ? `<div class="log-meta">${renderLogMetaRows("", `선생님 한마디: ${completionNote.comment}`)}</div>` : ""}
+        </div>` : ""
   const finalHtml = finalTests.length ? `
         <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg></span>진도 평가</h3>
         <div class="section-hint">${isProgram(book) ? "차시를" : "단원을"} 마치거나 ${josa(bookNoun(book), "을", "를")} 마무리하며 본 평가예요</div>
@@ -859,7 +873,7 @@ function renderBookDetail() {
           <div class="reg-title">${esc(selectedBookTitle)}</div>
         </div>
         <div class="reg-sub-badges">
-          <span class="sub-badge">${esc(book.status || "진행중")}</span>
+          <span class="sub-badge">${book.completedOn ? `수료 ${esc(String(book.completedOn).slice(5, 10).replace("-", "."))}` : esc(book.status || "진행중")}</span>
           ${book.progress != null ? `<span class="sub-badge">진도 ${book.progress}%</span>` : ""}
         </div>
       </div>
@@ -885,6 +899,7 @@ function renderBookDetail() {
             <div class="progress-label">진도 ${book.progress}%</div>
           </div>` : ""}
         </div>
+        ${completionHtml}
         ${finalHtml}
         <h3 class="sec-title"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg></span>학습기록</h3>
         <div class="section-hint">이 ${bookNoun(book)}의 학습 · 과제 · 평가 기록을 최근 순서로 보여줘요</div>

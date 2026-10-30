@@ -231,6 +231,8 @@ async function buildRegistrationOverview(reg: any, accessToken: string, cachedGe
         const range = text(bp["최근 학습 범위"])
         // (v2.8.0 예체능) 진도교재 `주제`(예: "기억에 남는 풍경 그리기"). 있으면 리포트가 교재명 대신 이 이름을 크게 보여 준다.
         const topic = text(bp["주제"])
+        // (v2.8.0 수료) 진도교재 [수료]가 적는 날짜. 있으면 리포트 교재 상세가 "수료"로 보인다.
+        const completedOn = dateStartOf(bp["수료일"])
         const regularId = libraryIds(bp)[0]
         let title = "",
           series = "",
@@ -257,7 +259,7 @@ async function buildRegistrationOverview(reg: any, accessToken: string, cachedGe
           }
         }
         // (v2.8.0) 진도교재 ID: 화면이 교재 상세를 이름이 아니라 이 ID로 묶는다(같은 교재·프로그램 2회독).
-        return { id: String(mp.id).replace(/-/g, ""), title, series, pages, status: statusText, progress, range, cover, units, ...(kind ? { kind } : {}), ...(topic ? { topic } : {}) }
+        return { id: String(mp.id).replace(/-/g, ""), title, series, pages, status: statusText, progress, range, cover, units, ...(kind ? { kind } : {}), ...(topic ? { topic } : {}), ...(completedOn ? { completed_on: completedOn } : {}) }
       }),
   )
 
@@ -378,6 +380,8 @@ export async function buildRegistrationDetail(reg: any, cachedGetPage: (id: stri
         start: dateStartOf(rpr["보고서 기간"]),
         end: dateEndOf(rpr["보고서 기간"]),
         comment: text(rpr["선생님 한마디"]),
+        // (v2.8.0 수료) 수료 보고서는 그 진도교재에 연결된다. 교재 상세가 이 한마디를 보여 준다.
+        book_id: (relationIds(rpr["진도교재"])[0] ?? "").replace(/-/g, ""),
       }
     })
     .filter((rc) => rc.comment && rc.start && rc.start >= sinceIso)
