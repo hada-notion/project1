@@ -21,6 +21,7 @@ import {
   createSendLogEntry,
   extractErrorMessage,
   getAlimtalkConfig,
+  type AlimtalkConfigCategory,
   getBotUserId,
   notionGetPage,
   notionPatchPageProperties,
@@ -74,7 +75,7 @@ export function sameInstant(a: string | null | undefined, b: string | null | und
 
 export type LessonNoticePlan =
   | { skip: string }
-  | { kind: LessonNoticeKind; variables: Record<string, string>; classIso: string }
+  | { kind: LessonNoticeKind; variables: Record<string, string>; classIso: string; configCategory: AlimtalkConfigCategory }
 
 // 출석·수업 페이지로 무엇을 보낼지 정한다(네트워크 없음). makeupOfIso는 보강 출석의 기존 결석 수업일시(있으면).
 // (v2.8.0 통일안) 새 템플릿 변수 #{수업정보}와 옛 템플릿 변수(#{수업일시}·#{전달사항})를 함께 만든다.
@@ -93,9 +94,12 @@ export function planLessonNotice(attendance: any, session: any | null, makeupOfI
   const note = getFormulaText(attendance, "전달사항(수업안내)").trim() || noteText(memo)
   // 일시는 수식을 읽지 않는다: Notion API가 수식의 formatDate를 UTC로 계산해 18:00이 "09:00"으로 온다(10/27 원본). 서버가 서울 시각으로.
   const classTime = formatClassTime(classIso)
+  const makeupOf = makeupOfIso ? dateOnly(formatClassTime(makeupOfIso)) : ""
   return {
     kind: "수업 안내",
     classIso,
+    // (v2.8.0 구역, 10/30 사용자) 보강 수업과 그 밖의 수업(시간 변경·공휴일 정상 수업 등)을 템플릿으로 나눈다.
+    configCategory: makeup ? "보강 수업 안내" : "수업 일정 안내",
     variables: {
       "#{수업구분}": alimtalkVar(attendance, "수업구분", label, "수업구분(수업안내)"),
       "#{학생이름}": alimtalkVar(attendance, "학생이름", getFormulaText(attendance, "학생이름(보고서)")),
@@ -103,6 +107,8 @@ export function planLessonNotice(attendance: any, session: any | null, makeupOfI
       "#{수업정보}": lessonInfoBlock({ classTime, makeupOf: makeupOfIso ? dateOnly(formatClassTime(makeupOfIso)) : undefined, note }),
       "#{수업일시}": classTime,
       "#{전달사항}": note,
+      // (v2.8.0 구역) [보강 정보]/[수업 정보] 구역: 보강이면 🔁 기존 + 📅 일시, 아니면 📅 일시. 날짜는 서버가 서울 시각으로 만든다.
+      "#{수업일정}": [...(makeupOf ? [`🔁 기존  ${makeupOf} 결석`] : []), `📅 일시  ${classTime}`].join("\n"),
     },
   }
 }
@@ -113,8 +119,11 @@ const SOLAPI_SENDER_NUMBER_FALLBACK = Deno.env.get("SOLAPI_SENDER_NUMBER") ?? ""
 
 // 템플릿 ID·채널 기본값(Secrets)을 쓰지 않는다: 설정 행이 꺼졌거나 비었으면 다른 템플릿으로 나가지 않게 막는다.
 // (v2.8.0) 일정 안내(_shared/scheduleNotice.ts)도 같은 규칙으로 이 함수를 쓴다. primaryPhone이 비면 등록의 우선 연락처를 읽는다.
-export async function sendConfiguredAlimtalk(kind: SendLogCategory, registrationId: string, primaryPhone: string, variables: Record<string, string>) {
-  const config = await getAlimtalkConfig(kind, { pfId: "", templateId: "", senderNumber: SOLAPI_SENDER_NUMBER_FALLBACK })
+// configCategory를 주면 그 행부터 찾고, 없거나 꺼져 있으면 kind 행(예: "보강 수업 안내" → "수업 안내").
+export async function sendConfiguredAlimtalk(kind: SendLogCategory, registrationId: string, primaryPhone: string, variables: Record<string, string>, configCategory?: AlimtalkConfigCategory) {
+  const config = configCategory && configCategory !== kind
+    ? await getAlimtalkConfig(configCategory, { pfId: "", templateId: "", senderNumber: SOLAPI_SENDER_NUMBER_FALLBACK }, kind)
+    : await getAlimtalkConfig(kind, { pfId: "", templateId: "", senderNumber: SOLAPI_SENDER_NUMBER_FALLBACK })
   if (!config.templateId || !config.pfId) throw new LessonConfigError(`알림톡 설정의 '${kind}' 행을 켜고(활성 여부) 카카오 채널 ID·템플릿 ID를 넣어 주세요.`)
   const recipients = await resolveAlimtalkRecipients({ registrationId, primaryPhone, recipientTarget: config.recipientTarget })
   const { SolapiMessageService } = await import("npm:solapi")
@@ -172,7 +181,7 @@ export async function processLessonNoticeQueueItem(payload: { attendanceId: stri
   const studentName = plan.variables["#{학생이름}"] || "수업 안내"
   const senderUserId = (payload.clickerUserId ?? page.properties?.["실행자"]?.people?.[0]?.id ?? (await deps.botUser().catch(() => null))) ?? undefined
   try {
-    await deps.send(plan.kind, registrationId, getFormulaText(page, "학부모 연락처"), plan.variables)
+    await deps.send(plan.kind, registrationId, getFormulaText(page, "학부모 연락처"), plan.variables, plan.configCategory)
   } catch (err) {
     const reason = extractErrorMessage(err)
     if (err instanceof LessonConfigError || /연락처 오류/.test(reason)) return await finish(attendanceId, "⚠️ 오류", reason)
