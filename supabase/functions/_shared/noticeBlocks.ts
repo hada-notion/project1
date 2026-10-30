@@ -195,6 +195,23 @@ export function reportStatusBlock(summary: string): string {
 	return summary.trim().replace(/^(\S+ (?:출석|과제|평가|학습)):\s*/gmu, "$1  ")
 }
 
+// (v2.8.0 구역, 10/30 사용자) 교재비 청구 안내 [교재 내역] #{교재목록}: 교재마다 "📚 교재  15,000원" 한 줄 + "🧾 합계  31,000원".
+// 교재비 `교재목록(알림톡)` 수식이 비었을 때만 미납교재 수식에서 만든다(변수 값이 공백으로 시작하지 않게 목록 점 없이).
+export function textbookListBlock(unpaid: string): string {
+	const items: string[] = []
+	let total = ""
+	for (const raw of unpaid.split("\n")) {
+		const l = raw.trim()
+		if (!l) continue
+		const sum = l.match(/^📚\s*청구 금액\s*:\s*(.+)$/u)
+		if (sum) { total = sum[1].trim(); continue }
+		const item = l.match(/^📘\s*(.+?)\s*:\s*(.+)$/u)
+		items.push(item ? `📚 ${item[1]}  ${item[2].trim()}` : l)
+	}
+	if (!items.length) items.push("📚 교재  없음")
+	return items.join("\n") + (total ? `\n🧾 합계  ${total}` : "")
+}
+
 // 교재비 #{교재내역}: 미납교재 수식("📘 교재 : 15,000원" 줄들 + "📚 청구 금액 : 31,000원")을
 // "📚 교재 내역" + "  • 교재  15,000원" 줄들 + "🧾 합계  31,000원"으로.
 export function textbookBlock(unpaid: string): string {
