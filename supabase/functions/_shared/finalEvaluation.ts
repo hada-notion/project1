@@ -22,10 +22,12 @@ import { markDone, markError, markRunning, type StatusSpec } from "./statusTrack
 import { seoulDay } from "./classReportPlan.ts"
 import { unitIdsOf, unitRelationNameOf } from "./selectedUnits.ts"
 
+// (10/30 사용자) 진도교재 버튼이 [수료]로 바뀌며 상태 칸 이름도 `수료 상태`·`수료 처리 시작 시각`이 됐다(completionReport.ts).
+// 예전 경로(/progress-evaluation 등)는 남겨 두되 같은 칸을 쓴다.
 export const FINAL_EVAL_STATUS_SPEC: StatusSpec = {
-	statusProp: "진도 평가 상태",
+	statusProp: "수료 상태",
 	errorProp: PROP_LAST_ERROR,
-	startedAtProp: "진도 평가 처리 시작 시각",
+	startedAtProp: "수료 처리 시작 시각",
 }
 export const TARGET_FINAL_EVALUATION = "final-evaluation"
 export const UNIT_EVAL_TYPE = "단원 평가"
