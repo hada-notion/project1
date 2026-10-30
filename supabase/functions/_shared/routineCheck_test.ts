@@ -71,3 +71,24 @@ Deno.test("v2.8.0 루틴 리포트: 등록의 체크 → 이름·날짜(출석 �
 	eq(out, [{ name: "일기", date: "2026-10-29", done: false }, { name: "단어 암기", date: "2026-10-30", done: true }])
 	eq(await m.routineRowsForRegistration("g1", get, new Map(), toDay, { checkDs: async () => null, queryAllPages: async () => rows }), [])
 })
+
+Deno.test("v2.8.0 루틴 일일 보고서: 출석의 체크 → 루틴 순서대로 이름·했음, 칸이 없으면 빈 목록", async () => {
+	const att = { properties: { "루틴 체크": rel("k1", "k2") } }
+	const pages: Record<string, any> = {
+		k1: { properties: { "루틴": rel(R2), "했음": { checkbox: false } } },
+		k2: { properties: { "루틴": rel(R1), "했음": { checkbox: true } } },
+		[R1]: routine(R1, "단어 암기", 1), [R2]: routine(R2, "영어 일기", 2),
+	}
+	const d = { getPage: async (id: string) => pages[id], fullRelationIds: async (p: any, prop: string) => (p.properties?.[prop]?.relation ?? []).map((r: any) => r.id) } as any
+	eq(await m.routineItemsForAttendance(att, d), [{ name: "단어 암기", done: true }, { name: "영어 일기", done: false }])
+	eq(await m.routineItemsForAttendance({ properties: {} }, d), [])
+})
+
+Deno.test("v2.8.0 루틴 일일 보고서 #{학습내용}: 시안 A 구역, 결석이면 붙이지 않음, 루틴만 있으면 구역만", async () => {
+	const b = await import("./noticeBlocks.ts")
+	const items = [{ name: "단어 암기", done: true }, { name: "영어 일기", done: false }]
+	eq(b.studyWithRoutines("📐 수학\nRPM (p.34~41)", "출석", items), "📐 수학\nRPM (p.34~41)\n☑️ 루틴\n  • 단어 암기  했어요\n  • 영어 일기  안 했어요")
+	eq(b.studyWithRoutines("", "결석", items), "결석으로 이날 학습 기록이 없습니다.")
+	eq(b.studyWithRoutines("", "출석", items), "☑️ 루틴\n  • 단어 암기  했어요\n  • 영어 일기  안 했어요")
+	eq(b.studyWithRoutines("📐 수학", "출석", []), "📐 수학")
+})
