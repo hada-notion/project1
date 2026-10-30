@@ -86,8 +86,7 @@ Deno.test("v2.8.0 구역: 주간·월간 구역 변수는 (알림톡) 수식을 
 	eq(b.reportSectionVars({ properties: { "학습기록(알림톡)": formula("📗 공통수학1\n#개념원리 공통수학1 (~73%)") } }), {
 		"#{학습기록}": "📗 공통수학1\n#개념원리 공통수학1 (~73%)",
 		"#{학습요약}": "이 기간 출석 기록이 없습니다.",
-		"#{교재명}": "-",
-		"#{수료출석}": "-",
+		"#{수료과정}": "📚 교재  -",
 		"#{수료요약}": "이 과정을 모두 마쳤습니다.",
 	})
 	const pages: Record<string, any> = {
@@ -108,7 +107,7 @@ Deno.test("v2.8.0 구역: 길이는 이모지를 2자로 세는 UTF-16 길이로
 	eq(out["#{학습기록}"], `📗 a\n${b.DAILY_TRIM_NOTE}`)
 })
 
-Deno.test("v2.8.0 수료: 교재·프로그램 수료 보고서 행만 쓰고(기본 템플릿 없음), 교재명은 수식 → 제목", async () => {
+Deno.test("v2.8.0 수료: 교재·프로그램 수료 보고서 행만 쓰고(기본 템플릿 없음), 수료과정은 수식 → 제목", async () => {
 	const pages: Record<string, any> = {
 		reg: { properties: { "클래스": { relation: [{ id: "art" }] } } },
 		reg2: { properties: { "클래스": { relation: [] } } },
@@ -117,8 +116,10 @@ Deno.test("v2.8.0 수료: 교재·프로그램 수료 보고서 행만 쓰고(�
 	const get = async (id: string) => { if (id in pages) return pages[id]; throw new Error("no") }
 	eq(await b.reportConfigChain("수료 보고서", "reg", get), { category: "프로그램 수료 보고서", fallback: [], noEnvTemplate: true })
 	eq(await b.reportConfigChain("수료 보고서", "reg2", get), { category: "교재 수료 보고서", fallback: [], noEnvTemplate: true })
-	const page = { properties: { "보고서": { title: [{ plain_text: "이도윤 수료 보고서 개념원리 중학수학 1-1" }] }, "수료출석(알림톡)": formula("17/18회") } }
-	const v = b.reportSectionVars(page)
-	eq([v["#{교재명}"], v["#{수료출석}"]], ["개념원리 중학수학 1-1", "17/18회"])
-	eq(b.reportSectionVars({ properties: { ...page.properties, "교재명(알림톡)": formula("정물화 그리기") } })["#{교재명}"], "정물화 그리기")
+	const page = { properties: { "보고서": { title: [{ plain_text: "이도윤 수료 보고서 개념원리 중학수학 1-1" }] } } }
+	eq(b.reportSectionVars(page)["#{수료과정}"], "📚 교재  개념원리 중학수학 1-1")
+	const course = "🎨 프로그램  정물화 그리기
+📅 기간  10.06(월)~27(월)
+✅ 출석  8/8회"
+	eq(b.reportSectionVars({ properties: { ...page.properties, "수료과정(알림톡)": formula(course) } })["#{수료과정}"], course)
 })

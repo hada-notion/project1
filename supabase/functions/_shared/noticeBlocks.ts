@@ -132,9 +132,8 @@ export function reportSectionVars(page: any): Record<string, string> {
 	return {
 		"#{학습기록}": alimtalkVar(page, "학습기록", REPORT_SECTION_DEFAULTS.record),
 		"#{학습요약}": alimtalkVar(page, "학습요약", REPORT_SECTION_DEFAULTS.summary),
-		// (v2.8.0 수료) 교재·프로그램 수료 보고서. [수료 과정]의 교재명·출석, 셋째 구역의 과제·평가·한마디.
-		"#{교재명}": alimtalkVar(page, "교재명", bookFromTitle(page) || "-"),
-		"#{수료출석}": alimtalkVar(page, "수료출석", "-"),
+		// (v2.8.0 수료) 교재·프로그램 수료 보고서의 구역 변수: [수료 과정](교재·기간·출석)과 셋째 구역(과제·평가·한마디).
+		"#{수료과정}": alimtalkVar(page, "수료과정", `📚 교재  ${bookFromTitle(page) || "-"}`),
 		"#{수료요약}": alimtalkVar(page, "수료요약", REPORT_SECTION_DEFAULTS.completion),
 	}
 }
